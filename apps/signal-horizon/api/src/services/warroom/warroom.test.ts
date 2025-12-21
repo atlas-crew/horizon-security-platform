@@ -359,7 +359,7 @@ describe('WarRoomService', () => {
       await warRoomService.createBlock(
         'warroom-123',
         'tenant-1',
-        { type: 'add', blockType: 'IP', indicator: '10.0.0.1', reason: 'Malicious' },
+        { type: 'add', blockType: 'IP', indicator: '10.0.0.1', reason: 'Malicious', source: 'WAR_ROOM' },
         'user-1',
         'John Doe'
       );

@@ -11,6 +11,7 @@ import type {
   BlocklistUpdate,
   Threat,
 } from '../../types/protocol.js';
+import type { ClickHouseService, BlocklistHistoryRow } from '../../storage/clickhouse/index.js';
 
 export interface BroadcasterConfig {
   pushDelayMs: number;
@@ -20,6 +21,7 @@ export interface BroadcasterConfig {
 export class Broadcaster {
   private prisma: PrismaClient;
   private logger: Logger;
+  private clickhouse: ClickHouseService | null;
   // Config will be used for push delay and cache eviction in future phases
   private _config: BroadcasterConfig;
   private dashboardGateway: DashboardGateway | null = null;
@@ -27,10 +29,16 @@ export class Broadcaster {
   // In-memory blocklist cache for fast lookup
   private blocklistCache: Map<string, BlocklistUpdate> = new Map();
 
-  constructor(prisma: PrismaClient, logger: Logger, config: BroadcasterConfig) {
+  constructor(
+    prisma: PrismaClient,
+    logger: Logger,
+    config: BroadcasterConfig,
+    clickhouse?: ClickHouseService
+  ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'broadcaster' });
     this._config = config;
+    this.clickhouse = clickhouse ?? null;
   }
 
   setDashboardGateway(gateway: DashboardGateway): void {
@@ -106,6 +114,16 @@ export class Broadcaster {
             propagationStatus: 'PENDING',
           },
         });
+
+        // Log to ClickHouse for historical tracking
+        void this.logBlocklistChange({
+          action: 'added',
+          block_type: 'IP',
+          indicator: signal.sourceIp,
+          source: 'FLEET_INTEL',
+          reason: `Campaign: ${campaign.name}`,
+          campaign_id: campaign.id,
+        });
       }
 
       if (signal.anonFingerprint) {
@@ -138,6 +156,16 @@ export class Broadcaster {
             reason: `Campaign: ${campaign.name}`,
             propagationStatus: 'PENDING',
           },
+        });
+
+        // Log to ClickHouse for historical tracking
+        void this.logBlocklistChange({
+          action: 'added',
+          block_type: 'FINGERPRINT',
+          indicator: signal.anonFingerprint,
+          source: 'FLEET_INTEL',
+          reason: `Campaign: ${campaign.name}`,
+          campaign_id: campaign.id,
         });
       }
     }
@@ -200,6 +228,44 @@ export class Broadcaster {
 
   getConfig(): BroadcasterConfig {
     return this._config;
+  }
+
+  /**
+   * Log blocklist change to ClickHouse for historical tracking
+   * Non-blocking: logs warning on failure
+   */
+  private async logBlocklistChange(params: {
+    action: 'added' | 'removed' | 'expired';
+    block_type: string;
+    indicator: string;
+    source: string;
+    reason: string;
+    campaign_id?: string;
+    tenant_id?: string;
+    expires_at?: Date;
+  }): Promise<void> {
+    if (!this.clickhouse?.isEnabled()) return;
+
+    try {
+      const row: BlocklistHistoryRow = {
+        timestamp: new Date().toISOString(),
+        tenant_id: params.tenant_id ?? 'fleet',
+        action: params.action,
+        block_type: params.block_type,
+        indicator: params.indicator,
+        source: params.source,
+        reason: params.reason,
+        campaign_id: params.campaign_id ?? '',
+        expires_at: params.expires_at?.toISOString() ?? null,
+      };
+
+      await this.clickhouse.insertBlocklistEvent(row);
+    } catch (error) {
+      this.logger.warn(
+        { error, indicator: params.indicator },
+        'ClickHouse blocklist log failed (non-critical)'
+      );
+    }
   }
 
   /**

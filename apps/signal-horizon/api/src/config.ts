@@ -54,6 +54,16 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // ClickHouse (optional - for historical data)
+  CLICKHOUSE_ENABLED: z.enum(['true', 'false']).default('false'),
+  CLICKHOUSE_HOST: z.string().default('localhost'),
+  CLICKHOUSE_HTTP_PORT: portString.catch(8123),
+  CLICKHOUSE_DB: z.string().default('signal_horizon'),
+  CLICKHOUSE_USER: z.string().default('default'),
+  CLICKHOUSE_PASSWORD: z.string().default('clickhouse'),
+  CLICKHOUSE_COMPRESSION: z.enum(['true', 'false']).default('true'),
+  CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 100).catch(10),
 });
 
 function loadConfig() {
@@ -118,6 +128,18 @@ function loadConfig() {
     logging: {
       level: env.LOG_LEVEL,
     },
+
+    // ClickHouse for historical data (optional)
+    clickhouse: {
+      enabled: env.CLICKHOUSE_ENABLED === 'true',
+      host: env.CLICKHOUSE_HOST,
+      port: env.CLICKHOUSE_HTTP_PORT, // Already parsed
+      database: env.CLICKHOUSE_DB,
+      username: env.CLICKHOUSE_USER,
+      password: env.CLICKHOUSE_PASSWORD,
+      compression: env.CLICKHOUSE_COMPRESSION === 'true',
+      maxOpenConnections: env.CLICKHOUSE_MAX_CONNECTIONS, // Already parsed
+    },
   } as const;
 
   // Log config summary in development
@@ -127,6 +149,7 @@ function loadConfig() {
     console.log(`   Server: ${config.server.host}:${config.server.port}`);
     console.log(`   WebSocket paths: ${config.websocket.sensorPath}, ${config.websocket.dashboardPath}`);
     console.log(`   Log level: ${config.logging.level}`);
+    console.log(`   ClickHouse: ${config.clickhouse.enabled ? `${config.clickhouse.host}:${config.clickhouse.port}` : 'disabled'}`);
   }
 
   return config;

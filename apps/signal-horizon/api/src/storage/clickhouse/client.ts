@@ -1,0 +1,284 @@
+/**
+ * ClickHouse Client Service
+ * Time-series storage for historical threat hunting
+ */
+
+import { createClient, ClickHouseClient } from '@clickhouse/client';
+import type { Logger } from 'pino';
+
+// =============================================================================
+// Configuration Types
+// =============================================================================
+
+export interface ClickHouseConfig {
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password: string;
+  compression: boolean;
+  maxOpenConnections: number;
+}
+
+// =============================================================================
+// Row Types (match ClickHouse schema)
+// =============================================================================
+
+/**
+ * Signal event row for signal_events table
+ */
+export interface SignalEventRow {
+  timestamp: string; // ISO 8601
+  tenant_id: string;
+  sensor_id: string;
+  signal_type: string;
+  source_ip: string;
+  fingerprint: string;
+  anon_fingerprint: string;
+  severity: string;
+  confidence: number;
+  event_count: number;
+  metadata: string; // JSON string
+}
+
+/**
+ * Campaign history row for campaign_history table
+ */
+export interface CampaignHistoryRow {
+  timestamp: string;
+  campaign_id: string;
+  tenant_id: string;
+  event_type: 'created' | 'updated' | 'escalated' | 'resolved';
+  name: string;
+  status: string;
+  severity: string;
+  is_cross_tenant: 0 | 1;
+  tenants_affected: number;
+  confidence: number;
+  metadata: string; // JSON string
+}
+
+/**
+ * Blocklist history row for blocklist_history table
+ */
+export interface BlocklistHistoryRow {
+  timestamp: string;
+  tenant_id: string;
+  action: 'added' | 'removed' | 'expired';
+  block_type: string;
+  indicator: string;
+  source: string;
+  reason: string;
+  campaign_id: string;
+  expires_at: string | null;
+}
+
+// =============================================================================
+// ClickHouse Service
+// =============================================================================
+
+/**
+ * ClickHouse client wrapper for Signal Horizon historical data.
+ * Provides typed insert methods and connection management.
+ *
+ * Usage:
+ * ```typescript
+ * const clickhouse = new ClickHouseService(config, logger);
+ * await clickhouse.insertSignalEvents([...signals]);
+ * await clickhouse.close();
+ * ```
+ */
+export class ClickHouseService {
+  private client: ClickHouseClient | null = null;
+  private logger: Logger;
+  private enabled: boolean;
+
+  constructor(config: ClickHouseConfig, logger: Logger, enabled = true) {
+    this.logger = logger.child({ service: 'clickhouse' });
+    this.enabled = enabled;
+
+    if (enabled) {
+      this.client = createClient({
+        url: `http://${config.host}:${config.port}`,
+        database: config.database,
+        username: config.username,
+        password: config.password,
+        compression: {
+          request: config.compression,
+          response: config.compression,
+        },
+        max_open_connections: config.maxOpenConnections,
+        request_timeout: 30000,
+        clickhouse_settings: {
+          // Async inserts for high throughput
+          async_insert: 1,
+          wait_for_async_insert: 0,
+        },
+      });
+      this.logger.info(
+        { host: config.host, port: config.port, database: config.database },
+        'ClickHouse client created'
+      );
+    } else {
+      this.logger.info('ClickHouse disabled (demo mode)');
+    }
+  }
+
+  /**
+   * Check if ClickHouse is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Health check - verifies connection to ClickHouse
+   */
+  async ping(): Promise<boolean> {
+    if (!this.enabled || !this.client) return false;
+
+    try {
+      await this.client.ping();
+      this.logger.debug('ClickHouse ping successful');
+      return true;
+    } catch (error) {
+      this.logger.error({ error }, 'ClickHouse ping failed');
+      return false;
+    }
+  }
+
+  /**
+   * Insert signal events into signal_events table
+   * Uses async insert for high throughput (fire-and-forget)
+   */
+  async insertSignalEvents(signals: SignalEventRow[]): Promise<void> {
+    if (!this.enabled || !this.client || signals.length === 0) return;
+
+    try {
+      await this.client.insert({
+        table: 'signal_events',
+        values: signals,
+        format: 'JSONEachRow',
+      });
+      this.logger.debug({ count: signals.length }, 'Inserted signal events');
+    } catch (error) {
+      this.logger.error({ error, count: signals.length }, 'Failed to insert signal events');
+      throw error;
+    }
+  }
+
+  /**
+   * Insert campaign history event
+   * Called on campaign creation, updates, and resolution
+   */
+  async insertCampaignEvent(event: CampaignHistoryRow): Promise<void> {
+    if (!this.enabled || !this.client) return;
+
+    try {
+      await this.client.insert({
+        table: 'campaign_history',
+        values: [event],
+        format: 'JSONEachRow',
+      });
+      this.logger.debug(
+        { campaignId: event.campaign_id, eventType: event.event_type },
+        'Inserted campaign history event'
+      );
+    } catch (error) {
+      this.logger.error(
+        { error, campaignId: event.campaign_id },
+        'Failed to insert campaign event'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Insert blocklist history event
+   * Called when blocklist entries are added, removed, or expire
+   */
+  async insertBlocklistEvent(event: BlocklistHistoryRow): Promise<void> {
+    if (!this.enabled || !this.client) return;
+
+    try {
+      await this.client.insert({
+        table: 'blocklist_history',
+        values: [event],
+        format: 'JSONEachRow',
+      });
+      this.logger.debug(
+        { action: event.action, indicator: event.indicator },
+        'Inserted blocklist history event'
+      );
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to insert blocklist event');
+      throw error;
+    }
+  }
+
+  /**
+   * Batch insert blocklist events
+   */
+  async insertBlocklistEvents(events: BlocklistHistoryRow[]): Promise<void> {
+    if (!this.enabled || !this.client || events.length === 0) return;
+
+    try {
+      await this.client.insert({
+        table: 'blocklist_history',
+        values: events,
+        format: 'JSONEachRow',
+      });
+      this.logger.debug({ count: events.length }, 'Inserted blocklist history events');
+    } catch (error) {
+      this.logger.error({ error, count: events.length }, 'Failed to insert blocklist events');
+      throw error;
+    }
+  }
+
+  /**
+   * Execute a raw query (for Hunt service)
+   */
+  async query<T>(sql: string): Promise<T[]> {
+    if (!this.enabled || !this.client) {
+      throw new Error('ClickHouse is not enabled');
+    }
+
+    try {
+      const resultSet = await this.client.query({
+        query: sql,
+        format: 'JSONEachRow',
+      });
+      const rows = await resultSet.json<T>();
+      return rows;
+    } catch (error) {
+      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Query failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Execute a raw query and return a single value
+   */
+  async queryOne<T>(sql: string): Promise<T | null> {
+    const rows = await this.query<T>(sql);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Get the underlying ClickHouse client for advanced operations
+   */
+  getClient(): ClickHouseClient | null {
+    return this.client;
+  }
+
+  /**
+   * Close the connection
+   */
+  async close(): Promise<void> {
+    if (this.enabled && this.client) {
+      await this.client.close();
+      this.client = null;
+      this.logger.info('ClickHouse client closed');
+    }
+  }
+}

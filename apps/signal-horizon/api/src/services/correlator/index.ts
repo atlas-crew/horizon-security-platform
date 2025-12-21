@@ -7,6 +7,7 @@ import type { PrismaClient, Campaign } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Broadcaster } from '../broadcaster/index.js';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
+import type { ClickHouseService, CampaignHistoryRow } from '../../storage/clickhouse/index.js';
 
 interface CorrelationResult {
   isCampaign: boolean;
@@ -43,6 +44,7 @@ export class Correlator {
   private prisma: PrismaClient;
   private logger: Logger;
   private broadcaster: Broadcaster;
+  private clickhouse: ClickHouseService | null;
 
   // Correlation thresholds
   private readonly CROSS_TENANT_THRESHOLD = 2; // 2+ tenants = fleet campaign
@@ -50,10 +52,16 @@ export class Correlator {
   private readonly TIMING_CONFIDENCE = 0.89;
   private readonly MIN_CAMPAIGN_CONFIDENCE = 0.75;
 
-  constructor(prisma: PrismaClient, logger: Logger, broadcaster: Broadcaster) {
+  constructor(
+    prisma: PrismaClient,
+    logger: Logger,
+    broadcaster: Broadcaster,
+    clickhouse?: ClickHouseService
+  ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'correlator' });
     this.broadcaster = broadcaster;
+    this.clickhouse = clickhouse ?? null;
   }
 
   /**
@@ -223,7 +231,7 @@ export class Correlator {
   ): Promise<Campaign> {
     const now = new Date();
 
-    return this.prisma.campaign.create({
+    const campaign = await this.prisma.campaign.create({
       data: {
         name: `Fleet Campaign ${anonFingerprint.substring(0, 8)}`,
         description: `Cross-tenant attack detected affecting ${tenantCount} tenants`,
@@ -245,6 +253,11 @@ export class Correlator {
         },
       },
     });
+
+    // Log to ClickHouse for historical tracking
+    void this.logCampaignEvent(campaign, 'created');
+
+    return campaign;
   }
 
   private async updateCampaign(
@@ -252,7 +265,7 @@ export class Correlator {
     signals: EnrichedSignal[],
     tenantCount: number
   ): Promise<void> {
-    await this.prisma.campaign.update({
+    const campaign = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: {
         lastActivityAt: new Date(),
@@ -260,6 +273,48 @@ export class Correlator {
         confidence: this.calculateConfidence(signals),
       },
     });
+
+    // Log to ClickHouse for historical tracking
+    void this.logCampaignEvent(campaign, 'updated');
+  }
+
+  /**
+   * Log campaign event to ClickHouse for historical tracking
+   * Non-blocking: logs warning on failure
+   */
+  private async logCampaignEvent(
+    campaign: Campaign,
+    eventType: 'created' | 'updated' | 'escalated' | 'resolved'
+  ): Promise<void> {
+    if (!this.clickhouse?.isEnabled()) return;
+
+    try {
+      const metadata = campaign.metadata as Record<string, unknown> | null;
+
+      const row: CampaignHistoryRow = {
+        timestamp: new Date().toISOString(),
+        campaign_id: campaign.id,
+        tenant_id: campaign.tenantId ?? 'fleet',
+        event_type: eventType,
+        name: campaign.name,
+        status: campaign.status,
+        severity: campaign.severity,
+        is_cross_tenant: campaign.isCrossTenant ? 1 : 0,
+        tenants_affected: campaign.tenantsAffected,
+        confidence: campaign.confidence,
+        metadata: JSON.stringify({
+          ...metadata,
+          correlationSignals: campaign.correlationSignals,
+        }),
+      };
+
+      await this.clickhouse.insertCampaignEvent(row);
+    } catch (error) {
+      this.logger.warn(
+        { error, campaignId: campaign.id },
+        'ClickHouse campaign log failed (non-critical)'
+      );
+    }
   }
 
   private calculateConfidence(signals: EnrichedSignal[]): number {

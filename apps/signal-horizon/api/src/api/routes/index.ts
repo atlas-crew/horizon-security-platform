@@ -12,8 +12,18 @@ import { createThreatRoutes } from './threats.js';
 import { createBlocklistRoutes } from './blocklist.js';
 import { createWarRoomRoutes } from './warroom.js';
 import { createIntelRoutes } from './intel.js';
+import { createHuntRoutes } from './hunt.js';
+import type { HuntService } from '../../services/hunt/index.js';
 
-export function createApiRouter(prisma: PrismaClient, logger: Logger): Router {
+export interface ApiRouterOptions {
+  huntService?: HuntService;
+}
+
+export function createApiRouter(
+  prisma: PrismaClient,
+  logger: Logger,
+  options: ApiRouterOptions = {}
+): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(prisma);
 
@@ -26,6 +36,12 @@ export function createApiRouter(prisma: PrismaClient, logger: Logger): Router {
   router.use('/blocklist', createBlocklistRoutes(prisma));
   router.use('/warrooms', createWarRoomRoutes(prisma, logger));
   router.use('/intel', createIntelRoutes(prisma, logger));
+
+  // Mount hunt routes if HuntService is provided
+  if (options.huntService) {
+    router.use('/hunt', createHuntRoutes(prisma, logger, options.huntService));
+    logger.info('Hunt routes mounted at /api/v1/hunt');
+  }
 
   return router;
 }

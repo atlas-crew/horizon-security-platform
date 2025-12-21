@@ -18,7 +18,9 @@ import { DashboardGateway } from './websocket/dashboard-gateway.js';
 import { Aggregator } from './services/aggregator/index.js';
 import { Correlator } from './services/correlator/index.js';
 import { Broadcaster } from './services/broadcaster/index.js';
+import { HuntService } from './services/hunt/index.js';
 import { createApiRouter } from './api/routes/index.js';
+import { ClickHouseService } from './storage/clickhouse/index.js';
 
 // Initialize logger
 const logger = pino({
@@ -60,9 +62,22 @@ app.get('/health', (_req, res) => {
 app.get('/ready', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
+
+    // Check ClickHouse if enabled
+    let clickhouseStatus: 'connected' | 'disabled' | 'disconnected' = 'disabled';
+    if (clickhouse) {
+      try {
+        await clickhouse.ping();
+        clickhouseStatus = 'connected';
+      } catch {
+        clickhouseStatus = 'disconnected';
+      }
+    }
+
     res.json({
       status: 'ready',
       database: 'connected',
+      clickhouse: clickhouseStatus,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -88,6 +103,8 @@ app.get('/api/v1/status', (_req, res) => {
 });
 
 // Initialize services
+let clickhouse: ClickHouseService | null = null;
+let huntService: HuntService;
 let aggregator: Aggregator;
 let correlator: Correlator;
 let broadcaster: Broadcaster;
@@ -101,15 +118,35 @@ async function start() {
   await prisma.$connect();
   logger.info('Connected to database');
 
-  // Mount API routes
-  const apiRouter = createApiRouter(prisma, logger);
+  // Initialize ClickHouse for historical data (if enabled)
+  if (config.clickhouse.enabled) {
+    clickhouse = new ClickHouseService(config.clickhouse, logger);
+    try {
+      await clickhouse.ping();
+      logger.info('Connected to ClickHouse for historical analytics');
+    } catch (error) {
+      logger.warn(
+        { error },
+        'ClickHouse connection failed - historical queries will be unavailable'
+      );
+      clickhouse = null;
+    }
+  } else {
+    logger.info('ClickHouse disabled - using PostgreSQL only (demo mode)');
+  }
+
+  // Initialize Hunt service (always available, routes to ClickHouse when enabled)
+  huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
+
+  // Mount API routes (including hunt routes)
+  const apiRouter = createApiRouter(prisma, logger, { huntService });
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1');
 
-  // Initialize core services
-  broadcaster = new Broadcaster(prisma, logger, config.broadcaster);
-  correlator = new Correlator(prisma, logger, broadcaster);
-  aggregator = new Aggregator(prisma, logger, correlator, config.aggregator);
+  // Initialize core services (pass ClickHouse for dual-write)
+  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
+  correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
+  aggregator = new Aggregator(prisma, logger, correlator, config.aggregator, clickhouse ?? undefined);
 
   // Initialize WebSocket gateways
   sensorGateway = new SensorGateway(httpServer, prisma, logger, aggregator, {
@@ -160,6 +197,13 @@ async function shutdown(signal: string) {
 
   // Stop services
   aggregator?.stop();
+  broadcaster?.stop();
+
+  // Close ClickHouse connection
+  if (clickhouse) {
+    await clickhouse.close();
+    logger.info('ClickHouse connection closed');
+  }
 
   // Disconnect database
   await prisma.$disconnect();

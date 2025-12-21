@@ -7,6 +7,7 @@ import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
+import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 
 /**
  * Signal with tenant/sensor context from sensor gateway
@@ -41,6 +42,7 @@ export class Aggregator {
   private prisma: PrismaClient;
   private logger: Logger;
   private correlator: Correlator;
+  private clickhouse: ClickHouseService | null;
   private config: Required<AggregatorConfig>;
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
@@ -52,17 +54,23 @@ export class Aggregator {
     prisma: PrismaClient,
     logger: Logger,
     correlator: Correlator,
-    config: AggregatorConfig
+    config: AggregatorConfig,
+    clickhouse?: ClickHouseService
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
     this.correlator = correlator;
+    this.clickhouse = clickhouse ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
       ...config,
     };
     this.startBatchTimer();
+
+    if (this.clickhouse?.isEnabled()) {
+      this.logger.info('ClickHouse dual-write enabled for historical data');
+    }
   }
 
   private startBatchTimer(): void {
@@ -216,6 +224,10 @@ export class Aggregator {
   /**
    * Store signal with anonymized fingerprint for cross-tenant sharing
    * Returns the enriched signal with anonFingerprint for correlation
+   *
+   * Dual-write pattern:
+   * 1. Store in PostgreSQL (source of truth, real-time queries)
+   * 2. Async write to ClickHouse (historical analytics, non-blocking)
    */
   private async storeSignal(signal: IncomingSignal): Promise<EnrichedSignal> {
     // Generate anonymized fingerprint for cross-tenant intelligence
@@ -223,6 +235,7 @@ export class Aggregator {
       ? await this.anonymizeFingerprint(signal.fingerprint)
       : undefined;
 
+    // 1. Store in PostgreSQL (source of truth)
     const stored = await this.prisma.signal.create({
       data: {
         tenantId: signal.tenantId,
@@ -238,11 +251,52 @@ export class Aggregator {
       },
     });
 
+    // 2. Async write to ClickHouse (non-blocking, for historical analytics)
+    if (this.clickhouse?.isEnabled()) {
+      void this.writeToClickHouse(signal, anonFingerprint, stored.createdAt);
+    }
+
     return {
       ...signal,
       anonFingerprint,
       id: stored.id,
     };
+  }
+
+  /**
+   * Write signal to ClickHouse for historical analytics
+   * Non-blocking: logs warning on failure, doesn't affect main request
+   */
+  private async writeToClickHouse(
+    signal: IncomingSignal,
+    anonFingerprint: string | undefined,
+    timestamp: Date
+  ): Promise<void> {
+    if (!this.clickhouse) return;
+
+    try {
+      const row: SignalEventRow = {
+        timestamp: timestamp.toISOString(),
+        tenant_id: signal.tenantId,
+        sensor_id: signal.sensorId,
+        signal_type: signal.signalType,
+        source_ip: signal.sourceIp ?? '0.0.0.0',
+        fingerprint: signal.fingerprint ?? '',
+        anon_fingerprint: anonFingerprint ?? ''.padEnd(64, '0'),
+        severity: signal.severity,
+        confidence: signal.confidence,
+        event_count: signal.eventCount ?? 1,
+        metadata: JSON.stringify(signal.metadata ?? {}),
+      };
+
+      await this.clickhouse.insertSignalEvents([row]);
+    } catch (error) {
+      // Log warning but don't fail - PostgreSQL is source of truth
+      this.logger.warn(
+        { error, signalType: signal.signalType },
+        'ClickHouse write failed (non-critical)'
+      );
+    }
   }
 
   /**

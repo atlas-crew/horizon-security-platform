@@ -41,6 +41,20 @@
         "command": "tsc --noEmit",
         "cwd": "apps/signal-horizon/ui"
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "apps/signal-horizon/ui"
+      }
+    },
+    "test:watch": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest",
+        "cwd": "apps/signal-horizon/ui"
+      }
     }
   }
 }

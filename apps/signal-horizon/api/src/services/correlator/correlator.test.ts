@@ -5,29 +5,32 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Correlator } from './index.js';
+import type { PrismaClient } from '@prisma/client';
+import type { Logger } from 'pino';
+import type { Broadcaster } from '../broadcaster/index.js';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
 
-// Mock Prisma client
+// Mock Prisma client - use explicit type
 const mockPrisma = {
   campaign: {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
   },
-} as unknown as Parameters<typeof Correlator>[0];
+} as unknown as PrismaClient;
 
-// Mock Logger
+// Mock Logger - use explicit type
 const mockLogger = {
   child: vi.fn().mockReturnThis(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-} as unknown as Parameters<typeof Correlator>[1];
+} as unknown as Logger;
 
-// Mock Broadcaster
+// Mock Broadcaster - use explicit type
 const mockBroadcaster = {
   onCampaignDetected: vi.fn().mockResolvedValue(undefined),
-} as unknown as Parameters<typeof Correlator>[2];
+} as unknown as Broadcaster;
 
 function createEnrichedSignal(overrides: Partial<EnrichedSignal> = {}): EnrichedSignal {
   return {
@@ -52,8 +55,8 @@ describe('Correlator', () => {
     vi.clearAllMocks();
 
     // Default: no existing campaigns
-    (mockPrisma.campaign.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    (mockPrisma.campaign.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([]);
+    vi.mocked(mockPrisma.campaign.create).mockResolvedValue({
       id: 'campaign-id-123',
       name: 'Test Campaign',
       status: 'ACTIVE',
@@ -61,7 +64,7 @@ describe('Correlator', () => {
       isCrossTenant: true,
       tenantsAffected: 2,
       confidence: 0.9,
-    });
+    } as never);
 
     correlator = new Correlator(mockPrisma, mockLogger, mockBroadcaster);
   });
@@ -126,7 +129,7 @@ describe('Correlator', () => {
         metadata: { anonFingerprint: 'existing-fp' },
       };
 
-      (mockPrisma.campaign.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([existingCampaign]);
+      vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([existingCampaign] as never);
 
       const signals = [
         createEnrichedSignal({ tenantId: 'tenant-1', anonFingerprint: 'existing-fp' }),
@@ -157,9 +160,9 @@ describe('Correlator', () => {
     });
 
     it('should detect multiple campaigns from different fingerprints', async () => {
-      (mockPrisma.campaign.create as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ id: 'campaign-1', name: 'Campaign 1' })
-        .mockResolvedValueOnce({ id: 'campaign-2', name: 'Campaign 2' });
+      vi.mocked(mockPrisma.campaign.create)
+        .mockResolvedValueOnce({ id: 'campaign-1', name: 'Campaign 1' } as never)
+        .mockResolvedValueOnce({ id: 'campaign-2', name: 'Campaign 2' } as never);
 
       const signals = [
         // Campaign 1
@@ -211,9 +214,9 @@ describe('Correlator', () => {
 
   describe('error handling', () => {
     it('should continue processing other fingerprints on individual error', async () => {
-      (mockPrisma.campaign.create as ReturnType<typeof vi.fn>)
+      vi.mocked(mockPrisma.campaign.create)
         .mockRejectedValueOnce(new Error('DB error'))
-        .mockResolvedValueOnce({ id: 'campaign-2', name: 'Campaign 2' });
+        .mockResolvedValueOnce({ id: 'campaign-2', name: 'Campaign 2' } as never);
 
       const signals = [
         createEnrichedSignal({ tenantId: 'tenant-1', anonFingerprint: 'fp-1' }),

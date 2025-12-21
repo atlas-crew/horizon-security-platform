@@ -12,7 +12,7 @@ import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protoco
  * Signal with tenant/sensor context from sensor gateway
  * This is what queueSignal receives before enrichment
  */
-interface IncomingSignal extends ThreatSignal {
+export interface IncomingSignal extends ThreatSignal {
   tenantId: string;
   sensorId: string;
 }

@@ -5,23 +5,24 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Broadcaster, type BroadcasterConfig } from './index.js';
-import type { Campaign } from '@prisma/client';
+import type { PrismaClient, Campaign } from '@prisma/client';
+import type { Logger } from 'pino';
 import type { EnrichedSignal } from '../../types/protocol.js';
 
-// Mock Prisma client
+// Mock Prisma client - use explicit type
 const mockPrisma = {
   blocklistEntry: {
     upsert: vi.fn(),
   },
-} as unknown as Parameters<typeof Broadcaster>[0];
+} as unknown as PrismaClient;
 
-// Mock Logger
+// Mock Logger - use explicit type
 const mockLogger = {
   child: vi.fn().mockReturnThis(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-} as unknown as Parameters<typeof Broadcaster>[1];
+} as unknown as Logger;
 
 // Mock Dashboard Gateway
 const mockDashboardGateway = {
@@ -77,7 +78,7 @@ describe('Broadcaster', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (mockPrisma.blocklistEntry.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    vi.mocked(mockPrisma.blocklistEntry.upsert).mockResolvedValue({} as never);
 
     broadcaster = new Broadcaster(mockPrisma, mockLogger, defaultConfig);
     broadcaster.setDashboardGateway(mockDashboardGateway as never);
@@ -258,8 +259,8 @@ describe('Broadcaster', () => {
       await broadcaster.onCampaignDetected(campaign, signals);
 
       // Verify the first call is for IP block
-      const calls = (mockPrisma.blocklistEntry.upsert as ReturnType<typeof vi.fn>).mock.calls;
-      const ipCall = calls.find((call) => call[0].where.blockType_indicator_tenantId.blockType === 'IP');
+      const calls = vi.mocked(mockPrisma.blocklistEntry.upsert).mock.calls;
+      const ipCall = calls.find((call) => call[0]?.where?.blockType_indicator_tenantId?.blockType === 'IP');
 
       expect(ipCall).toBeDefined();
       expect(ipCall![0]).toMatchObject({

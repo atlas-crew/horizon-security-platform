@@ -4,27 +4,30 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Aggregator, type AggregatorConfig } from './index.js';
+import { Aggregator, type AggregatorConfig, type IncomingSignal } from './index.js';
+import type { PrismaClient } from '@prisma/client';
+import type { Logger } from 'pino';
+import type { Correlator } from '../correlator/index.js';
 
-// Mock Prisma client
+// Mock Prisma client - use explicit type
 const mockPrisma = {
   signal: {
     create: vi.fn(),
   },
-} as unknown as Parameters<typeof Aggregator>[0];
+} as unknown as PrismaClient;
 
-// Mock Logger
+// Mock Logger - use explicit type
 const mockLogger = {
   child: vi.fn().mockReturnThis(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-} as unknown as Parameters<typeof Aggregator>[1];
+} as unknown as Logger;
 
-// Mock Correlator
+// Mock Correlator - use explicit type
 const mockCorrelator = {
   analyzeSignals: vi.fn().mockResolvedValue([]),
-} as unknown as Parameters<typeof Aggregator>[2];
+} as unknown as Correlator;
 
 const defaultConfig: AggregatorConfig = {
   batchSize: 5,
@@ -33,14 +36,14 @@ const defaultConfig: AggregatorConfig = {
   maxRetries: 3,
 };
 
-function createTestSignal(overrides = {}) {
+function createTestSignal(overrides: Partial<IncomingSignal> = {}): IncomingSignal {
   return {
     tenantId: 'tenant-1',
     sensorId: 'sensor-1',
-    signalType: 'BRUTE_FORCE' as const,
+    signalType: 'IP_THREAT',  // Use valid SignalType
     sourceIp: '192.168.1.100',
     fingerprint: 'test-fingerprint',
-    severity: 'MEDIUM' as const,
+    severity: 'MEDIUM',
     confidence: 0.85,
     eventCount: 1,
     ...overrides,
@@ -62,9 +65,9 @@ describe('Aggregator', () => {
     });
 
     // Mock Prisma create to return an object with id
-    (mockPrisma.signal.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(mockPrisma.signal.create).mockResolvedValue({
       id: 'signal-id-123',
-    });
+    } as never);
 
     aggregator = new Aggregator(mockPrisma, mockLogger, mockCorrelator, defaultConfig);
   });
@@ -128,7 +131,7 @@ describe('Aggregator', () => {
       expect(mockPrisma.signal.create).toHaveBeenCalledTimes(1);
 
       // Event count should be merged
-      const createCall = (mockPrisma.signal.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const createCall = vi.mocked(mockPrisma.signal.create).mock.calls[0][0];
       expect(createCall.data.eventCount).toBe(3);
     });
 
@@ -139,7 +142,7 @@ describe('Aggregator', () => {
 
       await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
 
-      const createCall = (mockPrisma.signal.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const createCall = vi.mocked(mockPrisma.signal.create).mock.calls[0][0];
       expect(createCall.data.severity).toBe('CRITICAL');
     });
 
@@ -174,9 +177,9 @@ describe('Aggregator', () => {
 
   describe('error handling', () => {
     it('should retry on failure', async () => {
-      (mockPrisma.signal.create as ReturnType<typeof vi.fn>)
+      vi.mocked(mockPrisma.signal.create)
         .mockRejectedValueOnce(new Error('DB error'))
-        .mockResolvedValue({ id: 'signal-id-123' });
+        .mockResolvedValue({ id: 'signal-id-123' } as never);
 
       aggregator.queueSignal(createTestSignal());
 
@@ -190,7 +193,7 @@ describe('Aggregator', () => {
     });
 
     it('should drop batch after max retries', async () => {
-      (mockPrisma.signal.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('DB error'));
+      vi.mocked(mockPrisma.signal.create).mockRejectedValue(new Error('DB error'));
 
       aggregator.queueSignal(createTestSignal());
 

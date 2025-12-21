@@ -4,6 +4,14 @@
  */
 
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+
+// =============================================================================
+// Memory Bounds - Prevent unbounded growth
+// =============================================================================
+const MAX_CAMPAIGNS = 50;
+const MAX_THREATS = 100;
+const MAX_ALERTS = 50;
 
 export interface Campaign {
   id: string;
@@ -121,13 +129,21 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
     }),
 
   addCampaign: (campaign) =>
-    set((state) => ({
-      campaigns: [campaign, ...state.campaigns.filter((c) => c.id !== campaign.id)],
-      stats: {
-        ...state.stats,
-        activeCampaigns: state.stats.activeCampaigns + 1,
-      },
-    })),
+    set((state) => {
+      // Deduplicate and bound to MAX_CAMPAIGNS
+      const updatedCampaigns = [
+        campaign,
+        ...state.campaigns.filter((c) => c.id !== campaign.id),
+      ].slice(0, MAX_CAMPAIGNS);
+
+      return {
+        campaigns: updatedCampaigns,
+        stats: {
+          ...state.stats,
+          activeCampaigns: updatedCampaigns.filter((c) => c.status === 'ACTIVE').length,
+        },
+      };
+    }),
 
   updateCampaign: (id, updates) =>
     set((state) => ({
@@ -135,20 +151,27 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
     })),
 
   addThreat: (threat) =>
-    set((state) => ({
-      threats: [threat, ...state.threats.filter((t) => t.id !== threat.id)].slice(0, 100),
-      stats: {
-        ...state.stats,
-        totalThreats: state.stats.totalThreats + 1,
-        fleetThreats: threat.isFleetThreat
-          ? state.stats.fleetThreats + 1
-          : state.stats.fleetThreats,
-      },
-    })),
+    set((state) => {
+      // Deduplicate and bound to MAX_THREATS
+      const updatedThreats = [
+        threat,
+        ...state.threats.filter((t) => t.id !== threat.id),
+      ].slice(0, MAX_THREATS);
+
+      return {
+        threats: updatedThreats,
+        stats: {
+          ...state.stats,
+          totalThreats: updatedThreats.length,
+          fleetThreats: updatedThreats.filter((t) => t.isFleetThreat).length,
+        },
+      };
+    }),
 
   addAlert: (alert) =>
     set((state) => ({
-      alerts: [alert, ...state.alerts].slice(0, 50),
+      // Bound to MAX_ALERTS
+      alerts: [alert, ...state.alerts].slice(0, MAX_ALERTS),
     })),
 
   clearAlerts: () => set({ alerts: [] }),
@@ -158,3 +181,78 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
       stats: { ...state.stats, ...stats },
     })),
 }));
+
+// =============================================================================
+// Memoized Selectors - Prevent unnecessary re-renders
+// Uses useShallow from Zustand 5.x for shallow comparison
+// =============================================================================
+
+/**
+ * Select connection state only - use when component only needs connection info
+ */
+export const useConnectionState = () =>
+  useHorizonStore((state) => state.connectionState);
+
+/**
+ * Select loading state only
+ */
+export const useLoadingState = () =>
+  useHorizonStore(
+    useShallow((state) => ({ isLoading: state.isLoading, hasReceivedSnapshot: state.hasReceivedSnapshot }))
+  );
+
+/**
+ * Select stats only - for dashboard summary components
+ */
+export const useStats = () => useHorizonStore(useShallow((state) => state.stats));
+
+/**
+ * Select campaigns with shallow comparison
+ */
+export const useCampaigns = () => useHorizonStore(useShallow((state) => state.campaigns));
+
+/**
+ * Select active campaigns only
+ */
+export const useActiveCampaigns = () =>
+  useHorizonStore(useShallow((state) => state.campaigns.filter((c) => c.status === 'ACTIVE')));
+
+/**
+ * Select threats with shallow comparison
+ */
+export const useThreats = () => useHorizonStore(useShallow((state) => state.threats));
+
+/**
+ * Select fleet threats only
+ */
+export const useFleetThreats = () =>
+  useHorizonStore(useShallow((state) => state.threats.filter((t) => t.isFleetThreat)));
+
+/**
+ * Select alerts with shallow comparison
+ */
+export const useAlerts = () => useHorizonStore(useShallow((state) => state.alerts));
+
+/**
+ * Select critical alerts only
+ */
+export const useCriticalAlerts = () =>
+  useHorizonStore(useShallow((state) => state.alerts.filter((a) => a.severity === 'CRITICAL')));
+
+/**
+ * Select sensor stats
+ */
+export const useSensorStats = () => useHorizonStore(useShallow((state) => state.sensorStats));
+
+/**
+ * Combined selector for overview page - batches related state
+ */
+export const useOverviewData = () =>
+  useHorizonStore(
+    useShallow((state) => ({
+      campaigns: state.campaigns,
+      threats: state.threats,
+      stats: state.stats,
+      sensorStats: state.sensorStats,
+    }))
+  );

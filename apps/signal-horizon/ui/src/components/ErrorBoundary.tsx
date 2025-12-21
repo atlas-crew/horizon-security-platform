@@ -1,6 +1,7 @@
 /**
  * Error Boundary Component
  * Catches React errors and displays fallback UI
+ * Uses key-based remounting for true recovery of children
  */
 
 import { Component, type ReactNode, type ErrorInfo } from 'react';
@@ -9,18 +10,24 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  /** Optional callback when error is caught */
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  /** Optional callback when retry is clicked */
+  onRetry?: () => void;
 }
 
 interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  /** Key for forcing remount of children on retry */
+  retryKey: number;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, retryKey: 0 };
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
@@ -31,10 +38,20 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ errorInfo });
     // Log to error reporting service
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // Call optional error callback
+    this.props.onError?.(error, errorInfo);
   }
 
   handleRetry = (): void => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+    // Increment retryKey to force remount of children
+    this.setState((prevState) => ({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      retryKey: prevState.retryKey + 1,
+    }));
+    // Call optional retry callback
+    this.props.onRetry?.();
   };
 
   render(): ReactNode {
@@ -76,7 +93,13 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    // Use key to force remount of children on retry
+    // This ensures fresh state and re-runs effects
+    return (
+      <div key={this.state.retryKey}>
+        {this.props.children}
+      </div>
+    );
   }
 }
 

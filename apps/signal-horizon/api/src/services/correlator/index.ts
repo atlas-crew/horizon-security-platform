@@ -15,6 +15,30 @@ interface CorrelationResult {
   signals: string[];
 }
 
+/**
+ * Type guard for campaign metadata with anonFingerprint
+ * Validates the structure at runtime instead of using type assertions
+ */
+interface CampaignMetadata {
+  anonFingerprint?: string;
+  signalCount?: number;
+}
+
+function isCampaignMetadata(value: unknown): value is CampaignMetadata {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value !== 'object') {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  // anonFingerprint must be string or undefined
+  if ('anonFingerprint' in obj && typeof obj.anonFingerprint !== 'string') {
+    return false;
+  }
+  return true;
+}
+
 export class Correlator {
   private prisma: PrismaClient;
   private logger: Logger;
@@ -157,6 +181,7 @@ export class Correlator {
   /**
    * Batch fetch existing campaigns for multiple fingerprints
    * OPTIMIZATION: Single query instead of N queries
+   * Uses Set for O(1) fingerprint lookups instead of O(n) includes()
    */
   private async findExistingCampaignsBatch(
     anonFingerprints: string[]
@@ -173,13 +198,18 @@ export class Correlator {
       },
     });
 
+    // Use Set for O(1) lookups instead of O(n) includes()
+    const fingerprintSet = new Set(anonFingerprints);
+
     // Build map keyed by anonFingerprint from metadata
+    // Use type guard for runtime validation instead of type assertion
     const campaignMap = new Map<string, Campaign>();
     for (const campaign of campaigns) {
-      const metadata = campaign.metadata as { anonFingerprint?: string } | null;
-      const fingerprint = metadata?.anonFingerprint;
-      if (fingerprint && anonFingerprints.includes(fingerprint)) {
-        campaignMap.set(fingerprint, campaign);
+      if (isCampaignMetadata(campaign.metadata)) {
+        const fingerprint = campaign.metadata.anonFingerprint;
+        if (fingerprint && fingerprintSet.has(fingerprint)) {
+          campaignMap.set(fingerprint, campaign);
+        }
       }
     }
 

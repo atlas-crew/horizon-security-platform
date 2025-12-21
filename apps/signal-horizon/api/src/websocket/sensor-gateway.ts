@@ -26,12 +26,55 @@ interface SensorConnection {
   connectedAt: number;
   lastHeartbeat: number;
   signalsReceived: number;
+  /** Rate limiting: timestamps of recent messages */
+  messageTimestamps: number[];
 }
 
 interface SensorGatewayConfig {
   path: string;
   heartbeatIntervalMs: number;
   maxConnections: number;
+  /** Maximum messages per window (default: 100) */
+  rateLimitMessages?: number;
+  /** Rate limit window in milliseconds (default: 1000ms) */
+  rateLimitWindowMs?: number;
+}
+
+/**
+ * Simple sliding window rate limiter
+ * Tracks message timestamps and rejects if too many in window
+ */
+class RateLimiter {
+  private windowMs: number;
+  private maxMessages: number;
+
+  constructor(windowMs: number, maxMessages: number) {
+    this.windowMs = windowMs;
+    this.maxMessages = maxMessages;
+  }
+
+  /**
+   * Check if message should be allowed and update timestamps
+   * @returns true if allowed, false if rate limited
+   */
+  checkAndUpdate(timestamps: number[]): boolean {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+
+    // Remove timestamps outside the window (mutates array in place for efficiency)
+    while (timestamps.length > 0 && timestamps[0] < windowStart) {
+      timestamps.shift();
+    }
+
+    // Check if we're at the limit
+    if (timestamps.length >= this.maxMessages) {
+      return false;
+    }
+
+    // Add current timestamp
+    timestamps.push(now);
+    return true;
+  }
 }
 
 // Local type aliases for Zod-validated payloads
@@ -52,6 +95,7 @@ export class SensorGateway {
   private aggregator: Aggregator;
   private config: SensorGatewayConfig;
   private sequenceId = 0;
+  private rateLimiter: RateLimiter;
 
   constructor(
     httpServer: HTTPServer,
@@ -64,6 +108,12 @@ export class SensorGateway {
     this.logger = logger.child({ gateway: 'sensor' });
     this.aggregator = aggregator;
     this.config = config;
+
+    // Initialize rate limiter with defaults or config values
+    this.rateLimiter = new RateLimiter(
+      config.rateLimitWindowMs ?? 1000,  // 1 second window
+      config.rateLimitMessages ?? 100     // 100 messages per second max
+    );
 
     this.wss = new WebSocketServer({
       server: httpServer,
@@ -120,6 +170,7 @@ export class SensorGateway {
       connectedAt: Date.now(),
       lastHeartbeat: Date.now(),
       signalsReceived: 0,
+      messageTimestamps: [], // For rate limiting
     };
 
     // Temporarily store pending connection
@@ -143,6 +194,17 @@ export class SensorGateway {
 
     ws.on('message', async (data) => {
       try {
+        // Rate limiting check - get connection from map to access messageTimestamps
+        const conn = this.connections.get(connectionId);
+        if (conn && !this.rateLimiter.checkAndUpdate(conn.messageTimestamps)) {
+          this.logger.warn({ connectionId }, 'Rate limit exceeded');
+          this.send(conn, {
+            type: 'error',
+            error: 'Rate limit exceeded. Please reduce message frequency.',
+          });
+          return;
+        }
+
         const parsed = JSON.parse(data.toString());
         const validation = validateSensorMessage(parsed);
 

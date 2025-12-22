@@ -81,6 +81,8 @@ model Sensor {
   id              String       @id @default(cuid())
   tenantId        String
   name            String
+  hostname        String?      // Machine hostname
+  region          String       @default("us-east-1") // Physical or cloud region
   version         String
   connectionState ConnectionState @default(DISCONNECTED)
   lastHeartbeat   DateTime?
@@ -154,6 +156,7 @@ enum SignalType {
   CREDENTIAL_STUFFING // Credential stuffing attempt
   RATE_ANOMALY        // Unusual request patterns
   BOT_SIGNATURE       // Automated bot detection
+  IMPOSSIBLE_TRAVEL   // Geographically impossible logins
 }
 
 enum Severity {

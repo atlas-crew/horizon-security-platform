@@ -206,30 +206,54 @@ export type SignalType =
   | 'CAMPAIGN_INDICATOR'
   | 'CREDENTIAL_STUFFING'
   | 'RATE_ANOMALY'
-  | 'BOT_SIGNATURE';
+  | 'BOT_SIGNATURE'
+  | 'IMPOSSIBLE_TRAVEL';
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-export interface ThreatSignal {
-  signalType: SignalType;
+export interface GeoMetadata {
+  latitude: number;
+  longitude: number;
+  city?: string;
+  countryCode?: string;
+  userId?: string;
+}
+
+export interface ImpossibleTravelMetadata extends GeoMetadata {
+  userId: string;
+}
+
+export type SignalMetadata = 
+  | ({ signalType: 'CREDENTIAL_STUFFING' } & GeoMetadata)
+  | ({ signalType: 'IMPOSSIBLE_TRAVEL' } & ImpossibleTravelMetadata)
+  | ({ signalType: 'IP_THREAT' | 'FINGERPRINT_THREAT' | 'CAMPAIGN_INDICATOR' | 'RATE_ANOMALY' | 'BOT_SIGNATURE' } & Record<string, unknown>);
+
+export type ThreatSignal = {
   sourceIp?: string;
   fingerprint?: string;
   severity: Severity;
   confidence: number; // 0.0 - 1.0
   eventCount?: number;
-  metadata?: Record<string, unknown>;
-}
+} & (
+  | { signalType: 'CREDENTIAL_STUFFING'; metadata: GeoMetadata }
+  | { signalType: 'IMPOSSIBLE_TRAVEL'; metadata: ImpossibleTravelMetadata }
+  | { signalType: 'IP_THREAT'; metadata?: Record<string, unknown> }
+  | { signalType: 'FINGERPRINT_THREAT'; metadata?: Record<string, unknown> }
+  | { signalType: 'CAMPAIGN_INDICATOR'; metadata?: Record<string, unknown> }
+  | { signalType: 'RATE_ANOMALY'; metadata?: Record<string, unknown> }
+  | { signalType: 'BOT_SIGNATURE'; metadata?: Record<string, unknown> }
+);
 
 /**
  * ThreatSignal enriched with tenant/sensor context after ingestion
  * Used internally by aggregator, correlator, and broadcaster
  */
-export interface EnrichedSignal extends ThreatSignal {
+export type EnrichedSignal = ThreatSignal & {
   tenantId: string;
   sensorId: string;
   anonFingerprint?: string; // Added by aggregator after SHA-256 anonymization
   id?: string; // Database ID after storage
-}
+};
 
 export type BlockType = 'IP' | 'IP_RANGE' | 'FINGERPRINT' | 'ASN' | 'USER_AGENT';
 

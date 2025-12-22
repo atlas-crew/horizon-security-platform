@@ -9,6 +9,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import type { Aggregator } from '../services/aggregator/index.js';
+import type { FleetAggregator } from '../services/fleet/fleet-aggregator.js';
 import type { HeartbeatHandler } from '../protocols/heartbeat-handler.js';
 import type { CommandSender } from '../protocols/command-sender.js';
 import type {
@@ -20,6 +21,9 @@ import type {
 import {
   validateSensorMessage,
   type ValidatedSensorMessage,
+  type ValidatedSensorAuthPayload,
+  type ValidatedSensorHeartbeatPayload,
+  type ValidatedSensorCommandAckPayload,
 } from '../schemas/signal.js';
 
 interface SensorConnection {
@@ -83,12 +87,6 @@ class RateLimiter {
 
 // Local type aliases for Zod-validated payloads
 // Full validation schemas are in ../schemas/signal.ts
-interface SensorAuthPayload {
-  apiKey: string;
-  sensorId: string;
-  sensorName?: string;
-  version: string;
-}
 
 export class SensorGateway {
   private wss: WebSocketServer | null = null;
@@ -97,10 +95,10 @@ export class SensorGateway {
   private prisma: PrismaClient;
   private logger: Logger;
   private aggregator: Aggregator;
+  private fleetAggregator: FleetAggregator;
   private config: SensorGatewayConfig;
   private sequenceId = 0;
   private rateLimiter: RateLimiter;
-  private heartbeatHandler: HeartbeatHandler | null = null;
   private commandSender: CommandSender | null = null;
 
   constructor(
@@ -108,11 +106,13 @@ export class SensorGateway {
     prisma: PrismaClient,
     logger: Logger,
     aggregator: Aggregator,
+    fleetAggregator: FleetAggregator,
     config: SensorGatewayConfig
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'sensor' });
     this.aggregator = aggregator;
+    this.fleetAggregator = fleetAggregator;
     this.config = config;
 
     // Initialize rate limiter with defaults or config values
@@ -132,10 +132,8 @@ export class SensorGateway {
    * Called after protocol handler services are initialized
    */
   setProtocolHandlers(
-    heartbeatHandler: HeartbeatHandler,
     commandSender: CommandSender
   ): void {
-    this.heartbeatHandler = heartbeatHandler;
     this.commandSender = commandSender;
     this.logger.info('Protocol handlers wired to sensor gateway');
   }
@@ -251,6 +249,9 @@ export class SensorGateway {
       const conn = this.connections.get(connectionId);
       if (conn?.sensorId) {
         this.updateSensorStatus(conn.sensorId, 'DISCONNECTED');
+        if (this.commandSender) {
+          this.commandSender.unregisterConnection(conn.sensorId);
+        }
       }
       this.connections.delete(connectionId);
       this.logger.info({ connectionId }, 'Sensor disconnected');
@@ -306,7 +307,7 @@ export class SensorGateway {
           this.send(conn, { type: 'error', error: 'Not authenticated' });
           return;
         }
-        await this.handleHeartbeat(conn, message.payload as SensorHeartbeatMessage['payload']);
+        await this.handleHeartbeat(conn, message.payload);
         break;
 
       case 'command-ack':
@@ -314,14 +315,14 @@ export class SensorGateway {
           this.send(conn, { type: 'error', error: 'Not authenticated' });
           return;
         }
-        await this.handleCommandAck(conn, message.payload as SensorCommandAckMessage['payload']);
+        await this.handleCommandAck(conn, message.payload);
         break;
     }
   }
 
   private async handleAuth(
     conn: SensorConnection,
-    payload: SensorAuthPayload,
+    payload: ValidatedSensorAuthPayload,
     authTimeout: NodeJS.Timeout
   ): Promise<void> {
     const { apiKey, sensorId, sensorName, version } = payload;
@@ -374,6 +375,11 @@ export class SensorGateway {
       // Update connection with auth info
       conn.sensorId = sensor.id;
       conn.tenantId = apiKeyRecord.tenantId;
+
+      // Register connection with command sender for outbound commands
+      if (this.commandSender) {
+        this.commandSender.registerConnection(sensor.id, conn.ws);
+      }
 
       // Update API key last used
       await this.prisma.apiKey.update({
@@ -453,20 +459,29 @@ export class SensorGateway {
 
   private async handleHeartbeat(
     conn: SensorConnection,
-    payload: SensorHeartbeatMessage['payload']
+    payload: ValidatedSensorHeartbeatPayload
   ): Promise<void> {
     try {
       // Update connection heartbeat timestamp
       conn.lastHeartbeat = Date.now();
 
-      // Route heartbeat to HeartbeatHandler if wired
-      if (this.heartbeatHandler) {
-        await this.heartbeatHandler.handleHeartbeat(
-          conn.sensorId,
-          conn.tenantId,
-          payload
-        );
-      }
+      // Route heartbeat to FleetAggregator
+      this.fleetAggregator.updateSensorMetrics(conn.sensorId, {
+        sensorId: conn.sensorId,
+        tenantId: conn.tenantId,
+        timestamp: new Date(payload.timestamp),
+        metrics: {
+          rps: payload.requestsLastMinute / 60,
+          latency: payload.avgLatencyMs,
+          cpu: payload.cpu,
+          memory: payload.memory,
+          disk: payload.disk,
+        },
+        health: payload.status === 'unhealthy' ? 'critical' : payload.status,
+        requestsTotal: 0, // Protocol doesn't provide total yet
+        configHash: payload.configHash,
+        rulesHash: payload.rulesHash,
+      });
 
       // Update sensor's last heartbeat in database
       await this.prisma.sensor.update({
@@ -480,6 +495,8 @@ export class SensorGateway {
             requestsLastMinute: payload.requestsLastMinute,
             avgLatencyMs: payload.avgLatencyMs,
             status: payload.status,
+            configHash: payload.configHash,
+            rulesHash: payload.rulesHash,
           },
         },
       });
@@ -498,7 +515,7 @@ export class SensorGateway {
 
   private async handleCommandAck(
     conn: SensorConnection,
-    payload: SensorCommandAckMessage['payload']
+    payload: ValidatedSensorCommandAckPayload
   ): Promise<void> {
     try {
       const { commandId, success, message: resultMessage, result } = payload;

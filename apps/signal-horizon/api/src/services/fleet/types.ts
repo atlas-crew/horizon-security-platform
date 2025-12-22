@@ -6,6 +6,8 @@
 export interface SensorMetricsSnapshot {
   sensorId: string;
   tenantId: string;
+  hostname?: string;
+  region?: string;
   rps: number;
   latency: number; // milliseconds
   cpu: number; // percentage 0-100
@@ -14,6 +16,8 @@ export interface SensorMetricsSnapshot {
   health: 'healthy' | 'degraded' | 'critical';
   lastHeartbeat: Date;
   requestsTotal: number;
+  configHash?: string;
+  rulesHash?: string;
 }
 
 export interface FleetMetrics {
@@ -192,6 +196,8 @@ export interface SensorHeartbeat {
   };
   health: 'healthy' | 'degraded' | 'critical';
   requestsTotal: number;
+  configHash?: string;
+  rulesHash?: string;
   region?: string;
   metadata?: Record<string, unknown>;
 }

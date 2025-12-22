@@ -7,6 +7,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'node:events';
 import type { SensorCommand, CommandStatus, Command } from './types.js';
+import type { CommandSender, CommandType } from '../../protocols/command-sender.js';
 
 export interface FleetCommanderConfig {
   /**
@@ -40,6 +41,7 @@ export class FleetCommander extends EventEmitter {
   private logger: Logger;
   private config: Required<FleetCommanderConfig>;
   private timeoutCheckInterval: NodeJS.Timeout | null = null;
+  private commandSender: CommandSender | null = null;
 
   constructor(prisma: PrismaClient, logger: Logger, config: FleetCommanderConfig = {}) {
     super();
@@ -53,6 +55,30 @@ export class FleetCommander extends EventEmitter {
 
     // Start timeout checker
     this.startTimeoutChecker();
+  }
+
+  /**
+   * Set the command sender protocol handler
+   */
+  setCommandSender(commandSender: CommandSender): void {
+    this.commandSender = commandSender;
+
+    // Listen for command updates from the protocol layer
+    this.commandSender.on('command-sent', async (cmd) => {
+      await this.markCommandSent(cmd.id);
+    });
+
+    this.commandSender.on('command-complete', async (cmd) => {
+      await this.markCommandSuccess(cmd.id, cmd.payload as Record<string, unknown>);
+    });
+
+    this.commandSender.on('command-failed', async (cmd) => {
+      await this.markCommandFailed(cmd.id, cmd.error || 'Unknown error');
+    });
+
+    this.commandSender.on('command-timeout', async (cmd) => {
+      await this.markCommandFailed(cmd.id, 'Command timed out at protocol layer');
+    });
   }
 
   // =============================================================================
@@ -80,16 +106,29 @@ export class FleetCommander extends EventEmitter {
       },
     });
 
-    // Emit command-sent event
+    // Emit command-sent event (locally queued)
     this.emit('command-sent', {
       commandId: created.id,
       sensorId,
       commandType: command.type,
     });
 
-    // In a real implementation, you would send the command via WebSocket here
-    // For now, we'll mark it as sent immediately
-    await this.markCommandSent(created.id);
+    // If command sender is available, try to send it immediately
+    if (this.commandSender) {
+      try {
+        this.commandSender.sendCommand(
+          sensorId,
+          command.type as CommandType,
+          command.payload,
+          created.id
+        );
+      } catch (error) {
+        this.logger.error({ error, commandId: created.id }, 'Failed to initiate command send');
+        await this.markCommandFailed(created.id, 'Failed to initiate send');
+      }
+    } else {
+      this.logger.warn({ sensorId }, 'CommandSender not wired, command will remain pending');
+    }
 
     return created.id;
   }

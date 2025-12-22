@@ -6,7 +6,7 @@
 import { z } from 'zod';
 
 // =============================================================================
-// Signal Types
+// Signal Types & Metadata
 // =============================================================================
 
 export const SignalTypeSchema = z.enum([
@@ -16,23 +16,68 @@ export const SignalTypeSchema = z.enum([
   'CREDENTIAL_STUFFING',
   'RATE_ANOMALY',
   'BOT_SIGNATURE',
+  'IMPOSSIBLE_TRAVEL',
 ]);
 
 export const SeveritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 
+// Specific Metadata Schemas
+const GeoMetadataSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  city: z.string().optional(),
+  countryCode: z.string().length(2).optional(),
+  userId: z.string().optional(),
+});
+
+const ImpossibleTravelMetadataSchema = GeoMetadataSchema.extend({
+  userId: z.string().min(1, 'userId is required for travel anomalies'),
+});
+
+const DefaultMetadataSchema = z.record(z.unknown()).optional();
+
 // =============================================================================
-// Threat Signal Schema
+// Threat Signal Schema (Discriminated Union)
 // =============================================================================
 
-export const ThreatSignalSchema = z.object({
-  signalType: SignalTypeSchema,
+export const BaseThreatSignalSchema = z.object({
   sourceIp: z.string().ip().optional(),
   fingerprint: z.string().max(256).optional(),
   severity: SeveritySchema,
   confidence: z.number().min(0).max(1),
   eventCount: z.number().int().positive().optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
+
+export const ThreatSignalSchema = z.discriminatedUnion('signalType', [
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('CREDENTIAL_STUFFING'),
+    metadata: GeoMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('IMPOSSIBLE_TRAVEL'),
+    metadata: ImpossibleTravelMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('IP_THREAT'),
+    metadata: DefaultMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('FINGERPRINT_THREAT'),
+    metadata: DefaultMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('CAMPAIGN_INDICATOR'),
+    metadata: DefaultMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('RATE_ANOMALY'),
+    metadata: DefaultMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('BOT_SIGNATURE'),
+    metadata: DefaultMetadataSchema,
+  }),
+]);
 
 export type ValidatedThreatSignal = z.infer<typeof ThreatSignalSchema>;
 
@@ -47,7 +92,28 @@ export const SensorAuthPayloadSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format'),
 });
 
+export const SensorHeartbeatPayloadSchema = z.object({
+  timestamp: z.number(),
+  status: z.enum(['healthy', 'degraded', 'unhealthy']),
+  cpu: z.number().min(0).max(100),
+  memory: z.number().min(0).max(100),
+  disk: z.number().min(0).max(100),
+  requestsLastMinute: z.number().nonnegative(),
+  avgLatencyMs: z.number().nonnegative(),
+  configHash: z.string(),
+  rulesHash: z.string(),
+});
+
+export const SensorCommandAckPayloadSchema = z.object({
+  commandId: z.string().min(1),
+  success: z.boolean(),
+  message: z.string().optional(),
+  result: z.record(z.unknown()).optional(),
+});
+
 export type ValidatedSensorAuthPayload = z.infer<typeof SensorAuthPayloadSchema>;
+export type ValidatedSensorHeartbeatPayload = z.infer<typeof SensorHeartbeatPayloadSchema>;
+export type ValidatedSensorCommandAckPayload = z.infer<typeof SensorCommandAckPayloadSchema>;
 
 // Discriminated union for all sensor messages
 export const SensorMessageSchema = z.discriminatedUnion('type', [
@@ -62,6 +128,14 @@ export const SensorMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('signal-batch'),
     payload: z.array(ThreatSignalSchema).max(1000, 'Batch size exceeds maximum of 1000'),
+  }),
+  z.object({
+    type: z.literal('heartbeat'),
+    payload: SensorHeartbeatPayloadSchema,
+  }),
+  z.object({
+    type: z.literal('command-ack'),
+    payload: SensorCommandAckPayloadSchema,
   }),
   z.object({
     type: z.literal('pong'),

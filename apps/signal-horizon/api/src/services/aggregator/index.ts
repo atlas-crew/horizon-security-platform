@@ -6,6 +6,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
+import type { ImpossibleTravelService } from '../impossible-travel.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 
@@ -42,6 +43,7 @@ export class Aggregator {
   private prisma: PrismaClient;
   private logger: Logger;
   private correlator: Correlator;
+  private impossibleTravel: ImpossibleTravelService | null;
   private clickhouse: ClickHouseService | null;
   private config: Required<AggregatorConfig>;
   private batchTimer: ReturnType<typeof setInterval> | null = null;
@@ -55,12 +57,14 @@ export class Aggregator {
     logger: Logger,
     correlator: Correlator,
     config: AggregatorConfig,
-    clickhouse?: ClickHouseService
+    clickhouse?: ClickHouseService,
+    impossibleTravel?: ImpossibleTravelService
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
     this.correlator = correlator;
     this.clickhouse = clickhouse ?? null;
+    this.impossibleTravel = impossibleTravel ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
@@ -254,6 +258,24 @@ export class Aggregator {
     // 2. Async write to ClickHouse (non-blocking, for historical analytics)
     if (this.clickhouse?.isEnabled()) {
       void this.writeToClickHouse(signal, anonFingerprint, stored.createdAt);
+    }
+
+    // 3. Optional: Trigger impossible travel check for authentication-related signals
+    if (this.impossibleTravel && signal.signalType === 'CREDENTIAL_STUFFING') {
+      const { metadata } = signal;
+      void this.impossibleTravel.processLogin({
+        userId: metadata.userId,
+        tenantId: signal.tenantId,
+        timestamp: stored.createdAt,
+        ip: signal.sourceIp || '0.0.0.0',
+        location: {
+          latitude: metadata.latitude,
+          longitude: metadata.longitude,
+          city: metadata.city,
+          countryCode: metadata.countryCode || 'XX',
+        },
+        fingerprint: signal.fingerprint,
+      });
     }
 
     return {

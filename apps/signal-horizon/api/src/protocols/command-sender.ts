@@ -55,8 +55,8 @@ export class CommandSender extends EventEmitter {
     this.sensorConnections.delete(sensorId);
   }
 
-  sendCommand(sensorId: string, type: CommandType, payload: unknown): string {
-    const id = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  sendCommand(sensorId: string, type: CommandType, payload: unknown, customId?: string): string {
+    const id = customId ?? `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const command: Command = {
       id,
       type,

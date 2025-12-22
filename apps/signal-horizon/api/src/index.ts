@@ -26,8 +26,8 @@ import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
+import { ImpossibleTravelService } from './services/impossible-travel.js';
 // Protocol handlers
-import { HeartbeatHandler } from './protocols/heartbeat-handler.js';
 import { CommandSender } from './protocols/command-sender.js';
 
 // Initialize logger
@@ -119,12 +119,12 @@ let broadcaster: Broadcaster;
 let sensorGateway: SensorGateway;
 let dashboardGateway: DashboardGateway;
 // Fleet management services
-let heartbeatHandler: HeartbeatHandler;
 let commandSender: CommandSender;
 let fleetAggregator: FleetAggregator;
 let configManager: ConfigManager;
 let fleetCommander: FleetCommander;
 let ruleDistributor: RuleDistributor;
+let impossibleTravelService: ImpossibleTravelService;
 
 async function start() {
   logger.info('Starting Signal Horizon Hub...');
@@ -154,7 +154,6 @@ async function start() {
   huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
 
   // Initialize protocol handlers for fleet management
-  heartbeatHandler = new HeartbeatHandler();
   commandSender = new CommandSender();
   logger.info('Protocol handlers initialized');
 
@@ -173,11 +172,13 @@ async function start() {
     timeoutCheckIntervalMs: 5000,
   });
   ruleDistributor = new RuleDistributor(prisma, logger);
+  impossibleTravelService = new ImpossibleTravelService(prisma, logger);
   logger.info('Fleet management services initialized');
 
   // Resolve circular dependencies: services that need each other
   configManager.setFleetCommander(fleetCommander);
   ruleDistributor.setFleetCommander(fleetCommander);
+  fleetCommander.setCommandSender(commandSender);
   logger.info('Fleet service dependencies wired');
 
   // Mount API routes (including hunt routes and fleet routes)
@@ -194,10 +195,10 @@ async function start() {
   // Initialize core services (pass ClickHouse for dual-write)
   broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
-  aggregator = new Aggregator(prisma, logger, correlator, config.aggregator, clickhouse ?? undefined);
+  aggregator = new Aggregator(prisma, logger, correlator, config.aggregator, clickhouse ?? undefined, impossibleTravelService);
 
   // Initialize WebSocket gateways
-  sensorGateway = new SensorGateway(httpServer, prisma, logger, aggregator, {
+  sensorGateway = new SensorGateway(httpServer, prisma, logger, aggregator, fleetAggregator, {
     path: config.websocket.sensorPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxSensorConnections,
@@ -213,12 +214,11 @@ async function start() {
   broadcaster.setDashboardGateway(dashboardGateway);
 
   // Start protocol handlers for fleet management
-  heartbeatHandler.start();
   commandSender.start();
   logger.info('Protocol handlers started');
 
   // Wire up protocol handlers to sensor gateway for fleet operations
-  sensorGateway.setProtocolHandlers(heartbeatHandler, commandSender);
+  sensorGateway.setProtocolHandlers(commandSender);
 
   // Start WebSocket gateways
   sensorGateway.start();
@@ -252,7 +252,6 @@ async function shutdown(signal: string) {
   dashboardGateway?.stop();
 
   // Stop protocol handlers
-  heartbeatHandler?.stop();
   commandSender?.stop();
   logger.info('Protocol handlers stopped');
 

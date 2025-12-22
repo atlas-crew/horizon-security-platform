@@ -83,6 +83,8 @@ export class FleetAggregator extends EventEmitter {
     const snapshot: SensorMetricsSnapshot = {
       sensorId: heartbeat.sensorId,
       tenantId: heartbeat.tenantId,
+      hostname: heartbeat.metadata?.hostname as string | undefined,
+      region: heartbeat.region,
       rps: heartbeat.metrics.rps,
       latency: heartbeat.metrics.latency,
       cpu: heartbeat.metrics.cpu,
@@ -91,6 +93,8 @@ export class FleetAggregator extends EventEmitter {
       health: heartbeat.health,
       lastHeartbeat: heartbeat.timestamp,
       requestsTotal: heartbeat.requestsTotal,
+      configHash: heartbeat.configHash,
+      rulesHash: heartbeat.rulesHash,
     };
 
     this.sensorMetrics.set(sensorId, snapshot);
@@ -174,7 +178,7 @@ export class FleetAggregator extends EventEmitter {
    */
   getRegionMetrics(region: string): RegionMetrics {
     const regionSensors = Array.from(this.sensorMetrics.values()).filter(
-      (s) => (s as unknown as { region?: string }).region === region
+      (s) => s.region === region
     );
 
     const onlineSensors = regionSensors.filter((s) => this.isOnline(s));

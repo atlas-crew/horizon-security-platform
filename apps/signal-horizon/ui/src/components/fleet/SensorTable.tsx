@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { SensorSummary } from '../../types/fleet';
 import { SensorStatusBadge } from './SensorStatusBadge';
 
@@ -14,14 +14,14 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  const handleSort = (field: SortField) => {
+  const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortDirection('asc');
     }
-  };
+  }, [sortField, sortDirection]);
 
   const sortedSensors = useMemo(() => {
     if (sortField === 'none') return sensors;

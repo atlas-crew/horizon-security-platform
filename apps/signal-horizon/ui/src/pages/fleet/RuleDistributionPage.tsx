@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
@@ -82,19 +82,23 @@ export function RuleDistributionPage() {
     },
   });
 
-  const toggleRule = (ruleId: string) => {
-    const newSet = new Set(selectedRules);
-    if (newSet.has(ruleId)) newSet.delete(ruleId);
-    else newSet.add(ruleId);
-    setSelectedRules(newSet);
-  };
+  const toggleRule = useCallback((ruleId: string) => {
+    setSelectedRules((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(ruleId)) newSet.delete(ruleId);
+      else newSet.add(ruleId);
+      return newSet;
+    });
+  }, []);
 
-  const toggleSensor = (sensorId: string) => {
-    const newSet = new Set(selectedSensors);
-    if (newSet.has(sensorId)) newSet.delete(sensorId);
-    else newSet.add(sensorId);
-    setSelectedSensors(newSet);
-  };
+  const toggleSensor = useCallback((sensorId: string) => {
+    setSelectedSensors((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sensorId)) newSet.delete(sensorId);
+      else newSet.add(sensorId);
+      return newSet;
+    });
+  }, []);
 
   const totalSynced = syncStatus.reduce((sum, s) => sum + s.syncedRules, 0);
   const totalPending = syncStatus.reduce((sum, s) => sum + s.pendingRules, 0);

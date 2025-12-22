@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
@@ -68,12 +68,14 @@ export function FleetUpdatesPage() {
     },
   });
 
-  const toggleSensor = (sensorId: string) => {
-    const newSet = new Set(selectedSensors);
-    if (newSet.has(sensorId)) newSet.delete(sensorId);
-    else newSet.add(sensorId);
-    setSelectedSensors(newSet);
-  };
+  const toggleSensor = useCallback((sensorId: string) => {
+    setSelectedSensors((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sensorId)) newSet.delete(sensorId);
+      else newSet.add(sensorId);
+      return newSet;
+    });
+  }, []);
 
   // Single-pass optimization for sensor versions + status counts
   const { sensorVersions, statusCounts } = useMemo(() => {

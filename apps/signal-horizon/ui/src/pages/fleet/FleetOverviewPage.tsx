@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MetricCard, SensorTable } from '../../components/fleet';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
@@ -8,9 +9,9 @@ export function FleetOverviewPage() {
   const { data: metrics, isLoading: metricsLoading } = useFleetMetrics();
   const { data: sensors = [], isLoading: sensorsLoading } = useSensors();
 
-  const handleSensorClick = (sensor: SensorSummary) => {
+  const handleSensorClick = useCallback((sensor: SensorSummary) => {
     navigate(`/fleet/sensors/${sensor.id}`);
-  };
+  }, [navigate]);
 
   if (metricsLoading || sensorsLoading) {
     return (

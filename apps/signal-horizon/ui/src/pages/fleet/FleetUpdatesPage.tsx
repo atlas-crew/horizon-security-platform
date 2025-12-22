@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
@@ -75,21 +75,38 @@ export function FleetUpdatesPage() {
     setSelectedSensors(newSet);
   };
 
-  // Merge sensor data with version data
-  const sensorVersions = sensors.map((sensor) => {
-    const version = versions.find((v) => v.sensorId === sensor.id);
-    return {
-      ...sensor,
-      currentVersion: version?.currentVersion ?? sensor.version,
-      updateStatus: version?.updateStatus ?? 'up_to_date',
-      lastUpdated: version?.lastUpdated,
-    };
-  });
+  // Single-pass optimization for sensor versions + status counts
+  const { sensorVersions, statusCounts } = useMemo(() => {
+    const merged = sensors.map((sensor) => {
+      const version = versions.find((v) => v.sensorId === sensor.id);
+      return {
+        ...sensor,
+        currentVersion: version?.currentVersion ?? sensor.version,
+        updateStatus: version?.updateStatus ?? 'up_to_date',
+        lastUpdated: version?.lastUpdated,
+      };
+    });
 
-  const upToDate = sensorVersions.filter((s) => s.updateStatus === 'up_to_date').length;
-  const needsUpdate = sensorVersions.filter((s) => s.updateStatus === 'update_available').length;
-  const updating = sensorVersions.filter((s) => s.updateStatus === 'updating').length;
-  const failed = sensorVersions.filter((s) => s.updateStatus === 'failed').length;
+    const counts = merged.reduce(
+      (acc, s) => {
+        acc[s.updateStatus]++;
+        return acc;
+      },
+      { up_to_date: 0, update_available: 0, updating: 0, failed: 0 }
+    );
+
+    return {
+      sensorVersions: merged,
+      statusCounts: {
+        upToDate: counts.up_to_date,
+        needsUpdate: counts.update_available,
+        updating: counts.updating,
+        failed: counts.failed,
+      },
+    };
+  }, [sensors, versions]);
+
+  const { upToDate, needsUpdate, updating, failed } = statusCounts;
 
   const statusColors = {
     up_to_date: 'bg-green-100 text-green-800',

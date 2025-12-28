@@ -6,7 +6,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import type { Aggregator } from '../services/aggregator/index.js';
@@ -532,12 +532,10 @@ export class SensorGateway {
 
       // Route command acknowledgment to CommandSender if wired
       if (this.commandSender) {
-        await this.commandSender.handleCommandAck(
+        this.commandSender.handleResponse(
           commandId,
-          conn.sensorId,
           success,
-          resultMessage,
-          result
+          resultMessage
         );
       }
 
@@ -548,7 +546,7 @@ export class SensorGateway {
           status: success ? 'success' : 'failed',
           completedAt: new Date(),
           error: success ? undefined : resultMessage,
-          result: success ? result : undefined,
+          result: success ? (result as Prisma.InputJsonValue) : undefined,
           attempts: { increment: 1 },
         },
       });

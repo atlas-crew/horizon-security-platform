@@ -6,6 +6,7 @@ import {
   Users,
   Search,
   BarChart3,
+  Shield,
   Wifi,
   WifiOff,
   Settings,
@@ -14,7 +15,6 @@ import {
   ChevronDown,
   Activity,
   Package,
-  Shield,
   Server,
 } from 'lucide-react';
 import { clsx } from 'clsx';

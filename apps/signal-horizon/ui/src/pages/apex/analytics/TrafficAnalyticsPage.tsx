@@ -1,365 +1,474 @@
 /**
- * Traffic Analytics Page - CtrlX Design System
- * Displays traffic metrics, response time distribution, regional traffic, and status codes
- * Fetches real data from risk-server via signal-horizon API with demo fallbacks
+ * Traffic Analytics Page
+ * Detailed API traffic patterns, trends, and breakdowns
  */
 
 import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import {
+  Activity,
+  TrendingUp,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock,
+} from 'lucide-react';
+import { clsx } from 'clsx';
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import {
-  Download,
-  Calendar,
-  Activity,
-  Zap,
-  AlertCircle,
-  TrendingUp,
-  Globe,
-  Filter,
-  RefreshCw,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
+import { useTrafficTimeline } from '../../../stores/apexStore';
+import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 
-import { MetricCard, TimeRangeSelector, type TimeRange } from '../../../components/ctrlx';
-import {
-  ResponseTimeDistributionChart,
-  TrafficByRegionList,
-  StatusCodesDonut,
-  PerformanceMetricsGrid,
-  TopEndpointsTable,
-} from '../../../components/apex/analytics';
-import { useApexAnalytics } from '../../../hooks/useApexAnalytics';
+type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
-// Format bytes to human readable (GB, MB, etc.)
-function formatBytes(bytes: number): string {
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(0)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(0)} KB`;
-  return `${bytes} B`;
+const TIME_RANGES: { value: TimeRange; label: string }[] = [
+  { value: '1h', label: '1 Hour' },
+  { value: '6h', label: '6 Hours' },
+  { value: '24h', label: '24 Hours' },
+  { value: '7d', label: '7 Days' },
+  { value: '30d', label: '30 Days' },
+];
+
+// Demo data
+const DEMO_TRAFFIC_HOURLY = Array.from({ length: 24 }, (_, i) => ({
+  time: `${String(i).padStart(2, '0')}:00`,
+  requests: Math.floor(Math.random() * 5000) + 1000,
+  blocked: Math.floor(Math.random() * 100) + 10,
+  allowed: Math.floor(Math.random() * 4900) + 900,
+}));
+
+const DEMO_METHOD_BREAKDOWN = [
+  { method: 'GET', count: 45200, percentage: 65 },
+  { method: 'POST', count: 18500, percentage: 27 },
+  { method: 'PUT', count: 3500, percentage: 5 },
+  { method: 'DELETE', count: 2100, percentage: 3 },
+];
+
+const DEMO_TOP_ENDPOINTS = [
+  { endpoint: '/api/v1/users', requests: 12500, blocked: 45 },
+  { endpoint: '/api/v1/products', requests: 9800, blocked: 23 },
+  { endpoint: '/api/v1/orders', requests: 7600, blocked: 89 },
+  { endpoint: '/api/v1/auth/login', requests: 5400, blocked: 156 },
+  { endpoint: '/api/v1/search', requests: 4200, blocked: 12 },
+];
+
+const CHART_COLORS = {
+  requests: '#3b82f6',
+  blocked: '#ef4444',
+  allowed: '#22c55e',
+  get: '#3b82f6',
+  post: '#22c55e',
+  put: '#f59e0b',
+  delete: '#ef4444',
+};
+
+// Time Range Selector
+function TimeRangeSelector({
+  value,
+  onChange,
+}: {
+  value: TimeRange;
+  onChange: (v: TimeRange) => void;
+}) {
+  return (
+    <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+      {TIME_RANGES.map((range) => (
+        <button
+          key={range.value}
+          onClick={() => onChange(range.value)}
+          className={clsx(
+            'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+            value === range.value
+              ? 'bg-horizon-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          )}
+        >
+          {range.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
-// Format large numbers (M, K)
-function formatNumber(num: number): string {
-  if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
-  if (num >= 1e3) return `${(num / 1e3).toFixed(0)}K`;
-  return num.toString();
+// Stat Card
+function StatCard({
+  label,
+  value,
+  trend,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  trend?: { value: number; label: string };
+  icon: React.ElementType;
+}) {
+  const isPositive = trend && trend.value >= 0;
+  const TrendIcon = isPositive ? ArrowUpRight : ArrowDownRight;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-400">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          {trend && (
+            <div
+              className={clsx(
+                'mt-2 flex items-center gap-1 text-sm',
+                isPositive ? 'text-green-400' : 'text-red-400'
+              )}
+            >
+              <TrendIcon className="w-4 h-4" />
+              <span>
+                {Math.abs(trend.value)}% {trend.label}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="p-3 bg-gray-700/50 rounded-lg">
+          <Icon className="w-6 h-6 text-horizon-400" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// Traffic Timeline Chart
+function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Traffic Over Time</h3>
+          <p className="text-sm text-gray-400 mt-1">Requests per hour</p>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500" />
+            <span className="text-gray-400">Total</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <span className="text-gray-400">Allowed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <span className="text-gray-400">Blocked</span>
+          </div>
+        </div>
+      </div>
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="requestsGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={CHART_COLORS.requests} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={CHART_COLORS.requests} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="allowedGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={CHART_COLORS.allowed} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={CHART_COLORS.allowed} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis
+              dataKey="time"
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+              }}
+              labelStyle={{ color: '#9ca3af' }}
+              itemStyle={{ color: '#fff' }}
+            />
+            <Area
+              type="monotone"
+              dataKey="requests"
+              stroke={CHART_COLORS.requests}
+              fill="url(#requestsGrad)"
+              strokeWidth={2}
+              name="Total"
+            />
+            <Area
+              type="monotone"
+              dataKey="allowed"
+              stroke={CHART_COLORS.allowed}
+              fill="url(#allowedGrad)"
+              strokeWidth={2}
+              name="Allowed"
+            />
+            <Area
+              type="monotone"
+              dataKey="blocked"
+              stroke={CHART_COLORS.blocked}
+              fill="transparent"
+              strokeWidth={2}
+              name="Blocked"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// Method Breakdown Chart
+function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) {
+  const colors: Record<string, string> = {
+    GET: CHART_COLORS.get,
+    POST: CHART_COLORS.post,
+    PUT: CHART_COLORS.put,
+    DELETE: CHART_COLORS.delete,
+  };
+
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+      <h3 className="text-lg font-semibold text-white mb-4">Request Methods</h3>
+      <div className="h-60">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
+            />
+            <YAxis
+              type="category"
+              dataKey="method"
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+              width={60}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+              }}
+              formatter={(value: number) => [value.toLocaleString(), 'Requests']}
+            />
+            <Bar
+              dataKey="count"
+              radius={[0, 4, 4, 0]}
+              fill={CHART_COLORS.requests}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              shape={(props: any) => {
+                const { x, y, width, height, payload } = props;
+                return (
+                  <rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    fill={colors[payload.method] || CHART_COLORS.requests}
+                    rx={4}
+                    ry={4}
+                  />
+                );
+              }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-4 grid grid-cols-4 gap-2">
+        {data.map((item) => (
+          <div key={item.method} className="text-center">
+            <div
+              className="w-4 h-4 rounded mx-auto mb-1"
+              style={{ backgroundColor: colors[item.method] }}
+            />
+            <p className="text-xs text-gray-400">{item.method}</p>
+            <p className="text-sm font-medium text-white">{item.percentage}%</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Top Endpoints Table
+function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl">
+      <div className="px-5 py-4 border-b border-gray-700">
+        <h3 className="text-lg font-semibold text-white">Top Endpoints</h3>
+        <p className="text-sm text-gray-400 mt-1">Highest traffic endpoints</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
+              <th className="px-5 py-3 font-medium">Endpoint</th>
+              <th className="px-5 py-3 font-medium text-right">Requests</th>
+              <th className="px-5 py-3 font-medium text-right">Blocked</th>
+              <th className="px-5 py-3 font-medium text-right">Block Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item, idx) => {
+              const blockRate = ((item.blocked / item.requests) * 100).toFixed(2);
+              return (
+                <tr
+                  key={item.endpoint}
+                  className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors"
+                >
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-500 text-sm w-6">{idx + 1}</span>
+                      <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded text-sm">
+                        {item.endpoint}
+                      </code>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-right text-white font-medium">
+                    {item.requests.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-right text-red-400">
+                    {item.blocked.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 rounded text-xs font-medium',
+                        parseFloat(blockRate) < 1
+                          ? 'text-green-400 bg-green-500/20'
+                          : parseFloat(blockRate) < 3
+                          ? 'text-yellow-400 bg-yellow-500/20'
+                          : 'text-red-400 bg-red-500/20'
+                      )}
+                    >
+                      {blockRate}%
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function TrafficAnalyticsPage() {
-  const [timeRange, setTimeRange] = useState<TimeRange>('24H');
-  const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const trafficData = useTrafficTimeline();
+  // Will be used when real-time stats are integrated
+  // const stats = useApexStats();
 
-  // Fetch real data from API
-  const { data, isLoading, isConnected, refetch, lastUpdated } = useApexAnalytics({
-    pollingInterval: 30000, // Refresh every 30 seconds
-  });
-
-  // Transform traffic timeline for chart
-  const trafficData = useMemo(() => {
-    if (!data?.traffic.timeline?.length) {
-      // Generate demo data if no real timeline available
-      return Array.from({ length: 24 }, (_, i) => {
-        const baseRequests = 80000 + Math.random() * 40000;
-        const blockedRate = 0.02 + Math.random() * 0.03;
-        return {
-          hour: `${String(i).padStart(2, '0')}:00`,
-          requests: Math.round(baseRequests),
-          blocked: Math.round(baseRequests * blockedRate),
-        };
-      });
+  // Transform traffic data to chart format or use demo data
+  const displayData = useMemo(() => {
+    if (trafficData.length > 0) {
+      return trafficData.map((d) => ({
+        time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        requests: d.requests,
+        blocked: d.blocked,
+        allowed: d.requests - d.blocked,
+      }));
     }
+    return DEMO_TRAFFIC_HOURLY;
+  }, [trafficData]);
+  const isLoading = false;
 
-    return data.traffic.timeline.map((point) => {
-      const date = new Date(point.timestamp);
-      return {
-        hour: `${String(date.getHours()).padStart(2, '0')}:00`,
-        requests: point.requests,
-        blocked: point.blocked,
-      };
-    });
-  }, [data?.traffic.timeline]);
+  // Calculate summary stats
+  const totalRequests = useMemo(
+    () => displayData.reduce((sum, d) => sum + d.requests, 0),
+    [displayData]
+  );
+  const totalBlocked = useMemo(
+    () => displayData.reduce((sum, d) => sum + d.blocked, 0),
+    [displayData]
+  );
+  const avgRequestsPerHour = Math.round(totalRequests / displayData.length);
 
-  // Transform response time data for chart
-  const responseTimeData = useMemo(() => {
-    if (!data?.responseTimeDistribution?.length) return [];
-    return data.responseTimeDistribution;
-  }, [data?.responseTimeDistribution]);
-
-  // Transform region data for list (map to component's expected interface)
-  const regionData = useMemo(() => {
-    if (!data?.regionTraffic?.length) return [];
-    return data.regionTraffic.map((r) => ({
-      code: r.countryCode,
-      name: r.countryName,
-      requests: r.requests,
-      percentage: r.percentage,
-    }));
-  }, [data?.regionTraffic]);
-
-  // Transform status codes for donut chart
-  const statusCodeData = useMemo(() => {
-    if (!data?.statusCodes) return [];
-    const { code2xx, code3xx, code4xx, code5xx } = data.statusCodes;
-    return [
-      { name: '2xx', value: code2xx, color: '#22c55e' },
-      { name: '3xx', value: code3xx, color: '#3b82f6' },
-      { name: '4xx', value: code4xx, color: '#f59e0b' },
-      { name: '5xx', value: code5xx, color: '#ef4444' },
-    ];
-  }, [data?.statusCodes]);
-
-  // Transform performance metrics
-  const performanceMetrics = useMemo(() => {
-    if (!data?.sensor) return [];
-    const { latencyP50, latencyP95, latencyP99, rps } = data.sensor;
-    return [
-      { label: 'P50 Latency', value: `${latencyP50}ms`, color: '#22c55e' as const },
-      { label: 'P90 Latency', value: `${latencyP95}ms`, color: '#3b82f6' as const },
-      { label: 'P99 Latency', value: `${latencyP99}ms`, color: '#f97316' as const },
-      { label: 'Requests/sec', value: formatNumber(rps), color: '#8b5cf6' as const },
-      { label: 'Block Rate', value: `${data.traffic.blockRate.toFixed(2)}%`, color: '#ef4444' as const },
-      { label: 'Entities', value: formatNumber(data.sensor.entitiesTracked), color: '#06b6d4' as const },
-    ];
-  }, [data?.sensor, data?.traffic.blockRate]);
-
-  // Transform top endpoints
-  const topEndpoints = useMemo(() => {
-    if (!data?.topEndpoints?.length) return [];
-    return data.topEndpoints.map((ep) => ({
-      method: ep.method,
-      path: ep.path,
-      requests: ep.requests,
-      avgLatency: Math.round(ep.avgLatency),
-      errorRate: ep.errorRate,
-    }));
-  }, [data?.topEndpoints]);
-
-  // Summary metrics
-  const totalRequests = data?.traffic.totalRequests ?? 0;
-  const totalBandwidth = (data?.traffic.totalBandwidthIn ?? 0) + (data?.traffic.totalBandwidthOut ?? 0);
-  const avgLatency = data?.sensor?.latencyP50 ?? 45;
-  const blockRate = data?.traffic.blockRate ?? 0;
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Traffic Analytics</h1>
+          <p className="text-gray-400 mt-1">Loading traffic data...</p>
+        </div>
+        <StatsGridSkeleton />
+        <CardSkeleton />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Page Header */}
-      <header className="ctrlx-page-header">
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="ctrlx-page-title">Analytics</h1>
-          <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
-            Traffic insights and performance metrics
-            {data?.dataSource && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded ${
-                data.dataSource === 'live'
-                  ? 'bg-green-100 text-green-700'
-                  : data.dataSource === 'mixed'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
-              }`}>
-                {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {data.dataSource === 'live' ? 'Live' : data.dataSource === 'mixed' ? 'Mixed' : 'Demo'}
-              </span>
-            )}
-          </p>
+          <h1 className="text-2xl font-bold text-white">Traffic Analytics</h1>
+          <p className="text-gray-400 mt-1">API traffic patterns and trends</p>
         </div>
-        <div className="ctrlx-page-actions">
-          <button
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="ctrlx-btn-ghost"
-            title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh'}
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-          <button className="ctrlx-btn-secondary">
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-          <button className="ctrlx-btn-secondary">
-            <Calendar className="w-4 h-4" />
-            Schedule Report
-          </button>
-        </div>
-      </header>
+        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+      </div>
 
-      {/* Metric Cards */}
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <MetricCard
-          label="Requests"
-          value={formatNumber(totalRequests)}
-          accent="primary"
-          icon={<Activity className="w-5 h-5" />}
-          trend={{ value: 18, direction: 'up' }}
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard
+          label="Total Requests"
+          value={`${(totalRequests / 1000).toFixed(1)}k`}
+          trend={{ value: 12, label: 'vs previous' }}
+          icon={Activity}
         />
-        <MetricCard
-          label="Bandwidth"
-          value={formatBytes(totalBandwidth)}
-          accent="info"
-          icon={<Globe className="w-5 h-5" />}
-          trend={{ value: 12, direction: 'up' }}
+        <StatCard
+          label="Blocked Requests"
+          value={totalBlocked.toLocaleString()}
+          trend={{ value: -8, label: 'vs previous' }}
+          icon={TrendingUp}
         />
-        <MetricCard
-          label="Latency"
-          value={`${avgLatency}ms`}
-          accent="success"
-          icon={<Zap className="w-5 h-5" />}
-          trend={{ value: 8, direction: 'down' }}
+        <StatCard
+          label="Avg Requests/Hour"
+          value={avgRequestsPerHour.toLocaleString()}
+          trend={{ value: 5, label: 'vs previous' }}
+          icon={Clock}
         />
-        <MetricCard
+        <StatCard
           label="Block Rate"
-          value={`${blockRate.toFixed(2)}%`}
-          accent="warning"
-          icon={<AlertCircle className="w-5 h-5" />}
-          trend={{ value: 0, direction: 'neutral' }}
-          subtitle={data?.threats ? `${data.threats.total} threats` : 'No change'}
+          value={`${((totalBlocked / totalRequests) * 100).toFixed(2)}%`}
+          icon={TrendingUp}
         />
-      </section>
-
-      {/* Traffic Overview Chart */}
-      <section className="ctrlx-card p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-navy-900">Traffic Overview</h2>
-          <div className="flex items-center gap-2">
-            <select
-              value={siteFilter}
-              onChange={(e) => setSiteFilter(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 bg-white text-navy-800 focus:outline-none focus:ring-2 focus:ring-ctrlx-primary"
-            >
-              <option value="all">All Sites</option>
-              <option value="api">API Gateway</option>
-              <option value="web">Web Application</option>
-              <option value="mobile">Mobile API</option>
-            </select>
-            <button className="ctrlx-btn-ghost">
-              <Filter className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={trafficData}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="requestsGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="blockedGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="hour"
-                tick={{ fontSize: 11, fill: '#627d98' }}
-                tickLine={false}
-                axisLine={{ stroke: '#e5e7eb' }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#627d98' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '0',
-                  fontSize: '12px',
-                }}
-                labelStyle={{ color: '#1e3a5f', fontWeight: 600 }}
-                formatter={(value: number, name: string) => [
-                  value.toLocaleString(),
-                  name === 'requests' ? 'Requests' : 'Blocked',
-                ]}
-              />
-              <Area
-                type="monotone"
-                dataKey="requests"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                fill="url(#requestsGradient)"
-              />
-              <Area
-                type="monotone"
-                dataKey="blocked"
-                stroke="#ef4444"
-                strokeWidth={2}
-                fill="url(#blockedGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex items-center gap-6 mt-4 text-xs text-gray-500">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-0.5 bg-ctrlx-info" />
-            <span>Total Requests</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-0.5 bg-ctrlx-danger" />
-            <span>Blocked</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Two Column Grid: Response Time + Traffic by Region */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <section className="ctrlx-card p-6">
-          <h2 className="text-lg font-semibold text-navy-900 mb-4">
-            Response Time Distribution
-          </h2>
-          <ResponseTimeDistributionChart data={responseTimeData} />
-        </section>
-
-        <section className="ctrlx-card p-6">
-          <h2 className="text-lg font-semibold text-navy-900 mb-4">
-            Traffic by Region
-          </h2>
-          <TrafficByRegionList data={regionData} />
-        </section>
       </div>
 
-      {/* Two Column Grid: Status Codes + Top Endpoints */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <section className="ctrlx-card p-6">
-          <h2 className="text-lg font-semibold text-navy-900 mb-4">
-            Response Status Codes
-          </h2>
-          <StatusCodesDonut data={statusCodeData} />
-        </section>
+      {/* Traffic Timeline */}
+      <TrafficTimelineChart data={displayData} />
 
-        <section className="ctrlx-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-navy-900">
-              Top Endpoints by Traffic
-            </h2>
-            <TrendingUp className="w-4 h-4 text-gray-400" />
-          </div>
-          <TopEndpointsTable data={topEndpoints} />
-        </section>
+      {/* Method Breakdown + Top Endpoints */}
+      <div className="grid grid-cols-3 gap-6">
+        <MethodBreakdownChart data={DEMO_METHOD_BREAKDOWN} />
+        <div className="col-span-2">
+          <TopEndpointsTable data={DEMO_TOP_ENDPOINTS} />
+        </div>
       </div>
-
-      {/* Performance Metrics Bar */}
-      <section className="mb-6">
-        <h2 className="text-lg font-semibold text-navy-900 mb-4">
-          Performance Metrics
-        </h2>
-        <PerformanceMetricsGrid metrics={performanceMetrics} />
-      </section>
     </div>
   );
 }

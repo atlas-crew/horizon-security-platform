@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
 interface SensorVersion {
   sensorId: string;
@@ -22,21 +24,21 @@ interface AvailableUpdate {
 }
 
 async function fetchVersions(): Promise<SensorVersion[]> {
-  const response = await fetch(`${API_BASE}/api/fleet/updates/versions`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/versions`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch versions');
   return response.json();
 }
 
 async function fetchAvailableUpdates(): Promise<AvailableUpdate[]> {
-  const response = await fetch(`${API_BASE}/api/fleet/updates/available`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/available`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch updates');
   return response.json();
 }
 
 async function triggerUpdate(sensorIds: string[], version: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/fleet/updates/trigger`, {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/trigger`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ sensorIds, version }),
   });
   if (!response.ok) throw new Error('Failed to trigger update');

@@ -4,18 +4,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import type { SensorDetail, PerformanceMetric } from '../../types/fleet';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
+const authHeaders = {
+  'Authorization': `Bearer ${API_KEY}`,
+};
 
 type TabType = 'overview' | 'performance' | 'configuration';
 
 async function fetchSensorDetail(id: string): Promise<SensorDetail> {
-  const response = await fetch(`${API_BASE}/api/fleet/sensors/${id}`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch sensor details');
   return response.json();
 }
 
 async function fetchPerformance(id: string): Promise<PerformanceMetric[]> {
-  const response = await fetch(`${API_BASE}/api/fleet/sensors/${id}/performance`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/performance`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch performance');
   return response.json();
 }
@@ -42,7 +47,7 @@ export function SensorDetailPage() {
 
   const restartMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${API_BASE}/api/fleet/sensors/${id}/restart`, { method: 'POST' });
+      const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/restart`, { method: 'POST', headers: authHeaders });
       if (!response.ok) throw new Error('Failed to restart sensor');
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id] }),
@@ -50,7 +55,7 @@ export function SensorDetailPage() {
 
   const pushConfigMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${API_BASE}/api/fleet/sensors/${id}/config`, { method: 'POST' });
+      const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config`, { method: 'POST', headers: authHeaders });
       if (!response.ok) throw new Error('Failed to push config');
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id] }),

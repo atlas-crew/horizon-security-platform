@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
 interface ConfigTemplate {
   id: string;
@@ -24,21 +26,21 @@ interface SyncStatus {
 }
 
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
-  const response = await fetch(`${API_BASE}/api/fleet/config/templates`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/config/templates`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch templates');
   return response.json();
 }
 
 async function fetchSyncStatus(): Promise<SyncStatus> {
-  const response = await fetch(`${API_BASE}/api/fleet/config/sync-status`);
+  const response = await fetch(`${API_BASE}/api/v1/fleet/config/sync-status`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch sync status');
   return response.json();
 }
 
 async function pushConfig(templateId: string, sensorIds: string[]): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/fleet/config/push`, {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/config/push`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ templateId, sensorIds }),
   });
   if (!response.ok) throw new Error('Failed to push config');

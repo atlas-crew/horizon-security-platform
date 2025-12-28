@@ -151,11 +151,14 @@ model Signal {
   @@index([signalType])
   @@index([anonFingerprint])
   @@index([createdAt])
+  @@index([severity])                      // Filter by severity level
   // Compound indexes for efficient query patterns
   @@index([createdAt, sensorId])           // Range queries by sensor
   @@index([signalType, createdAt])         // Correlation queries by type
   @@index([tenantId, createdAt])           // Tenant-scoped time ranges
   @@index([anonFingerprint, createdAt])    // Cross-tenant fingerprint analysis
+  @@index([severity, createdAt])           // Dashboard: severity over time
+  @@index([tenantId, severity, createdAt]) // Tenant dashboard severity filter
   @@map("signals")
 }
 

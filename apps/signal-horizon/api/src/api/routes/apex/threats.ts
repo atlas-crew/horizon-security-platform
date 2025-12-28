@@ -1,78 +1,120 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
+import { ThreatQuerySchema, UUIDParamSchema } from './validation.js';
 
 export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Router {
   const router = Router();
 
   // GET /api/v1/apex/threats - List recent block decisions
-  router.get('/', async (req, res) => {
-    try {
-      const tenantId = (req as any).auth?.tenantId;
-      if (!tenantId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const limit = parseInt(req.query.limit as string) || 50;
-      const offset = parseInt(req.query.offset as string) || 0;
-
-      const [blocks, total] = await Promise.all([
-        prisma.blockDecision.findMany({
-          where: { tenantId },
-          include: {
-            sensor: {
-              select: { id: true, name: true }
-            }
-          },
-          orderBy: { decidedAt: 'desc' },
-          take: limit,
-          skip: offset,
-        }),
-        prisma.blockDecision.count({ where: { tenantId } }),
-      ]);
-
-      return res.json({
-        blocks,
-        pagination: {
-          total,
-          limit,
-          offset,
-          hasMore: offset + limit < total
-        }
+  router.get('/', asyncHandler(async (req, res) => {
+    const tenantId = (req as any).auth?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
       });
-    } catch (error) {
-      logger.error({ error }, 'Failed to fetch block decisions');
-      return res.status(500).json({ error: 'Internal server error' });
     }
-  });
 
-  // GET /api/v1/apex/threats/:id - Get block decision details
-  router.get('/:id', async (req, res) => {
-    try {
-      const tenantId = (req as any).auth?.tenantId;
-      if (!tenantId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+    // Validate query parameters
+    const queryValidation = ThreatQuerySchema.safeParse(req.query);
+    if (!queryValidation.success) {
+      return handleValidationError(res, queryValidation.error);
+    }
 
-      const block = await prisma.blockDecision.findFirst({
-        where: { id: req.params.id, tenantId },
+    const { severity, status, timeRange, limit, offset } = queryValidation.data;
+
+    // Build where clause with filters
+    const where: any = { tenantId };
+
+    if (severity) {
+      where.severity = severity;
+    }
+
+    if (status) {
+      where.action = status;
+    }
+
+    if (timeRange) {
+      const now = Date.now();
+      const timeRangeMs: Record<string, number> = {
+        '1h': 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      };
+      where.decidedAt = {
+        gte: new Date(now - timeRangeMs[timeRange]),
+      };
+    }
+
+    const [blocks, total] = await Promise.all([
+      prisma.blockDecision.findMany({
+        where,
         include: {
           sensor: {
-            select: { id: true, name: true, version: true }
+            select: { id: true, name: true }
           }
-        }
-      });
+        },
+        orderBy: { decidedAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.blockDecision.count({ where }),
+    ]);
 
-      if (!block) {
-        return res.status(404).json({ error: 'Block decision not found' });
+    logger.info({ tenantId, count: blocks.length, total }, 'Threats fetched successfully');
+
+    return res.json({
+      blocks,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total
       }
+    });
+  }));
 
-      return res.json({ block });
-    } catch (error) {
-      logger.error({ error }, 'Failed to fetch block decision');
-      return res.status(500).json({ error: 'Internal server error' });
+  // GET /api/v1/apex/threats/:id - Get block decision details
+  router.get('/:id', asyncHandler(async (req, res) => {
+    const tenantId = (req as any).auth?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
+      });
     }
-  });
+
+    // Validate UUID parameter
+    const paramValidation = UUIDParamSchema.safeParse(req.params);
+    if (!paramValidation.success) {
+      return handleValidationError(res, paramValidation.error);
+    }
+
+    const { id } = paramValidation.data;
+
+    const block = await prisma.blockDecision.findFirst({
+      where: { id, tenantId },
+      include: {
+        sensor: {
+          select: { id: true, name: true, version: true }
+        }
+      }
+    });
+
+    if (!block) {
+      return res.status(404).json({
+        code: 'NOT_FOUND',
+        message: 'Block decision not found',
+      });
+    }
+
+    logger.info({ tenantId, blockId: id }, 'Threat details fetched successfully');
+
+    return res.json({ block });
+  }));
 
   return router;
 }

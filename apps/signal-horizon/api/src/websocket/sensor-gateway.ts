@@ -1,6 +1,14 @@
 /**
  * Sensor Gateway
  * WebSocket server for sensor connections (inbound signals)
+ *
+ * Security Features:
+ * 1. Optional token pre-validation at connection time (query param or Authorization header)
+ * 2. Mandatory API key authentication via auth message within 10 seconds
+ * 3. Rate limiting: 100 messages per second per connection (configurable)
+ * 4. Message validation using Zod schemas for all incoming messages
+ * 5. Connection limit enforcement (max concurrent connections)
+ * 6. All operations require authenticated connection
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -154,6 +162,20 @@ export class SensorGateway {
 
   handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
     if (!this.wss) {
+      socket.destroy();
+      return;
+    }
+
+    // Optional: Pre-validate authentication token from query params or headers
+    // This provides an early authentication check before WebSocket upgrade
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const token = url.searchParams.get('token') || req.headers.authorization?.replace('Bearer ', '');
+
+    // Note: We still require auth message for full validation,
+    // but this can be used for early rejection of obviously invalid tokens
+    if (token && token.length < 10) {
+      this.logger.warn({ ip: socket.remoteAddress }, 'Rejected connection with invalid token format');
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }

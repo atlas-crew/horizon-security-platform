@@ -1,0 +1,57 @@
+[package]
+name = "synapse-pingora"
+version = "0.1.0"
+edition = "2021"
+description = "Synapse WAF detection engine on Cloudflare Pingora proxy framework"
+authors = ["Atlas Crew"]
+license = "Apache-2.0"
+repository = "https://github.com/atlascrew/atlascrew-monorepo"
+
+[dependencies]
+# Pingora core
+pingora = "0.5"
+pingora-proxy = "0.5"
+pingora-http = "0.5"
+pingora-limits = "0.5"
+pingora-core = "0.5"
+
+# Synapse detection engine (real rule engine with 237 rules)
+libsynapse = { path = "../risk-server/libsynapse" }
+
+# Async runtime
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+
+# Pattern matching (keeping for backward compatibility)
+regex = "1"
+once_cell = "1"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Configuration
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+
+# Time measurement
+instant = "0.1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "detection"
+harness = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+
+[profile.bench]
+lto = "fat"
+codegen-units = 1
+opt-level = 3

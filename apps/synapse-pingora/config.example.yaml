@@ -1,0 +1,56 @@
+# Synapse-Pingora Configuration
+# Copy to config.yaml and customize
+
+# Server settings
+server:
+  # Address to listen on
+  listen: "0.0.0.0:6190"
+
+  # Number of worker threads (0 = auto-detect CPU count)
+  workers: 0
+
+# Upstream backend servers (round-robin load balancing)
+upstreams:
+  - host: "127.0.0.1"
+    port: 8080
+  # Add more backends for load balancing:
+  # - host: "127.0.0.1"
+  #   port: 8081
+
+# Rate limiting
+rate_limit:
+  # Requests per second per client IP
+  rps: 10000
+
+  # Enable/disable rate limiting
+  enabled: true
+
+# Logging
+logging:
+  # Log level: trace, debug, info, warn, error
+  level: "info"
+
+  # Log format: text, json
+  format: "text"
+
+  # Log access requests
+  access_log: true
+
+# Detection settings
+detection:
+  # Enable/disable detection categories
+  sqli: true
+  xss: true
+  path_traversal: true
+  command_injection: true
+
+  # Action on detection: block, log, challenge
+  action: "block"
+
+  # Custom response code for blocked requests
+  block_status: 403
+
+# Future: DLP settings (not yet implemented)
+# dlp:
+#   enabled: false
+#   patterns: []

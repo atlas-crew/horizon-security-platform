@@ -147,6 +147,13 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
 
   const intervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const hasDataRef = useRef(false);
+
+  // Stabilize queryParams to prevent infinite re-renders
+  const queryParamsKey = useMemo(
+    () => JSON.stringify(queryParams),
+    [queryParams.service, queryParams.method, queryParams.limit]
+  );
 
   // Derive services from endpoints
   const services = useMemo(() => generateDemoServices(endpoints), [endpoints]);
@@ -162,10 +169,12 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
     setIsLoading(true);
 
     try {
+      // Parse stabilized queryParams
+      const parsedParams = JSON.parse(queryParamsKey) as EndpointQueryParams;
       const params = new URLSearchParams();
-      if (queryParams.service) params.set('service', queryParams.service);
-      if (queryParams.method) params.set('method', queryParams.method);
-      if (queryParams.limit) params.set('limit', queryParams.limit.toString());
+      if (parsedParams.service) params.set('service', parsedParams.service);
+      if (parsedParams.method) params.set('method', parsedParams.method);
+      if (parsedParams.limit) params.set('limit', parsedParams.limit.toString());
 
       const url = `${apiBaseUrl}/beam/endpoints${params.toString() ? `?${params}` : ''}`;
 
@@ -200,6 +209,7 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
       }));
 
       setEndpoints(transformedEndpoints);
+      hasDataRef.current = true;
       setIsConnected(true);
       setError(null);
       setLastUpdated(new Date());
@@ -210,13 +220,15 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
       setError(err as Error);
       setIsConnected(false);
 
-      if (endpoints.length === 0) {
+      // Only populate demo data if we don't have any data yet
+      if (!hasDataRef.current) {
         setEndpoints(generateDemoEndpoints());
+        hasDataRef.current = true;
       }
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, queryParams, endpoints.length]);
+  }, [apiBaseUrl, queryParamsKey]);
 
   const fetchEndpointById = useCallback(async (id: string): Promise<Endpoint | null> => {
     try {

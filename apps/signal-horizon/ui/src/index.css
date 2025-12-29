@@ -39,6 +39,16 @@
     --ac-card-dark: #0A1A3A;
 
     /* =========================================
+       CHARCOAL SCALE (for dark mode)
+       ========================================= */
+    --ac-charcoal-darkest: #121212;
+    --ac-charcoal-darker: #1a1a1a;
+    --ac-charcoal-dark: #242424;
+    --ac-charcoal: #2d2d2d;
+    --ac-charcoal-light: #3a3a3a;
+    --ac-charcoal-lighter: #4a4a4a;
+
+    /* =========================================
        TINTS & SHADES
        ========================================= */
     --ac-blue-light: #7CBAFF;
@@ -93,31 +103,32 @@
   .dark {
     color-scheme: dark;
 
-    --surface-base: #00174A;
-    --surface-subtle: #001E62;
-    --surface-card: #0A1A3A;
-    --surface-inset: #00174A;
-    --surface-overlay: #001E62;
-    --surface-hero: #001E62;
+    /* Charcoal-based dark mode */
+    --surface-base: var(--ac-charcoal-darker);
+    --surface-subtle: var(--ac-charcoal-dark);
+    --surface-card: var(--ac-charcoal);
+    --surface-inset: var(--ac-charcoal-darkest);
+    --surface-overlay: var(--ac-charcoal-dark);
+    --surface-hero: var(--ac-charcoal-dark);
 
     --text-primary: #F0F4F8;
-    --text-secondary: #DFE8F0;
-    --text-muted: #BEDDFF;
+    --text-secondary: #C0C0C0;
+    --text-muted: #808080;
     --text-inverse: #FFFFFF;
 
     --link: #529EEC;
     --link-hover: #7CBAFF;
 
-    --border-subtle: #00174A;
-    --border-strong: #003EC8;
-    --border-inset: #0A1A3A;
+    --border-subtle: var(--ac-charcoal-light);
+    --border-strong: var(--ac-charcoal-lighter);
+    --border-inset: var(--ac-charcoal);
 
     --accent: #529EEC;
     --accent-hover: #7CBAFF;
     --focus-ring: #7CBAFF;
 
-    --shadow-color: rgba(0, 0, 0, 0.35);
-    --shadow-color-strong: rgba(0, 0, 0, 0.55);
+    --shadow-color: rgba(0, 0, 0, 0.45);
+    --shadow-color-strong: rgba(0, 0, 0, 0.65);
   }
 
   body {

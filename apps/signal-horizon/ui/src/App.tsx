@@ -16,6 +16,8 @@ import {
   Activity,
   Package,
   Server,
+  AlertTriangle,
+  Bell,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -32,16 +34,6 @@ import { fleetRoutes } from './routes/fleet.routes';
 import { beamRoutes } from './routes/beam.routes';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useHorizonStore } from './stores/horizonStore';
-
-const topNavItems = [
-  { label: 'Dashboard' },
-  { label: 'Entities' },
-  { label: 'Threats' },
-  { label: 'API Catalog' },
-  { label: 'Bot Mgmt' },
-  { label: 'Signal Array' },
-  { label: 'Signal Horizon', active: true },
-];
 
 const primaryNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Threat Overview' },
@@ -80,14 +72,23 @@ function getInitialTheme(): 'light' | 'dark' {
 }
 
 function App() {
-  const { connect, disconnect, isConnected, connectionState } = useWebSocket();
+  const { connect, isConnected, connectionState } = useWebSocket();
   const sensorCount = useHorizonStore((s) => s.sensorStats.CONNECTED || 0);
+  const campaigns = useHorizonStore((s) => s.campaigns);
+  const threats = useHorizonStore((s) => s.threats);
+  const alerts = useHorizonStore((s) => s.alerts);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme());
 
+  const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
+  const criticalThreats = threats.filter((t) => t.riskScore >= 80).length;
+  const unreadAlerts = alerts.filter((a) => a.timestamp > Date.now() - 3600000).length; // Last hour
+
   useEffect(() => {
+    // Connect to WebSocket on mount
     connect();
-    return () => disconnect();
-  }, [connect, disconnect]);
+    // No cleanup - let the hook manage its own connection lifecycle
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -99,29 +100,40 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary">
-      {/* Top Navigation */}
+      {/* Top Header */}
       <header className="h-14 border-b border-border-subtle bg-surface-hero">
         <div className="h-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
               <span className="tracking-[0.2em] text-xs text-ink-muted">Atlas Crew</span>
             </div>
-            <nav className="hidden lg:flex items-center gap-4 text-xs font-semibold tracking-[0.12em] uppercase text-ink-muted">
-              {topNavItems.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  className={clsx(
-                    'px-2 py-1 transition-colors',
-                    item.active
-                      ? 'text-link border-b-2 border-link'
-                      : 'hover:text-ink-primary'
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            {/* Status Indicators */}
+            <div className="hidden lg:flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-red' : 'text-ink-muted')} />
+                <span className="text-xs text-ink-secondary">
+                  <span className={clsx('font-semibold', activeCampaigns > 0 && 'text-ac-red')}>{activeCampaigns}</span> Active Campaigns
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-ink-muted')} />
+                <span className="text-xs text-ink-secondary">
+                  <span className={clsx('font-semibold', criticalThreats > 0 && 'text-ac-orange')}>{criticalThreats}</span> Critical Threats
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-cyan' : 'text-ink-muted')} />
+                <span className="text-xs text-ink-secondary">
+                  <span className={clsx('font-semibold', unreadAlerts > 0 && 'text-ac-cyan')}>{unreadAlerts}</span> Recent Alerts
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-ink-muted')} />
+                <span className="text-xs text-ink-secondary">
+                  <span className={clsx('font-semibold', sensorCount > 0 && 'text-ac-green')}>{sensorCount}</span> Sensors
+                </span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2 border border-border-subtle px-2 h-8 text-xs text-ink-secondary">

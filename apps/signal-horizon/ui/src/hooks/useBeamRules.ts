@@ -1,12 +1,12 @@
 /**
  * useBeamRules Hook
  * Fetches and manages protection rules from Signal Horizon API
+ * with CRUD operations and real-time polling.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { apiFetch } from '../lib/api';
 import type { Rule, RuleDeployment, RuleTemplate, RuleCategory, RuleSeverity, RuleAction } from '../types/beam';
-
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
 // ============================================================================
 // API Response/Request Types
@@ -23,8 +23,8 @@ interface ApiRule {
   category: string;
   severity: string;
   action: string;
-  patterns: any;
-  exclusions: any;
+  patterns: unknown;
+  exclusions: unknown;
   sensitivity: number;
   enabled: boolean;
   createdAt: string;
@@ -59,8 +59,6 @@ export interface UseBeamRulesOptions {
   pollingInterval?: number;
   /** Whether to start fetching immediately (default: true) */
   autoFetch?: boolean;
-  /** API base URL (default: /api/v1) */
-  apiBaseUrl?: string;
 }
 
 export interface UseBeamRulesResult {
@@ -68,13 +66,14 @@ export interface UseBeamRulesResult {
   deployments: RuleDeployment[];
   templates: RuleTemplate[];
   isLoading: boolean;
-  error: Error | null;
+  error: string | null;
+  isDemo: boolean;
+  /** @deprecated Use `!isDemo` instead */
+  isConnected: boolean;
   refetch: () => Promise<void>;
   fetchRuleById: (id: string) => Promise<Rule | null>;
   createRule: (payload: CreateRulePayload) => Promise<Rule | null>;
-  isConnected: boolean;
   lastUpdated: Date | null;
-  // Computed helpers
   activeRules: Rule[];
   rulesByCategory: Map<RuleCategory, Rule[]>;
 }
@@ -201,27 +200,26 @@ function generateDemoTemplates(): RuleTemplate[] {
   ];
 }
 
+// Generate demo data once
+const DEMO_RULES = generateDemoRules();
+const DEMO_TEMPLATES = generateDemoTemplates();
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
 
 export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesResult {
-  const {
-    pollingInterval = 60000,
-    autoFetch = true,
-    apiBaseUrl = '/api/v1',
-  } = options;
+  const { pollingInterval = 60000, autoFetch = true } = options;
 
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [deployments] = useState<RuleDeployment[]>([]);
-  const [templates] = useState<RuleTemplate[]>(generateDemoTemplates());
+  const [rules, setRules] = useState<Rule[]>(DEMO_RULES);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const intervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef(false);
 
   // Transform API rule to UI Rule
   const transformRule = useCallback((apiRule: ApiRule): Rule => ({
@@ -236,126 +234,92 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
     sensitivity: apiRule.sensitivity || 5,
     enabled: apiRule.enabled,
     deployedSensors: apiRule._count?.deployments ?? 0,
-    totalSensors: 12, // Will come from fleet info
-    triggers24h: 0, // Not provided by current API
+    totalSensors: 12,
+    triggers24h: 0,
     rolloutStrategy: 'immediate',
   }), []);
 
   const fetchData = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/beam/rules`, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
+      const data = await apiFetch<RulesApiResponse>('/beam/rules', {
+        signal: abortControllerRef.current.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json() as RulesApiResponse;
       const transformedRules = data.rules.map(transformRule);
-
       setRules(transformedRules);
-      setIsConnected(true);
+      setIsDemo(false);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
 
-      console.warn('Failed to fetch beam rules, using demo data:', err);
-      setError(err as Error);
-      setIsConnected(false);
-
-      if (rules.length === 0) {
-        setRules(generateDemoRules());
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.warn('[useBeamRules] API failed, using demo data:', errorMessage);
+      setError(errorMessage);
+      setIsDemo(true);
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [apiBaseUrl, transformRule, rules.length]);
+  }, [transformRule]);
 
   const fetchRuleById = useCallback(async (id: string): Promise<Rule | null> => {
     try {
-      const response = await fetch(`${apiBaseUrl}/beam/rules/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json() as RuleDetailResponse;
+      const data = await apiFetch<RuleDetailResponse>(`/beam/rules/${id}`);
       return {
         ...transformRule(data.rule),
         deployedSensors: data.rule.deployments.length,
       };
     } catch (err) {
-      console.warn('Failed to fetch rule details:', err);
+      console.warn('[useBeamRules] Failed to fetch rule details:', err);
       return null;
     }
-  }, [apiBaseUrl, transformRule]);
+  }, [transformRule]);
 
   const createRule = useCallback(async (payload: CreateRulePayload): Promise<Rule | null> => {
     try {
-      const response = await fetch(`${apiBaseUrl}/beam/rules`, {
+      const data = await apiFetch<{ rule: ApiRule }>('/beam/rules', {
         method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || `API error: ${response.status}`);
-      }
-
-      const data = await response.json() as { rule: ApiRule };
       const newRule = transformRule(data.rule);
-
-      // Add to local state
       setRules(prev => [newRule, ...prev]);
-
       return newRule;
     } catch (err) {
-      console.error('Failed to create rule:', err);
+      console.error('[useBeamRules] Failed to create rule:', err);
       throw err;
     }
-  }, [apiBaseUrl, transformRule]);
+  }, [transformRule]);
 
   // Computed: active rules
-  const activeRules = rules.filter(r => r.enabled);
+  const activeRules = useMemo(() => rules.filter(r => r.enabled), [rules]);
 
   // Computed: rules by category
-  const rulesByCategory = new Map<RuleCategory, Rule[]>();
-  rules.forEach(rule => {
-    const existing = rulesByCategory.get(rule.category) || [];
-    rulesByCategory.set(rule.category, [...existing, rule]);
-  });
+  const rulesByCategory = useMemo(() => {
+    const map = new Map<RuleCategory, Rule[]>();
+    rules.forEach(rule => {
+      const existing = map.get(rule.category) || [];
+      map.set(rule.category, [...existing, rule]);
+    });
+    return map;
+  }, [rules]);
 
+  // Initial fetch
   useEffect(() => {
     if (autoFetch) fetchData();
     return () => { abortControllerRef.current?.abort(); };
   }, [autoFetch, fetchData]);
 
+  // Polling
   useEffect(() => {
     if (pollingInterval > 0) {
       intervalRef.current = window.setInterval(fetchData, pollingInterval);
@@ -365,14 +329,15 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
 
   return {
     rules,
-    deployments,
-    templates,
+    deployments: [],
+    templates: DEMO_TEMPLATES,
     isLoading,
     error,
+    isDemo,
+    isConnected: !isDemo,
     refetch: fetchData,
     fetchRuleById,
     createRule,
-    isConnected,
     lastUpdated,
     activeRules,
     rulesByCategory,

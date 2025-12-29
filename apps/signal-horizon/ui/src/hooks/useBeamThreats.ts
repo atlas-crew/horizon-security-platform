@@ -1,12 +1,12 @@
 /**
  * useBeamThreats Hook
  * Fetches blocked requests and threat activity from Signal Horizon API
+ * with pagination, filtering, and real-time polling.
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { apiFetch } from '../lib/api';
 import type { BlockedRequest, AttackPattern, ThreatEvent } from '../types/beam';
-
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
 // ============================================================================
 // API Response Types
@@ -63,8 +63,6 @@ export interface UseBeamThreatsOptions {
   pollingInterval?: number;
   /** Whether to start fetching immediately (default: true) */
   autoFetch?: boolean;
-  /** API base URL (default: /api/v1) */
-  apiBaseUrl?: string;
   /** Query parameters for filtering */
   queryParams?: ThreatQueryParams;
 }
@@ -80,13 +78,14 @@ export interface UseBeamThreatsResult {
   attackPatterns: AttackPattern[];
   recentEvents: ThreatEvent[];
   isLoading: boolean;
-  error: Error | null;
+  error: string | null;
+  isDemo: boolean;
+  /** @deprecated Use `!isDemo` instead */
+  isConnected: boolean;
   refetch: () => Promise<void>;
   fetchBlockById: (id: string) => Promise<BlockedRequest | null>;
   loadMore: () => Promise<void>;
-  isConnected: boolean;
   lastUpdated: Date | null;
-  // Computed stats
   stats: {
     total: number;
     blocked: number;
@@ -137,33 +136,36 @@ function generateDemoPatterns(): AttackPattern[] {
   ];
 }
 
+// Generate demo data once
+const DEMO_BLOCKS = generateDemoBlocks();
+const DEMO_PATTERNS = generateDemoPatterns();
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
 
 export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThreatsResult {
   const {
-    pollingInterval = 15000, // 15s for near-real-time threat monitoring
+    pollingInterval = 15000,
     autoFetch = true,
-    apiBaseUrl = '/api/v1',
     queryParams = {},
   } = options;
 
-  const [blocks, setBlocks] = useState<BlockedRequest[]>([]);
+  const [blocks, setBlocks] = useState<BlockedRequest[]>(DEMO_BLOCKS);
   const [pagination, setPagination] = useState({
-    total: 0,
+    total: DEMO_BLOCKS.length,
     limit: queryParams.limit || 50,
     offset: queryParams.offset || 0,
     hasMore: false,
   });
-  const [attackPatterns] = useState<AttackPattern[]>(generateDemoPatterns());
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const intervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef(false);
 
   // Transform API block to UI BlockedRequest
   const transformBlock = useCallback((apiBlock: ApiBlockDecision): BlockedRequest => ({
@@ -179,12 +181,11 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
   }), []);
 
   const fetchData = useCallback(async (append = false) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
 
@@ -196,21 +197,10 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
       params.set('limit', (queryParams.limit || 50).toString());
       params.set('offset', (append ? pagination.offset + pagination.limit : queryParams.offset || 0).toString());
 
-      const url = `${apiBaseUrl}/beam/threats?${params}`;
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
+      const data = await apiFetch<ThreatsApiResponse>(`/beam/threats?${params}`, {
+        signal: abortControllerRef.current.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json() as ThreatsApiResponse;
       const transformedBlocks = data.blocks.map(transformBlock);
 
       if (append) {
@@ -220,25 +210,21 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
       }
 
       setPagination(data.pagination);
-      setIsConnected(true);
+      setIsDemo(false);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
 
-      console.warn('Failed to fetch beam threats, using demo data:', err);
-      setError(err as Error);
-      setIsConnected(false);
-
-      if (blocks.length === 0) {
-        const demoBlocks = generateDemoBlocks();
-        setBlocks(demoBlocks);
-        setPagination({ total: demoBlocks.length, limit: 50, offset: 0, hasMore: false });
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.warn('[useBeamThreats] API failed, using demo data:', errorMessage);
+      setError(errorMessage);
+      setIsDemo(true);
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [apiBaseUrl, queryParams, transformBlock, pagination, blocks.length]);
+  }, [queryParams, transformBlock, pagination.offset, pagination.limit]);
 
   const loadMore = useCallback(async () => {
     if (pagination.hasMore && !isLoading) {
@@ -248,25 +234,13 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
 
   const fetchBlockById = useCallback(async (id: string): Promise<BlockedRequest | null> => {
     try {
-      const response = await fetch(`${apiBaseUrl}/beam/threats/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json() as BlockDetailResponse;
+      const data = await apiFetch<BlockDetailResponse>(`/beam/threats/${id}`);
       return transformBlock(data.block);
     } catch (err) {
-      console.warn('Failed to fetch block details:', err);
+      console.warn('[useBeamThreats] Failed to fetch block details:', err);
       return null;
     }
-  }, [apiBaseUrl, transformBlock]);
+  }, [transformBlock]);
 
   // Derive recent events from blocks
   const recentEvents = useMemo<ThreatEvent[]>(() =>
@@ -289,16 +263,18 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
     highCount: blocks.filter(b => b.riskScore >= 60 && b.riskScore < 80).length,
   }), [blocks, pagination.total]);
 
+  // Initial fetch
   useEffect(() => {
     if (autoFetch) fetchData();
     return () => { abortControllerRef.current?.abort(); };
-  }, [autoFetch]); // Note: deliberately not including fetchData to avoid refetch on queryParams change
+  }, [autoFetch]);
 
   // Refetch when query params change
   useEffect(() => {
     if (autoFetch) fetchData();
   }, [queryParams.severity, queryParams.status, queryParams.timeRange]);
 
+  // Polling
   useEffect(() => {
     if (pollingInterval > 0) {
       intervalRef.current = window.setInterval(() => fetchData(false), pollingInterval);
@@ -309,14 +285,15 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
   return {
     blocks,
     pagination,
-    attackPatterns,
+    attackPatterns: DEMO_PATTERNS,
     recentEvents,
     isLoading,
     error,
+    isDemo,
+    isConnected: !isDemo,
     refetch: () => fetchData(false),
     fetchBlockById,
     loadMore,
-    isConnected,
     lastUpdated,
     stats,
   };

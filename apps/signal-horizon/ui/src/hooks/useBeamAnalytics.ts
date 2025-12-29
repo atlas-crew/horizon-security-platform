@@ -1,11 +1,10 @@
 /**
  * useBeamAnalytics Hook
- * Fetches analytics data from signal-horizon API (which proxies risk-server)
+ * Fetches analytics data from signal-horizon API with automatic polling
+ * and demo data fallback when the API is unavailable.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+import { useApiPolling } from './useApiPolling';
 
 // ============================================================================
 // Types (mirrored from API)
@@ -140,16 +139,14 @@ export interface UseBeamAnalyticsOptions {
   pollingInterval?: number;
   /** Whether to start fetching immediately (default: true) */
   autoFetch?: boolean;
-  /** API base URL (default: /api/v1) */
-  apiBaseUrl?: string;
 }
 
 export interface UseBeamAnalyticsResult {
-  data: BeamAnalyticsData | null;
+  data: BeamAnalyticsData;
   isLoading: boolean;
-  error: Error | null;
+  error: string | null;
   refetch: () => Promise<void>;
-  isConnected: boolean;
+  isDemo: boolean;
   lastUpdated: Date | null;
 }
 
@@ -254,108 +251,31 @@ function generateDemoData(): BeamAnalyticsData {
   };
 }
 
+// Generate demo data once to use as initial data
+const DEMO_DATA = generateDemoData();
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
 
 export function useBeamAnalytics(options: UseBeamAnalyticsOptions = {}): UseBeamAnalyticsResult {
-  const {
-    pollingInterval = 30000,
-    autoFetch = true,
-    apiBaseUrl = '/api/v1',
-  } = options;
+  const { pollingInterval = 30000, autoFetch = true } = options;
 
-  const [data, setData] = useState<BeamAnalyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  const intervalRef = useRef<number | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const fetchData = useCallback(async () => {
-    // Cancel any in-flight request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/beam/analytics`, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json() as BeamAnalyticsData;
-      setData(result);
-      setIsConnected(true);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') {
-        // Request was cancelled, ignore
-        return;
-      }
-
-      console.warn('Failed to fetch beam analytics, using demo data:', err);
-      setError(err as Error);
-      setIsConnected(false);
-
-      // Fall back to demo data if we don't have any data yet
-      if (!data) {
-        setData(generateDemoData());
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apiBaseUrl, data]);
-
-  // Initial fetch
-  useEffect(() => {
-    if (autoFetch) {
-      fetchData();
-    }
-
-    return () => {
-      // Cleanup: cancel any pending request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [autoFetch, fetchData]);
-
-  // Polling
-  useEffect(() => {
-    if (pollingInterval > 0) {
-      intervalRef.current = window.setInterval(fetchData, pollingInterval);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [pollingInterval, fetchData]);
+  const result = useApiPolling<BeamAnalyticsData>({
+    endpoint: '/beam/analytics',
+    initialData: DEMO_DATA,
+    pollInterval: pollingInterval,
+    enabled: autoFetch,
+    transform: (data) => data as BeamAnalyticsData,
+  });
 
   return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData,
-    isConnected,
-    lastUpdated,
+    data: result.data,
+    isLoading: result.isLoading,
+    error: result.error,
+    refetch: result.refetch,
+    isDemo: result.isDemo,
+    lastUpdated: result.lastUpdated,
   };
 }
 

@@ -2,7 +2,10 @@
  * Test Setup for Signal Horizon UI
  */
 
-import '@testing-library/jest-dom/vitest';
+import { expect } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+
+expect.extend(matchers);
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 

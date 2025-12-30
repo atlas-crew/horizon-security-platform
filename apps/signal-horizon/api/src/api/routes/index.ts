@@ -15,6 +15,7 @@ import { createIntelRoutes } from './intel.js';
 import { createHuntRoutes } from './hunt.js';
 import { createFleetRoutes } from './fleet.js';
 import { createBeamRouter } from './beam/index.js';
+import { createTunnelRoutes } from './tunnel.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
@@ -62,6 +63,10 @@ export function createApiRouter(
   // Mount Beam (Customer Protection Console) routes
   router.use('/beam', createBeamRouter(prisma, logger));
   logger.info('Beam routes mounted at /api/v1/beam');
+
+  // Mount Tunnel routes for remote sensor access
+  router.use('/tunnel', createTunnelRoutes(prisma, logger));
+  logger.info('Tunnel routes mounted at /api/v1/tunnel');
 
   return router;
 }

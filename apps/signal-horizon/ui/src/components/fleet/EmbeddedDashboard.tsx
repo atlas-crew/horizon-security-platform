@@ -1,0 +1,255 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  ExternalLink,
+  AlertCircle,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
+import clsx from 'clsx';
+
+export interface EmbeddedDashboardProps {
+  sensorId: string;
+  sessionId?: string;
+  tunnelMode?: boolean;
+  height?: string | number;
+  onLoad?: () => void;
+  onError?: (error: Error) => void;
+}
+
+interface DashboardState {
+  loading: boolean;
+  error: Error | null;
+  content: string | null;
+  connected: boolean;
+  fullscreen: boolean;
+}
+
+export function EmbeddedDashboard({
+  sensorId,
+  sessionId,
+  tunnelMode = true,
+  height = 600,
+  onLoad,
+  onError,
+}: EmbeddedDashboardProps) {
+  const [state, setState] = useState<DashboardState>({
+    loading: true,
+    error: null,
+    content: null,
+    connected: false,
+    fullscreen: false,
+  });
+
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const fetchDashboardContent = useCallback(async () => {
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+
+    try {
+      const url = `/api/v1/tunnel/proxy/${sessionId || sensorId}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dashboard: ${response.statusText}`);
+      }
+
+      const html = await response.text();
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        content: html,
+        connected: true,
+        error: null,
+      }));
+      onLoad?.();
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error('Unknown error');
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err,
+        connected: false,
+      }));
+      onError?.(err);
+    }
+  }, [sessionId, sensorId, onLoad, onError]);
+
+  useEffect(() => {
+    if (tunnelMode) {
+      fetchDashboardContent();
+    } else {
+      setState((prev) => ({ ...prev, loading: false, connected: true }));
+      onLoad?.();
+    }
+  }, [tunnelMode, fetchDashboardContent, onLoad]);
+
+  const handleIframeLoad = () => {
+    if (!tunnelMode) {
+      setState((prev) => ({ ...prev, loading: false, connected: true }));
+      onLoad?.();
+    }
+  };
+
+  const handleIframeError = () => {
+    const error = new Error('Failed to load dashboard in iframe');
+    setState((prev) => ({
+      ...prev,
+      loading: false,
+      error,
+      connected: false,
+    }));
+    onError?.(error);
+  };
+
+  const toggleFullscreen = () => {
+    setState((prev) => ({ ...prev, fullscreen: !prev.fullscreen }));
+  };
+
+  const handleRefresh = () => {
+    if (tunnelMode) {
+      fetchDashboardContent();
+    } else if (iframeRef.current) {
+      iframeRef.current.src = iframeRef.current.src;
+    }
+  };
+
+  const handleRetry = () => {
+    setState((prev) => ({ ...prev, error: null, loading: true }));
+    if (tunnelMode) {
+      fetchDashboardContent();
+    } else if (iframeRef.current) {
+      iframeRef.current.src = iframeRef.current.src;
+    }
+  };
+
+  const handleOpenExternal = () => {
+    const url = tunnelMode
+      ? `/api/v1/tunnel/proxy/${sessionId || sensorId}`
+      : iframeRef.current?.src;
+    if (url) window.open(url, '_blank');
+  };
+
+  const normalizedHeight = typeof height === 'number' ? `${height}px` : height;
+
+  return (
+    <div
+      className={clsx(
+        'bg-surface-card border border-border-subtle rounded-lg overflow-hidden',
+        state.fullscreen && 'fixed inset-0 z-50 rounded-none'
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">
+        <div className="space-y-0.5">
+          <h3 className="text-sm font-medium text-ink-primary">Sensor Dashboard</h3>
+          <p className="text-xs text-ink-secondary">
+            {tunnelMode ? 'Tunnel Mode' : 'Direct Mode'} • Sensor {sensorId}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Connection Status */}
+          <div className="flex items-center gap-1.5 text-sm mr-2">
+            {state.connected ? (
+              <>
+                <Wifi className="h-4 w-4 text-status-success" />
+                <span className="text-ink-secondary">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-status-error" />
+                <span className="text-ink-secondary">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <button
+            onClick={handleRefresh}
+            disabled={state.loading}
+            className="p-2 rounded hover:bg-surface-subtle disabled:opacity-50"
+            title="Refresh Dashboard"
+          >
+            <RefreshCw className={clsx('h-4 w-4', state.loading && 'animate-spin')} />
+          </button>
+
+          <button
+            onClick={handleOpenExternal}
+            className="p-2 rounded hover:bg-surface-subtle"
+            title="Open in New Tab"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 rounded hover:bg-surface-subtle"
+            title={state.fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          >
+            {state.fullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-0">
+        {/* Error State */}
+        {state.error && (
+          <div className="p-6">
+            <div className="bg-status-error/10 border border-status-error/20 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-status-error">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1">{state.error.message}</span>
+                <button
+                  onClick={handleRetry}
+                  className="px-3 py-1 text-sm border border-status-error/30 rounded hover:bg-status-error/10"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {state.loading && !state.error && (
+          <div
+            className="flex items-center justify-center bg-surface-subtle"
+            style={{ height: normalizedHeight }}
+          >
+            <div className="flex flex-col items-center gap-3">
+              <RefreshCw className="h-8 w-8 animate-spin text-ink-secondary" />
+              <p className="text-sm text-ink-secondary">Loading dashboard...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Dashboard Iframe */}
+        {!state.loading && !state.error && (
+          <div className="border-t border-border-subtle">
+            <iframe
+              ref={iframeRef}
+              src={tunnelMode ? undefined : `/api/v1/sensors/${sensorId}/dashboard-url`}
+              srcDoc={tunnelMode ? state.content ?? undefined : undefined}
+              title={`Sensor ${sensorId} Dashboard`}
+              className="w-full border-0"
+              style={{
+                height: state.fullscreen ? 'calc(100vh - 60px)' : normalizedHeight,
+              }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              onLoad={handleIframeLoad}
+              onError={handleIframeError}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

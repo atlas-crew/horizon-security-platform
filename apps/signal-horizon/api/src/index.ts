@@ -30,6 +30,8 @@ import { RuleDistributor } from './services/fleet/rule-distributor.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
+// Tunnel broker for remote access
+import { TunnelBroker } from './websocket/tunnel-broker.js';
 
 // Initialize logger
 const logger = pino({
@@ -126,6 +128,7 @@ let configManager: ConfigManager;
 let fleetCommander: FleetCommander;
 let ruleDistributor: RuleDistributor;
 let impossibleTravelService: ImpossibleTravelService;
+let tunnelBroker: TunnelBroker;
 
 async function start() {
   logger.info('Starting Signal Horizon Hub...');
@@ -174,6 +177,7 @@ async function start() {
   });
   ruleDistributor = new RuleDistributor(prisma, logger);
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
+  tunnelBroker = new TunnelBroker(logger);
   logger.info('Fleet management services initialized');
 
   // Resolve circular dependencies: services that need each other
@@ -242,6 +246,15 @@ async function start() {
       return;
     }
 
+    // Tunnel WebSocket paths: /ws/tunnel/sensor/:sensorId and /ws/tunnel/user/:sessionId
+    if (normalizedPath.startsWith('/ws/tunnel/')) {
+      // TODO: Implement tunnel WebSocket gateway with TunnelBroker
+      // For now, just log and close the connection
+      logger.info({ path: normalizedPath }, 'Tunnel WebSocket connection attempt');
+      socket.destroy();
+      return;
+    }
+
     socket.destroy();
   });
 
@@ -284,6 +297,7 @@ async function shutdown(signal: string) {
   aggregator?.stop();
   broadcaster?.stop();
   fleetAggregator?.stop?.();
+  await tunnelBroker?.shutdown?.();
   logger.info('Fleet services stopped');
 
   // Close ClickHouse connection

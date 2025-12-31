@@ -113,7 +113,13 @@ export class TunnelBroker extends EventEmitter {
     this.tunnels.set(sensorId, session);
 
     ws.on('message', (data) => this.handleSensorMessage(sensorId, data));
-    ws.on('close', () => this.handleSensorDisconnect(sensorId, 'socket closed'));
+    // Capture socket reference to prevent closing a newer connection when old socket closes
+    ws.on('close', () => {
+      const currentTunnel = this.tunnels.get(sensorId);
+      if (currentTunnel && currentTunnel.socket === ws) {
+        this.handleSensorDisconnect(sensorId, 'socket closed');
+      }
+    });
     ws.on('error', (error) => this.handleSensorError(sensorId, error));
 
     this.logger.info({ sensorId, tenantId, capabilities }, 'Sensor tunnel connected');

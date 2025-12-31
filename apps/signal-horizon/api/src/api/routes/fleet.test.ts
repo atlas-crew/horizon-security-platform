@@ -84,6 +84,7 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   approvalStatus: 'APPROVED',
   approvedAt: null,
   approvedBy: null,
+  registrationTokenId: null,
   ...overrides,
 });
 

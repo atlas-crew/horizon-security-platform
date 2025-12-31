@@ -10,6 +10,7 @@ import {
   Wifi,
   WifiOff,
   Settings,
+  Key,
   Sun,
   Moon,
   ChevronDown,
@@ -48,6 +49,8 @@ const fleetNavItems = [
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
+  { path: '/fleet/connectivity', icon: Wifi, label: 'Connectivity' },
+  { path: '/fleet/keys', icon: Key, label: 'API Keys' },
 ];
 
 const beamNavItems = [

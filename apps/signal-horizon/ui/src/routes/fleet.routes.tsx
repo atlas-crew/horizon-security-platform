@@ -6,6 +6,8 @@ import { FleetUpdatesPage } from '../pages/fleet/FleetUpdatesPage';
 import { RuleDistributionPage } from '../pages/fleet/RuleDistributionPage';
 import { SensorDetailPage } from '../pages/fleet/SensorDetailPage';
 import { ConfigManagerPage } from '../pages/fleet/ConfigManagerPage';
+import { ConnectivityPage } from '../pages/fleet/ConnectivityPage';
+import { SensorKeysPage } from '../pages/fleet/SensorKeysPage';
 
 /**
  * Fleet Management Routes
@@ -58,6 +60,22 @@ export const fleetRoutes: RouteObject[] = [
     element: (
       <FleetErrorBoundary level="page" title="Configuration Manager Error">
         <ConfigManagerPage />
+      </FleetErrorBoundary>
+    ),
+  },
+  {
+    path: '/fleet/connectivity',
+    element: (
+      <FleetErrorBoundary level="page" title="Connectivity Monitor Error">
+        <ConnectivityPage />
+      </FleetErrorBoundary>
+    ),
+  },
+  {
+    path: '/fleet/keys',
+    element: (
+      <FleetErrorBoundary level="page" title="API Key Management Error">
+        <SensorKeysPage />
       </FleetErrorBoundary>
     ),
   },

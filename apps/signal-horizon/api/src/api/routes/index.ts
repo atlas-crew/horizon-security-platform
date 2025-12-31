@@ -16,6 +16,7 @@ import { createHuntRoutes } from './hunt.js';
 import { createFleetRoutes } from './fleet.js';
 import { createBeamRouter } from './beam/index.js';
 import { createTunnelRoutes } from './tunnel.js';
+import { createManagementRoutes } from './management.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
@@ -67,6 +68,10 @@ export function createApiRouter(
   // Mount Tunnel routes for remote sensor access
   router.use('/tunnel', createTunnelRoutes(prisma, logger));
   logger.info('Tunnel routes mounted at /api/v1/tunnel');
+
+  // Mount Management routes for API keys and connectivity
+  router.use('/management', createManagementRoutes(prisma, logger));
+  logger.info('Management routes mounted at /api/v1/management');
 
   return router;
 }

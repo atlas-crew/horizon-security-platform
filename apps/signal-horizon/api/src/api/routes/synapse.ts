@@ -97,6 +97,7 @@ export function createSynapseRoutes(
 
   /**
    * Helper to handle synapse proxy errors consistently
+   * Uses the enhanced SynapseProxyError.toJSON() for structured responses
    */
   function handleError(res: Response, error: unknown, context: string): void {
     if (error instanceof SynapseProxyError) {
@@ -108,16 +109,22 @@ export function createSynapseRoutes(
         SENSOR_ERROR: 502,
         HTTP_ERROR: error.status || 502,
         SHUTDOWN: 503,
+        INVALID_SENSOR_ID: 400,
+        INVALID_ENDPOINT: 400,
+        ENDPOINT_NOT_ALLOWED: 403,
+        STALE_REQUEST: 504,
       };
 
       const status = statusMap[error.code] || 500;
-      res.status(status).json({
-        error: error.message,
-        code: error.code,
-      });
+      // Use enhanced toJSON() for structured response with suggestions
+      res.status(status).json(error.toJSON());
     } else {
       logger.error({ error, context }, 'Synapse proxy error');
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({
+        error: 'Internal server error',
+        code: 'INTERNAL_ERROR',
+        retryable: false,
+      });
     }
   }
 

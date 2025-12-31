@@ -3,11 +3,19 @@
  *
  * Routes requests through WebSocket tunnel to sensor's local Synapse API.
  * Provides high-level methods for common operations with response caching.
+ *
+ * Security features:
+ * - Tenant isolation via tunnel validation
+ * - Path allowlist to prevent SSRF
+ * - Bounded cache with LRU eviction
+ * - Concurrency limits to prevent upstream overload
+ * - Request timeout handling
  */
 
 import type { Logger } from 'pino';
 import type { TunnelBroker, TunnelMessage } from '../websocket/tunnel-broker.js';
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 
 // ============================================================================
 // Types
@@ -130,6 +138,139 @@ export interface SynapseProxyResponse {
 interface CacheEntry<T> {
   data: T;
   expiresAt: number;
+  accessedAt: number;
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
+  createdAt: number;
+}
+
+// ============================================================================
+// Security Constants
+// ============================================================================
+
+/** Allowed API path prefixes to prevent SSRF */
+const ALLOWED_PATH_PREFIXES = [
+  '/api/v1/status',
+  '/api/v1/entities',
+  '/api/v1/blocks',
+  '/api/v1/rules',
+  '/api/v1/actors',
+  '/api/v1/evaluate',
+] as const;
+
+/** Sensor ID format validation */
+const SENSOR_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+
+// ============================================================================
+// LRU Cache Implementation
+// ============================================================================
+
+class LRUCache<K, V> {
+  private cache = new Map<K, { value: V; accessedAt: number }>();
+  private readonly maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+
+    // Move to end (most recently used)
+    this.cache.delete(key);
+    entry.accessedAt = Date.now();
+    this.cache.set(key, entry);
+    return entry.value;
+  }
+
+  set(key: K, value: V): void {
+    // If key exists, delete it first to update position
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Evict oldest (first) entry
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, { value, accessedAt: Date.now() });
+  }
+
+  delete(key: K): boolean {
+    return this.cache.delete(key);
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+
+  keys(): IterableIterator<K> {
+    return this.cache.keys();
+  }
+
+  /** Delete entries matching a prefix */
+  deleteByPrefix(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (typeof key === 'string' && key.startsWith(prefix)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Concurrency Control
+// ============================================================================
+
+class Semaphore {
+  private permits: number;
+  private waiting: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      this.waiting.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.waiting.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits++;
+    }
+  }
+
+  get available(): number {
+    return this.permits;
+  }
+
+  get queueLength(): number {
+    return this.waiting.length;
+  }
 }
 
 // ============================================================================
@@ -137,27 +278,37 @@ interface CacheEntry<T> {
 // ============================================================================
 
 export class SynapseProxyService extends EventEmitter {
-  private cache = new Map<string, CacheEntry<unknown>>();
-  private pendingRequests = new Map<string, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-    timeout: NodeJS.Timeout;
-  }>();
-  private requestCounter = 0;
+  private cache: LRUCache<string, CacheEntry<unknown>>;
+  private pendingRequests = new Map<string, PendingRequest>();
+  private concurrencyLimit: Semaphore;
 
-  // Cache TTLs in milliseconds
+  // Metrics
+  private cacheHits = 0;
+  private cacheMisses = 0;
+  private totalRequests = 0;
+
+  // Configuration
+  private readonly MAX_CACHE_SIZE = 1000;
+  private readonly MAX_CONCURRENT_REQUESTS = 20;
   private readonly STATUS_CACHE_TTL = 5000;     // 5 seconds
   private readonly LIST_CACHE_TTL = 10000;      // 10 seconds
   private readonly REQUEST_TIMEOUT = 30000;     // 30 seconds
+  private readonly STALE_REQUEST_THRESHOLD = 60000; // 1 minute for GC
 
   constructor(
     private tunnelBroker: TunnelBroker,
     private logger: Logger
   ) {
     super();
+    this.cache = new LRUCache(this.MAX_CACHE_SIZE);
+    this.concurrencyLimit = new Semaphore(this.MAX_CONCURRENT_REQUESTS);
     this.setupTunnelListener();
     this.startCacheCleanup();
-    this.logger.info('SynapseProxyService initialized');
+    this.startStaleRequestCleanup();
+    this.logger.info({
+      maxCacheSize: this.MAX_CACHE_SIZE,
+      maxConcurrentRequests: this.MAX_CONCURRENT_REQUESTS,
+    }, 'SynapseProxyService initialized');
   }
 
   // ==========================================================================
@@ -166,6 +317,12 @@ export class SynapseProxyService extends EventEmitter {
 
   /**
    * Route a request through the tunnel to sensor's Synapse API
+   *
+   * Security checks:
+   * - Validates sensor ID format
+   * - Validates endpoint against allowlist (SSRF protection)
+   * - Verifies tunnel exists and belongs to tenant
+   * - Applies concurrency limits
    */
   async proxyRequest<T = unknown>(
     sensorId: string,
@@ -174,6 +331,19 @@ export class SynapseProxyService extends EventEmitter {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
     body?: unknown
   ): Promise<T> {
+    this.totalRequests++;
+
+    // Validate sensor ID format
+    if (!SENSOR_ID_PATTERN.test(sensorId)) {
+      throw new SynapseProxyError(
+        'Invalid sensor ID format',
+        'INVALID_SENSOR_ID'
+      );
+    }
+
+    // SSRF protection: validate endpoint against allowlist
+    this.validateEndpoint(endpoint);
+
     // Verify tunnel exists and belongs to tenant
     const tunnel = this.tunnelBroker.getTunnelStatus(sensorId);
     if (!tunnel) {
@@ -184,6 +354,52 @@ export class SynapseProxyService extends EventEmitter {
       throw new SynapseProxyError('Tenant mismatch', 'FORBIDDEN');
     }
 
+    // Apply concurrency limit
+    await this.concurrencyLimit.acquire();
+
+    try {
+      return await this.executeRequest<T>(sensorId, endpoint, method, body);
+    } finally {
+      this.concurrencyLimit.release();
+    }
+  }
+
+  /**
+   * Validate endpoint against allowlist to prevent SSRF
+   */
+  private validateEndpoint(endpoint: string): void {
+    // Reject path traversal attempts
+    if (endpoint.includes('..') || endpoint.includes('//')) {
+      throw new SynapseProxyError(
+        'Invalid endpoint: path traversal detected',
+        'INVALID_ENDPOINT'
+      );
+    }
+
+    // Check against allowlist
+    const pathWithoutQuery = endpoint.split('?')[0];
+    const isAllowed = ALLOWED_PATH_PREFIXES.some(prefix =>
+      pathWithoutQuery.startsWith(prefix)
+    );
+
+    if (!isAllowed) {
+      this.logger.warn({ endpoint }, 'Blocked request to non-allowlisted endpoint');
+      throw new SynapseProxyError(
+        'Endpoint not allowed',
+        'ENDPOINT_NOT_ALLOWED'
+      );
+    }
+  }
+
+  /**
+   * Execute the actual request through the tunnel
+   */
+  private async executeRequest<T>(
+    sensorId: string,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    body?: unknown
+  ): Promise<T> {
     const requestId = this.generateRequestId();
 
     return new Promise<T>((resolve, reject) => {
@@ -196,6 +412,7 @@ export class SynapseProxyService extends EventEmitter {
         resolve: resolve as (value: unknown) => void,
         reject,
         timeout,
+        createdAt: Date.now(),
       });
 
       const message: TunnelMessage = {
@@ -542,76 +759,137 @@ export class SynapseProxyService extends EventEmitter {
 
   private getFromCache<T>(key: string): T | null {
     const entry = this.cache.get(key);
-    if (!entry) return null;
-
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
+    if (!entry) {
+      this.cacheMisses++;
       return null;
     }
 
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      this.cacheMisses++;
+      return null;
+    }
+
+    this.cacheHits++;
     return entry.data as T;
   }
 
   private setCache(key: string, data: unknown, ttlMs: number): void {
+    const now = Date.now();
     this.cache.set(key, {
       data,
-      expiresAt: Date.now() + ttlMs,
+      expiresAt: now + ttlMs,
+      accessedAt: now,
     });
   }
 
   private invalidateCache(prefix: string): void {
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) {
-        this.cache.delete(key);
-      }
-    }
+    this.cache.deleteByPrefix(prefix);
   }
 
   /**
    * Clear all cache entries for a sensor
    */
   clearSensorCache(sensorId: string): void {
+    const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
     const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors'];
     for (const prefix of prefixes) {
-      this.invalidateCache(`${prefix}:${sensorId}`);
+      this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }
   }
 
   private startCacheCleanup(): void {
     setInterval(() => {
       const now = Date.now();
-      for (const [key, entry] of this.cache) {
-        if (now > entry.expiresAt) {
+      for (const key of this.cache.keys()) {
+        const entry = this.cache.get(key);
+        if (entry && now > entry.expiresAt) {
           this.cache.delete(key);
         }
       }
     }, 60000); // Clean up every minute
   }
 
+  /**
+   * Garbage collect stale pending requests
+   * This catches requests that weren't properly cleaned up due to:
+   * - Tunnel disconnection without error emission
+   * - Network partitions
+   * - Unhandled edge cases
+   */
+  private startStaleRequestCleanup(): void {
+    setInterval(() => {
+      const now = Date.now();
+      let cleanedCount = 0;
+
+      for (const [requestId, pending] of this.pendingRequests) {
+        if (now - pending.createdAt > this.STALE_REQUEST_THRESHOLD) {
+          clearTimeout(pending.timeout);
+          pending.reject(new SynapseProxyError(
+            'Request stale - garbage collected',
+            'STALE_REQUEST'
+          ));
+          this.pendingRequests.delete(requestId);
+          cleanedCount++;
+        }
+      }
+
+      if (cleanedCount > 0) {
+        this.logger.warn({ cleanedCount }, 'Garbage collected stale pending requests');
+      }
+    }, 30000); // Check every 30 seconds
+  }
+
   // ==========================================================================
   // Utilities
   // ==========================================================================
 
+  /**
+   * Generate a unique request ID using crypto.randomUUID
+   * This is collision-safe even under high concurrency
+   */
   private generateRequestId(): string {
-    this.requestCounter++;
-    return `synapse-${Date.now()}-${this.requestCounter}`;
+    return `synapse-${randomUUID()}`;
   }
 
   /**
-   * Get proxy statistics
+   * Get proxy statistics including cache hit rate and concurrency metrics
    */
-  getStats(): { pendingRequests: number; cacheSize: number; cacheHitRate: number } {
+  getStats(): {
+    pendingRequests: number;
+    cacheSize: number;
+    maxCacheSize: number;
+    cacheHitRate: number;
+    cacheHits: number;
+    cacheMisses: number;
+    totalRequests: number;
+    concurrentRequestsAvailable: number;
+    concurrentRequestsQueued: number;
+  } {
+    const totalCacheRequests = this.cacheHits + this.cacheMisses;
+    const hitRate = totalCacheRequests > 0
+      ? Math.round((this.cacheHits / totalCacheRequests) * 100) / 100
+      : 0;
+
     return {
       pendingRequests: this.pendingRequests.size,
       cacheSize: this.cache.size,
-      cacheHitRate: 0, // TODO: Track cache hits/misses
+      maxCacheSize: this.MAX_CACHE_SIZE,
+      cacheHitRate: hitRate,
+      cacheHits: this.cacheHits,
+      cacheMisses: this.cacheMisses,
+      totalRequests: this.totalRequests,
+      concurrentRequestsAvailable: this.concurrencyLimit.available,
+      concurrentRequestsQueued: this.concurrencyLimit.queueLength,
     };
   }
 
   /**
-   * Shutdown the service
+   * Shutdown the service gracefully
    */
   async shutdown(): Promise<void> {
+    this.logger.info('SynapseProxyService shutting down...');
+
     // Cancel all pending requests
     for (const [requestId, pending] of this.pendingRequests) {
       clearTimeout(pending.timeout);
@@ -620,7 +898,11 @@ export class SynapseProxyService extends EventEmitter {
     }
 
     this.cache.clear();
-    this.logger.info('SynapseProxyService shutdown complete');
+    this.logger.info({
+      totalRequests: this.totalRequests,
+      cacheHits: this.cacheHits,
+      cacheMisses: this.cacheMisses,
+    }, 'SynapseProxyService shutdown complete');
   }
 }
 
@@ -628,13 +910,69 @@ export class SynapseProxyService extends EventEmitter {
 // Error Class
 // ============================================================================
 
+export type SynapseErrorCode =
+  | 'TUNNEL_NOT_FOUND'
+  | 'FORBIDDEN'
+  | 'TIMEOUT'
+  | 'SEND_FAILED'
+  | 'SENSOR_ERROR'
+  | 'HTTP_ERROR'
+  | 'SHUTDOWN'
+  | 'INVALID_SENSOR_ID'
+  | 'INVALID_ENDPOINT'
+  | 'ENDPOINT_NOT_ALLOWED'
+  | 'STALE_REQUEST';
+
 export class SynapseProxyError extends Error {
+  readonly code: SynapseErrorCode;
+  readonly status: number | undefined;
+  readonly retryable: boolean;
+
   constructor(
     message: string,
-    public readonly code: string,
-    public readonly status?: number
+    code: SynapseErrorCode,
+    status?: number,
+    options?: { cause?: Error }
   ) {
-    super(message);
+    super(message, options);
     this.name = 'SynapseProxyError';
+    this.code = code;
+    this.status = status;
+
+    // Determine if error is retryable based on code
+    this.retryable = [
+      'TUNNEL_NOT_FOUND',
+      'TIMEOUT',
+      'SEND_FAILED',
+      'STALE_REQUEST',
+    ].includes(code);
+  }
+
+  /**
+   * Create a structured error response for API consumers
+   */
+  toJSON(): {
+    error: string;
+    code: SynapseErrorCode;
+    status?: number;
+    retryable: boolean;
+    suggestion?: string;
+  } {
+    const suggestions: Partial<Record<SynapseErrorCode, string>> = {
+      TUNNEL_NOT_FOUND: 'Verify sensor is online and connected',
+      TIMEOUT: 'Retry the request or check sensor connectivity',
+      SEND_FAILED: 'Check tunnel connection and retry',
+      FORBIDDEN: 'Verify you have access to this sensor',
+      INVALID_SENSOR_ID: 'Sensor ID must be alphanumeric with hyphens/underscores, max 64 chars',
+      ENDPOINT_NOT_ALLOWED: 'The requested endpoint is not available through the proxy',
+    };
+
+    return {
+      error: this.message,
+      code: this.code,
+      status: this.status,
+      retryable: this.retryable,
+      suggestion: suggestions[this.code],
+    };
   }
 }

@@ -31,7 +31,10 @@ import { ImpossibleTravelService } from './services/impossible-travel.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
 // Tunnel broker for remote access
-import { TunnelBroker } from './websocket/tunnel-broker.js';
+import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
+import { SynapseProxyService } from './services/synapse-proxy.js';
+import { WebSocketServer, WebSocket } from 'ws';
+import { createHash } from 'node:crypto';
 
 // Initialize logger
 const logger = pino({
@@ -129,6 +132,169 @@ let fleetCommander: FleetCommander;
 let ruleDistributor: RuleDistributor;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
+let synapseProxy: SynapseProxyService;
+let tunnelWss: WebSocketServer;
+
+// ============================================================================
+// Tunnel Authentication Handler
+// ============================================================================
+
+interface TunnelAuthPayload {
+  sensorId: string;
+  apiKey: string;
+  capabilities?: TunnelCapability[];
+  metadata?: {
+    hostname?: string;
+    version?: string;
+    platform?: string;
+  };
+}
+
+interface TunnelMessage {
+  type: string;
+  payload: unknown;
+  timestamp: string;
+}
+
+/**
+ * Handle incoming sensor tunnel connection with authentication
+ */
+function handleTunnelSensorConnection(
+  ws: WebSocket,
+  db: PrismaClient,
+  log: typeof logger
+): void {
+  const AUTH_TIMEOUT_MS = 10000;
+  let authenticated = false;
+
+  // Set auth timeout
+  const authTimeout = setTimeout(() => {
+    if (!authenticated) {
+      log.warn('Tunnel connection auth timeout');
+      ws.close(4001, 'Authentication timeout');
+    }
+  }, AUTH_TIMEOUT_MS);
+
+  ws.once('message', async (data: Buffer | string) => {
+    try {
+      const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+      const message: TunnelMessage = JSON.parse(str);
+
+      if (message.type !== 'auth') {
+        log.warn({ type: message.type }, 'Expected auth message');
+        ws.close(4002, 'Expected auth message');
+        clearTimeout(authTimeout);
+        return;
+      }
+
+      const payload = message.payload as TunnelAuthPayload;
+      const { sensorId, apiKey, capabilities = ['dashboard'], metadata } = payload;
+
+      if (!sensorId || !apiKey) {
+        log.warn('Missing sensorId or apiKey in auth');
+        ws.close(4003, 'Missing credentials');
+        clearTimeout(authTimeout);
+        return;
+      }
+
+      // Hash the API key for lookup
+      const keyHash = createHash('sha256').update(apiKey).digest('hex');
+
+      // Validate API key against database
+      const apiKeyRecord = await db.apiKey.findFirst({
+        where: {
+          keyHash,
+          isRevoked: false,
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: new Date() } },
+          ],
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          name: true,
+          scopes: true,
+        },
+      });
+
+      if (!apiKeyRecord) {
+        log.warn({ sensorId }, 'Invalid or expired API key for tunnel');
+        ws.send(JSON.stringify({
+          type: 'auth-error',
+          payload: { error: 'Invalid or expired API key' },
+          timestamp: new Date().toISOString(),
+        }));
+        ws.close(4004, 'Invalid API key');
+        clearTimeout(authTimeout);
+        return;
+      }
+
+      // Verify sensor belongs to this tenant
+      const sensor = await db.sensor.findFirst({
+        where: {
+          id: sensorId,
+          tenantId: apiKeyRecord.tenantId,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (!sensor) {
+        log.warn({ sensorId, tenantId: apiKeyRecord.tenantId }, 'Sensor not found or tenant mismatch');
+        ws.send(JSON.stringify({
+          type: 'auth-error',
+          payload: { error: 'Sensor not found' },
+          timestamp: new Date().toISOString(),
+        }));
+        ws.close(4005, 'Sensor not found');
+        clearTimeout(authTimeout);
+        return;
+      }
+
+      // Authentication successful
+      authenticated = true;
+      clearTimeout(authTimeout);
+
+      // Send success response
+      ws.send(JSON.stringify({
+        type: 'auth-success',
+        payload: {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          tenantId: apiKeyRecord.tenantId,
+        },
+        timestamp: new Date().toISOString(),
+      }));
+
+      // Hand off to TunnelBroker for connection management
+      tunnelBroker.handleSensorConnect(
+        ws,
+        sensorId,
+        apiKeyRecord.tenantId,
+        capabilities,
+        metadata
+      );
+
+      log.info(
+        { sensorId, tenantId: apiKeyRecord.tenantId, capabilities },
+        'Sensor tunnel authenticated and connected'
+      );
+    } catch (error) {
+      log.error({ error }, 'Error processing tunnel auth');
+      ws.close(4000, 'Auth error');
+      clearTimeout(authTimeout);
+    }
+  });
+
+  ws.on('error', (error) => {
+    log.error({ error: error.message }, 'Tunnel WebSocket error during auth');
+    clearTimeout(authTimeout);
+  });
+
+  ws.on('close', () => {
+    clearTimeout(authTimeout);
+  });
+}
 
 async function start() {
   logger.info('Starting Signal Horizon Hub...');
@@ -178,6 +344,10 @@ async function start() {
   ruleDistributor = new RuleDistributor(prisma, logger);
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
   tunnelBroker = new TunnelBroker(logger);
+  synapseProxy = new SynapseProxyService(tunnelBroker, logger);
+
+  // Create WebSocket server for tunnel connections (noServer mode - we handle upgrades manually)
+  tunnelWss = new WebSocketServer({ noServer: true });
   logger.info('Fleet management services initialized');
 
   // Resolve circular dependencies: services that need each other
@@ -186,16 +356,17 @@ async function start() {
   fleetCommander.setCommandSender(commandSender);
   logger.info('Fleet service dependencies wired');
 
-  // Mount API routes (including hunt routes and fleet routes)
+  // Mount API routes (including hunt routes, fleet routes, and synapse proxy)
   const apiRouter = createApiRouter(prisma, logger, {
     huntService,
     fleetAggregator,
     configManager,
     fleetCommander,
     ruleDistributor,
+    synapseProxy,
   });
   app.use('/api/v1', apiRouter);
-  logger.info('API routes mounted at /api/v1 (includes fleet routes)');
+  logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
 
   // Initialize core services (pass ClickHouse for dual-write)
   broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
@@ -248,9 +419,16 @@ async function start() {
 
     // Tunnel WebSocket paths: /ws/tunnel/sensor/:sensorId and /ws/tunnel/user/:sessionId
     if (normalizedPath.startsWith('/ws/tunnel/')) {
-      // TODO: Implement tunnel WebSocket gateway with TunnelBroker
-      // For now, just log and close the connection
-      logger.info({ path: normalizedPath }, 'Tunnel WebSocket connection attempt');
+      // Handle sensor tunnel connections
+      if (normalizedPath.startsWith('/ws/tunnel/sensor')) {
+        tunnelWss.handleUpgrade(req, netSocket, head, (ws) => {
+          handleTunnelSensorConnection(ws, prisma, logger);
+        });
+        return;
+      }
+
+      // User dashboard proxy connections (future)
+      logger.info({ path: normalizedPath }, 'User tunnel WebSocket not yet implemented');
       socket.destroy();
       return;
     }
@@ -276,6 +454,10 @@ async function start() {
       { path: config.websocket.dashboardPath },
       'Dashboard WebSocket gateway ready'
     );
+    logger.info(
+      { path: '/ws/tunnel/sensor' },
+      'Tunnel WebSocket gateway ready'
+    );
   });
 }
 
@@ -297,7 +479,9 @@ async function shutdown(signal: string) {
   aggregator?.stop();
   broadcaster?.stop();
   fleetAggregator?.stop?.();
+  await synapseProxy?.shutdown?.();
   await tunnelBroker?.shutdown?.();
+  tunnelWss?.close();
   logger.info('Fleet services stopped');
 
   // Close ClickHouse connection

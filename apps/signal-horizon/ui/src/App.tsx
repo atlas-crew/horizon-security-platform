@@ -19,6 +19,7 @@ import {
   Server,
   AlertTriangle,
   Bell,
+  UserPlus,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -51,6 +52,7 @@ const fleetNavItems = [
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
   { path: '/fleet/connectivity', icon: Wifi, label: 'Connectivity' },
   { path: '/fleet/keys', icon: Key, label: 'API Keys' },
+  { path: '/fleet/onboarding', icon: UserPlus, label: 'Onboarding' },
 ];
 
 const beamNavItems = [

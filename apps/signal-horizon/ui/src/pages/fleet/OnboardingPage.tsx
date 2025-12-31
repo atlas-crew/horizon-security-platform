@@ -1,0 +1,575 @@
+/**
+ * Sensor Onboarding Page
+ *
+ * Registration token management and pending sensor approval workflow.
+ * Enables zero-touch provisioning with secure token-based registration.
+ */
+
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Key,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  AlertTriangle,
+  Clock,
+  Server,
+  CheckCircle,
+  XCircle,
+  UserPlus,
+  Globe,
+} from 'lucide-react';
+import { MetricCard } from '../../components/fleet';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+interface RegistrationToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'EXHAUSTED' | 'REVOKED';
+  maxUses: number;
+  usedCount: number;
+  remainingUses: number;
+  region: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  createdBy: string;
+}
+
+interface PendingSensor {
+  id: string;
+  name: string;
+  hostname: string;
+  region: string | null;
+  version: string | null;
+  os: string | null;
+  architecture: string | null;
+  publicIp: string | null;
+  privateIp: string | null;
+  registrationMethod: string;
+  registrationToken: string | null;
+  createdAt: string;
+  lastHeartbeat: string | null;
+}
+
+interface NewTokenRequest {
+  name: string;
+  maxUses: number;
+  expiresIn?: number;
+  region?: string;
+}
+
+export function OnboardingPage(): React.ReactElement {
+  const [activeTab, setActiveTab] = useState<'tokens' | 'pending'>('tokens');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [tokenToRevoke, setTokenToRevoke] = useState<string | null>(null);
+  // Note: sensorToProcess reserved for future modal-based approval with confirmation
+  const [_sensorToProcess, _setSensorToProcess] = useState<{ id: string; action: 'approve' | 'reject' } | null>(null);
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+
+  const queryClient = useQueryClient();
+
+  // Fetch statistics
+  const { data: statsData } = useQuery({
+    queryKey: ['onboarding-stats'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/onboarding/stats`);
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      return response.json();
+    },
+  });
+
+  // Fetch tokens
+  const { data: tokensData, isLoading: tokensLoading, error: tokensError } = useQuery({
+    queryKey: ['registration-tokens'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/onboarding/tokens`);
+      if (!response.ok) throw new Error('Failed to fetch tokens');
+      return response.json();
+    },
+    enabled: activeTab === 'tokens',
+  });
+
+  // Fetch pending sensors
+  const { data: pendingData, isLoading: pendingLoading, error: pendingError } = useQuery({
+    queryKey: ['pending-sensors'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/onboarding/pending`);
+      if (!response.ok) throw new Error('Failed to fetch pending sensors');
+      return response.json();
+    },
+    enabled: activeTab === 'pending',
+  });
+
+  const tokens: RegistrationToken[] = tokensData?.tokens || [];
+  const pendingSensors: PendingSensor[] = pendingData?.sensors || [];
+
+  // Generate token mutation
+  const generateMutation = useMutation({
+    mutationFn: async (request: NewTokenRequest) => {
+      const response = await fetch(`${API_BASE}/onboarding/tokens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error('Failed to generate token');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['registration-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+      setGeneratedToken(data.token);
+    },
+  });
+
+  // Revoke token mutation
+  const revokeMutation = useMutation({
+    mutationFn: async (tokenId: string) => {
+      const response = await fetch(`${API_BASE}/onboarding/tokens/${tokenId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to revoke token');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['registration-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+      setTokenToRevoke(null);
+    },
+  });
+
+  // Approve/reject sensor mutation
+  const approvalMutation = useMutation({
+    mutationFn: async ({ sensorId, action, assignedName }: { sensorId: string; action: 'approve' | 'reject'; assignedName?: string }) => {
+      const response = await fetch(`${API_BASE}/onboarding/pending/${sensorId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, assignedName }),
+      });
+      if (!response.ok) throw new Error(`Failed to ${action} sensor`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-sensors'] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+      _setSensorToProcess(null);
+    },
+  });
+
+  const handleCopyToken = () => {
+    if (generatedToken) {
+      navigator.clipboard.writeText(generatedToken);
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2000);
+    }
+  };
+
+  const handleCreateToken = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const request: NewTokenRequest = {
+      name: formData.get('name') as string,
+      maxUses: parseInt(formData.get('maxUses') as string) || 1,
+      expiresIn: formData.get('expiresIn') ? parseInt(formData.get('expiresIn') as string) : undefined,
+      region: formData.get('region') as string || undefined,
+    };
+    generateMutation.mutate(request);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      ACTIVE: 'bg-ac-green/10 text-ac-green border-ac-green/20',
+      EXPIRED: 'bg-ac-orange/10 text-ac-orange border-ac-orange/20',
+      EXHAUSTED: 'bg-ac-yellow/10 text-ac-yellow border-ac-yellow/20',
+      REVOKED: 'bg-ac-red/10 text-ac-red border-ac-red/20',
+    };
+    return (
+      <span className={`px-2 py-0.5 text-xs font-medium border ${styles[status] || 'bg-ink-muted/10'}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="flex-1 p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-primary">Sensor Onboarding</h1>
+          <p className="text-sm text-ink-secondary mt-1">
+            Manage registration tokens and approve pending sensors
+          </p>
+        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          New Token
+        </button>
+      </div>
+
+      {/* Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <MetricCard
+          label="Pending Approvals"
+          value={statsData?.pendingApprovals || 0}
+          icon={<Clock className="w-5 h-5" />}
+          trend={statsData?.pendingApprovals > 0 ? { value: 1, label: 'needs attention' } : undefined}
+        />
+        <MetricCard
+          label="Active Tokens"
+          value={statsData?.activeTokens || 0}
+          icon={<Key className="w-5 h-5" />}
+        />
+        <MetricCard
+          label="Registrations (7d)"
+          value={statsData?.registrationsLast7Days || 0}
+          icon={<UserPlus className="w-5 h-5" />}
+        />
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-border-subtle">
+        <nav className="flex gap-4">
+          <button
+            onClick={() => setActiveTab('tokens')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'tokens'
+                ? 'border-link text-link'
+                : 'border-transparent text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            <Key className="w-4 h-4 inline-block mr-2" />
+            Registration Tokens
+          </button>
+          <button
+            onClick={() => setActiveTab('pending')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'pending'
+                ? 'border-link text-link'
+                : 'border-transparent text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            <Clock className="w-4 h-4 inline-block mr-2" />
+            Pending Sensors
+            {(statsData?.pendingApprovals || 0) > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-ac-orange/10 text-ac-orange rounded-full">
+                {statsData.pendingApprovals}
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+
+      {/* Registration Tokens Tab */}
+      {activeTab === 'tokens' && (
+        <div className="bg-surface-card border border-border-subtle">
+          {tokensLoading ? (
+            <div className="p-8 text-center text-ink-muted">Loading tokens...</div>
+          ) : tokensError ? (
+            <div className="p-8 text-center text-ac-red">
+              <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+              Failed to load tokens
+            </div>
+          ) : tokens.length === 0 ? (
+            <div className="p-8 text-center text-ink-muted">
+              <Key className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No registration tokens yet</p>
+              <p className="text-sm mt-1">Create a token to enable sensor registration</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-surface-subtle border-b border-border-subtle">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Prefix</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Uses</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Region</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Expires</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Created</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {tokens.map((token) => (
+                  <tr key={token.id} className="hover:bg-surface-subtle/50">
+                    <td className="px-4 py-3 text-sm font-medium text-ink-primary">{token.name}</td>
+                    <td className="px-4 py-3 text-sm font-mono text-ink-secondary">{token.tokenPrefix}...</td>
+                    <td className="px-4 py-3">{getStatusBadge(token.status)}</td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      {token.usedCount} / {token.maxUses}
+                      <span className="text-ink-muted ml-1">({token.remainingUses} left)</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">{token.region || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(token.expiresAt)}</td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(token.createdAt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {token.status === 'ACTIVE' && (
+                        <button
+                          onClick={() => setTokenToRevoke(token.id)}
+                          className="btn-ghost p-1.5 text-ac-red hover:bg-ac-red/10"
+                          title="Revoke token"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Pending Sensors Tab */}
+      {activeTab === 'pending' && (
+        <div className="bg-surface-card border border-border-subtle">
+          {pendingLoading ? (
+            <div className="p-8 text-center text-ink-muted">Loading pending sensors...</div>
+          ) : pendingError ? (
+            <div className="p-8 text-center text-ac-red">
+              <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+              Failed to load pending sensors
+            </div>
+          ) : pendingSensors.length === 0 ? (
+            <div className="p-8 text-center text-ink-muted">
+              <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50 text-ac-green" />
+              <p>No pending sensors</p>
+              <p className="text-sm mt-1">All sensors have been processed</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-surface-subtle border-b border-border-subtle">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Hostname</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">System</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">IP Address</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Region</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Registered</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {pendingSensors.map((sensor) => (
+                  <tr key={sensor.id} className="hover:bg-surface-subtle/50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Server className="w-4 h-4 text-ink-muted" />
+                        <span className="text-sm font-medium text-ink-primary">{sensor.hostname}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      {sensor.os || 'Unknown'} {sensor.architecture && `(${sensor.architecture})`}
+                      {sensor.version && <span className="text-ink-muted ml-1">v{sensor.version}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-mono text-ink-secondary">
+                      {sensor.publicIp || sensor.privateIp || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      <Globe className="w-3 h-3 inline-block mr-1" />
+                      {sensor.region || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(sensor.createdAt)}</td>
+                    <td className="px-4 py-3 text-right space-x-2">
+                      <button
+                        onClick={() => approvalMutation.mutate({ sensorId: sensor.id, action: 'approve' })}
+                        className="btn-ghost p-1.5 text-ac-green hover:bg-ac-green/10"
+                        title="Approve sensor"
+                        disabled={approvalMutation.isPending}
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => approvalMutation.mutate({ sensorId: sensor.id, action: 'reject' })}
+                        className="btn-ghost p-1.5 text-ac-red hover:bg-ac-red/10"
+                        title="Reject sensor"
+                        disabled={approvalMutation.isPending}
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Create Token Modal */}
+      {isModalOpen && !generatedToken && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-ink-primary mb-4">Create Registration Token</h2>
+            <form onSubmit={handleCreateToken} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Token Name</label>
+                <input
+                  name="name"
+                  type="text"
+                  required
+                  placeholder="e.g., AWS Production Fleet"
+                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Max Uses</label>
+                <input
+                  name="maxUses"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  defaultValue="10"
+                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
+                />
+                <p className="text-xs text-ink-muted mt-1">Number of sensors that can use this token</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Expires In (days)</label>
+                <input
+                  name="expiresIn"
+                  type="number"
+                  min="1"
+                  max="365"
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Region</label>
+                <select
+                  name="region"
+                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
+                >
+                  <option value="">Any Region</option>
+                  <option value="us-east-1">US East (N. Virginia)</option>
+                  <option value="us-west-2">US West (Oregon)</option>
+                  <option value="eu-west-1">EU (Ireland)</option>
+                  <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-ghost flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex-1"
+                  disabled={generateMutation.isPending}
+                >
+                  {generateMutation.isPending ? 'Creating...' : 'Create Token'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Generated Token Modal */}
+      {generatedToken && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-ac-green/10 flex items-center justify-center">
+                <Check className="w-5 h-5 text-ac-green" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-ink-primary">Token Created</h2>
+                <p className="text-sm text-ink-secondary">Copy this token now. It won't be shown again.</p>
+              </div>
+            </div>
+            <div className="bg-surface-subtle border border-border-subtle p-4 rounded mb-4">
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-sm font-mono text-ink-primary break-all">{generatedToken}</code>
+                <button
+                  onClick={handleCopyToken}
+                  className="btn-ghost p-2"
+                  title="Copy token"
+                >
+                  {copiedToken ? (
+                    <Check className="w-4 h-4 text-ac-green" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="bg-ac-orange/10 border border-ac-orange/20 p-3 mb-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-ac-orange flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-ac-orange">
+                  This token grants sensor registration access. Store it securely and don't share it publicly.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setGeneratedToken(null);
+                setIsModalOpen(false);
+              }}
+              className="btn-primary w-full"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Confirmation Modal */}
+      {tokenToRevoke && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-ac-red/10 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-ac-red" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-ink-primary">Revoke Token</h2>
+                <p className="text-sm text-ink-secondary">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-ink-secondary mb-4">
+              Sensors that haven't registered yet will no longer be able to use this token.
+              Already registered sensors will not be affected.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setTokenToRevoke(null)}
+                className="btn-ghost flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => revokeMutation.mutate(tokenToRevoke)}
+                className="btn-primary flex-1 bg-ac-red hover:bg-ac-red/90"
+                disabled={revokeMutation.isPending}
+              >
+                {revokeMutation.isPending ? 'Revoking...' : 'Revoke Token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

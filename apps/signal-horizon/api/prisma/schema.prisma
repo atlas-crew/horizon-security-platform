@@ -114,11 +114,13 @@ model Sensor {
   tunnelSessionId String?
 
   // Signal Array - Onboarding
-  registrationMethod RegistrationMethod @default(MANUAL)
-  registrationToken  String?
-  approvalStatus     ApprovalStatus     @default(APPROVED)
-  approvedAt         DateTime?
-  approvedBy         String?
+  registrationMethod  RegistrationMethod @default(MANUAL)
+  registrationToken   String? // The full token used (legacy)
+  registrationTokenId String? // FK to RegistrationToken
+  approvalStatus      ApprovalStatus     @default(APPROVED)
+  approvedAt          DateTime?
+  approvedBy          String?
+  registeredByToken   RegistrationToken? @relation("TokenSensors", fields: [registrationTokenId], references: [id])
 
   // Relations
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -693,19 +695,25 @@ model FleetAlert {
 }
 
 model RegistrationToken {
-  id        String    @id @default(cuid())
-  tenantId  String
-  token     String    @unique
-  name      String?
-  region    String?
-  expiresAt DateTime
-  usedAt    DateTime?
-  usedBy    String? // Sensor ID that used this token
-  createdAt DateTime  @default(now())
-  createdBy String?
+  id          String    @id @default(cuid())
+  tenantId    String
+  tokenHash   String    @unique
+  tokenPrefix String    // First 16 chars for display
+  name        String?
+  region      String?
+  maxUses     Int       @default(1)
+  expiresAt   DateTime?
+  revoked     Boolean   @default(false)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  metadata    Json?
+
+  // Sensors registered with this token
+  registeredSensors Sensor[] @relation("TokenSensors")
 
   @@index([tenantId])
-  @@index([token])
+  @@index([tokenHash])
   @@map("registration_tokens")
 }
 

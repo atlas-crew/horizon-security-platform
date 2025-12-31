@@ -8,6 +8,7 @@ import { SensorDetailPage } from '../pages/fleet/SensorDetailPage';
 import { ConfigManagerPage } from '../pages/fleet/ConfigManagerPage';
 import { ConnectivityPage } from '../pages/fleet/ConnectivityPage';
 import { SensorKeysPage } from '../pages/fleet/SensorKeysPage';
+import { OnboardingPage } from '../pages/fleet/OnboardingPage';
 
 /**
  * Fleet Management Routes
@@ -76,6 +77,14 @@ export const fleetRoutes: RouteObject[] = [
     element: (
       <FleetErrorBoundary level="page" title="API Key Management Error">
         <SensorKeysPage />
+      </FleetErrorBoundary>
+    ),
+  },
+  {
+    path: '/fleet/onboarding',
+    element: (
+      <FleetErrorBoundary level="page" title="Sensor Onboarding Error">
+        <OnboardingPage />
       </FleetErrorBoundary>
     ),
   },

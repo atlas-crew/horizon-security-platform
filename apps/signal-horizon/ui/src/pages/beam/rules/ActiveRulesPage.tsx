@@ -126,7 +126,7 @@ const DEMO_ACTIVE_RULES = [
 const SEVERITY_CONFIG: Record<RuleSeverity, { color: string; bg: string }> = {
   critical: { color: 'text-red-400', bg: 'bg-red-500/20' },
   high: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  medium: { color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20' },
   low: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
 };
 
@@ -153,14 +153,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -207,12 +207,12 @@ function RuleCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
-        'bg-gray-800 border rounded-xl overflow-hidden',
+        'bg-surface-card border overflow-hidden',
         rule.status === 'failed'
           ? 'border-red-500/50'
           : rule.status === 'deploying'
           ? 'border-blue-500/50'
-          : 'border-gray-700'
+          : 'border-border-subtle'
       )}
     >
       <div className="px-5 py-4 flex items-center justify-between">
@@ -220,38 +220,38 @@ function RuleCard({
           onClick={onToggle}
           className="flex items-center gap-4 flex-1 text-left"
         >
-          <div className="p-2 bg-gray-700 rounded-lg">
+          <div className="p-2 bg-surface-subtle">
             <Shield className="w-5 h-5 text-horizon-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-white font-medium">{rule.name}</h3>
-              <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', severityConfig.color, severityConfig.bg)}>
+              <h3 className="text-ink-primary font-medium">{rule.name}</h3>
+              <span className={clsx('px-2 py-0.5 text-xs font-medium', severityConfig.color, severityConfig.bg)}>
                 {rule.severity}
               </span>
             </div>
-            <p className="text-sm text-gray-400 mt-0.5">{rule.category}</p>
+            <p className="text-sm text-ink-secondary mt-0.5">{rule.category}</p>
           </div>
         </button>
 
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-sm text-gray-400">Triggers</p>
-            <p className="text-white font-medium">{rule.triggers.toLocaleString()}</p>
+            <p className="text-sm text-ink-secondary">Triggers</p>
+            <p className="text-ink-primary font-medium">{rule.triggers.toLocaleString()}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Blocks</p>
-            <p className="text-white font-medium">{rule.blocks.toLocaleString()}</p>
+            <p className="text-sm text-ink-secondary">Blocks</p>
+            <p className="text-ink-primary font-medium">{rule.blocks.toLocaleString()}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Last Triggered</p>
-            <p className="text-gray-300 text-sm">{formatRelativeTime(rule.lastTriggered)}</p>
+            <p className="text-sm text-ink-secondary">Last Triggered</p>
+            <p className="text-ink-secondary text-sm">{formatRelativeTime(rule.lastTriggered)}</p>
           </div>
           <div className={clsx('flex items-center gap-1', statusConfig.color)}>
             <StatusIcon className="w-4 h-4" />
             <span className="text-sm">{statusConfig.label}</span>
             {rule.status === 'deploying' && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-ink-secondary">
                 ({rule.deployedSensors}/{rule.totalSensors})
               </span>
             )}
@@ -275,76 +275,76 @@ function RuleCard({
           </button>
           <button onClick={onToggle}>
             {isExpanded ? (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+              <ChevronDown className="w-5 h-5 text-ink-secondary" />
             ) : (
-              <ChevronRight className="w-5 h-5 text-gray-400" />
+              <ChevronRight className="w-5 h-5 text-ink-secondary" />
             )}
           </button>
         </div>
       </div>
 
       {isExpanded && (
-        <div className="px-5 py-4 border-t border-gray-700 bg-gray-800/50">
+        <div className="px-5 py-4 border-t border-border-subtle bg-surface-subtle">
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-400">Description</p>
-              <p className="text-white mt-1">{rule.description}</p>
+              <p className="text-sm text-ink-secondary">Description</p>
+              <p className="text-ink-primary mt-1">{rule.description}</p>
             </div>
             <div className="flex items-center gap-8">
               <div>
-                <p className="text-sm text-gray-400">Deployed Sensors</p>
+                <p className="text-sm text-ink-secondary">Deployed Sensors</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-32 h-2 bg-surface-subtle overflow-hidden">
                     <div
                       className={clsx(
-                        'h-full rounded-full',
+                        'h-full',
                         rule.deployedSensors === rule.totalSensors
                           ? 'bg-green-500'
                           : rule.deployedSensors > 0
-                          ? 'bg-yellow-500'
+                          ? 'bg-sky-500'
                           : 'bg-gray-600'
                       )}
                       style={{ width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }}
                     />
                   </div>
-                  <span className="text-white text-sm">
+                  <span className="text-ink-primary text-sm">
                     {rule.deployedSensors}/{rule.totalSensors}
                   </span>
                 </div>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Block Rate</p>
-                <p className="text-white mt-1">
+                <p className="text-sm text-ink-secondary">Block Rate</p>
+                <p className="text-ink-primary mt-1">
                   {rule.triggers > 0 ? ((rule.blocks / rule.triggers) * 100).toFixed(1) : 0}%
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Created</p>
-                <p className="text-white mt-1">
+                <p className="text-sm text-ink-secondary">Created</p>
+                <p className="text-ink-primary mt-1">
                   {new Date(rule.createdAt).toLocaleDateString()}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               {rule.status === 'paused' && (
-                <button className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <button className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors flex items-center gap-2">
                   <Play className="w-4 h-4" />
                   Resume
                 </button>
               )}
               {rule.status === 'active' && (
-                <button className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <button className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium transition-colors flex items-center gap-2">
                   <Pause className="w-4 h-4" />
                   Pause
                 </button>
               )}
               {rule.status === 'failed' && (
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center gap-2">
                   <Play className="w-4 h-4" />
                   Retry Deployment
                 </button>
               )}
-              <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+              <button className="px-4 py-2 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors flex items-center gap-2">
                 <Settings className="w-4 h-4" />
                 Configure
               </button>
@@ -428,8 +428,8 @@ export default function ActiveRulesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Active Rules</h1>
-          <p className="text-gray-400 mt-1">Loading rules...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Active Rules</h1>
+          <p className="text-ink-secondary mt-1">Loading rules...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -442,23 +442,23 @@ export default function ActiveRulesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Active Rules</h1>
-          <p className="text-gray-400 mt-1">Protection rules and policies</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Active Rules</h1>
+          <p className="text-ink-secondary mt-1">Protection rules and policies</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
             {isConnected ? (
               <Wifi className="w-4 h-4 text-green-400" />
             ) : (
-              <WifiOff className="w-4 h-4 text-gray-400" />
+              <WifiOff className="w-4 h-4 text-ink-secondary" />
             )}
-            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+            <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
               {isConnected ? 'Live' : 'Demo Data'}
             </span>
           </div>
           <button
             onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
             disabled={hookLoading}
           >
             <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
@@ -480,7 +480,7 @@ export default function ActiveRulesPage() {
           label="Total Triggers"
           value={stats.totalTriggers.toLocaleString()}
           icon={Activity}
-          color="text-yellow-400"
+          color="text-sky-400"
         />
         <StatCard
           label="Total Blocks"

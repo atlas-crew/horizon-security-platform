@@ -58,7 +58,7 @@ const DEMO_ERROR_TYPES = [
 
 // Demo data - error breakdown by category
 const DEMO_ERROR_CATEGORIES = [
-  { name: 'Client Errors (4xx)', value: 3100, color: '#f59e0b' },
+  { name: 'Client Errors (4xx)', value: 3100, color: '#529EEC' },
   { name: 'Server Errors (5xx)', value: 460, color: '#ef4444' },
   { name: 'Blocked by WAF', value: 890, color: '#8b5cf6' },
 ];
@@ -74,7 +74,7 @@ const DEMO_ERROR_ENDPOINTS = [
 
 const CHART_COLORS = {
   total: '#3b82f6',
-  errors4xx: '#f59e0b',
+  errors4xx: '#529EEC',
   errors5xx: '#ef4444',
   blocked: '#8b5cf6',
 };
@@ -88,16 +88,16 @@ function TimeRangeSelector({
   onChange: (v: TimeRange) => void;
 }) {
   return (
-    <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+    <div className="flex gap-1 bg-surface-card p-1">
       {TIME_RANGES.map((range) => (
         <button
           key={range.value}
           onClick={() => onChange(range.value)}
           className={clsx(
-            'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
-              ? 'bg-horizon-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              ? 'bg-horizon-600 text-ink-primary'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
           )}
         >
           {range.label}
@@ -124,7 +124,7 @@ function StatCard({
   color: 'yellow' | 'red' | 'purple' | 'blue';
 }) {
   const colorClasses = {
-    yellow: 'text-yellow-400 bg-yellow-500/20',
+    yellow: 'text-sky-400 bg-sky-500/20',
     red: 'text-red-400 bg-red-500/20',
     purple: 'text-purple-400 bg-purple-500/20',
     blue: 'text-blue-400 bg-blue-500/20',
@@ -134,14 +134,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">{value}</span>
-            {subvalue && <span className="text-sm text-gray-400">{subvalue}</span>}
+            <span className="text-2xl font-bold text-ink-primary">{value}</span>
+            {subvalue && <span className="text-sm text-ink-secondary">{subvalue}</span>}
           </div>
           {trend && (
             <div
@@ -159,7 +159,7 @@ function StatCard({
             </div>
           )}
         </div>
-        <div className={clsx('p-3 rounded-lg', colorClasses[color])}>
+        <div className={clsx('p-3', colorClasses[color])}>
           <Icon className="w-6 h-6" />
         </div>
       </div>
@@ -170,24 +170,24 @@ function StatCard({
 // Error Timeline Chart
 function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+    <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-white">Error Rate Over Time</h3>
-          <p className="text-sm text-gray-400 mt-1">4xx, 5xx, and blocked requests</p>
+          <h3 className="text-lg font-semibold text-ink-primary">Error Rate Over Time</h3>
+          <p className="text-sm text-ink-secondary mt-1">4xx, 5xx, and blocked requests</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-gray-400">4xx</span>
+            <div className="w-3 h-3 rounded-full bg-sky-500" />
+            <span className="text-ink-secondary">4xx</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-400">5xx</span>
+            <span className="text-ink-secondary">5xx</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-purple-500" />
-            <span className="text-gray-400">Blocked</span>
+            <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
       </div>
@@ -208,25 +208,25 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
                 <stop offset="95%" stopColor={CHART_COLORS.blocked} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
             <XAxis
               dataKey="time"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: 'var(--text-secondary)' }}
               itemStyle={{ color: '#fff' }}
             />
             <Area
@@ -265,8 +265,8 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Error Distribution</h3>
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Error Distribution</h3>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -285,9 +285,9 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
             </Pie>
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
               formatter={(value: number) => [
                 `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
@@ -305,9 +305,9 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              <span className="text-sm text-gray-400">{item.name}</span>
+              <span className="text-sm text-ink-secondary">{item.name}</span>
             </div>
-            <span className="text-sm font-medium text-white">
+            <span className="text-sm font-medium text-ink-primary">
               {item.value.toLocaleString()}
             </span>
           </div>
@@ -320,25 +320,25 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
 // Error Types Breakdown
 function ErrorTypesTable({ data }: { data: typeof DEMO_ERROR_TYPES }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Error Types</h3>
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Error Types</h3>
       <div className="space-y-3">
         {data.map((item) => (
           <div key={item.type}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-300">{item.type}</span>
-              <span className="text-sm font-medium text-white">
+              <span className="text-sm text-ink-secondary">{item.type}</span>
+              <span className="text-sm font-medium text-ink-primary">
                 {item.count.toLocaleString()}
               </span>
             </div>
-            <div className="w-full bg-gray-700 rounded-full h-2">
+            <div className="w-full bg-surface-subtle h-2">
               <div
                 className={clsx(
-                  'h-2 rounded-full transition-all',
+                  'h-2 transition-all',
                   item.type.startsWith('5')
                     ? 'bg-red-500'
                     : item.type.startsWith('4')
-                    ? 'bg-yellow-500'
+                    ? 'bg-sky-500'
                     : 'bg-blue-500'
                 )}
                 style={{ width: `${item.percentage}%` }}
@@ -354,15 +354,15 @@ function ErrorTypesTable({ data }: { data: typeof DEMO_ERROR_TYPES }) {
 // Endpoints with Highest Errors
 function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold text-white">Highest Error Endpoints</h3>
-        <p className="text-sm text-gray-400 mt-1">Endpoints with the most errors</p>
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle">
+        <h3 className="text-lg font-semibold text-ink-primary">Highest Error Endpoints</h3>
+        <p className="text-sm text-ink-secondary mt-1">Endpoints with the most errors</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
+            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
               <th className="px-5 py-3 font-medium text-right">Total Requests</th>
               <th className="px-5 py-3 font-medium text-right">Errors</th>
@@ -373,17 +373,17 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
             {data.map((item, idx) => (
               <tr
                 key={item.endpoint}
-                className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors"
+                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-gray-500 text-sm w-6">{idx + 1}</span>
-                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded text-sm">
+                    <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
+                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
                       {item.endpoint}
                     </code>
                   </div>
                 </td>
-                <td className="px-5 py-3 text-right text-gray-300">
+                <td className="px-5 py-3 text-right text-ink-secondary">
                   {item.total.toLocaleString()}
                 </td>
                 <td className="px-5 py-3 text-right text-red-400 font-medium">
@@ -392,11 +392,11 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
                 <td className="px-5 py-3 text-right">
                   <span
                     className={clsx(
-                      'px-2 py-0.5 rounded text-xs font-medium',
+                      'px-2 py-0.5 text-xs font-medium',
                       item.rate < 2
                         ? 'text-green-400 bg-green-500/20'
                         : item.rate < 3
-                        ? 'text-yellow-400 bg-yellow-500/20'
+                        ? 'text-sky-400 bg-sky-500/20'
                         : 'text-red-400 bg-red-500/20'
                     )}
                   >
@@ -432,8 +432,8 @@ export default function ErrorAnalysisPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Error Analysis</h1>
-          <p className="text-gray-400 mt-1">Loading error data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Error Analysis</h1>
+          <p className="text-ink-secondary mt-1">Loading error data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -446,8 +446,8 @@ export default function ErrorAnalysisPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Error Analysis</h1>
-          <p className="text-gray-400 mt-1">Error rates and patterns</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Error Analysis</h1>
+          <p className="text-ink-secondary mt-1">Error rates and patterns</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
       </div>

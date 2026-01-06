@@ -144,7 +144,7 @@ const DEMO_ENDPOINTS = [
 const METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400 bg-green-500/20',
   POST: 'text-blue-400 bg-blue-500/20',
-  PUT: 'text-yellow-400 bg-yellow-500/20',
+  PUT: 'text-[#D62598] bg-[#D62598]/20',
   PATCH: 'text-orange-400 bg-orange-500/20',
   DELETE: 'text-red-400 bg-red-500/20',
 };
@@ -163,14 +163,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className="w-6 h-6 text-horizon-400" />
         </div>
       </div>
@@ -199,21 +199,21 @@ function SearchFilterBar({
   return (
     <div className="flex items-center gap-4">
       <div className="relative flex-1 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary" />
         <input
           type="text"
           placeholder="Search endpoints..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
+          className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
         />
       </div>
       <div className="flex items-center gap-2">
-        <Filter className="w-4 h-4 text-gray-400" />
+        <Filter className="w-4 h-4 text-ink-secondary" />
         <select
           value={methodFilter}
           onChange={(e) => onMethodFilterChange(e.target.value)}
-          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+          className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
         >
           <option value="">All Methods</option>
           <option value="GET">GET</option>
@@ -225,7 +225,7 @@ function SearchFilterBar({
         <select
           value={serviceFilter}
           onChange={(e) => onServiceFilterChange(e.target.value)}
-          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+          className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
         >
           <option value="">All Services</option>
           {services.map((s) => (
@@ -301,48 +301,48 @@ function formatRelativeTime(dateStr: string): string {
 // Endpoint Table Row
 function EndpointRow({ endpoint }: { endpoint: typeof DEMO_ENDPOINTS[0] }) {
   return (
-    <tr className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors">
+    <tr className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors">
       <td className="px-5 py-4">
         <div className="flex items-center gap-3">
-          <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', METHOD_COLORS[endpoint.method])}>
+          <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[endpoint.method])}>
             {endpoint.method}
           </span>
           <div>
             <code className="text-blue-400 text-sm">{endpoint.pathTemplate}</code>
-            <p className="text-xs text-gray-500 mt-0.5">{endpoint.service}</p>
+            <p className="text-xs text-ink-muted mt-0.5">{endpoint.service}</p>
           </div>
         </div>
       </td>
-      <td className="px-5 py-4 text-right text-gray-300">
+      <td className="px-5 py-4 text-right text-ink-secondary">
         {endpoint.requestCount.toLocaleString()}
       </td>
       <td className="px-5 py-4 text-right">
         <div>
-          <span className="text-white font-medium">{endpoint.avgLatencyMs}ms</span>
-          <span className="text-gray-500 text-xs ml-2">P95: {endpoint.p95LatencyMs}ms</span>
+          <span className="text-ink-primary font-medium">{endpoint.avgLatencyMs}ms</span>
+          <span className="text-ink-muted text-xs ml-2">P95: {endpoint.p95LatencyMs}ms</span>
         </div>
       </td>
       <td className="px-5 py-4 text-right">
         <span
           className={clsx(
-            'px-2 py-0.5 rounded text-xs font-medium',
+            'px-2 py-0.5 text-xs font-medium',
             endpoint.errorRate < 1
               ? 'text-green-400 bg-green-500/20'
               : endpoint.errorRate < 2
-              ? 'text-yellow-400 bg-yellow-500/20'
+              ? 'text-sky-400 bg-sky-500/20'
               : 'text-red-400 bg-red-500/20'
           )}
         >
           {endpoint.errorRate.toFixed(1)}%
         </span>
       </td>
-      <td className="px-5 py-4 text-right text-gray-400 text-sm">
+      <td className="px-5 py-4 text-right text-ink-secondary text-sm">
         {formatRelativeTime(endpoint.lastSeenAt)}
       </td>
       <td className="px-5 py-4">
         <div className="flex items-center justify-end gap-2">
           {endpoint.authRequired && (
-            <span className="text-yellow-400" title="Auth Required">
+            <span className="text-sky-400" title="Auth Required">
               <Shield className="w-4 h-4" />
             </span>
           )}
@@ -497,8 +497,8 @@ export default function ApiCatalogPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">API Catalog</h1>
-          <p className="text-gray-400 mt-1">Loading endpoint data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">API Catalog</h1>
+          <p className="text-ink-secondary mt-1">Loading endpoint data...</p>
         </div>
         <StatsGridSkeleton />
         <TableSkeleton />
@@ -511,23 +511,23 @@ export default function ApiCatalogPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">API Catalog</h1>
-          <p className="text-gray-400 mt-1">Discovered endpoints and API inventory</p>
+          <h1 className="text-2xl font-bold text-ink-primary">API Catalog</h1>
+          <p className="text-ink-secondary mt-1">Discovered endpoints and API inventory</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
             {isConnected ? (
               <Wifi className="w-4 h-4 text-green-400" />
             ) : (
-              <WifiOff className="w-4 h-4 text-gray-400" />
+              <WifiOff className="w-4 h-4 text-ink-secondary" />
             )}
-            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+            <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
               {isConnected ? 'Live' : 'Demo Data'}
             </span>
           </div>
           <button
             onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-subtle/80 text-sm text-ink-secondary transition-colors"
             disabled={hookLoading}
           >
             <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
@@ -564,11 +564,11 @@ export default function ApiCatalogPage() {
       />
 
       {/* Endpoints Table */}
-      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+      <div className="bg-surface-card border border-border-subtle overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="text-left text-sm text-gray-400 border-b border-gray-700 bg-gray-800/50">
+              <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle bg-surface-subtle">
                 <SortableHeader
                   label="Endpoint"
                   field="path"
@@ -612,7 +612,7 @@ export default function ApiCatalogPage() {
           </table>
         </div>
         {filteredEndpoints.length === 0 && (
-          <div className="p-8 text-center text-gray-400">
+          <div className="p-8 text-center text-ink-secondary">
             No endpoints match your filters
           </div>
         )}

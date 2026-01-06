@@ -142,14 +142,14 @@ const DEMO_TOP_SOURCES = [
 const DEMO_SEVERITY_DIST = [
   { name: 'Critical', value: 42, color: '#ef4444' },
   { name: 'High', value: 168, color: '#f97316' },
-  { name: 'Medium', value: 289, color: '#eab308' },
+  { name: 'Medium', value: 289, color: '#529EEC' },
   { name: 'Low', value: 198, color: '#3b82f6' },
 ];
 
 const SEVERITY_CONFIG: Record<ThreatSeverity, { color: string; bg: string; label: string }> = {
   critical: { color: 'text-red-400', bg: 'bg-red-500/20', label: 'Critical' },
   high: { color: 'text-orange-400', bg: 'bg-orange-500/20', label: 'High' },
-  medium: { color: 'text-yellow-400', bg: 'bg-yellow-500/20', label: 'Medium' },
+  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20', label: 'Medium' },
   low: { color: 'text-blue-400', bg: 'bg-blue-500/20', label: 'Low' },
 };
 
@@ -180,12 +180,12 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
           {change && (
             <p
               className={clsx(
@@ -197,7 +197,7 @@ function StatCard({
             </p>
           )}
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -238,16 +238,16 @@ function TimeRangeSelector({
   ];
 
   return (
-    <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+    <div className="flex items-center gap-1 bg-surface-card p-1">
       {options.map((option) => (
         <button
           key={option.value}
           onClick={() => onChange(option.value)}
           className={clsx(
-            'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+            'px-3 py-1.5 text-sm font-medium transition-colors',
             value === option.value
-              ? 'bg-horizon-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              ? 'bg-horizon-600 text-ink-primary'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
           )}
         >
           {option.label}
@@ -265,22 +265,22 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 hover:bg-gray-750 transition-colors"
+      className="bg-surface-subtle border border-border-subtle p-4 hover:bg-surface-subtle transition-colors"
     >
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
-          <div className={clsx('p-2 rounded-lg', config.bg)}>
+          <div className={clsx('p-2', config.bg)}>
             <ShieldAlert className={clsx('w-4 h-4', config.color)} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="text-white font-medium">{incident.type}</h4>
-              <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', config.bg, config.color)}>
+              <h4 className="text-ink-primary font-medium">{incident.type}</h4>
+              <span className={clsx('px-2 py-0.5 text-xs font-medium', config.bg, config.color)}>
                 {config.label}
               </span>
             </div>
-            <p className="text-sm text-gray-400 mt-1">{incident.details}</p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+            <p className="text-sm text-ink-secondary mt-1">{incident.details}</p>
+            <div className="flex items-center gap-4 mt-2 text-xs text-ink-muted">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3" />
                 {incident.sourceIp}
@@ -293,12 +293,12 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
           </div>
         </div>
         <div className="text-right">
-          <span className="text-xs text-gray-500 flex items-center gap-1">
+          <span className="text-xs text-ink-muted flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {formatRelativeTime(incident.timestamp)}
           </span>
           {incident.blocked && (
-            <span className="mt-1 inline-block px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs">
+            <span className="mt-1 inline-block px-2 py-0.5 bg-green-500/20 text-green-400 text-xs">
               Blocked
             </span>
           )}
@@ -366,8 +366,8 @@ export default function ThreatActivityPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Threat Activity</h1>
-          <p className="text-gray-400 mt-1">Loading threat data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Threat Activity</h1>
+          <p className="text-ink-secondary mt-1">Loading threat data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -380,23 +380,23 @@ export default function ThreatActivityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Threat Activity</h1>
-          <p className="text-gray-400 mt-1">Real-time threat monitoring and incident response</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Threat Activity</h1>
+          <p className="text-ink-secondary mt-1">Real-time threat monitoring and incident response</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
             {isConnected ? (
               <Wifi className="w-4 h-4 text-green-400" />
             ) : (
-              <WifiOff className="w-4 h-4 text-gray-400" />
+              <WifiOff className="w-4 h-4 text-ink-secondary" />
             )}
-            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+            <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
               {isConnected ? 'Live' : 'Demo Data'}
             </span>
           </div>
           <button
             onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
             disabled={hookLoading}
           >
             <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
@@ -443,9 +443,9 @@ export default function ThreatActivityPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="col-span-2 bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="col-span-2 bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-white font-medium mb-4">Threat Timeline</h3>
+          <h3 className="text-ink-primary font-medium mb-4">Threat Timeline</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={DEMO_THREAT_TIMELINE}>
@@ -464,9 +464,9 @@ export default function ThreatActivityPage() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '0',
                   }}
                   labelStyle={{ color: '#9ca3af' }}
                 />
@@ -486,9 +486,9 @@ export default function ThreatActivityPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-white font-medium mb-4">Severity Distribution</h3>
+          <h3 className="text-ink-primary font-medium mb-4">Severity Distribution</h3>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -507,9 +507,9 @@ export default function ThreatActivityPage() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '0',
                   }}
                 />
               </PieChart>
@@ -519,8 +519,8 @@ export default function ThreatActivityPage() {
             {DEMO_SEVERITY_DIST.map((item) => (
               <div key={item.name} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-sm text-gray-400">{item.name}</span>
-                <span className="text-sm text-white ml-auto">{item.value}</span>
+                <span className="text-sm text-ink-secondary">{item.name}</span>
+                <span className="text-sm text-ink-primary ml-auto">{item.value}</span>
               </div>
             ))}
           </div>
@@ -533,10 +533,10 @@ export default function ThreatActivityPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="col-span-2 bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="col-span-2 bg-surface-card border border-border-subtle p-5"
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-medium">Recent Incidents</h3>
+            <h3 className="text-ink-primary font-medium">Recent Incidents</h3>
             <button className="text-sm text-horizon-400 hover:text-horizon-300 transition-colors">
               View all →
             </button>
@@ -552,9 +552,9 @@ export default function ThreatActivityPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-white font-medium mb-4">Top Threat Sources</h3>
+          <h3 className="text-ink-primary font-medium mb-4">Top Threat Sources</h3>
           <div className="h-48 mb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
@@ -569,12 +569,12 @@ export default function ThreatActivityPage() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '0',
                   }}
                 />
-                <Bar dataKey="threats" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="threats" fill="#ef4444" radius={[0, 0, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -582,8 +582,8 @@ export default function ThreatActivityPage() {
             {DEMO_TOP_SOURCES.slice(0, 3).map((source) => (
               <div key={source.ip} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400 font-mono">{source.ip}</span>
-                  <span className="text-xs text-gray-500">({source.country})</span>
+                  <span className="text-ink-secondary font-mono">{source.ip}</span>
+                  <span className="text-xs text-ink-muted">({source.country})</span>
                 </div>
                 <span className="text-red-400">{source.threats} threats</span>
               </div>

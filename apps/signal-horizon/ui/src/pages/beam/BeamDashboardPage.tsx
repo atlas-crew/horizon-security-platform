@@ -41,21 +41,21 @@ import { useBeamThreats } from '../../hooks/useBeamThreats';
 import { StatsGridSkeleton, TableSkeleton, CardSkeleton } from '../../components/LoadingStates';
 import type { BlockedRequest, ProtectionAlert, TrafficDataPoint } from '../../types/beam';
 
-// Color palette for dark theme
+// Color palette for dark theme - Atlas Crew Brand compliant
 const COLORS = {
-  requests: '#3b82f6', // blue
-  blocked: '#ef4444', // red
-  protected: '#22c55e', // green
-  warning: '#f59e0b', // amber
+  requests: '#0057B7', // Atlas Crew Blue
+  blocked: '#EF3340', // Atlas Crew Red (accent)
+  protected: '#00B140', // Atlas Crew Green (accent)
+  warning: '#529EEC', // Atlas Crew Sky Blue (secondary) - no yellow per brand
   chart: {
-    area: 'rgba(59, 130, 246, 0.2)',
-    line: '#3b82f6',
-    blocked: 'rgba(239, 68, 68, 0.4)',
-    blockedLine: '#ef4444',
+    area: 'rgba(0, 87, 183, 0.2)',
+    line: '#0057B7',
+    blocked: 'rgba(239, 51, 64, 0.4)',
+    blockedLine: '#EF3340',
   },
 };
 
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+const PIE_COLORS = ['#0057B7', '#00B140', '#E35205', '#EF3340', '#440099']; // Atlas Crew approved colors
 
 // Demo data for initial development
 const DEMO_TRAFFIC: TrafficDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
@@ -90,21 +90,21 @@ function StatCard({ icon: Icon, label, value, trend, color, bgColor }: StatCardP
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-400">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-white">{value.toLocaleString()}</p>
+          <p className="text-sm font-medium text-ink-secondary">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-ink-primary">{value.toLocaleString()}</p>
           {trend && (
             <div className={clsx('mt-2 flex items-center gap-1 text-sm', trendColor)}>
               <TrendIcon className="w-4 h-4" />
               <span>{Math.abs(trend.value)}%</span>
-              <span className="text-gray-500">{trend.period}</span>
+              <span className="text-ink-muted">{trend.period}</span>
             </div>
           )}
         </div>
-        <div className={clsx('p-3 rounded-lg', bgColor)}>
+        <div className={clsx('p-3', bgColor)}>
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -126,17 +126,17 @@ function TrafficChart({ data }: TrafficChartProps) {
   );
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+    <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Traffic Overview</h3>
+        <h3 className="text-lg font-semibold text-ink-primary">Traffic Overview</h3>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-gray-400">Requests</span>
+            <div className="w-3 h-3 rounded-full bg-[#0057B7]" />
+            <span className="text-ink-secondary">Requests</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-400">Blocked</span>
+            <div className="w-3 h-3 rounded-full bg-[#EF3340]" />
+            <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
       </div>
@@ -169,7 +169,7 @@ function TrafficChart({ data }: TrafficChartProps) {
               contentStyle={{
                 backgroundColor: '#1f2937',
                 border: '1px solid #374151',
-                borderRadius: '8px',
+                borderRadius: '0',
                 color: '#fff',
               }}
               labelStyle={{ color: '#9ca3af' }}
@@ -198,8 +198,8 @@ function TrafficChart({ data }: TrafficChartProps) {
 // Attack Types Pie Chart
 function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Attack Distribution</h3>
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Attack Distribution</h3>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -221,7 +221,7 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
               contentStyle={{
                 backgroundColor: '#1f2937',
                 border: '1px solid #374151',
-                borderRadius: '8px',
+                borderRadius: '0',
                 color: '#fff',
               }}
             />
@@ -236,9 +236,9 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
               />
-              <span className="text-gray-400">{item.type}</span>
+              <span className="text-ink-secondary">{item.type}</span>
             </div>
-            <span className="text-white font-medium">{item.percentage}%</span>
+            <span className="text-ink-primary font-medium">{item.percentage}%</span>
           </div>
         ))}
       </div>
@@ -250,21 +250,21 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
 function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
   const actionColors: Record<string, string> = {
     blocked: 'text-red-400 bg-red-500/20',
-    challenged: 'text-yellow-400 bg-yellow-500/20',
+    challenged: 'text-sky-400 bg-sky-500/20',
     throttled: 'text-orange-400 bg-orange-500/20',
     logged: 'text-blue-400 bg-blue-500/20',
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Recent Blocked Requests</h3>
-        <span className="text-sm text-gray-400">{requests.length} blocked</span>
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-ink-primary">Recent Blocked Requests</h3>
+        <span className="text-sm text-ink-secondary">{requests.length} blocked</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
+            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Time</th>
               <th className="px-5 py-3 font-medium">Endpoint</th>
               <th className="px-5 py-3 font-medium">Source IP</th>
@@ -276,30 +276,30 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
             {requests.slice(0, 5).map((req) => (
               <tr
                 key={req.id}
-                className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors"
+                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
-                <td className="px-5 py-3 text-sm text-gray-400">
+                <td className="px-5 py-3 text-sm text-ink-secondary">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />
                     {new Date(req.timestamp).toLocaleTimeString()}
                   </div>
                 </td>
                 <td className="px-5 py-3 text-sm">
-                  <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                  <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5">
                     {req.method} {req.endpoint}
                   </code>
                 </td>
-                <td className="px-5 py-3 text-sm text-gray-300">
+                <td className="px-5 py-3 text-sm text-ink-secondary">
                   <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-gray-500" />
+                    <Globe className="w-4 h-4 text-ink-muted" />
                     {req.sourceIp}
                   </div>
                 </td>
-                <td className="px-5 py-3 text-sm text-gray-300">{req.threatType}</td>
+                <td className="px-5 py-3 text-sm text-ink-secondary">{req.threatType}</td>
                 <td className="px-5 py-3">
                   <span
                     className={clsx(
-                      'px-2 py-1 rounded text-xs font-medium',
+                      'px-2 py-1 text-xs font-medium',
                       actionColors[req.action] || actionColors.blocked
                     )}
                   >
@@ -310,7 +310,7 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
             ))}
             {requests.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-5 py-8 text-center text-ink-muted">
                   No blocked requests in the last 24 hours
                 </td>
               </tr>
@@ -326,7 +326,7 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
 function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
   const severityColors: Record<string, string> = {
     low: 'border-l-green-500 bg-green-500/5',
-    medium: 'border-l-yellow-500 bg-yellow-500/5',
+    medium: 'border-l-sky-500 bg-sky-500/5',
     high: 'border-l-orange-500 bg-orange-500/5',
     critical: 'border-l-red-500 bg-red-500/5',
   };
@@ -339,11 +339,11 @@ function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold text-white">Recent Alerts</h3>
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle">
+        <h3 className="text-lg font-semibold text-ink-primary">Recent Alerts</h3>
       </div>
-      <div className="divide-y divide-gray-700/50 max-h-80 overflow-y-auto">
+      <div className="divide-y divide-border-subtle/50 max-h-80 overflow-y-auto">
         {alerts.slice(0, 5).map((alert) => {
           const Icon = typeIcons[alert.type] || AlertTriangle;
           return (
@@ -357,11 +357,11 @@ function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
               )}
             >
               <div className="flex items-start gap-3">
-                <Icon className="w-5 h-5 text-gray-400 mt-0.5" />
+                <Icon className="w-5 h-5 text-ink-secondary mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{alert.title}</p>
-                  <p className="text-xs text-gray-400 mt-1 truncate">{alert.description}</p>
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-sm font-medium text-ink-primary truncate">{alert.title}</p>
+                  <p className="text-xs text-ink-secondary mt-1 truncate">{alert.description}</p>
+                  <p className="text-xs text-ink-muted mt-2">
                     {new Date(alert.timestamp).toLocaleString()}
                   </p>
                 </div>
@@ -370,7 +370,7 @@ function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
           );
         })}
         {alerts.length === 0 && (
-          <div className="px-5 py-8 text-center text-gray-500">No recent alerts</div>
+          <div className="px-5 py-8 text-center text-ink-muted">No recent alerts</div>
         )}
       </div>
     </div>
@@ -473,8 +473,8 @@ export default function BeamDashboardPage() {
       <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading Beam dashboard">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Beam Protection Dashboard</h1>
-            <p className="text-gray-400 mt-1">Loading protection status...</p>
+            <h1 className="text-2xl font-bold text-ink-primary">Beam Protection Dashboard</h1>
+            <p className="text-ink-secondary mt-1">Loading protection status...</p>
           </div>
         </div>
         <StatsGridSkeleton />
@@ -503,8 +503,8 @@ export default function BeamDashboardPage() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Beam Protection Dashboard</h1>
-          <p className="text-gray-400 mt-1">Real-time API security overview</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Beam Protection Dashboard</h1>
+          <p className="text-ink-secondary mt-1">Real-time API security overview</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">

@@ -64,7 +64,7 @@ const DEMO_LATENCY_DISTRIBUTION = [
 
 const CHART_COLORS = {
   p50: '#22c55e',
-  p95: '#f59e0b',
+  p95: '#529EEC',
   p99: '#ef4444',
   distribution: '#3b82f6',
 };
@@ -78,16 +78,16 @@ function TimeRangeSelector({
   onChange: (v: TimeRange) => void;
 }) {
   return (
-    <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+    <div className="flex gap-1 bg-surface-card p-1">
       {TIME_RANGES.map((range) => (
         <button
           key={range.value}
           onClick={() => onChange(range.value)}
           className={clsx(
-            'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
-              ? 'bg-horizon-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              ? 'bg-horizon-600 text-ink-primary'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
           )}
         >
           {range.label}
@@ -111,11 +111,11 @@ function StatCard({
   unit?: string;
   trend?: { value: number; isGood: boolean };
   icon: React.ElementType;
-  color: 'green' | 'yellow' | 'red' | 'blue';
+  color: 'green' | 'sky' | 'red' | 'blue';
 }) {
   const colorClasses = {
     green: 'text-green-400 bg-green-500/20',
-    yellow: 'text-yellow-400 bg-yellow-500/20',
+    sky: 'text-sky-400 bg-sky-500/20',
     red: 'text-red-400 bg-red-500/20',
     blue: 'text-blue-400 bg-blue-500/20',
   };
@@ -124,14 +124,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-white">{value}</span>
-            {unit && <span className="text-sm text-gray-400">{unit}</span>}
+            <span className="text-2xl font-bold text-ink-primary">{value}</span>
+            {unit && <span className="text-sm text-ink-secondary">{unit}</span>}
           </div>
           {trend && (
             <div
@@ -149,7 +149,7 @@ function StatCard({
             </div>
           )}
         </div>
-        <div className={clsx('p-3 rounded-lg', colorClasses[color])}>
+        <div className={clsx('p-3', colorClasses[color])}>
           <Icon className="w-6 h-6" />
         </div>
       </div>
@@ -160,50 +160,50 @@ function StatCard({
 // Latency Percentile Chart
 function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+    <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-white">Response Time Percentiles</h3>
-          <p className="text-sm text-gray-400 mt-1">P50, P95, P99 latency over time</p>
+          <h3 className="text-lg font-semibold text-ink-primary">Response Time Percentiles</h3>
+          <p className="text-sm text-ink-secondary mt-1">P50, P95, P99 latency over time</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-gray-400">P50</span>
+            <span className="text-ink-secondary">P50</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-gray-400">P95</span>
+            <div className="w-3 h-3 rounded-full bg-sky-500" />
+            <span className="text-ink-secondary">P95</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-400">P99</span>
+            <span className="text-ink-secondary">P99</span>
           </div>
         </div>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
             <XAxis
               dataKey="time"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
               tickFormatter={(v) => `${v}ms`}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: 'var(--text-secondary)' }}
               formatter={(value: number, name: string) => [
                 `${value}ms`,
                 name.toUpperCase(),
@@ -243,36 +243,36 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
 // Latency Distribution Chart
 function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBUTION }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Latency Distribution</h3>
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Latency Distribution</h3>
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
             <XAxis
               dataKey="range"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar
               dataKey="count"
               fill={CHART_COLORS.distribution}
-              radius={[4, 4, 0, 0]}
+              radius={[0, 0, 0, 0]}
             />
           </BarChart>
         </ResponsiveContainer>
@@ -280,8 +280,8 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
       <div className="mt-4 grid grid-cols-5 gap-2">
         {data.map((item) => (
           <div key={item.range} className="text-center">
-            <p className="text-xs text-gray-400">{item.range}</p>
-            <p className="text-sm font-medium text-white">{item.percentage}%</p>
+            <p className="text-xs text-ink-secondary">{item.range}</p>
+            <p className="text-sm font-medium text-ink-primary">{item.percentage}%</p>
           </div>
         ))}
       </div>
@@ -292,15 +292,15 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
 // Slowest Endpoints Table
 function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold text-white">Slowest Endpoints</h3>
-        <p className="text-sm text-gray-400 mt-1">Endpoints with highest latency</p>
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle">
+        <h3 className="text-lg font-semibold text-ink-primary">Slowest Endpoints</h3>
+        <p className="text-sm text-ink-secondary mt-1">Endpoints with highest latency</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
+            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
               <th className="px-5 py-3 font-medium text-right">P50</th>
               <th className="px-5 py-3 font-medium text-right">P95</th>
@@ -312,12 +312,12 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
             {data.map((item, idx) => (
               <tr
                 key={item.endpoint}
-                className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors"
+                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-gray-500 text-sm w-6">{idx + 1}</span>
-                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded text-sm">
+                    <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
+                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
                       {item.endpoint}
                     </code>
                   </div>
@@ -326,7 +326,7 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
                   <span className="text-green-400 font-medium">{item.p50}ms</span>
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <span className="text-yellow-400 font-medium">{item.p95}ms</span>
+                  <span className="text-sky-400 font-medium">{item.p95}ms</span>
                 </td>
                 <td className="px-5 py-3 text-right">
                   <span className={clsx(
@@ -336,7 +336,7 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
                     {item.p99}ms
                   </span>
                 </td>
-                <td className="px-5 py-3 text-right text-gray-300">
+                <td className="px-5 py-3 text-right text-ink-secondary">
                   {item.calls.toLocaleString()}
                 </td>
               </tr>
@@ -375,8 +375,8 @@ export default function ResponseTimesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Response Times</h1>
-          <p className="text-gray-400 mt-1">Loading performance data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Response Times</h1>
+          <p className="text-ink-secondary mt-1">Loading performance data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -389,8 +389,8 @@ export default function ResponseTimesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Response Times</h1>
-          <p className="text-gray-400 mt-1">Performance metrics and latency analysis</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Response Times</h1>
+          <p className="text-ink-secondary mt-1">Performance metrics and latency analysis</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
       </div>
@@ -411,7 +411,7 @@ export default function ResponseTimesPage() {
           unit="ms"
           trend={{ value: 8, isGood: true }}
           icon={Zap}
-          color="yellow"
+          color="sky"
         />
         <StatCard
           label="P99"

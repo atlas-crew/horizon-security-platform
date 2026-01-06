@@ -153,21 +153,21 @@ const REASON_CONFIG: Record<BlockReason, { label: string; color: string; bg: str
   xss: { label: 'XSS Attack', color: 'text-orange-400', bg: 'bg-orange-500/20' },
   rate_limit: { label: 'Rate Limited', color: 'text-blue-400', bg: 'bg-blue-500/20' },
   bot: { label: 'Bot Detected', color: 'text-purple-400', bg: 'bg-purple-500/20' },
-  path_traversal: { label: 'Path Traversal', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  path_traversal: { label: 'Path Traversal', color: 'text-sky-400', bg: 'bg-sky-500/20' },
   credential_stuffing: { label: 'Credential Stuffing', color: 'text-pink-400', bg: 'bg-pink-500/20' },
 };
 
 const RISK_CONFIG: Record<RiskLevel, { color: string; bg: string }> = {
   critical: { color: 'text-red-400', bg: 'bg-red-500/20' },
   high: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  medium: { color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20' },
   low: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
 };
 
 const METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400 bg-green-500/20',
   POST: 'text-blue-400 bg-blue-500/20',
-  PUT: 'text-yellow-400 bg-yellow-500/20',
+  PUT: 'text-[#D62598] bg-[#D62598]/20',
   DELETE: 'text-red-400 bg-red-500/20',
   PATCH: 'text-orange-400 bg-orange-500/20',
 };
@@ -205,14 +205,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -245,73 +245,73 @@ function DecisionTraceModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden"
+          className="bg-surface-card border border-border-subtle w-full max-w-2xl max-h-[80vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Decision Trace</h2>
-              <p className="text-sm text-gray-400">Why was this request blocked?</p>
+              <h2 className="text-lg font-semibold text-ink-primary">Decision Trace</h2>
+              <p className="text-sm text-ink-secondary">Why was this request blocked?</p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-surface-subtle transition-colors"
             >
-              <X className="w-5 h-5 text-gray-400" />
+              <X className="w-5 h-5 text-ink-secondary" />
             </button>
           </div>
 
           {/* Content */}
           <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
             {/* Request Summary */}
-            <div className="bg-gray-750 rounded-lg p-4 mb-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Request Details</h3>
+            <div className="bg-surface-subtle p-4 mb-6">
+              <h3 className="text-sm font-medium text-ink-secondary mb-3">Request Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500">Endpoint</p>
+                  <p className="text-xs text-ink-muted">Endpoint</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', METHOD_COLORS[request.method])}>
+                    <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[request.method])}>
                       {request.method}
                     </span>
                     <code className="text-blue-400 text-sm">{request.path}</code>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Source</p>
-                  <p className="text-white mt-1 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400" />
+                  <p className="text-xs text-ink-muted">Source</p>
+                  <p className="text-ink-primary mt-1 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-ink-secondary" />
                     {request.sourceIp} ({request.country})
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Timestamp</p>
-                  <p className="text-white mt-1">{new Date(request.timestamp).toLocaleString()}</p>
+                  <p className="text-xs text-ink-muted">Timestamp</p>
+                  <p className="text-ink-primary mt-1">{new Date(request.timestamp).toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">User Agent</p>
-                  <p className="text-white mt-1 text-sm truncate">{request.userAgent}</p>
+                  <p className="text-xs text-ink-muted">User Agent</p>
+                  <p className="text-ink-primary mt-1 text-sm truncate">{request.userAgent}</p>
                 </div>
               </div>
             </div>
 
             {/* Final Decision */}
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
+            <div className="bg-red-500/10 border border-red-500/30 p-4 mb-6">
               <div className="flex items-start gap-3">
                 <ShieldX className="w-6 h-6 text-red-400 mt-0.5" />
                 <div>
-                  <h3 className="text-white font-medium">Request Blocked</h3>
-                  <p className="text-sm text-gray-400 mt-1">
+                  <h3 className="text-ink-primary font-medium">Request Blocked</h3>
+                  <p className="text-sm text-ink-secondary mt-1">
                     Reason: <span className={clsx('font-medium', reasonConfig.color)}>{reasonConfig.label}</span>
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-ink-secondary">
                     Risk Score: <span className={clsx('font-medium', riskConfig.color)}>{request.riskScore}/100</span>
                   </p>
                 </div>
@@ -320,46 +320,46 @@ function DecisionTraceModal({
 
             {/* Decision Trace Steps */}
             <div>
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Rule Evaluation Chain</h3>
+              <h3 className="text-sm font-medium text-ink-secondary mb-3">Rule Evaluation Chain</h3>
               <div className="space-y-3">
                 {decisionTrace.map((step, idx) => (
                   <div
                     key={step.step}
                     className={clsx(
-                      'p-4 rounded-lg border',
+                      'p-4 border',
                       step.result === 'fail'
                         ? 'bg-red-500/10 border-red-500/30'
-                        : 'bg-gray-750 border-gray-700'
+                        : 'bg-surface-subtle border-border-subtle'
                     )}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className={clsx(
                           'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium',
-                          step.result === 'fail' ? 'bg-red-500 text-white' : 'bg-gray-600 text-gray-300'
+                          step.result === 'fail' ? 'bg-red-500 text-white' : 'bg-surface-subtle text-ink-secondary'
                         )}>
                           {step.step}
                         </span>
                         <div>
-                          <p className="text-white font-medium">{step.rule}</p>
-                          <p className="text-sm text-gray-400">{step.detail}</p>
+                          <p className="text-ink-primary font-medium">{step.rule}</p>
+                          <p className="text-sm text-ink-secondary">{step.detail}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         <span className={clsx(
-                          'px-2 py-0.5 rounded text-xs font-medium',
+                          'px-2 py-0.5 text-xs font-medium',
                           step.result === 'fail' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
                         )}>
                           {step.result === 'fail' ? 'BLOCKED' : 'PASS'}
                         </span>
                         {step.score > 0 && (
-                          <p className="text-xs text-gray-500 mt-1">+{step.score} risk</p>
+                          <p className="text-xs text-ink-muted mt-1">+{step.score} risk</p>
                         )}
                       </div>
                     </div>
                     {idx < decisionTrace.length - 1 && step.result !== 'fail' && (
                       <div className="flex justify-center mt-2">
-                        <ChevronRight className="w-4 h-4 text-gray-600 rotate-90" />
+                        <ChevronRight className="w-4 h-4 text-ink-muted rotate-90" />
                       </div>
                     )}
                   </div>
@@ -369,12 +369,12 @@ function DecisionTraceModal({
 
             {/* Matched Patterns */}
             <div className="mt-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Matched Patterns</h3>
+              <h3 className="text-sm font-medium text-ink-secondary mb-3">Matched Patterns</h3>
               <div className="flex flex-wrap gap-2">
                 {request.matchedPatterns.map((pattern, idx) => (
                   <code
                     key={idx}
-                    className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded text-red-300 text-sm"
+                    className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 text-sm"
                   >
                     {pattern}
                   </code>
@@ -431,8 +431,8 @@ export default function BlockedRequestsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Blocked Requests</h1>
-          <p className="text-gray-400 mt-1">Loading blocked requests...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Blocked Requests</h1>
+          <p className="text-ink-secondary mt-1">Loading blocked requests...</p>
         </div>
         <StatsGridSkeleton />
         <TableSkeleton />
@@ -445,10 +445,10 @@ export default function BlockedRequestsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Blocked Requests</h1>
-          <p className="text-gray-400 mt-1">Review and analyze blocked API requests</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Blocked Requests</h1>
+          <p className="text-ink-secondary mt-1">Review and analyze blocked API requests</p>
         </div>
-        <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+        <button className="px-4 py-2 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors flex items-center gap-2">
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
@@ -459,27 +459,27 @@ export default function BlockedRequestsPage() {
         <StatCard label="Total Blocked" value={stats.total.toString()} icon={ShieldX} color="text-red-400" />
         <StatCard label="Critical" value={stats.critical.toString()} icon={AlertTriangle} color="text-orange-400" />
         <StatCard label="Unique IPs" value={stats.uniqueIps.toString()} icon={MapPin} color="text-blue-400" />
-        <StatCard label="Avg Risk Score" value={stats.avgRisk.toString()} icon={Target} color="text-yellow-400" />
+        <StatCard label="Avg Risk Score" value={stats.avgRisk.toString()} icon={Target} color="text-sky-400" />
       </div>
 
       {/* Search and Filters */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary" />
           <input
             type="text"
             placeholder="Search by path, IP, or rule..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+          <Filter className="w-4 h-4 text-ink-secondary" />
           <select
             value={reasonFilter}
             onChange={(e) => setReasonFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+            className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
           >
             <option value="">All Reasons</option>
             {Object.entries(REASON_CONFIG).map(([key, config]) => (
@@ -495,11 +495,11 @@ export default function BlockedRequestsPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden"
+        className="bg-surface-card border border-border-subtle overflow-hidden"
       >
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-400 bg-gray-800/50">
+            <tr className="text-left text-sm text-ink-secondary bg-surface-subtle">
               <th className="px-5 py-3 font-medium">Time</th>
               <th className="px-5 py-3 font-medium">Source</th>
               <th className="px-5 py-3 font-medium">Endpoint</th>
@@ -517,36 +517,36 @@ export default function BlockedRequestsPage() {
               return (
                 <tr
                   key={request.id}
-                  className="border-t border-gray-700 hover:bg-gray-750 transition-colors"
+                  className="border-t border-border-subtle hover:bg-surface-subtle transition-colors"
                 >
                   <td className="px-5 py-4">
-                    <span className="text-gray-400 text-sm flex items-center gap-1">
+                    <span className="text-ink-secondary text-sm flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {formatRelativeTime(request.timestamp)}
                     </span>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-white font-mono text-sm">{request.sourceIp}</span>
-                      <span className="text-xs text-gray-500">({request.country})</span>
+                      <span className="text-ink-primary font-mono text-sm">{request.sourceIp}</span>
+                      <span className="text-xs text-ink-muted">({request.country})</span>
                     </div>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', METHOD_COLORS[request.method])}>
+                      <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[request.method])}>
                         {request.method}
                       </span>
                       <code className="text-blue-400 text-sm truncate max-w-[200px]">{request.path}</code>
                     </div>
                   </td>
                   <td className="px-5 py-4">
-                    <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', reasonConfig.bg, reasonConfig.color)}>
+                    <span className={clsx('px-2 py-0.5 text-xs font-medium', reasonConfig.bg, reasonConfig.color)}>
                       {reasonConfig.label}
                     </span>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-16 h-2 bg-surface-subtle overflow-hidden">
                         <div
                           className={clsx('h-full', riskConfig.bg.replace('/20', ''))}
                           style={{ width: `${request.riskScore}%` }}
@@ -556,12 +556,12 @@ export default function BlockedRequestsPage() {
                     </div>
                   </td>
                   <td className="px-5 py-4">
-                    <span className="text-gray-300 text-sm">{request.ruleMatched}</span>
+                    <span className="text-ink-secondary text-sm">{request.ruleMatched}</span>
                   </td>
                   <td className="px-5 py-4 text-right">
                     <button
                       onClick={() => setSelectedRequest(request)}
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1"
+                      className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors inline-flex items-center gap-1"
                     >
                       <Eye className="w-4 h-4" />
                       Trace
@@ -575,7 +575,7 @@ export default function BlockedRequestsPage() {
 
         {filteredRequests.length === 0 && (
           <div className="p-8 text-center">
-            <p className="text-gray-400">No blocked requests match your filters</p>
+            <p className="text-ink-secondary">No blocked requests match your filters</p>
           </div>
         )}
       </motion.div>

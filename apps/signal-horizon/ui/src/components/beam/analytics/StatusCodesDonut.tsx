@@ -15,13 +15,13 @@ interface StatusCodesDonutProps {
 const statusCodeColors: Record<string, string> = {
   '2xx': '#22c55e', // success - green
   '3xx': '#3b82f6', // redirect - blue
-  '4xx': '#f59e0b', // client error - yellow/amber
+  '4xx': '#529EEC', // client error - sky blue (Atlas Crew brand)
   '5xx': '#ef4444', // server error - red
 };
 
 /**
  * StatusCodesDonut - Donut chart showing HTTP status code distribution.
- * 2xx=green, 3xx=blue, 4xx=yellow, 5xx=red.
+ * 2xx=green, 3xx=blue, 4xx=sky blue (Atlas Crew brand), 5xx=red.
  */
 export const StatusCodesDonut = memo(function StatusCodesDonut({
   data,

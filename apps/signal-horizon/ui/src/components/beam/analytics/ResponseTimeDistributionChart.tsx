@@ -24,7 +24,7 @@ interface ResponseTimeDistributionChartProps {
 const bucketColors = [
   '#22c55e', // <25ms - green
   '#84cc16', // 25-50ms - lime
-  '#eab308', // 50-100ms - yellow
+  '#529EEC', // 50-100ms - sky blue (Atlas Crew brand)
   '#f97316', // 100-250ms - orange
   '#ef4444', // 250-500ms - red
   '#dc2626', // >500ms - dark red
@@ -70,7 +70,7 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
             }}
             labelStyle={{ color: '#1e3a5f', fontWeight: 600 }}
           />
-          <Bar dataKey="percentage" radius={[2, 2, 0, 0]}>
+          <Bar dataKey="percentage">
             {data.map((_entry, index) => (
               <Cell
                 key={`cell-${index}`}

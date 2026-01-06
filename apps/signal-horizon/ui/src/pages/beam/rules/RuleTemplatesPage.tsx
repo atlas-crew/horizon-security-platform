@@ -117,7 +117,7 @@ const DEMO_TEMPLATES = [
 
 const CATEGORY_CONFIG: Record<TemplateCategory, { icon: React.ElementType; color: string; label: string }> = {
   injection: { icon: Code, color: 'text-red-400 bg-red-500/20', label: 'Injection' },
-  authentication: { icon: Lock, color: 'text-yellow-400 bg-yellow-500/20', label: 'Authentication' },
+  authentication: { icon: Lock, color: 'text-sky-400 bg-sky-500/20', label: 'Authentication' },
   bot: { icon: Bot, color: 'text-purple-400 bg-purple-500/20', label: 'Bot Protection' },
   data: { icon: Database, color: 'text-blue-400 bg-blue-500/20', label: 'Data Protection' },
   'rate-limiting': { icon: Zap, color: 'text-orange-400 bg-orange-500/20', label: 'Rate Limiting' },
@@ -139,10 +139,10 @@ function TemplateCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5 hover:border-gray-600 transition-colors"
+      className="bg-surface-card border border-border-subtle p-5 hover:border-border-subtle transition-colors"
     >
       <div className="flex items-start justify-between">
-        <div className={clsx('p-2 rounded-lg', categoryConfig.color)}>
+        <div className={clsx('p-2', categoryConfig.color)}>
           <CategoryIcon className="w-5 h-5" />
         </div>
         {template.isDeployed && (
@@ -153,39 +153,39 @@ function TemplateCard({
         )}
       </div>
 
-      <h3 className="text-white font-medium mt-4">{template.name}</h3>
-      <p className="text-sm text-gray-400 mt-2 line-clamp-2">{template.description}</p>
+      <h3 className="text-ink-primary font-medium mt-4">{template.name}</h3>
+      <p className="text-sm text-ink-secondary mt-2 line-clamp-2">{template.description}</p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {template.patterns.slice(0, 3).map((pattern, idx) => (
           <span
             key={idx}
-            className="px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-300"
+            className="px-2 py-0.5 bg-surface-subtle text-xs text-ink-secondary"
           >
             {pattern}
           </span>
         ))}
         {template.patterns.length > 3 && (
-          <span className="px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-400">
+          <span className="px-2 py-0.5 bg-surface-subtle text-xs text-ink-muted">
             +{template.patterns.length - 3} more
           </span>
         )}
       </div>
 
-      <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-700">
-        <div className="flex items-center gap-4 text-sm text-gray-400">
+      <div className="mt-4 flex items-center justify-between pt-4 border-t border-border-subtle">
+        <div className="flex items-center gap-4 text-sm text-ink-secondary">
           <span>{template.deployments.toLocaleString()} deployments</span>
           <span className="flex items-center gap-1">
-            <span className="text-yellow-400">{template.popularity}%</span> popular
+            <span className="text-sky-400">{template.popularity}%</span> popular
           </span>
         </div>
         <button
           onClick={onDeploy}
           disabled={template.isDeployed}
           className={clsx(
-            'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1',
+            'px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1',
             template.isDeployed
-              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+              ? 'bg-surface-subtle text-ink-muted cursor-not-allowed'
               : 'bg-horizon-600 hover:bg-horizon-500 text-white'
           )}
         >
@@ -224,8 +224,8 @@ export default function RuleTemplatesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Rule Templates</h1>
-          <p className="text-gray-400 mt-1">Loading templates...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Rule Templates</h1>
+          <p className="text-ink-secondary mt-1">Loading templates...</p>
         </div>
         <CardSkeleton />
       </div>
@@ -237,10 +237,10 @@ export default function RuleTemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Rule Templates</h1>
-          <p className="text-gray-400 mt-1">Pre-built protection templates</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Rule Templates</h1>
+          <p className="text-ink-secondary mt-1">Pre-built protection templates</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-ink-secondary">
           <Shield className="w-4 h-4" />
           <span>{templates.filter((t) => t.isDeployed).length} deployed</span>
         </div>
@@ -249,21 +249,21 @@ export default function RuleTemplatesPage() {
       {/* Search and Filters */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary" />
           <input
             type="text"
             placeholder="Search templates..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+          <Filter className="w-4 h-4 text-ink-secondary" />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+            className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
           >
             <option value="">All Categories</option>
             {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
@@ -287,8 +287,8 @@ export default function RuleTemplatesPage() {
       </div>
 
       {filteredTemplates.length === 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-          <p className="text-gray-400">No templates match your search</p>
+        <div className="bg-surface-card border border-border-subtle p-8 text-center">
+          <p className="text-ink-secondary">No templates match your search</p>
         </div>
       )}
     </div>

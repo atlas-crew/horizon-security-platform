@@ -121,7 +121,7 @@ const DEMO_SERVICE_ENDPOINTS: Record<string, Array<{
 const METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400 bg-green-500/20',
   POST: 'text-blue-400 bg-blue-500/20',
-  PUT: 'text-yellow-400 bg-yellow-500/20',
+  PUT: 'text-sky-400 bg-sky-500/20',
   PATCH: 'text-orange-400 bg-orange-500/20',
   DELETE: 'text-red-400 bg-red-500/20',
 };
@@ -140,14 +140,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className="w-6 h-6 text-horizon-400" />
         </div>
       </div>
@@ -169,7 +169,7 @@ function ServiceCard({
 }) {
   const statusConfig = {
     healthy: { color: 'text-green-400', icon: CheckCircle, label: 'Healthy' },
-    degraded: { color: 'text-yellow-400', icon: AlertTriangle, label: 'Degraded' },
+    degraded: { color: 'text-sky-400', icon: AlertTriangle, label: 'Degraded' },
     down: { color: 'text-red-400', icon: AlertTriangle, label: 'Down' },
   };
 
@@ -180,46 +180,46 @@ function ServiceCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden"
+      className="bg-surface-card border border-border-subtle overflow-hidden"
     >
       {/* Service Header */}
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-750 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
         <div className="flex items-center gap-4">
-          <div className="p-2 bg-gray-700 rounded-lg">
+          <div className="p-2 bg-surface-subtle">
             <Server className="w-5 h-5 text-horizon-400" />
           </div>
           <div className="text-left">
-            <h3 className="text-white font-medium">{service.name}</h3>
-            <p className="text-sm text-gray-400">{service.description}</p>
+            <h3 className="text-ink-primary font-medium">{service.name}</h3>
+            <p className="text-sm text-ink-secondary">{service.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-sm text-gray-400">Endpoints</p>
-            <p className="text-white font-medium">{service.endpoints}</p>
+            <p className="text-sm text-ink-secondary">Endpoints</p>
+            <p className="text-ink-primary font-medium">{service.endpoints}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Requests</p>
-            <p className="text-white font-medium">
+            <p className="text-sm text-ink-secondary">Requests</p>
+            <p className="text-ink-primary font-medium">
               {(service.totalRequests / 1000000).toFixed(1)}M
             </p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Latency</p>
-            <p className="text-white font-medium">{service.avgLatencyMs}ms</p>
+            <p className="text-sm text-ink-secondary">Latency</p>
+            <p className="text-ink-primary font-medium">{service.avgLatencyMs}ms</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Error Rate</p>
+            <p className="text-sm text-ink-secondary">Error Rate</p>
             <p
               className={clsx(
                 'font-medium',
                 service.errorRate < 1
                   ? 'text-green-400'
                   : service.errorRate < 2
-                  ? 'text-yellow-400'
+                  ? 'text-sky-400'
                   : 'text-red-400'
               )}
             >
@@ -231,19 +231,19 @@ function ServiceCard({
             <span className="text-sm">{status.label}</span>
           </div>
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+            <ChevronDown className="w-5 h-5 text-ink-secondary" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-gray-400" />
+            <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
         </div>
       </button>
 
       {/* Expanded Endpoints List */}
       {isExpanded && endpoints && (
-        <div className="border-t border-gray-700">
+        <div className="border-t border-border-subtle">
           <table className="w-full">
             <thead>
-              <tr className="text-left text-sm text-gray-400 bg-gray-800/50">
+              <tr className="text-left text-sm text-ink-secondary bg-surface-subtle">
                 <th className="px-5 py-2 font-medium">Endpoint</th>
                 <th className="px-5 py-2 font-medium text-right">Requests</th>
                 <th className="px-5 py-2 font-medium text-right">Latency</th>
@@ -254,13 +254,13 @@ function ServiceCard({
               {endpoints.map((endpoint, idx) => (
                 <tr
                   key={idx}
-                  className="border-t border-gray-700/50 hover:bg-gray-750 transition-colors"
+                  className="border-t border-border-subtle/50 hover:bg-surface-subtle transition-colors"
                 >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <span
                         className={clsx(
-                          'px-2 py-0.5 rounded text-xs font-medium',
+                          'px-2 py-0.5 text-xs font-medium',
                           METHOD_COLORS[endpoint.method]
                         )}
                       >
@@ -269,20 +269,20 @@ function ServiceCard({
                       <code className="text-blue-400 text-sm">{endpoint.path}</code>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right text-gray-300">
+                  <td className="px-5 py-3 text-right text-ink-secondary">
                     {endpoint.requestCount.toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-right text-white">
+                  <td className="px-5 py-3 text-right text-ink-primary">
                     {endpoint.avgLatencyMs}ms
                   </td>
                   <td className="px-5 py-3 text-right">
                     <span
                       className={clsx(
-                        'px-2 py-0.5 rounded text-xs font-medium',
+                        'px-2 py-0.5 text-xs font-medium',
                         endpoint.errorRate < 1
                           ? 'text-green-400 bg-green-500/20'
                           : endpoint.errorRate < 2
-                          ? 'text-yellow-400 bg-yellow-500/20'
+                          ? 'text-sky-400 bg-sky-500/20'
                           : 'text-red-400 bg-red-500/20'
                       )}
                     >
@@ -332,8 +332,8 @@ export default function ServicesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Services</h1>
-          <p className="text-gray-400 mt-1">Loading service data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Services</h1>
+          <p className="text-ink-secondary mt-1">Loading service data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -345,8 +345,8 @@ export default function ServicesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Services</h1>
-        <p className="text-gray-400 mt-1">Endpoints grouped by service</p>
+        <h1 className="text-2xl font-bold text-ink-primary">Services</h1>
+        <p className="text-ink-secondary mt-1">Endpoints grouped by service</p>
       </div>
 
       {/* Stats Grid */}

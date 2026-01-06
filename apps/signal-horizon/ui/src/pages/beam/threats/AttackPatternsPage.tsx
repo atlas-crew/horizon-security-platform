@@ -161,7 +161,7 @@ const DEMO_CATEGORY_DIST = [
   { name: 'Bot Activity', value: 534, color: '#8b5cf6' },
   { name: 'Rate Abuse', value: 389, color: '#3b82f6' },
   { name: 'Data Exposure', value: 234, color: '#22c55e' },
-  { name: 'Protocol', value: 178, color: '#eab308' },
+  { name: 'Protocol', value: 178, color: '#529EEC' },
 ];
 
 const CATEGORY_CONFIG: Record<PatternCategory, { label: string; color: string; bg: string }> = {
@@ -170,13 +170,13 @@ const CATEGORY_CONFIG: Record<PatternCategory, { label: string; color: string; b
   bot: { label: 'Bot Activity', color: 'text-purple-400', bg: 'bg-purple-500/20' },
   rate_abuse: { label: 'Rate Abuse', color: 'text-blue-400', bg: 'bg-blue-500/20' },
   data_exposure: { label: 'Data Exposure', color: 'text-green-400', bg: 'bg-green-500/20' },
-  protocol: { label: 'Protocol', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  protocol: { label: 'Protocol', color: 'text-sky-400', bg: 'bg-sky-500/20' },
 };
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string }> = {
   critical: { color: 'text-red-400', bg: 'bg-red-500/20' },
   high: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  medium: { color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20' },
   low: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
 };
 
@@ -205,12 +205,12 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
           {change && (
             <p
               className={clsx(
@@ -227,7 +227,7 @@ function StatCard({
             </p>
           )}
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -252,23 +252,23 @@ function PatternCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden"
+      className="bg-surface-card border border-border-subtle overflow-hidden"
     >
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-750 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
         <div className="flex items-center gap-4">
-          <div className={clsx('p-2 rounded-lg', categoryConfig.bg)}>
+          <div className={clsx('p-2', categoryConfig.bg)}>
             <Target className={clsx('w-5 h-5', categoryConfig.color)} />
           </div>
           <div className="text-left">
-            <h3 className="text-white font-medium">{pattern.name}</h3>
+            <h3 className="text-ink-primary font-medium">{pattern.name}</h3>
             <div className="flex items-center gap-2 mt-1">
-              <span className={clsx('px-2 py-0.5 rounded text-xs', categoryConfig.bg, categoryConfig.color)}>
+              <span className={clsx('px-2 py-0.5 text-xs', categoryConfig.bg, categoryConfig.color)}>
                 {categoryConfig.label}
               </span>
-              <span className={clsx('px-2 py-0.5 rounded text-xs', severityConfig.bg, severityConfig.color)}>
+              <span className={clsx('px-2 py-0.5 text-xs', severityConfig.bg, severityConfig.color)}>
                 {pattern.severity}
               </span>
             </div>
@@ -276,17 +276,17 @@ function PatternCard({
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-sm text-gray-400">Detections</p>
-            <p className="text-white font-medium">{pattern.count.toLocaleString()}</p>
+            <p className="text-sm text-ink-secondary">Detections</p>
+            <p className="text-ink-primary font-medium">{pattern.count.toLocaleString()}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Block Rate</p>
+            <p className="text-sm text-ink-secondary">Block Rate</p>
             <p className="text-green-400 font-medium">
               {((pattern.blocked / pattern.count) * 100).toFixed(1)}%
             </p>
           </div>
           <div className="text-right min-w-[80px]">
-            <p className="text-sm text-gray-400">Trend</p>
+            <p className="text-sm text-ink-secondary">Trend</p>
             <p
               className={clsx(
                 'font-medium flex items-center gap-1 justify-end',
@@ -294,7 +294,7 @@ function PatternCard({
                   ? 'text-red-400'
                   : pattern.trend === 'down'
                   ? 'text-green-400'
-                  : 'text-gray-400'
+                  : 'text-ink-secondary'
               )}
             >
               {pattern.trend === 'up' ? (
@@ -308,35 +308,35 @@ function PatternCard({
             </p>
           </div>
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+            <ChevronDown className="w-5 h-5 text-ink-secondary" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-gray-400" />
+            <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
         </div>
       </button>
 
       {isExpanded && (
-        <div className="px-5 py-4 border-t border-gray-700 bg-gray-800/50">
+        <div className="px-5 py-4 border-t border-border-subtle bg-surface-subtle">
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h4 className="text-sm font-medium text-gray-400 mb-2">Top Targeted Endpoints</h4>
+              <h4 className="text-sm font-medium text-ink-secondary mb-2">Top Targeted Endpoints</h4>
               <div className="space-y-2">
                 {pattern.topTargets.map((target, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <span className="text-gray-500">{idx + 1}.</span>
+                    <span className="text-ink-muted">{idx + 1}.</span>
                     <code className="text-blue-400 text-sm">{target}</code>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <h4 className="text-sm font-medium text-gray-400 mb-2">Detection Signatures</h4>
+              <h4 className="text-sm font-medium text-ink-secondary mb-2">Detection Signatures</h4>
               <div className="flex flex-wrap gap-2">
                 {pattern.signatures.map((sig, idx) => (
                   <code
                     key={idx}
                     className={clsx(
-                      'px-2 py-1 rounded text-xs',
+                      'px-2 py-1 text-xs',
                       categoryConfig.bg,
                       categoryConfig.color
                     )}
@@ -390,8 +390,8 @@ export default function AttackPatternsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Attack Patterns</h1>
-          <p className="text-gray-400 mt-1">Loading pattern data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Attack Patterns</h1>
+          <p className="text-ink-secondary mt-1">Loading pattern data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -403,8 +403,8 @@ export default function AttackPatternsPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Attack Patterns</h1>
-        <p className="text-gray-400 mt-1">Pattern detection and threat intelligence</p>
+        <h1 className="text-2xl font-bold text-ink-primary">Attack Patterns</h1>
+        <p className="text-ink-secondary mt-1">Pattern detection and threat intelligence</p>
       </div>
 
       {/* Stats Grid */}
@@ -448,9 +448,9 @@ export default function AttackPatternsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="col-span-2 bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="col-span-2 bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-white font-medium mb-4">Weekly Pattern Trend</h3>
+          <h3 className="text-ink-primary font-medium mb-4">Weekly Pattern Trend</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={DEMO_PATTERN_TIMELINE}>
@@ -463,9 +463,9 @@ export default function AttackPatternsPage() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '0',
                   }}
                   labelStyle={{ color: '#9ca3af' }}
                 />
@@ -508,7 +508,7 @@ export default function AttackPatternsPage() {
             {Object.entries(CHART_COLORS).map(([key, color]) => (
               <div key={key} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-sm text-gray-400 capitalize">{key}</span>
+                <span className="text-sm text-ink-secondary capitalize">{key}</span>
               </div>
             ))}
           </div>
@@ -518,9 +518,9 @@ export default function AttackPatternsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+          className="bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-white font-medium mb-4">Category Distribution</h3>
+          <h3 className="text-ink-primary font-medium mb-4">Category Distribution</h3>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -539,9 +539,9 @@ export default function AttackPatternsPage() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '0',
                   }}
                 />
               </PieChart>
@@ -552,9 +552,9 @@ export default function AttackPatternsPage() {
               <div key={item.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-gray-400">{item.name}</span>
+                  <span className="text-ink-secondary">{item.name}</span>
                 </div>
-                <span className="text-white">{item.value.toLocaleString()}</span>
+                <span className="text-ink-primary">{item.value.toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -565,9 +565,9 @@ export default function AttackPatternsPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+        className="bg-surface-card border border-border-subtle p-5"
       >
-        <h3 className="text-white font-medium mb-4">Top Patterns by Volume</h3>
+        <h3 className="text-ink-primary font-medium mb-4">Top Patterns by Volume</h3>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={DEMO_ATTACK_PATTERNS.slice(0, 6)} layout="vertical">
@@ -587,12 +587,12 @@ export default function AttackPatternsPage() {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
-                  borderRadius: '0.5rem',
+                  backgroundColor: 'var(--surface-card)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '0',
                 }}
               />
-              <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Detections" />
+              <Bar dataKey="count" fill="#3b82f6" radius={[0, 0, 0, 0]} name="Detections" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -601,11 +601,11 @@ export default function AttackPatternsPage() {
       {/* Filter */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-gray-400" />
+          <BarChart3 className="w-4 h-4 text-ink-secondary" />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+            className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
           >
             <option value="">All Categories</option>
             {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
@@ -615,7 +615,7 @@ export default function AttackPatternsPage() {
             ))}
           </select>
         </div>
-        <span className="text-sm text-gray-400">
+        <span className="text-sm text-ink-secondary">
           Showing {filteredPatterns.length} of {DEMO_ATTACK_PATTERNS.length} patterns
         </span>
       </div>
@@ -631,8 +631,8 @@ export default function AttackPatternsPage() {
           />
         ))}
         {filteredPatterns.length === 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-gray-400">No patterns match your filter</p>
+          <div className="bg-surface-card border border-border-subtle p-8 text-center">
+            <p className="text-ink-secondary">No patterns match your filter</p>
           </div>
         )}
       </div>

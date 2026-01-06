@@ -73,13 +73,13 @@ export class BeamErrorBoundary extends React.Component<
           <div className="flex gap-3">
             <button
               onClick={this.handleReset}
-              className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 rounded"
+              className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600"
             >
               Try Again
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-horizon-600 text-white hover:bg-horizon-700 rounded"
+              className="px-4 py-2 bg-horizon-600 text-white hover:bg-horizon-700"
             >
               Reload Page
             </button>

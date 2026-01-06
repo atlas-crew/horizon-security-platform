@@ -66,7 +66,7 @@ const CHART_COLORS = {
   allowed: '#22c55e',
   get: '#3b82f6',
   post: '#22c55e',
-  put: '#f59e0b',
+  put: '#D62598',
   delete: '#ef4444',
 };
 
@@ -79,16 +79,16 @@ function TimeRangeSelector({
   onChange: (v: TimeRange) => void;
 }) {
   return (
-    <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+    <div className="flex gap-1 bg-surface-card p-1">
       {TIME_RANGES.map((range) => (
         <button
           key={range.value}
           onClick={() => onChange(range.value)}
           className={clsx(
-            'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
-              ? 'bg-horizon-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              ? 'bg-horizon-600 text-ink-primary'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
           )}
         >
           {range.label}
@@ -117,12 +117,12 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
           {trend && (
             <div
               className={clsx(
@@ -137,7 +137,7 @@ function StatCard({
             </div>
           )}
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className="w-6 h-6 text-horizon-400" />
         </div>
       </div>
@@ -148,24 +148,24 @@ function StatCard({
 // Traffic Timeline Chart
 function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+    <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-white">Traffic Over Time</h3>
-          <p className="text-sm text-gray-400 mt-1">Requests per hour</p>
+          <h3 className="text-lg font-semibold text-ink-primary">Traffic Over Time</h3>
+          <p className="text-sm text-ink-secondary mt-1">Requests per hour</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-gray-400">Total</span>
+            <span className="text-ink-secondary">Total</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-gray-400">Allowed</span>
+            <span className="text-ink-secondary">Allowed</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-400">Blocked</span>
+            <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
       </div>
@@ -182,26 +182,26 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
                 <stop offset="95%" stopColor={CHART_COLORS.allowed} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
             <XAxis
               dataKey="time"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: 'var(--text-secondary)' }}
               itemStyle={{ color: '#fff' }}
             />
             <Area
@@ -245,38 +245,37 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Request Methods</h3>
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Request Methods</h3>
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
             <XAxis
               type="number"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <YAxis
               type="category"
               dataKey="method"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              axisLine={{ stroke: 'var(--border-subtle)' }}
               tickLine={false}
               width={60}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '0',
               }}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar
               dataKey="count"
-              radius={[0, 4, 4, 0]}
               fill={CHART_COLORS.requests}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               shape={(props: any) => {
@@ -288,8 +287,8 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
                     width={width}
                     height={height}
                     fill={colors[payload.method] || CHART_COLORS.requests}
-                    rx={4}
-                    ry={4}
+                    rx={0}
+                    ry={0}
                   />
                 );
               }}
@@ -301,11 +300,11 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
         {data.map((item) => (
           <div key={item.method} className="text-center">
             <div
-              className="w-4 h-4 rounded mx-auto mb-1"
+              className="w-4 h-4 mx-auto mb-1"
               style={{ backgroundColor: colors[item.method] }}
             />
-            <p className="text-xs text-gray-400">{item.method}</p>
-            <p className="text-sm font-medium text-white">{item.percentage}%</p>
+            <p className="text-xs text-ink-secondary">{item.method}</p>
+            <p className="text-sm font-medium text-ink-primary">{item.percentage}%</p>
           </div>
         ))}
       </div>
@@ -316,15 +315,15 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
 // Top Endpoints Table
 function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold text-white">Top Endpoints</h3>
-        <p className="text-sm text-gray-400 mt-1">Highest traffic endpoints</p>
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle">
+        <h3 className="text-lg font-semibold text-ink-primary">Top Endpoints</h3>
+        <p className="text-sm text-ink-secondary mt-1">Highest traffic endpoints</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
+            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
               <th className="px-5 py-3 font-medium text-right">Requests</th>
               <th className="px-5 py-3 font-medium text-right">Blocked</th>
@@ -337,17 +336,17 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
               return (
                 <tr
                   key={item.endpoint}
-                  className="border-b border-gray-700/50 hover:bg-gray-750 transition-colors"
+                  className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
                 >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-gray-500 text-sm w-6">{idx + 1}</span>
-                      <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded text-sm">
+                      <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
+                      <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
                         {item.endpoint}
                       </code>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right text-white font-medium">
+                  <td className="px-5 py-3 text-right text-ink-primary font-medium">
                     {item.requests.toLocaleString()}
                   </td>
                   <td className="px-5 py-3 text-right text-red-400">
@@ -356,11 +355,11 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
                   <td className="px-5 py-3 text-right">
                     <span
                       className={clsx(
-                        'px-2 py-0.5 rounded text-xs font-medium',
+                        'px-2 py-0.5 text-xs font-medium',
                         parseFloat(blockRate) < 1
                           ? 'text-green-400 bg-green-500/20'
                           : parseFloat(blockRate) < 3
-                          ? 'text-yellow-400 bg-yellow-500/20'
+                          ? 'text-sky-400 bg-sky-500/20'
                           : 'text-red-400 bg-red-500/20'
                       )}
                     >
@@ -412,8 +411,8 @@ export default function TrafficAnalyticsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Traffic Analytics</h1>
-          <p className="text-gray-400 mt-1">Loading traffic data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Traffic Analytics</h1>
+          <p className="text-ink-secondary mt-1">Loading traffic data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -426,8 +425,8 @@ export default function TrafficAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Traffic Analytics</h1>
-          <p className="text-gray-400 mt-1">API traffic patterns and trends</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Traffic Analytics</h1>
+          <p className="text-ink-secondary mt-1">API traffic patterns and trends</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
       </div>

@@ -108,14 +108,14 @@ const DEMO_SCHEMA_CHANGES = [
 const CHANGE_TYPE_CONFIG: Record<ChangeType, { icon: React.ElementType; color: string; label: string }> = {
   added: { icon: Plus, color: 'text-green-400 bg-green-500/20', label: 'Added' },
   removed: { icon: Minus, color: 'text-red-400 bg-red-500/20', label: 'Removed' },
-  modified: { icon: RefreshCw, color: 'text-yellow-400 bg-yellow-500/20', label: 'Modified' },
+  modified: { icon: RefreshCw, color: 'text-sky-400 bg-sky-500/20', label: 'Modified' },
   deprecated: { icon: AlertTriangle, color: 'text-orange-400 bg-orange-500/20', label: 'Deprecated' },
 };
 
 const METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400',
   POST: 'text-blue-400',
-  PUT: 'text-yellow-400',
+  PUT: 'text-sky-400',
   PATCH: 'text-orange-400',
   DELETE: 'text-red-400',
 };
@@ -136,14 +136,14 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 border border-gray-700 rounded-xl p-5"
+      className="bg-surface-card border border-border-subtle p-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm text-ink-secondary">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
-        <div className="p-3 bg-gray-700/50 rounded-lg">
+        <div className="p-3 bg-surface-subtle/50">
           <Icon className={clsx('w-6 h-6', color)} />
         </div>
       </div>
@@ -186,18 +186,18 @@ function SchemaChangeCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
-        'bg-gray-800 border rounded-xl overflow-hidden transition-colors',
+        'bg-surface-card border overflow-hidden transition-colors',
         change.breaking && !change.acknowledged
           ? 'border-red-500/50'
-          : 'border-gray-700'
+          : 'border-border-subtle'
       )}
     >
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-750 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
         <div className="flex items-center gap-4">
-          <div className={clsx('p-2 rounded-lg', config.color)}>
+          <div className={clsx('p-2', config.color)}>
             <ChangeIcon className="w-4 h-4" />
           </div>
           <div className="text-left">
@@ -207,16 +207,16 @@ function SchemaChangeCard({
               </span>
               <code className="text-blue-400 text-sm">{change.endpoint}</code>
             </div>
-            <p className="text-sm text-gray-400 mt-0.5">
-              <span className="font-mono text-gray-300">{change.field}</span>
+            <p className="text-sm text-ink-secondary mt-0.5">
+              <span className="font-mono text-ink-secondary">{change.field}</span>
               <span className="mx-2">→</span>
-              <span className="text-gray-500">{change.fieldType}</span>
+              <span className="text-ink-muted">{change.fieldType}</span>
             </p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           {change.breaking && (
-            <span className="px-2 py-0.5 rounded text-xs font-medium text-red-400 bg-red-500/20">
+            <span className="px-2 py-0.5 text-xs font-medium text-red-400 bg-red-500/20">
               Breaking
             </span>
           )}
@@ -225,47 +225,47 @@ function SchemaChangeCard({
               <CheckCircle className="w-4 h-4" />
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-xs font-medium text-yellow-400 bg-yellow-500/20">
+            <span className="px-2 py-0.5 text-xs font-medium text-sky-400 bg-sky-500/20">
               Unacknowledged
             </span>
           )}
-          <span className="text-sm text-gray-400 flex items-center gap-1">
+          <span className="text-sm text-ink-secondary flex items-center gap-1">
             <Clock className="w-4 h-4" />
             {formatRelativeTime(change.detectedAt)}
           </span>
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+            <ChevronDown className="w-5 h-5 text-ink-secondary" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-gray-400" />
+            <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
         </div>
       </button>
 
       {isExpanded && (
-        <div className="px-5 py-4 border-t border-gray-700 bg-gray-800/50">
+        <div className="px-5 py-4 border-t border-border-subtle bg-surface-subtle">
           <div className="space-y-3">
             <div>
-              <p className="text-sm text-gray-400">Description</p>
-              <p className="text-white mt-1">{change.description}</p>
+              <p className="text-sm text-ink-secondary">Description</p>
+              <p className="text-ink-primary mt-1">{change.description}</p>
             </div>
             <div className="flex items-center gap-6">
               <div>
-                <p className="text-sm text-gray-400">Service</p>
-                <p className="text-white mt-1">{change.service}</p>
+                <p className="text-sm text-ink-secondary">Service</p>
+                <p className="text-ink-primary mt-1">{change.service}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Change Type</p>
-                <p className="text-white mt-1 capitalize">{change.changeType}</p>
+                <p className="text-sm text-ink-secondary">Change Type</p>
+                <p className="text-ink-primary mt-1 capitalize">{change.changeType}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Detected</p>
-                <p className="text-white mt-1">
+                <p className="text-sm text-ink-secondary">Detected</p>
+                <p className="text-ink-primary mt-1">
                   {new Date(change.detectedAt).toLocaleString()}
                 </p>
               </div>
             </div>
             {!change.acknowledged && (
-              <button className="px-4 py-2 bg-horizon-600 hover:bg-horizon-500 text-white rounded-lg text-sm font-medium transition-colors">
+              <button className="px-4 py-2 bg-horizon-600 hover:bg-horizon-500 text-ink-primary text-sm font-medium transition-colors">
                 Acknowledge Change
               </button>
             )}
@@ -335,8 +335,8 @@ export default function SchemaChangesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Schema Changes</h1>
-          <p className="text-gray-400 mt-1">Loading schema change data...</p>
+          <h1 className="text-2xl font-bold text-ink-primary">Schema Changes</h1>
+          <p className="text-ink-secondary mt-1">Loading schema change data...</p>
         </div>
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -348,8 +348,8 @@ export default function SchemaChangesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Schema Changes</h1>
-        <p className="text-gray-400 mt-1">API schema drift detection and versioning</p>
+        <h1 className="text-2xl font-bold text-ink-primary">Schema Changes</h1>
+        <p className="text-ink-secondary mt-1">API schema drift detection and versioning</p>
       </div>
 
       {/* Stats Grid */}
@@ -365,7 +365,7 @@ export default function SchemaChangesPage() {
           label="Unacknowledged"
           value={stats.unacknowledged.toString()}
           icon={Clock}
-          color="text-yellow-400"
+          color="text-sky-400"
         />
         <StatCard
           label="This Week"
@@ -378,11 +378,11 @@ export default function SchemaChangesPage() {
       {/* Filters */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+          <Filter className="w-4 h-4 text-ink-secondary" />
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-horizon-500"
+            className="px-3 py-2 bg-surface-card border border-border-subtle text-ink-primary focus:outline-none focus:ring-2 focus:ring-horizon-500"
           >
             <option value="">All Types</option>
             <option value="added">Added</option>
@@ -396,18 +396,18 @@ export default function SchemaChangesPage() {
             type="checkbox"
             checked={showBreakingOnly}
             onChange={(e) => setShowBreakingOnly(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-horizon-600 focus:ring-horizon-500"
+            className="w-4 h-4 border-border-subtle bg-surface-card text-horizon-600 focus:ring-horizon-500"
           />
-          <span className="text-sm text-gray-300">Breaking only</span>
+          <span className="text-sm text-ink-secondary">Breaking only</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             checked={showUnacknowledgedOnly}
             onChange={(e) => setShowUnacknowledgedOnly(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-horizon-600 focus:ring-horizon-500"
+            className="w-4 h-4 border-border-subtle bg-surface-card text-horizon-600 focus:ring-horizon-500"
           />
-          <span className="text-sm text-gray-300">Unacknowledged only</span>
+          <span className="text-sm text-ink-secondary">Unacknowledged only</span>
         </label>
       </div>
 
@@ -422,8 +422,8 @@ export default function SchemaChangesPage() {
           />
         ))}
         {filteredChanges.length === 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-gray-400">No schema changes match your filters</p>
+          <div className="bg-surface-card border border-border-subtle p-8 text-center">
+            <p className="text-ink-secondary">No schema changes match your filters</p>
           </div>
         )}
       </div>

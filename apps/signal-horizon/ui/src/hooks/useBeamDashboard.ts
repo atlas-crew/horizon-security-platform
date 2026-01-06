@@ -5,6 +5,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BeamDashboard, TrafficDataPoint, AttackTypeData } from '../types/beam';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
@@ -42,6 +44,7 @@ export interface UseBeamDashboardResult {
   refetch: () => Promise<void>;
   isConnected: boolean;
   lastUpdated: Date | null;
+  isDemo: boolean;
 }
 
 // ============================================================================
@@ -104,6 +107,22 @@ export function useBeamDashboard(options: UseBeamDashboardOptions = {}): UseBeam
     autoFetch = true,
     apiBaseUrl = '/api/v1',
   } = options;
+
+  const { isEnabled, scenario } = useDemoMode();
+
+  // Early return for demo mode - no API calls, no polling
+  if (isEnabled) {
+    const demoData = getDemoData(scenario);
+    return {
+      data: demoData.dashboard,
+      isLoading: false,
+      error: null,
+      refetch: async () => {},
+      isConnected: false,
+      lastUpdated: new Date(demoData.generatedAt),
+      isDemo: true,
+    };
+  }
 
   const [data, setData] = useState<BeamDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -215,6 +234,7 @@ export function useBeamDashboard(options: UseBeamDashboardOptions = {}): UseBeam
     refetch: fetchData,
     isConnected,
     lastUpdated,
+    isDemo: false,
   };
 }
 

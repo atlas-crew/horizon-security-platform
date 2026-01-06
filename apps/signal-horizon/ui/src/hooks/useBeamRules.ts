@@ -6,6 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 import type { Rule, RuleDeployment, RuleTemplate, RuleCategory, RuleSeverity, RuleAction } from '../types/beam';
 
 // ============================================================================
@@ -210,6 +212,35 @@ const DEMO_TEMPLATES = generateDemoTemplates();
 
 export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesResult {
   const { pollingInterval = 60000, autoFetch = true } = options;
+
+  // Check demo mode state - early return with static demo data
+  const { isEnabled: isDemoEnabled, scenario } = useDemoMode();
+
+  if (isDemoEnabled) {
+    const demoData = getDemoData(scenario);
+    const demoActiveRules = demoData.rules.filter(r => r.enabled);
+    const demoRulesByCategory = new Map<RuleCategory, Rule[]>();
+    demoData.rules.forEach(rule => {
+      const existing = demoRulesByCategory.get(rule.category) || [];
+      demoRulesByCategory.set(rule.category, [...existing, rule]);
+    });
+
+    return {
+      rules: demoData.rules,
+      deployments: [],
+      templates: demoData.ruleTemplates,
+      isLoading: false,
+      error: null,
+      isDemo: true,
+      isConnected: false,
+      refetch: async () => {},
+      fetchRuleById: async () => null,
+      createRule: async () => null,
+      lastUpdated: new Date(demoData.generatedAt),
+      activeRules: demoActiveRules,
+      rulesByCategory: demoRulesByCategory,
+    };
+  }
 
   const [rules, setRules] = useState<Rule[]>(DEMO_RULES);
   const [isLoading, setIsLoading] = useState(false);

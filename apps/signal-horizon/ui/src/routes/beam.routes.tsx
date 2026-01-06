@@ -1,5 +1,6 @@
 import { RouteObject } from 'react-router-dom';
 import { BeamErrorBoundary } from '../components/beam/BeamErrorBoundary';
+import { BeamPageWrapper } from '../components/beam/BeamPageWrapper';
 import BeamDashboardPage from '../pages/beam/BeamDashboardPage';
 import TrafficAnalyticsPage from '../pages/beam/analytics/TrafficAnalyticsPage';
 import ResponseTimesPage from '../pages/beam/analytics/ResponseTimesPage';
@@ -24,7 +25,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam',
     element: (
       <BeamErrorBoundary level="page" title="Dashboard Error">
-        <BeamDashboardPage />
+        <BeamPageWrapper>
+          <BeamDashboardPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -33,7 +36,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/analytics',
     element: (
       <BeamErrorBoundary level="page" title="Traffic Analytics Error">
-        <TrafficAnalyticsPage />
+        <BeamPageWrapper>
+          <TrafficAnalyticsPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -41,7 +46,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/analytics/traffic',
     element: (
       <BeamErrorBoundary level="page" title="Traffic Analytics Error">
-        <TrafficAnalyticsPage />
+        <BeamPageWrapper>
+          <TrafficAnalyticsPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -49,7 +56,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/analytics/response-times',
     element: (
       <BeamErrorBoundary level="page" title="Response Times Error">
-        <ResponseTimesPage />
+        <BeamPageWrapper>
+          <ResponseTimesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -57,7 +66,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/analytics/errors',
     element: (
       <BeamErrorBoundary level="page" title="Error Analysis Error">
-        <ErrorAnalysisPage />
+        <BeamPageWrapper>
+          <ErrorAnalysisPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -65,7 +76,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/catalog',
     element: (
       <BeamErrorBoundary level="page" title="API Catalog Error">
-        <ApiCatalogPage />
+        <BeamPageWrapper>
+          <ApiCatalogPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -73,7 +86,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/catalog/services',
     element: (
       <BeamErrorBoundary level="page" title="Services Error">
-        <ServicesPage />
+        <BeamPageWrapper>
+          <ServicesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -81,7 +96,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/catalog/schema-changes',
     element: (
       <BeamErrorBoundary level="page" title="Schema Changes Error">
-        <SchemaChangesPage />
+        <BeamPageWrapper>
+          <SchemaChangesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -89,7 +106,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/rules',
     element: (
       <BeamErrorBoundary level="page" title="Rules Error">
-        <ActiveRulesPage />
+        <BeamPageWrapper>
+          <ActiveRulesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -97,7 +116,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/rules/templates',
     element: (
       <BeamErrorBoundary level="page" title="Rule Templates Error">
-        <RuleTemplatesPage />
+        <BeamPageWrapper>
+          <RuleTemplatesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -105,7 +126,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/rules/custom',
     element: (
       <BeamErrorBoundary level="page" title="Custom Rules Error">
-        <CustomRulesPage />
+        <BeamPageWrapper>
+          <CustomRulesPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -113,7 +136,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/threats',
     element: (
       <BeamErrorBoundary level="page" title="Threat Activity Error">
-        <ThreatActivityPage />
+        <BeamPageWrapper>
+          <ThreatActivityPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -121,7 +146,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/threats/blocked',
     element: (
       <BeamErrorBoundary level="page" title="Blocked Requests Error">
-        <BlockedRequestsPage />
+        <BeamPageWrapper>
+          <BlockedRequestsPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },
@@ -129,7 +156,9 @@ export const beamRoutes: RouteObject[] = [
     path: '/beam/threats/patterns',
     element: (
       <BeamErrorBoundary level="page" title="Attack Patterns Error">
-        <AttackPatternsPage />
+        <BeamPageWrapper>
+          <AttackPatternsPage />
+        </BeamPageWrapper>
       </BeamErrorBoundary>
     ),
   },

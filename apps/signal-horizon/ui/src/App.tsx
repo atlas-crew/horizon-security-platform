@@ -27,6 +27,7 @@ import signalHorizonLogoLight from './assets/brand/signal-horizon-icon-light.svg
 import signalHorizonLogoDark from './assets/brand/signal-horizon-icon-dark.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
+import { DemoModeControls } from './components/beam/DemoModeControls';
 import OverviewPage from './pages/OverviewPage';
 import CampaignDetailPage from './pages/CampaignDetailPage';
 import WarRoomPage from './pages/WarRoomPage';
@@ -141,6 +142,7 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <DemoModeControls />
             <div className="hidden md:flex items-center gap-2 border border-border-subtle px-2 h-8 text-xs text-ink-secondary">
               acme-corp
               <ChevronDown className="w-3 h-3" />

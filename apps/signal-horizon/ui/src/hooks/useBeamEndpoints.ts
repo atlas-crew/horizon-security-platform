@@ -4,6 +4,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 import type { Endpoint, Service } from '../types/beam';
 
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -71,6 +73,8 @@ export interface UseBeamEndpointsResult {
   error: Error | null;
   refetch: () => Promise<void>;
   fetchEndpointById: (id: string) => Promise<Endpoint | null>;
+  isDemo: boolean;
+  /** @deprecated Use `!isDemo` instead */
   isConnected: boolean;
   lastUpdated: Date | null;
 }
@@ -138,6 +142,27 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
     apiBaseUrl = '/api/v1',
     queryParams = {},
   } = options;
+
+  // Check demo mode state - early return with static demo data
+  const { isEnabled: isDemoEnabled, scenario } = useDemoMode();
+
+  if (isDemoEnabled) {
+    const demoData = getDemoData(scenario);
+
+    return {
+      endpoints: demoData.endpoints,
+      services: demoData.services,
+      isLoading: false,
+      error: null,
+      refetch: async () => {},
+      fetchEndpointById: async (id: string) => {
+        return demoData.endpoints.find(ep => ep.id === id) || null;
+      },
+      isDemo: true,
+      isConnected: false,
+      lastUpdated: new Date(demoData.generatedAt),
+    };
+  }
 
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -286,6 +311,7 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
     error,
     refetch: fetchData,
     fetchEndpointById,
+    isDemo: false,
     isConnected,
     lastUpdated,
   };

@@ -6,6 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 import type { BlockedRequest, AttackPattern, ThreatEvent } from '../types/beam';
 
 // ============================================================================
@@ -150,6 +152,41 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
     autoFetch = true,
     queryParams = {},
   } = options;
+
+  // Check demo mode state - early return with static demo data
+  const { isEnabled: isDemoEnabled, scenario } = useDemoMode();
+
+  if (isDemoEnabled) {
+    const demoData = getDemoData(scenario);
+    const demoStats = {
+      total: demoData.blockedRequests.length,
+      blocked: demoData.blockedRequests.filter(b => b.action === 'blocked').length,
+      challenged: demoData.blockedRequests.filter(b => b.action === 'challenged').length,
+      criticalCount: demoData.blockedRequests.filter(b => b.riskScore >= 80).length,
+      highCount: demoData.blockedRequests.filter(b => b.riskScore >= 60 && b.riskScore < 80).length,
+    };
+
+    return {
+      blocks: demoData.blockedRequests,
+      pagination: {
+        total: demoData.blockedRequests.length,
+        limit: queryParams.limit || 50,
+        offset: queryParams.offset || 0,
+        hasMore: false,
+      },
+      attackPatterns: demoData.attackPatterns,
+      recentEvents: demoData.threatEvents.slice(0, 10),
+      isLoading: false,
+      error: null,
+      isDemo: true,
+      isConnected: false,
+      refetch: async () => {},
+      fetchBlockById: async () => null,
+      loadMore: async () => {},
+      lastUpdated: new Date(demoData.generatedAt),
+      stats: demoStats,
+    };
+  }
 
   const [blocks, setBlocks] = useState<BlockedRequest[]>(DEMO_BLOCKS);
   const [pagination, setPagination] = useState({

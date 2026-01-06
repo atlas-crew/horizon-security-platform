@@ -5,6 +5,8 @@
  */
 
 import { useApiPolling } from './useApiPolling';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 
 // ============================================================================
 // Types (mirrored from API)
@@ -260,6 +262,126 @@ const DEMO_DATA = generateDemoData();
 
 export function useBeamAnalytics(options: UseBeamAnalyticsOptions = {}): UseBeamAnalyticsResult {
   const { pollingInterval = 30000, autoFetch = true } = options;
+
+  const { isEnabled, scenario } = useDemoMode();
+
+  // Early return for demo mode - no API calls, no polling
+  if (isEnabled) {
+    const demoData = getDemoData(scenario);
+
+    // Map demo data snapshot to BeamAnalyticsData format
+    const analyticsData: BeamAnalyticsData = {
+      traffic: {
+        totalRequests: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests, 0),
+        totalBlocked: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.blocked, 0),
+        totalBandwidthIn: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests * 1500, 0),
+        totalBandwidthOut: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests * 4500, 0),
+        blockRate: (() => {
+          const total = demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests, 0);
+          const blocked = demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.blocked, 0);
+          return total > 0 ? (blocked / total) * 100 : 0;
+        })(),
+        timeline: demoData.analytics.trafficHourly.map(h => ({
+          timestamp: h.timestamp,
+          requests: h.requests,
+          blocked: h.blocked,
+          bytesIn: h.requests * 1500,
+          bytesOut: h.requests * 4500,
+        })),
+      },
+      bandwidth: {
+        timeline: demoData.analytics.trafficHourly.map(h => ({
+          timestamp: h.timestamp,
+          bytesIn: h.requests * 1500,
+          bytesOut: h.requests * 4500,
+          requestCount: h.requests,
+        })),
+        topEndpoints: [],
+        totalBytesIn: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests * 1500, 0),
+        totalBytesOut: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests * 4500, 0),
+        avgBytesPerRequest: 6000,
+      },
+      threats: {
+        total: demoData.threatEvents.length,
+        bySeverity: {
+          // Map action to severity for demo purposes
+          critical: demoData.threatEvents.filter(t => t.action === 'blocked').length,
+          high: Math.floor(demoData.threatEvents.filter(t => t.action === 'challenged').length * 0.5),
+          medium: Math.floor(demoData.threatEvents.filter(t => t.action === 'challenged').length * 0.5),
+          low: demoData.threatEvents.filter(t => t.action === 'throttled').length,
+        },
+        byType: demoData.threatEvents.reduce((acc, t) => {
+          acc[t.type] = (acc[t.type] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        recentEvents: demoData.threatEvents.slice(0, 10).map(t => ({
+          id: t.id,
+          timestamp: t.timestamp,
+          severity: (t.action === 'blocked' ? 'CRITICAL' : t.action === 'challenged' ? 'HIGH' : 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+          type: t.type,
+          description: `${t.type} detected from ${t.sourceIp}`,
+          entityId: undefined,
+          sourceIp: t.sourceIp,
+          blocked: t.action === 'blocked',
+        })),
+      },
+      sensor: {
+        requestsTotal: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.requests, 0),
+        blocksTotal: demoData.analytics.trafficHourly.reduce((sum, h) => sum + h.blocked, 0),
+        entitiesTracked: 12847,
+        activeCampaigns: 3,
+        uptime: 99.95,
+        rps: 1847,
+        latencyP50: 23,
+        latencyP95: 67,
+        latencyP99: 245,
+      },
+      topEndpoints: demoData.analytics.topEndpoints.slice(0, 6).map((ep, idx) => ({
+        method: (['GET', 'POST', 'PUT', 'DELETE', 'GET', 'GET'] as const)[idx % 6],
+        path: ep.endpoint.replace(/^(GET|POST|PUT|DELETE|PATCH) /, ''),
+        requests: ep.requests,
+        avgLatency: 30 + Math.random() * 80,
+        errorRate: 0.05 + Math.random() * 0.4,
+        bandwidthIn: ep.requests * 1500,
+        bandwidthOut: ep.requests * 4500,
+      })),
+      responseTimeDistribution: [
+        { range: '<25ms', count: 45230, percentage: 38.2 },
+        { range: '25-50ms', count: 32100, percentage: 27.1 },
+        { range: '50-100ms', count: 21500, percentage: 18.2 },
+        { range: '100-250ms', count: 12300, percentage: 10.4 },
+        { range: '250-500ms', count: 5200, percentage: 4.4 },
+        { range: '>500ms', count: 2100, percentage: 1.8 },
+      ],
+      regionTraffic: [
+        { countryCode: 'US', countryName: 'United States', requests: 892000, percentage: 37.2, blocked: 18400 },
+        { countryCode: 'GB', countryName: 'United Kingdom', requests: 412000, percentage: 17.2, blocked: 8200 },
+        { countryCode: 'DE', countryName: 'Germany', requests: 298000, percentage: 12.4, blocked: 5900 },
+        { countryCode: 'FR', countryName: 'France', requests: 245000, percentage: 10.2, blocked: 4900 },
+        { countryCode: 'JP', countryName: 'Japan', requests: 187000, percentage: 7.8, blocked: 3700 },
+        { countryCode: 'CA', countryName: 'Canada', requests: 156000, percentage: 6.5, blocked: 3100 },
+        { countryCode: 'AU', countryName: 'Australia', requests: 98000, percentage: 4.1, blocked: 1900 },
+        { countryCode: 'NL', countryName: 'Netherlands', requests: 112000, percentage: 4.7, blocked: 2200 },
+      ],
+      statusCodes: {
+        code2xx: 2145000,
+        code3xx: 156000,
+        code4xx: 89000,
+        code5xx: 12000,
+      },
+      fetchedAt: demoData.generatedAt,
+      dataSource: 'demo',
+    };
+
+    return {
+      data: analyticsData,
+      isLoading: false,
+      error: null,
+      refetch: async () => {},
+      isDemo: true,
+      lastUpdated: new Date(demoData.generatedAt),
+    };
+  }
 
   const result = useApiPolling<BeamAnalyticsData>({
     endpoint: '/beam/analytics',

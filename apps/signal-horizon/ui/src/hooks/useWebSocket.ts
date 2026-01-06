@@ -1,11 +1,16 @@
 /**
  * Signal Horizon WebSocket Hook
  * Manages connection to the dashboard gateway
+ *
+ * When demo mode is enabled, this hook populates the store with demo data
+ * instead of connecting to the real WebSocket server.
  */
 
 import { useCallback, useRef, useEffect } from 'react';
 import { z } from 'zod';
 import { useHorizonStore } from '../stores/horizonStore';
+import { useDemoMode } from '../stores/demoModeStore';
+import { getDemoData } from '../lib/demoData';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3100/ws/dashboard';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -94,6 +99,10 @@ export function useWebSocket() {
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCleaningUpRef = useRef(false);
+  const demoLoadedRef = useRef(false);
+
+  // Demo mode state
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
 
   const {
     connectionState,
@@ -104,6 +113,47 @@ export function useWebSocket() {
     addThreat,
     addAlert,
   } = useHorizonStore();
+
+  // Load demo data when demo mode is enabled
+  useEffect(() => {
+    if (isDemoMode && !demoLoadedRef.current) {
+      // Load Signal Horizon demo data into the store
+      const demoData = getDemoData(scenario);
+      const { signalHorizon } = demoData;
+
+      // Convert SensorStats to Record<string, number> format
+      const sensorStatsRecord: Record<string, number> = {
+        CONNECTED: signalHorizon.sensorStats.CONNECTED,
+        DISCONNECTED: signalHorizon.sensorStats.DISCONNECTED,
+        WARNING: signalHorizon.sensorStats.WARNING,
+      };
+
+      // Set snapshot with demo data
+      setSnapshot({
+        activeCampaigns: signalHorizon.campaigns,
+        recentThreats: signalHorizon.threats,
+        sensorStats: sensorStatsRecord,
+      });
+
+      // Add demo alerts
+      signalHorizon.alerts.forEach((alert) => {
+        addAlert(alert);
+      });
+
+      // Mark demo as loaded and set connected state
+      demoLoadedRef.current = true;
+      setConnectionState('connected');
+      setSessionId('demo-session');
+
+      console.log('[WebSocket] Demo mode enabled - loaded demo data for scenario:', scenario);
+    } else if (!isDemoMode && demoLoadedRef.current) {
+      // Demo mode was disabled - reset state
+      demoLoadedRef.current = false;
+      setConnectionState('disconnected');
+      setSessionId(null);
+      console.log('[WebSocket] Demo mode disabled');
+    }
+  }, [isDemoMode, scenario, setSnapshot, addAlert, setConnectionState, setSessionId]);
 
   // Cleanup helper - clears timeout and closes websocket
   const cleanup = useCallback(() => {
@@ -303,6 +353,12 @@ export function useWebSocket() {
 
   // Connect to WebSocket
   const connect = useCallback(() => {
+    // Skip actual WebSocket connection when demo mode is enabled
+    if (isDemoMode) {
+      console.log('[WebSocket] Demo mode active - skipping real connection');
+      return;
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -345,7 +401,7 @@ export function useWebSocket() {
       setConnectionState('error');
       scheduleReconnect();
     }
-  }, [cleanup, handleMessage, scheduleReconnect, setConnectionState, setSessionId]);
+  }, [cleanup, handleMessage, scheduleReconnect, setConnectionState, setSessionId, isDemoMode]);
 
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
@@ -398,5 +454,6 @@ export function useWebSocket() {
     requestSnapshot,
     isConnected: connectionState === 'connected',
     connectionState,
+    isDemoMode,
   };
 }

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SensorTable } from '../../components/fleet/SensorTable';
 import { useFleetStore } from '../../stores/fleetStore';
+import { useDemoMode } from '../../stores/demoModeStore';
+import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -69,17 +71,32 @@ export function FleetOverviewPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const { filters, setStatusFilter } = useFleetStore();
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
-    queryKey: ['fleet', 'overview'],
-    queryFn: fetchFleetOverview,
-    refetchInterval: 10000,
+    queryKey: ['fleet', 'overview', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        const demoData = getDemoData(scenario);
+        return demoData.fleet.overview as FleetOverview;
+      }
+      return fetchFleetOverview();
+    },
+    refetchInterval: isDemoMode ? false : 10000,
+    staleTime: isDemoMode ? Infinity : 9000,
   });
 
   const { data: sensors = [], isLoading: sensorsLoading } = useQuery({
-    queryKey: ['fleet', 'sensors'],
-    queryFn: fetchSensors,
-    refetchInterval: 5000,
+    queryKey: ['fleet', 'sensors', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        const demoData = getDemoData(scenario);
+        return demoData.fleet.sensors as SensorSummary[];
+      }
+      return fetchSensors();
+    },
+    refetchInterval: isDemoMode ? false : 5000,
+    staleTime: isDemoMode ? Infinity : 4000,
   });
 
   const filteredSensors = sensors.filter((s) => {

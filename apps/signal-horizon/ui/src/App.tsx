@@ -28,6 +28,7 @@ import signalHorizonLogoDark from './assets/brand/signal-horizon-icon-dark.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { DemoModeControls } from './components/beam/DemoModeControls';
+import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import OverviewPage from './pages/OverviewPage';
 import CampaignDetailPage from './pages/CampaignDetailPage';
 import WarRoomPage from './pages/WarRoomPage';
@@ -313,13 +314,13 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner message="Loading page..." size="lg" />}>
               <Routes>
-                <Route path="/" element={<OverviewPage />} />
-                <Route path="/campaigns" element={<CampaignDetailPage />} />
-                <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
-                <Route path="/warroom" element={<WarRoomPage />} />
-                <Route path="/warroom/:id" element={<WarRoomPage />} />
-                <Route path="/hunting" element={<HuntingPage />} />
-                <Route path="/intel" element={<IntelPage />} />
+                <Route path="/" element={<SignalHorizonPageWrapper><OverviewPage /></SignalHorizonPageWrapper>} />
+                <Route path="/campaigns" element={<SignalHorizonPageWrapper><CampaignDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/campaigns/:id" element={<SignalHorizonPageWrapper><CampaignDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
+                <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
+                <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
+                <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}

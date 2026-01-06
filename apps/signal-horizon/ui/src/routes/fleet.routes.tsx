@@ -1,5 +1,6 @@
 import { RouteObject } from 'react-router-dom';
 import { FleetErrorBoundary } from '../components/fleet/FleetErrorBoundary';
+import { FleetPageWrapper } from '../components/fleet/FleetPageWrapper';
 import { FleetOverviewPage } from '../pages/fleet/FleetOverviewPage';
 import { FleetHealthPage } from '../pages/fleet/FleetHealthPage';
 import { FleetUpdatesPage } from '../pages/fleet/FleetUpdatesPage';
@@ -13,14 +14,16 @@ import { OnboardingPage } from '../pages/fleet/OnboardingPage';
 /**
  * Fleet Management Routes
  * All fleet routes are wrapped with FleetErrorBoundary for error isolation
- * This ensures that failures in one fleet page don't crash the entire application
+ * and FleetPageWrapper for demo mode banner display
  */
 export const fleetRoutes: RouteObject[] = [
   {
     path: '/fleet',
     element: (
       <FleetErrorBoundary level="page" title="Fleet Overview Error">
-        <FleetOverviewPage />
+        <FleetPageWrapper>
+          <FleetOverviewPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -28,7 +31,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/health',
     element: (
       <FleetErrorBoundary level="page" title="Fleet Health Error">
-        <FleetHealthPage />
+        <FleetPageWrapper>
+          <FleetHealthPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -36,7 +41,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/updates',
     element: (
       <FleetErrorBoundary level="page" title="Fleet Updates Error">
-        <FleetUpdatesPage />
+        <FleetPageWrapper>
+          <FleetUpdatesPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -44,7 +51,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/rules',
     element: (
       <FleetErrorBoundary level="page" title="Rule Distribution Error">
-        <RuleDistributionPage />
+        <FleetPageWrapper>
+          <RuleDistributionPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -52,7 +61,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/sensors/:id',
     element: (
       <FleetErrorBoundary level="page" title="Sensor Detail Error">
-        <SensorDetailPage />
+        <FleetPageWrapper>
+          <SensorDetailPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -60,7 +71,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/config',
     element: (
       <FleetErrorBoundary level="page" title="Configuration Manager Error">
-        <ConfigManagerPage />
+        <FleetPageWrapper>
+          <ConfigManagerPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -68,7 +81,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/connectivity',
     element: (
       <FleetErrorBoundary level="page" title="Connectivity Monitor Error">
-        <ConnectivityPage />
+        <FleetPageWrapper>
+          <ConnectivityPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -76,7 +91,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/keys',
     element: (
       <FleetErrorBoundary level="page" title="API Key Management Error">
-        <SensorKeysPage />
+        <FleetPageWrapper>
+          <SensorKeysPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },
@@ -84,7 +101,9 @@ export const fleetRoutes: RouteObject[] = [
     path: '/fleet/onboarding',
     element: (
       <FleetErrorBoundary level="page" title="Sensor Onboarding Error">
-        <OnboardingPage />
+        <FleetPageWrapper>
+          <OnboardingPage />
+        </FleetPageWrapper>
       </FleetErrorBoundary>
     ),
   },

@@ -33,6 +33,11 @@ import { generateSchemasData } from './generators/schemas';
 import { generateResponseTimesData } from './generators/responseTimes';
 import { generateErrorsData } from './generators/errors';
 import { generateAttackPatternsData } from './generators/attackPatterns';
+import {
+  generateSignalHorizonData,
+  type SignalHorizonData,
+} from './generators/signalHorizon';
+import { generateFleetData, type FleetData } from './generators/fleet';
 
 // Complete demo data snapshot for a scenario
 export interface DemoDataSnapshot {
@@ -82,6 +87,12 @@ export interface DemoDataSnapshot {
   // Metadata
   generatedAt: string;
   scenario: DemoScenario;
+
+  // Signal Horizon (main dashboard)
+  signalHorizon: SignalHorizonData;
+
+  // Fleet Operations
+  fleet: FleetData;
 }
 
 // Cache for static snapshots
@@ -146,6 +157,10 @@ function generateSnapshot(scenario: DemoScenario): DemoDataSnapshot {
   const errors = generateErrorsData(scenario);
   const attackPatterns = generateAttackPatternsData(scenario);
 
+  // Generate Signal Horizon and Fleet data
+  const signalHorizon = generateSignalHorizonData(scenario);
+  const fleet = generateFleetData(scenario);
+
   return {
     // Dashboard
     dashboard: dashboard.dashboard,
@@ -190,6 +205,12 @@ function generateSnapshot(scenario: DemoScenario): DemoDataSnapshot {
     // Alerts
     alerts: dashboard.alerts,
 
+    // Signal Horizon (main dashboard)
+    signalHorizon,
+
+    // Fleet Operations
+    fleet,
+
     // Metadata
     generatedAt: now,
     scenario,
@@ -199,3 +220,19 @@ function generateSnapshot(scenario: DemoScenario): DemoDataSnapshot {
 // Re-export types and utilities
 export { SCENARIO_PROFILES, getScenarioProfile, BASELINE } from './scenarios';
 export type { ScenarioProfile } from './scenarios';
+
+// Re-export Signal Horizon types
+export type { SignalHorizonData, SensorStats, AttackMapData } from './generators/signalHorizon';
+
+// Re-export Fleet types
+export type {
+  FleetData,
+  FleetSensor,
+  FleetMetrics,
+  FleetOverview,
+  FleetHealthData,
+  ConnectivityData,
+  FleetRulesData,
+  OnboardingData,
+  ApiKeysData,
+} from './generators/fleet';

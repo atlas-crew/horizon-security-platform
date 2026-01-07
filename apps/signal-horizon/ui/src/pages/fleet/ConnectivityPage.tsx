@@ -209,14 +209,14 @@ export function ConnectivityPage(): React.ReactElement {
     switch (status) {
       case 'operational':
       case 'connected':
-        return 'text-green-500';
+        return 'text-status-success';
       case 'degraded':
-        return 'text-yellow-500';
+        return 'text-status-warning';
       case 'down':
       case 'disconnected':
-        return 'text-red-500';
+        return 'text-status-error';
       default:
-        return 'text-gray-400';
+        return 'text-ink-muted';
     }
   };
 
@@ -224,14 +224,14 @@ export function ConnectivityPage(): React.ReactElement {
     switch (status) {
       case 'operational':
       case 'connected':
-        return 'bg-green-500/10';
+        return 'bg-status-success/10';
       case 'degraded':
-        return 'bg-yellow-500/10';
+        return 'bg-status-warning/10';
       case 'down':
       case 'disconnected':
-        return 'bg-red-500/10';
+        return 'bg-status-error/10';
       default:
-        return 'bg-gray-500/10';
+        return 'bg-surface-subtle';
     }
   };
 
@@ -239,12 +239,12 @@ export function ConnectivityPage(): React.ReactElement {
     switch (status) {
       case 'operational':
       case 'connected':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
+        return <CheckCircle className="w-4 h-4 text-status-success" />;
       case 'degraded':
-        return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+        return <AlertTriangle className="w-4 h-4 text-status-warning" />;
       case 'down':
       case 'disconnected':
-        return <XCircle className="w-4 h-4 text-red-500" />;
+        return <XCircle className="w-4 h-4 text-status-error" />;
       default:
         return null;
     }
@@ -254,8 +254,8 @@ export function ConnectivityPage(): React.ReactElement {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Connectivity Monitor</h1>
-        <p className="text-gray-400 mt-1">
+        <h1 className="text-2xl font-bold text-ink-primary">Connectivity Monitor</h1>
+        <p className="text-ink-secondary mt-1">
           Real-time network connectivity status and diagnostics
         </p>
       </div>
@@ -289,20 +289,20 @@ export function ConnectivityPage(): React.ReactElement {
       </div>
 
       {/* Atlas Crew Cloud Endpoints */}
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Atlas Crew Cloud Endpoints</h2>
+      <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-ink-primary mb-4">Atlas Crew Cloud Endpoints</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {cloudEndpoints.map((endpoint) => {
             const Icon = endpoint.icon;
             return (
               <div
                 key={endpoint.name}
-                className={`${getStatusBgColor(endpoint.status)} border border-gray-700 rounded-lg p-4`}
+                className={`${getStatusBgColor(endpoint.status)} border border-border-subtle rounded-lg p-4`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Icon className="w-5 h-5 text-gray-400" />
-                    <h3 className="font-medium text-white">{endpoint.name}</h3>
+                    <Icon className="w-5 h-5 text-ink-muted" />
+                    <h3 className="font-medium text-ink-primary">{endpoint.name}</h3>
                   </div>
                   <div className="flex items-center gap-1">
                     {getStatusIcon(endpoint.status)}
@@ -311,9 +311,9 @@ export function ConnectivityPage(): React.ReactElement {
                     </span>
                   </div>
                 </div>
-                <div className="space-y-1 text-sm text-gray-400">
+                <div className="space-y-1 text-sm text-ink-secondary">
                   <div>{endpoint.url}</div>
-                  <div>Latency: <span className="font-medium text-white">{endpoint.latency}ms</span></div>
+                  <div>Latency: <span className="font-medium text-ink-primary">{endpoint.latency}ms</span></div>
                 </div>
               </div>
             );
@@ -322,8 +322,8 @@ export function ConnectivityPage(): React.ReactElement {
       </div>
 
       {/* Connectivity Tests */}
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Connectivity Tests</h2>
+      <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-ink-primary mb-4">Connectivity Tests</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {connectivityTests.map((test) => {
             const Icon = test.icon;
@@ -333,17 +333,17 @@ export function ConnectivityPage(): React.ReactElement {
                 key={test.id}
                 onClick={() => handleRunTest(test.id)}
                 disabled={isRunning}
-                className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 text-left hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-surface-subtle border border-border-subtle rounded-lg p-4 text-left hover:bg-surface-card transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="flex items-start gap-3">
-                  <Icon className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <Icon className="w-5 h-5 text-ink-muted mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="font-medium text-white mb-1">{test.name}</h3>
-                    <p className="text-sm text-gray-400">{test.description}</p>
+                    <h3 className="font-medium text-ink-primary mb-1">{test.name}</h3>
+                    <p className="text-sm text-ink-secondary">{test.description}</p>
                     {isRunning && (
                       <div className="flex items-center gap-2 mt-2">
-                        <PlayCircle className="w-4 h-4 text-blue-400 animate-pulse" />
-                        <span className="text-xs text-blue-400">Running...</span>
+                        <PlayCircle className="w-4 h-4 text-accent-primary animate-pulse" />
+                        <span className="text-xs text-accent-primary">Running...</span>
                       </div>
                     )}
                   </div>
@@ -355,28 +355,28 @@ export function ConnectivityPage(): React.ReactElement {
       </div>
 
       {/* Sensor Connectivity Table */}
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
-        <div className="p-6 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">Sensor Connectivity Status</h2>
+      <div className="bg-surface-card border border-border-subtle rounded-lg overflow-hidden">
+        <div className="p-6 border-b border-border-subtle">
+          <h2 className="text-lg font-semibold text-ink-primary">Sensor Connectivity Status</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-700/50">
+            <thead className="bg-surface-subtle">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Sensor</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Latency</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Last Heartbeat</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Reconnects (24h)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Packet Loss</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Sensor</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Latency</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Last Heartbeat</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Reconnects (24h)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Packet Loss</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className="divide-y divide-border-subtle">
               {sensorConnectivity.map((sensor) => (
-                <tr key={sensor.sensorId} className="hover:bg-gray-700/30">
+                <tr key={sensor.sensorId} className="hover:bg-surface-subtle/50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{sensor.sensorName}</div>
-                    <div className="text-xs text-gray-400">{sensor.sensorId}</div>
+                    <div className="text-sm font-medium text-ink-primary">{sensor.sensorName}</div>
+                    <div className="text-xs text-ink-muted">{sensor.sensorId}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -386,21 +386,21 @@ export function ConnectivityPage(): React.ReactElement {
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">
                     {sensor.latency !== null ? `${sensor.latency}ms` : 'N/A'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                     {sensor.lastHeartbeat
                       ? new Date(sensor.lastHeartbeat).toLocaleString()
                       : 'Never'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${sensor.reconnects > 5 ? 'text-yellow-400' : 'text-white'}`}>
+                    <span className={`text-sm ${sensor.reconnects > 5 ? 'text-status-warning' : 'text-ink-primary'}`}>
                       {sensor.reconnects}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${sensor.packetLoss > 1 ? 'text-red-400' : 'text-white'}`}>
+                    <span className={`text-sm ${sensor.packetLoss > 1 ? 'text-status-error' : 'text-ink-primary'}`}>
                       {sensor.packetLoss.toFixed(1)}%
                     </span>
                   </td>
@@ -408,7 +408,7 @@ export function ConnectivityPage(): React.ReactElement {
               ))}
               {sensorConnectivity.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-ink-muted">
                     No sensor connectivity data available
                   </td>
                 </tr>
@@ -421,19 +421,19 @@ export function ConnectivityPage(): React.ReactElement {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latency Trend Chart */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Latency Trend (24h)</h2>
+        <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-ink-primary mb-4">Latency Trend (24h)</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={latencyTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="time" stroke="#9CA3AF" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border-subtle" />
+              <XAxis dataKey="time" className="text-ink-muted" tick={{ fontSize: 12 }} />
+              <YAxis className="text-ink-muted" tick={{ fontSize: 12 }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'var(--color-surface-card)',
+                  border: '1px solid var(--color-border-subtle)',
                   borderRadius: '0.5rem',
-                  color: '#F9FAFB',
+                  color: 'var(--color-ink-primary)',
                 }}
               />
               <Line
@@ -449,19 +449,19 @@ export function ConnectivityPage(): React.ReactElement {
         </div>
 
         {/* Connection Events Chart */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Connection Events (Weekly)</h2>
+        <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-ink-primary mb-4">Connection Events (Weekly)</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={connectionEventsData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="day" stroke="#9CA3AF" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border-subtle" />
+              <XAxis dataKey="day" className="text-ink-muted" tick={{ fontSize: 12 }} />
+              <YAxis className="text-ink-muted" tick={{ fontSize: 12 }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'var(--color-surface-card)',
+                  border: '1px solid var(--color-border-subtle)',
                   borderRadius: '0.5rem',
-                  color: '#F9FAFB',
+                  color: 'var(--color-ink-primary)',
                 }}
               />
               <Bar dataKey="reconnections" fill="#F59E0B" name="Reconnections" />

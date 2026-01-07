@@ -166,8 +166,7 @@ impl ApiHandler {
     pub fn handle_get_site(&self, hostname: &str) -> ApiResponse<SiteDetailResponse> {
         match &self.config_manager {
             Some(manager) => match manager.get_site(hostname) {
-                Ok(Some(site)) => ApiResponse::ok(site),
-                Ok(None) => ApiResponse::err(format!("Site '{}' not found", hostname)),
+                Ok(site) => ApiResponse::ok(site),
                 Err(e) => ApiResponse::err(e.to_string()),
             },
             None => ApiResponse::err("Configuration manager not available"),

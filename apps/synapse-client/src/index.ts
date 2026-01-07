@@ -2,6 +2,9 @@
  * Synapse Client
  * TypeScript client and CLI for the Synapse (risk-server) API
  *
+ * This package re-exports from @edge-lab/synapse-api for backward compatibility.
+ * For new projects, consider importing directly from @edge-lab/synapse-api.
+ *
  * @example
  * ```typescript
  * import { SynapseClient } from 'synapse-client';
@@ -12,5 +15,5 @@
  * ```
  */
 
-export * from './types.js';
-export * from './client.js';
+// Re-export everything from the standalone package
+export * from '@edge-lab/synapse-api';

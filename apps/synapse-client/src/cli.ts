@@ -4,8 +4,8 @@
  * Command-line interface for the Synapse (risk-server) API
  */
 
-import { SynapseClient } from './client.js';
-import type { EvaluateRequest, RuleDefinition } from './types.js';
+import { SynapseClient } from '@edge-lab/synapse-api';
+import type { EvaluateRequest, RuleDefinition } from '@edge-lab/synapse-api';
 
 const VERSION = '0.1.0';
 

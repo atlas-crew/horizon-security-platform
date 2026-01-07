@@ -64,6 +64,10 @@ zeroize = "1.7"         # Secure memory clearing (SEC-010)
 governor = "0.6"        # Rate limiting (SEC-009)
 chrono = { version = "0.4", features = ["serde"] }  # Timestamps for audit logging
 
+# Phase 3: Feature Migration - JA4 Fingerprinting
+sha2 = "0.10"           # SHA256 for fingerprint hashing
+hex = "0.4"             # Hex encoding for hash output
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"

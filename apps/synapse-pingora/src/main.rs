@@ -43,6 +43,11 @@ use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
 use synapse_pingora::metrics::MetricsRegistry;
 
+// Phase 3: Fingerprinting (Feature Migration from risk-server)
+use synapse_pingora::fingerprint::{
+    ClientFingerprint, HttpHeaders, extract_client_fingerprint,
+};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -431,6 +436,8 @@ pub struct RequestContext {
     client_ip: Option<String>,
     /// Total body size seen (for body inspection)
     body_bytes_seen: usize,
+    /// Phase 3: Client fingerprint (JA4 + JA4H)
+    fingerprint: Option<ClientFingerprint>,
 }
 
 /// Rate limiter for early_request_filter
@@ -509,6 +516,7 @@ impl ProxyHttp for SynapseProxy {
             backend_idx: 0,
             client_ip: None,
             body_bytes_seen: 0,
+            fingerprint: None,
         }
     }
 
@@ -557,6 +565,48 @@ impl ProxyHttp for SynapseProxy {
         let uri = req_header.uri.to_string();
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+        // Phase 3: Extract client fingerprint (JA4 + JA4H)
+        let ja4_header = req_header
+            .headers
+            .get("x-ja4-fingerprint")
+            .and_then(|v| v.to_str().ok());
+
+        let http_version = format!("{:?}", req_header.version);
+        let http_version_str = match http_version.as_str() {
+            "HTTP_10" => "1.0",
+            "HTTP_11" => "1.1",
+            "HTTP_2" => "2.0",
+            "HTTP_3" => "3.0",
+            _ => "1.1",
+        };
+
+        let http_headers = HttpHeaders {
+            headers: &headers,
+            method,
+            http_version: http_version_str,
+        };
+
+        let fingerprint = extract_client_fingerprint(ja4_header, &http_headers);
+
+        // Log fingerprint info for debugging and validation
+        if let Some(ref ja4) = fingerprint.ja4 {
+            debug!(
+                "JA4 fingerprint: {} (tls={}, protocol={}, alpn={})",
+                ja4.raw, ja4.tls_version, ja4.protocol, ja4.alpn
+            );
+        }
+        debug!(
+            "JA4H fingerprint: {} (method={}, http={}, cookie={}, referer={})",
+            fingerprint.ja4h.raw,
+            fingerprint.ja4h.method,
+            fingerprint.ja4h.http_version,
+            fingerprint.ja4h.has_cookie,
+            fingerprint.ja4h.has_referer
+        );
+        debug!("Combined fingerprint hash: {}", fingerprint.combined_hash);
+
+        ctx.fingerprint = Some(fingerprint);
 
         // Run detection using the real libsynapse engine
         let result = DetectionEngine::analyze(method, &uri, &headers, client_ip);
@@ -694,6 +744,22 @@ impl ProxyHttp for SynapseProxy {
             upstream_request.insert_header("X-Synapse-Client-IP", ip)?;
         }
 
+        // Phase 3: Add fingerprint headers for dual-running validation
+        // These headers allow risk-server to compare its fingerprint calculations
+        // with Pingora's calculations during the migration period.
+        if let Some(ref fp) = ctx.fingerprint {
+            // JA4H fingerprint (always available, generated from HTTP headers)
+            upstream_request.insert_header("X-JA4H-Fingerprint-Pingora", &fp.ja4h.raw)?;
+
+            // JA4 fingerprint (only if X-JA4-Fingerprint header was provided)
+            if let Some(ref ja4) = fp.ja4 {
+                upstream_request.insert_header("X-JA4-Fingerprint-Pingora", &ja4.raw)?;
+            }
+
+            // Combined fingerprint hash (for entity correlation)
+            upstream_request.insert_header("X-Fingerprint-Combined-Pingora", &fp.combined_hash)?;
+        }
+
         Ok(())
     }
 
@@ -718,15 +784,23 @@ impl ProxyHttp for SynapseProxy {
 
         let blocked = ctx.detection.as_ref().map(|d| d.blocked).unwrap_or(false);
 
+        // Phase 3: Include fingerprint in access log
+        let fp_hash = ctx
+            .fingerprint
+            .as_ref()
+            .map(|fp| fp.combined_hash.as_str())
+            .unwrap_or("-");
+
         info!(
-            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} backend={}",
+            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} backend={} fp={}",
             session.req_header().method,
             session.req_header().uri,
             status,
             total_time.as_micros(),
             detection_time,
             blocked,
-            ctx.backend_idx
+            ctx.backend_idx,
+            fp_hash
         );
     }
 }

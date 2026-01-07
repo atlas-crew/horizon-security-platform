@@ -23,6 +23,7 @@
 //!
 //! - [`fingerprint`] - JA4/JA4H TLS and HTTP fingerprinting
 //! - [`entity`] - Per-IP entity tracking with risk scoring and decay
+//! - [`tarpit`] - Progressive response delays for slow-drip defense
 
 // Phase 1: Core Features
 pub mod config;
@@ -42,6 +43,7 @@ pub mod reload;
 // Phase 3: Feature Migration from risk-server
 pub mod fingerprint;
 pub mod entity;
+pub mod tarpit;
 
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
@@ -68,4 +70,8 @@ pub use fingerprint::{
 pub use entity::{
     EntityConfig, EntityState, EntityManager,
     BlockDecision, RiskApplication, EntitySnapshot, EntityMetrics,
+};
+pub use tarpit::{
+    TarpitConfig, TarpitState, TarpitStats,
+    TarpitManager, TarpitDecision,
 };

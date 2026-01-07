@@ -70,6 +70,8 @@ pub struct Config {
     pub logging: LoggingConfig,
     #[serde(default)]
     pub detection: DetectionConfig,
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 impl Default for Config {
@@ -80,6 +82,7 @@ impl Default for Config {
             rate_limit: RateLimitConfig::default(),
             logging: LoggingConfig::default(),
             detection: DetectionConfig::default(),
+            tls: TlsConfig::default(),
         }
     }
 }
@@ -231,6 +234,53 @@ impl Default for DetectionConfig {
             action: default_action(),
             block_status: default_block_status(),
             rules_path: default_rules_path(),
+        }
+    }
+}
+
+/// TLS/HTTPS configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct TlsConfig {
+    /// Enable TLS on the proxy listener
+    #[serde(default)]
+    pub enabled: bool,
+    /// Path to certificate file (PEM format)
+    #[serde(default)]
+    pub cert_path: String,
+    /// Path to private key file (PEM format)
+    #[serde(default)]
+    pub key_path: String,
+    /// Per-domain certificates (optional)
+    /// Maps domain -> {cert_path, key_path}
+    #[serde(default)]
+    pub per_domain_certs: Vec<PerDomainCert>,
+    /// Minimum TLS version: "1.2" or "1.3"
+    #[serde(default = "default_tls_version")]
+    pub min_version: String,
+}
+
+fn default_tls_version() -> String {
+    "1.2".to_string()
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PerDomainCert {
+    /// Domain name (or *.example.com for wildcard)
+    pub domain: String,
+    /// Path to certificate file
+    pub cert_path: String,
+    /// Path to private key file
+    pub key_path: String,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_path: String::new(),
+            key_path: String::new(),
+            per_domain_certs: Vec::new(),
+            min_version: default_tls_version(),
         }
     }
 }
@@ -464,15 +514,35 @@ pub struct SynapseProxy {
     rps_limit: usize,
     /// Phase 3: Thread-safe entity manager for per-IP tracking
     entity_manager: Arc<EntityManager>,
+    /// Health checker for /_sensor/status endpoint
+    health_checker: Arc<HealthChecker>,
+    /// Metrics registry for collecting statistics
+    metrics_registry: Arc<MetricsRegistry>,
 }
 
 impl SynapseProxy {
     pub fn new(backends: Vec<(String, u16)>, rps_limit: usize) -> Self {
+        Self::with_health(
+            backends,
+            rps_limit,
+            Arc::new(HealthChecker::default()),
+            Arc::new(MetricsRegistry::new()),
+        )
+    }
+
+    pub fn with_health(
+        backends: Vec<(String, u16)>,
+        rps_limit: usize,
+        health_checker: Arc<HealthChecker>,
+        metrics_registry: Arc<MetricsRegistry>,
+    ) -> Self {
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
+            health_checker,
+            metrics_registry,
         }
     }
 
@@ -482,6 +552,8 @@ impl SynapseProxy {
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(entity_config)),
+            health_checker: Arc::new(HealthChecker::default()),
+            metrics_registry: Arc::new(MetricsRegistry::new()),
         }
     }
 
@@ -588,6 +660,33 @@ impl ProxyHttp for SynapseProxy {
         let uri = req_header.uri.to_string();
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+        // ===== Phase 6: Health Check Endpoint =====
+        // Handle /_sensor/status endpoint for load balancer health checks
+        if method == "GET" && uri == "/_sensor/status" {
+            let health_response = self.health_checker.check();
+            let http_status = health_response.status.http_status();
+
+            // Build JSON response body
+            let response_body = serde_json::to_vec(&health_response)
+                .unwrap_or_else(|_| b"{\"status\":\"error\"}".to_vec());
+
+            let mut resp = ResponseHeader::build(http_status, None)?;
+            resp.insert_header("content-type", "application/json")?;
+
+            session.write_response_header(Box::new(resp), false).await?;
+            session
+                .write_response_body(
+                    Some(Bytes::from(response_body)),
+                    true,
+                )
+                .await?;
+
+            debug!("Health check endpoint accessed, returning {} (status: {:?})",
+                http_status, health_response.status);
+            return Ok(true); // We handled this request
+        }
+        // ===== End Health Check Endpoint =====
 
         // Phase 3: Extract client fingerprint (JA4 + JA4H)
         let ja4_header = req_header
@@ -1197,5 +1296,119 @@ mod tests {
             iterations,
             DetectionEngine::rule_count()
         );
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Phase 6: Health Endpoint Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_health_checker_default_status() {
+        // Test that HealthChecker provides a default status
+        let checker = HealthChecker::default();
+        let response = checker.check();
+
+        // Default status should be Healthy (no backends registered yet)
+        assert_eq!(response.status, synapse_pingora::health::HealthStatus::Healthy,
+            "Default health status should be Healthy");
+    }
+
+    #[test]
+    fn test_health_status_http_codes() {
+        // Test HTTP status codes for different health states
+        assert_eq!(
+            synapse_pingora::health::HealthStatus::Healthy.http_status(),
+            200,
+            "Healthy status should return HTTP 200"
+        );
+
+        assert_eq!(
+            synapse_pingora::health::HealthStatus::Degraded.http_status(),
+            200,
+            "Degraded status should still return HTTP 200"
+        );
+
+        assert_eq!(
+            synapse_pingora::health::HealthStatus::Unhealthy.http_status(),
+            503,
+            "Unhealthy status should return HTTP 503"
+        );
+    }
+
+    #[test]
+    fn test_tls_config_default() {
+        // Test that TLS config has sensible defaults
+        let config = TlsConfig::default();
+
+        assert!(!config.enabled, "TLS should be disabled by default");
+        assert!(config.cert_path.is_empty(), "Certificate path should be empty by default");
+        assert!(config.key_path.is_empty(), "Key path should be empty by default");
+        assert_eq!(config.min_version, "1.2", "Minimum TLS version should default to 1.2");
+        assert!(config.per_domain_certs.is_empty(), "Per-domain certs should be empty by default");
+    }
+
+    #[test]
+    fn test_config_loads_with_tls() {
+        // Test that Config can be deserialized with TLS settings
+        let yaml = r#"
+server:
+  listen: "0.0.0.0:6190"
+  admin_listen: "0.0.0.0:6191"
+upstreams:
+  - host: "127.0.0.1"
+    port: 8080
+rate_limit:
+  rps: 10000
+  enabled: true
+logging:
+  level: "info"
+detection:
+  sqli: true
+  xss: true
+tls:
+  enabled: false
+  min_version: "1.3"
+"#;
+        let config: Config = serde_yaml::from_str(yaml)
+            .expect("Failed to parse config with TLS");
+
+        assert!(!config.tls.enabled, "TLS should be disabled in test config");
+        assert_eq!(config.tls.min_version, "1.3", "TLS version should be 1.3");
+    }
+
+    #[test]
+    fn test_synapse_proxy_health_integration() {
+        // Test that SynapseProxy can be instantiated with health checker
+        let backends = vec![("127.0.0.1".to_string(), 8080)];
+        let health_checker = Arc::new(HealthChecker::default());
+        let metrics_registry = Arc::new(MetricsRegistry::new());
+
+        let proxy = SynapseProxy::with_health(
+            backends.clone(),
+            10000,
+            Arc::clone(&health_checker),
+            Arc::clone(&metrics_registry),
+        );
+
+        // Verify health status is accessible through proxy
+        let response = proxy.health_checker.check();
+        assert_eq!(response.status, synapse_pingora::health::HealthStatus::Healthy,
+            "Proxy should have healthy status by default");
+    }
+
+    #[test]
+    fn test_per_domain_cert_structure() {
+        // Test that PerDomainCert can be deserialized from YAML
+        let yaml = r#"
+domain: "*.example.com"
+cert_path: "/etc/certs/example.pem"
+key_path: "/etc/keys/example.key"
+"#;
+        let cert_config: PerDomainCert = serde_yaml::from_str(yaml)
+            .expect("Failed to parse per-domain cert config");
+
+        assert_eq!(cert_config.domain, "*.example.com");
+        assert_eq!(cert_config.cert_path, "/etc/certs/example.pem");
+        assert_eq!(cert_config.key_path, "/etc/keys/example.key");
     }
 }

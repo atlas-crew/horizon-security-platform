@@ -41,6 +41,7 @@ pub mod vhost;
 
 // Phase 2: Management Features
 pub mod access;
+pub mod admin_server;
 pub mod api;
 pub mod metrics;
 pub mod ratelimit;

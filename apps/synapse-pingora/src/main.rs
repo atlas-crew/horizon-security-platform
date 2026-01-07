@@ -23,7 +23,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use synapse::{Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse, Verdict as SynapseVerdict};
-use log::{debug, info, warn};
+use log::{debug, info, warn, error};
 use once_cell::sync::Lazy;
 use pingora_core::prelude::*;
 use pingora_http::{RequestHeader, ResponseHeader};
@@ -31,9 +31,17 @@ use pingora_limits::rate::Rate;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::Deserialize;
 use std::fs;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
+
+// Admin API imports
+use synapse_pingora::admin_server::start_admin_server;
+use synapse_pingora::api::ApiHandler;
+use synapse_pingora::health::HealthChecker;
+use synapse_pingora::metrics::MetricsRegistry;
 
 // ============================================================================
 // Configuration
@@ -70,6 +78,8 @@ impl Default for Config {
 pub struct ServerConfig {
     #[serde(default = "default_listen")]
     pub listen: String,
+    #[serde(default = "default_admin_listen")]
+    pub admin_listen: String,
     #[serde(default)]
     pub workers: usize,
 }
@@ -78,10 +88,15 @@ fn default_listen() -> String {
     "0.0.0.0:6190".to_string()
 }
 
+fn default_admin_listen() -> String {
+    "0.0.0.0:6191".to_string()
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             listen: default_listen(),
+            admin_listen: default_admin_listen(),
             workers: 0,
         }
     }
@@ -751,6 +766,38 @@ fn main() {
         .map(|u| (u.host.clone(), u.port))
         .collect();
 
+    // Create shared health checker and metrics registry for admin API
+    let health_checker = Arc::new(HealthChecker::default());
+    let metrics_registry = Arc::new(MetricsRegistry::new());
+
+    // Build the API handler
+    let api_handler = Arc::new(
+        ApiHandler::builder()
+            .health(Arc::clone(&health_checker))
+            .metrics(Arc::clone(&metrics_registry))
+            .build()
+    );
+
+    // Start admin HTTP server in a separate thread with its own tokio runtime
+    let admin_addr: SocketAddr = config.server.admin_listen.parse()
+        .expect("Invalid admin_listen address");
+    let admin_handler = Arc::clone(&api_handler);
+
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create admin runtime");
+
+        rt.block_on(async {
+            if let Err(e) = start_admin_server(admin_addr, admin_handler).await {
+                error!("Admin server error: {}", e);
+            }
+        });
+    });
+
+    info!("Admin API server starting on {}", config.server.admin_listen);
+
     // Create Pingora server
     let mut server = Server::new(None).expect("Failed to create server");
     server.bootstrap();
@@ -764,6 +811,8 @@ fn main() {
     server.add_service(proxy_service);
 
     info!("Synapse-Pingora ready");
+    info!("  Proxy:  {}", config.server.listen);
+    info!("  Admin:  {}", config.server.admin_listen);
     info!("Graceful reload: pkill -SIGQUIT synapse-pingora && ./synapse-pingora -u");
     server.run_forever();
 }

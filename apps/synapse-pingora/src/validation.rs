@@ -283,6 +283,91 @@ pub fn validate_tls_config(
     Ok(())
 }
 
+/// Validates a hostname (alias for domain validation).
+pub fn validate_hostname(hostname: &str) -> ValidationResult<()> {
+    validate_domain_name(hostname)
+}
+
+/// Validates an upstream address (host:port).
+pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
+    if upstream.is_empty() {
+        return Err(ValidationError::InvalidDomain("empty upstream".to_string()));
+    }
+    
+    // Check for port
+    let parts: Vec<&str> = upstream.split(':').collect();
+    if parts.len() != 2 {
+         return Err(ValidationError::InvalidDomain(format!("upstream must be host:port, got {}", upstream)));
+    }
+    
+    let host = parts[0];
+    let port_str = parts[1];
+    
+    // Validate host part (can be IP or domain)
+    if validate_domain_name(host).is_err() {
+        // Simple check if it's a valid IP
+        if host.parse::<std::net::IpAddr>().is_err() {
+             return Err(ValidationError::InvalidDomain(format!("invalid host in upstream: {}", host)));
+        }
+    }
+    
+    // Validate port
+    match port_str.parse::<u16>() {
+        Ok(p) if p > 0 => Ok(()),
+        _ => Err(ValidationError::InvalidDomain(format!("invalid port in upstream: {}", port_str))),
+    }
+}
+
+/// Validates a CIDR block string.
+pub fn validate_cidr(cidr: &str) -> ValidationResult<()> {
+    // Simple parsing check using ipnetwork crate if available, or manual check
+    // Since we don't want to add more deps if possible, let's do basic parsing
+    let parts: Vec<&str> = cidr.split('/').collect();
+    if parts.len() != 2 {
+        return Err(ValidationError::InvalidDomain(format!("invalid CIDR format: {}", cidr)));
+    }
+    
+    let ip_str = parts[0];
+    let prefix_str = parts[1];
+    
+    let is_ipv4 = ip_str.contains('.');
+    if ip_str.parse::<std::net::IpAddr>().is_err() {
+        return Err(ValidationError::InvalidDomain(format!("invalid IP in CIDR: {}", ip_str)));
+    }
+    
+    match prefix_str.parse::<u8>() {
+        Ok(p) => {
+            if is_ipv4 && p > 32 {
+                return Err(ValidationError::InvalidDomain(format!("IPv4 prefix too large: {}", p)));
+            }
+            if !is_ipv4 && p > 128 {
+                return Err(ValidationError::InvalidDomain(format!("IPv6 prefix too large: {}", p)));
+            }
+            Ok(())
+        },
+        Err(_) => Err(ValidationError::InvalidDomain(format!("invalid prefix in CIDR: {}", prefix_str))),
+    }
+}
+
+/// Validates WAF risk threshold (0-100).
+pub fn validate_waf_threshold(threshold: f64) -> ValidationResult<()> {
+    if threshold < 0.0 || threshold > 100.0 {
+        return Err(ValidationError::InvalidDomain(format!("WAF threshold must be 0-100, got {}", threshold)));
+    }
+    Ok(())
+}
+
+/// Validates rate limit configuration.
+pub fn validate_rate_limit(requests: u64, window: u64) -> ValidationResult<()> {
+    if requests == 0 {
+        return Err(ValidationError::InvalidDomain("rate limit requests must be > 0".to_string()));
+    }
+    if window == 0 {
+        return Err(ValidationError::InvalidDomain("rate limit window must be > 0".to_string()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

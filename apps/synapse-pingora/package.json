@@ -1,0 +1,13 @@
+{
+  "name": "synapse-pingora",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench:payloads": "node ../load-testing/scripts/bench-generate-payloads.mjs",
+    "bench:heavy": "node ../load-testing/scripts/bench-generate-heavy.mjs",
+    "bench:setup": "npm run bench:payloads && npm run bench:heavy",
+    "bench": "cargo bench",
+    "test": "cargo test"
+  }
+}

@@ -41,5 +41,6 @@ pub use scanner::{
     // Validators
     validate_credit_card,
     validate_ssn,
+    validate_phone,
     validate_iban,
 };

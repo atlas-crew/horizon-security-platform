@@ -83,7 +83,7 @@ pub use tarpit::{
 pub use dlp::{
     DlpConfig, DlpScanner, DlpMatch, DlpStats, ScanResult,
     SensitiveDataType, PatternSeverity,
-    validate_credit_card, validate_ssn, validate_iban,
+    validate_credit_card, validate_ssn, validate_phone, validate_iban,
 };
 
 // Re-export validation utilities

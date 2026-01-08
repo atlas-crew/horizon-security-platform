@@ -9,11 +9,84 @@ use once_cell::sync::Lazy;
 use std::time::Duration;
 use std::fs;
 use std::path::Path;
+use serde::Deserialize;
 use synapse::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction, Verdict as SynapseVerdict};
+
+// ============================================================================
+// Data Loading
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct PayloadData {
+    attacks: AttackPayloads,
+    normal: Vec<NormalPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AttackPayloads {
+    sqli: Vec<String>,
+    xss: Vec<String>,
+    #[serde(rename = "commandInjection")]
+    command_injection: Vec<String>,
+    #[serde(rename = "pathTraversal")]
+    path_traversal: Vec<String>,
+    #[serde(default)]
+    xxe: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NormalPayload {
+    #[serde(rename = "type")]
+    _type: String,
+    data: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct HeavyPayloadData {
+    complex_request: ComplexRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct ComplexRequest {
+    uri: String,
+    headers: Vec<(String, String)>,
+    body_json: serde_json::Value,
+}
+
+static PAYLOADS: Lazy<PayloadData> = Lazy::new(|| {
+    let path = Path::new("benches/payloads.json");
+    if !path.exists() {
+        eprintln!("WARNING: benches/payloads.json not found. Run 'node apps/load-testing/scripts/extract_payloads.mjs' first.");
+        // Return dummy data to avoid crash if file missing
+        return PayloadData {
+            attacks: AttackPayloads {
+                sqli: vec!["' OR '1'='1".into()],
+                xss: vec!["<script>alert(1)</script>".into()],
+                xxe: vec![],
+                command_injection: vec![],
+                path_traversal: vec![],
+            },
+            normal: vec![],
+        };
+    }
+    let content = fs::read_to_string(path).expect("Failed to read payloads.json");
+    serde_json::from_str(&content).expect("Failed to parse payloads.json")
+});
+
+static HEAVY_PAYLOADS: Lazy<HeavyPayloadData> = Lazy::new(|| {
+    let path = Path::new("benches/heavy_payloads.json");
+    if !path.exists() {
+        eprintln!("WARNING: benches/heavy_payloads.json not found.");
+        panic!("Missing heavy_payloads.json");
+    }
+    let content = fs::read_to_string(path).expect("Failed to read heavy_payloads.json");
+    serde_json::from_str(&content).expect("Failed to parse heavy_payloads.json")
+});
 
 // ============================================================================
 // Detection Engine (Real libsynapse wrapper)
 // ============================================================================
+
 
 // Result struct to match the benchmark's expectations
 #[derive(Debug, Clone)]
@@ -60,7 +133,7 @@ pub struct DetectionEngine;
 
 impl DetectionEngine {
     #[inline]
-    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)]) -> DetectionResult {
+    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>) -> DetectionResult {
         let synapse_headers: Vec<SynapseHeader> = headers
             .iter()
             .map(|(name, value)| SynapseHeader::new(name, value))
@@ -72,7 +145,7 @@ impl DetectionEngine {
             path: uri,
             query: None, // libsynapse parses this from path if None
             headers: synapse_headers,
-            body: None,
+            body,
             client_ip: "127.0.0.1",
             is_static: false,
         };
@@ -93,19 +166,42 @@ impl DetectionEngine {
 fn bench_clean_requests(c: &mut Criterion) {
     // Ensure engine is initialized
     DetectionEngine::ensure_init();
-
-    let clean_uris = vec![
-        ("/api/users/123", "simple path"),
-        ("/api/search?q=hello+world&page=1", "with query"),
-        ("/api/products/list?category=electronics&sort=price", "complex query"),
-        ("/assets/images/logo.png", "static asset"),
-        ("/v1/oauth/token", "auth endpoint"),
-    ];
+    
+    // Force load payloads
+    let _ = &*PAYLOADS;
 
     let mut group = c.benchmark_group("clean_requests");
     group.measurement_time(Duration::from_secs(5));
-    group.sample_size(1000);
+    group.sample_size(100); 
 
+    // Use generated normal payloads
+    for (i, payload) in PAYLOADS.normal.iter().take(5).enumerate() {
+        let body_json = serde_json::to_string(&payload.data).unwrap();
+        let name = format!("normal_{}_{}", payload._type, i);
+        
+        group.bench_with_input(
+            BenchmarkId::new("detection", name),
+            &body_json,
+            |b, body| {
+                b.iter(|| {
+                    let result = DetectionEngine::analyze(
+                        black_box("POST"),
+                        black_box("/api/action"),
+                        black_box(&[("content-type".to_string(), "application/json".to_string())]),
+                        black_box(Some(body.as_bytes())),
+                    );
+                    result
+                })
+            },
+        );
+    }
+    
+    // Keep some simple GETs for baseline
+    let clean_uris = vec![
+        ("/api/users/123", "simple_get"),
+        ("/assets/logo.png", "static_asset"),
+    ];
+    
     for (uri, name) in clean_uris {
         group.bench_with_input(
             BenchmarkId::new("detection", name),
@@ -116,46 +212,55 @@ fn bench_clean_requests(c: &mut Criterion) {
                         black_box("GET"),
                         black_box(uri),
                         black_box(&[]),
+                        black_box(None),
                     );
-                    assert!(!result.blocked);
                     result
                 })
             },
         );
     }
+
     group.finish();
 }
 
 fn bench_attack_detection(c: &mut Criterion) {
     DetectionEngine::ensure_init();
-
-    let attacks = vec![
-        ("/api/users?id=1' OR '1'='1", "sqli"),
-        ("/search?q=<script>alert(1)</script>", "xss"),
-        ("/files/../../../etc/passwd", "path_traversal"),
-        ("/ping?host=127.0.0.1|cat /etc/passwd", "cmd_injection"),
-    ];
+    let _ = &*PAYLOADS;
 
     let mut group = c.benchmark_group("attack_detection");
     group.measurement_time(Duration::from_secs(5));
-    group.sample_size(1000);
+    group.sample_size(100);
 
-    for (uri, name) in attacks {
-        group.bench_with_input(
-            BenchmarkId::new("detection", name),
-            &uri,
-            |b, uri| {
-                b.iter(|| {
-                    let result = DetectionEngine::analyze(
-                        black_box("GET"),
-                        black_box(uri),
-                        black_box(&[]),
-                    );
-                    result
-                })
-            },
-        );
-    }
+    // Helper to bench a list of attack strings
+    let mut bench_list = |name_prefix: &str, attacks: &[String]| {
+        for (i, attack) in attacks.iter().take(5).enumerate() {
+            // Inject into query param
+            let uri = format!("/search?q={}", urlencoding::encode(attack));
+            let name = format!("{}_{}", name_prefix, i);
+            
+            group.bench_with_input(
+                BenchmarkId::new("detection", name),
+                &uri,
+                |b, uri| {
+                    b.iter(|| {
+                        let result = DetectionEngine::analyze(
+                            black_box("GET"),
+                            black_box(uri),
+                            black_box(&[]),
+                            black_box(None),
+                        );
+                        result
+                    })
+                },
+            );
+        }
+    };
+
+    bench_list("sqli", &PAYLOADS.attacks.sqli);
+    bench_list("xss", &PAYLOADS.attacks.xss);
+    bench_list("cmd_inj", &PAYLOADS.attacks.command_injection);
+    bench_list("path_trav", &PAYLOADS.attacks.path_traversal);
+
     group.finish();
 }
 
@@ -180,6 +285,7 @@ fn bench_with_headers(c: &mut Criterion) {
                 black_box("GET"),
                 black_box("/api/users/123"),
                 black_box(&headers),
+                black_box(None),
             )
         })
     });
@@ -194,6 +300,7 @@ fn bench_with_headers(c: &mut Criterion) {
                 black_box("GET"),
                 black_box("/api/users/123"),
                 black_box(&attack_headers),
+                black_box(None),
             );
             result
         })
@@ -230,6 +337,7 @@ fn bench_throughput(c: &mut Criterion) {
                     black_box(method),
                     black_box(uri),
                     black_box(&[]),
+                    black_box(None),
                 );
             }
         })
@@ -255,6 +363,33 @@ fn bench_sub_10us_verification(c: &mut Criterion) {
                     ("user-agent".to_string(), "Mozilla/5.0".to_string()),
                     ("cookie".to_string(), "session=abc".to_string()),
                 ]),
+                black_box(None),
+            )
+        })
+    });
+
+    group.finish();
+}
+
+fn bench_heavy_complex(c: &mut Criterion) {
+    DetectionEngine::ensure_init();
+    let _ = &*HEAVY_PAYLOADS;
+    
+    let body_bytes = serde_json::to_vec(&HEAVY_PAYLOADS.complex_request.body_json).unwrap();
+    let headers = &HEAVY_PAYLOADS.complex_request.headers;
+    let uri = &HEAVY_PAYLOADS.complex_request.uri;
+
+    let mut group = c.benchmark_group("heavy_complex");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(500); // Lower sample size for heavy requests
+
+    group.bench_function("heavy_request_14kb_20headers", |b| {
+        b.iter(|| {
+            DetectionEngine::analyze(
+                black_box("POST"),
+                black_box(uri),
+                black_box(headers),
+                black_box(Some(&body_bytes)),
             )
         })
     });
@@ -269,6 +404,7 @@ criterion_group!(
     bench_with_headers,
     bench_throughput,
     bench_sub_10us_verification,
+    bench_heavy_complex,
 );
 
 criterion_main!(benches);

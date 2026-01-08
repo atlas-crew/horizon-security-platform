@@ -2469,6 +2469,7 @@ dependencies = [
  "hex",
  "http",
  "instant",
+ "lazy_static",
  "libsynapse",
  "log",
  "once_cell",

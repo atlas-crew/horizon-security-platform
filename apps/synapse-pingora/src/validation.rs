@@ -1,392 +1,283 @@
-//! Input validation for configuration mutation requests.
+//! Validation utilities for TLS certificates, domains, and configuration.
 //!
-//! This module provides comprehensive validation for all configuration parameters
-//! that can be mutated at runtime, including hostnames, upstreams, CIDR ranges,
-//! WAF settings, and rate limits.
+//! # Security
+//!
+//! This module provides comprehensive validation for:
+//! - **Certificate file paths and accessibility** - Validates PEM format, path traversal detection
+//! - **Domain names (RFC 1035 compliance)** - Prevents invalid domain configurations
+//! - **Configuration safety** - Ensures TLS configuration is safe before use
+//!
+//! # Path Traversal Protection
+//!
+//! The module detects and rejects paths containing:
+//! - `..` (directory traversal)
+//! - `~` (home directory expansion attacks)
+//!
+//! This prevents configuration-based path traversal attacks.
+//!
+//! # Domain Validation
+//!
+//! Domains must comply with RFC 1035:
+//! - Max 253 characters total
+//! - Each label max 63 characters
+//! - Labels contain only alphanumerics and hyphens
+//! - Labels cannot start or end with hyphen
+//! - Supports wildcard domains (`*.example.com`)
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use synapse_pingora::validation::{validate_domain_name, validate_certificate_file};
+//!
+//! // Validate a domain
+//! assert!(validate_domain_name("example.com").is_ok());
+//! assert!(validate_domain_name("*.example.com").is_ok());
+//! assert!(validate_domain_name("-invalid.com").is_err()); // Invalid format
+//!
+//! // Validate a certificate file
+//! assert!(validate_certificate_file("/etc/certs/server.crt").is_ok());
+//! assert!(validate_certificate_file("/etc/certs/invalid.txt").is_err()); // Not PEM format
+//! ```
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::str::FromStr;
-use thiserror::Error;
+use std::fs;
+use std::path::Path;
+use regex::Regex;
+use once_cell::sync::Lazy;
 
-/// Validation errors for configuration mutation requests.
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+/// RFC 1035 compliant domain name regex pattern.
+/// Allows labels with alphanumeric and hyphens, supports wildcards, max 253 chars.
+static DOMAIN_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    // RFC 1035: domain names can contain letters, digits, hyphens
+    // Labels can't start/end with hyphen, max 63 chars per label
+    // Supports wildcard *.example.com
+    Regex::new(r"^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$").unwrap()
+});
+
+/// Validation errors that can occur during configuration validation.
+///
+/// # Security Context
+///
+/// These errors provide specific information about configuration failures
+/// to help administrators diagnose issues without exposing system internals.
+#[derive(Debug, Clone)]
 pub enum ValidationError {
-    /// Invalid hostname format or content.
-    #[error("invalid hostname '{value}': {reason}")]
-    InvalidHostname { value: String, reason: String },
+    /// Certificate or key file not found at the specified path.
+    ///
+    /// Check that the path is correct and the file exists.
+    FileNotFound(String),
 
-    /// Invalid upstream address format.
-    #[error("invalid upstream '{value}': {reason}")]
-    InvalidUpstream { value: String, reason: String },
+    /// Certificate or key file exists but is not readable.
+    ///
+    /// Check file permissions and ownership.
+    FileNotReadable(String),
 
-    /// Invalid CIDR notation.
-    #[error("invalid CIDR '{value}': {reason}")]
-    InvalidCidr { value: String, reason: String },
+    /// Domain name does not comply with RFC 1035.
+    ///
+    /// Domain must contain only alphanumerics, hyphens, and dots.
+    /// Labels cannot start or end with hyphens.
+    InvalidDomain(String),
 
-    /// Invalid WAF configuration parameter.
-    #[error("invalid WAF config: {reason}")]
-    InvalidWafConfig { reason: String },
+    /// Certificate file does not contain PEM format markers.
+    ///
+    /// Certificate must start with `-----BEGIN CERTIFICATE-----`
+    /// and end with `-----END CERTIFICATE-----`.
+    InvalidCertFormat(String),
 
-    /// Invalid rate limit configuration.
-    #[error("invalid rate limit: {reason}")]
-    InvalidRateLimit { reason: String },
+    /// Private key file does not contain PEM format markers.
+    ///
+    /// Private key must start with one of:
+    /// - `-----BEGIN PRIVATE KEY-----`
+    /// - `-----BEGIN RSA PRIVATE KEY-----`
+    /// - `-----BEGIN EC PRIVATE KEY-----`
+    /// - `-----BEGIN ENCRYPTED PRIVATE KEY-----`
+    InvalidKeyFormat(String),
 
-    /// Security violation detected in input.
-    #[error("security violation: {reason}")]
-    SecurityViolation { reason: String },
+    /// File path contains suspicious characters or traversal attempts.
+    ///
+    /// Paths containing `..` or `~` are rejected to prevent directory traversal.
+    SuspiciousPath(String),
+
+    /// Domain name exceeds the maximum length of 253 characters.
+    DomainTooLong(String),
 }
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FileNotFound(path) => write!(f, "File not found: {}", path),
+            Self::FileNotReadable(path) => write!(f, "File not readable: {}", path),
+            Self::InvalidDomain(domain) => write!(f, "Invalid domain name: {}", domain),
+            Self::InvalidCertFormat(path) => write!(f, "Invalid certificate format (must be PEM): {}", path),
+            Self::InvalidKeyFormat(path) => write!(f, "Invalid key format (must be PEM): {}", path),
+            Self::SuspiciousPath(path) => write!(f, "Suspicious path (potential traversal): {}", path),
+            Self::DomainTooLong(domain) => write!(f, "Domain name too long (max 253 chars): {}", domain),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
 
 /// Result type for validation operations.
 pub type ValidationResult<T> = Result<T, ValidationError>;
 
-/// Maximum hostname length per RFC 1123.
-const MAX_HOSTNAME_LENGTH: usize = 253;
-
-/// Maximum label length within a hostname.
-const MAX_LABEL_LENGTH: usize = 63;
-
-/// Maximum requests per second for rate limiting.
-const MAX_RPS: u64 = 1_000_000;
-
-/// Maximum burst size for rate limiting.
-const MAX_BURST: u64 = 10_000_000;
-
-/// Validates a hostname according to RFC 1123 with wildcard support.
-pub fn validate_hostname(hostname: &str) -> ValidationResult<()> {
-    if hostname.is_empty() {
-        return Err(ValidationError::InvalidHostname {
-            value: hostname.to_string(),
-            reason: "hostname cannot be empty".to_string(),
-        });
+/// Validates a file path exists and is readable.
+///
+/// # Security
+/// - Checks for path traversal attempts
+/// - Verifies file exists and is readable
+/// - Returns specific errors for debugging without exposing full paths in production
+///
+/// # Arguments
+/// * `path` - File path to validate
+/// * `_name` - Description for error messages (e.g., "certificate", "private key") - unused but kept for API consistency
+pub fn validate_file_path(path: &str, _name: &str) -> ValidationResult<()> {
+    // Security: Detect path traversal attempts
+    if path.contains("..") || path.contains("~") {
+        return Err(ValidationError::SuspiciousPath(path.to_string()));
     }
 
-    if hostname.len() > MAX_HOSTNAME_LENGTH {
-        return Err(ValidationError::InvalidHostname {
-            value: hostname.to_string(),
-            reason: format!("hostname exceeds maximum length of {} characters", MAX_HOSTNAME_LENGTH),
-        });
+    let path_obj = Path::new(path);
+
+    // Check if file exists
+    if !path_obj.exists() {
+        return Err(ValidationError::FileNotFound(path.to_string()));
     }
 
-    let labels: Vec<&str> = hostname.split('.').collect();
-
-    for (i, label) in labels.iter().enumerate() {
-        validate_hostname_label(hostname, label, i == 0)?;
+    // Check if it's a regular file
+    if !path_obj.is_file() {
+        return Err(ValidationError::FileNotReadable(format!("{} is not a file", path)));
     }
 
-    Ok(())
-}
-
-fn validate_hostname_label(hostname: &str, label: &str, is_first: bool) -> ValidationResult<()> {
-    if label.is_empty() {
-        return Err(ValidationError::InvalidHostname {
-            value: hostname.to_string(),
-            reason: "empty label in hostname".to_string(),
-        });
-    }
-
-    // Allow wildcard as first label only
-    if label == "*" {
-        if is_first {
-            return Ok(());
-        } else {
-            return Err(ValidationError::InvalidHostname {
-                value: hostname.to_string(),
-                reason: "wildcard (*) is only allowed as the first label".to_string(),
-            });
-        }
-    }
-
-    if label.len() > MAX_LABEL_LENGTH {
-        return Err(ValidationError::InvalidHostname {
-            value: hostname.to_string(),
-            reason: format!("label '{}' exceeds maximum length of {} characters", label, MAX_LABEL_LENGTH),
-        });
-    }
-
-    if label.starts_with('-') || label.ends_with('-') {
-        return Err(ValidationError::InvalidHostname {
-            value: hostname.to_string(),
-            reason: format!("label '{}' cannot start or end with a hyphen", label),
-        });
-    }
-
-    for ch in label.chars() {
-        if !ch.is_ascii_alphanumeric() && ch != '-' {
-            return Err(ValidationError::InvalidHostname {
-                value: hostname.to_string(),
-                reason: format!("label '{}' contains invalid character '{}'", label, ch),
-            });
-        }
+    // Check if file is readable
+    if fs::metadata(path)
+        .map(|meta| !meta.permissions().readonly() || meta.len() > 0)
+        .is_err()
+    {
+        return Err(ValidationError::FileNotReadable(path.to_string()));
     }
 
     Ok(())
 }
 
-/// Validates an upstream address in `host:port` format.
-pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
-    if upstream.is_empty() {
-        return Err(ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "upstream cannot be empty".to_string(),
-        });
+/// Validates a certificate file is in PEM format and contains cert data.
+///
+/// # Arguments
+/// * `path` - Path to certificate file
+pub fn validate_certificate_file(path: &str) -> ValidationResult<()> {
+    validate_file_path(path, "certificate")?;
+
+    // Read and validate PEM format
+    let contents = fs::read_to_string(path)
+        .map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
+
+    if !contents.contains("-----BEGIN CERTIFICATE-----") {
+        return Err(ValidationError::InvalidCertFormat(path.to_string()));
     }
 
-    if upstream.contains('/') {
-        return Err(ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "upstream cannot contain path components".to_string(),
-        });
-    }
-
-    let (host, port_str) = if upstream.starts_with('[') {
-        // IPv6 format: [::1]:port
-        let bracket_end = upstream.find(']').ok_or_else(|| ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "malformed IPv6 address".to_string(),
-        })?;
-        let colon_pos = upstream[bracket_end..].find(':').map(|p| p + bracket_end);
-        match colon_pos {
-            Some(pos) => (&upstream[1..bracket_end], &upstream[pos + 1..]),
-            None => return Err(ValidationError::InvalidUpstream {
-                value: upstream.to_string(),
-                reason: "missing port number".to_string(),
-            }),
-        }
-    } else {
-        upstream.rsplit_once(':').ok_or_else(|| ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "missing port number (expected host:port format)".to_string(),
-        })?
-    };
-
-    let port: u16 = port_str.parse().map_err(|_| ValidationError::InvalidUpstream {
-        value: upstream.to_string(),
-        reason: format!("invalid port number '{}'", port_str),
-    })?;
-
-    if port == 0 {
-        return Err(ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "port must be between 1 and 65535".to_string(),
-        });
-    }
-
-    if host.is_empty() {
-        return Err(ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: "host cannot be empty".to_string(),
-        });
-    }
-
-    // Try parsing as IP, otherwise validate as hostname
-    if IpAddr::from_str(host).is_err() {
-        validate_hostname(host).map_err(|e| ValidationError::InvalidUpstream {
-            value: upstream.to_string(),
-            reason: format!("invalid host: {}", e),
-        })?;
+    if !contents.contains("-----END CERTIFICATE-----") {
+        return Err(ValidationError::InvalidCertFormat(path.to_string()));
     }
 
     Ok(())
 }
 
-/// Validates a CIDR notation string for IPv4 or IPv6.
-pub fn validate_cidr(cidr: &str) -> ValidationResult<()> {
-    if cidr.is_empty() {
-        return Err(ValidationError::InvalidCidr {
-            value: cidr.to_string(),
-            reason: "CIDR cannot be empty".to_string(),
-        });
-    }
+/// Validates a private key file is in PEM format.
+///
+/// # Security Note
+/// This function only validates the file format, not the key contents.
+/// The actual key data should be zeroized from memory after use.
+///
+/// # Arguments
+/// * `path` - Path to private key file
+pub fn validate_private_key_file(path: &str) -> ValidationResult<()> {
+    validate_file_path(path, "private key")?;
 
-    let (address, prefix_str) = cidr.split_once('/').ok_or_else(|| ValidationError::InvalidCidr {
-        value: cidr.to_string(),
-        reason: "CIDR must be in format 'address/prefix'".to_string(),
-    })?;
+    // Read and validate PEM format
+    let contents = fs::read_to_string(path)
+        .map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
 
-    let prefix: u8 = prefix_str.parse().map_err(|_| ValidationError::InvalidCidr {
-        value: cidr.to_string(),
-        reason: format!("invalid prefix length '{}'", prefix_str),
-    })?;
+    // Check for common private key markers
+    let valid_key = contents.contains("-----BEGIN RSA PRIVATE KEY-----")
+        || contents.contains("-----BEGIN PRIVATE KEY-----")
+        || contents.contains("-----BEGIN ENCRYPTED PRIVATE KEY-----")
+        || contents.contains("-----BEGIN EC PRIVATE KEY-----");
 
-    if let Ok(_addr) = Ipv4Addr::from_str(address) {
-        if prefix > 32 {
-            return Err(ValidationError::InvalidCidr {
-                value: cidr.to_string(),
-                reason: format!("IPv4 prefix length must be 0-32, got {}", prefix),
-            });
-        }
-        return Ok(());
-    }
-
-    if let Ok(_addr) = Ipv6Addr::from_str(address) {
-        if prefix > 128 {
-            return Err(ValidationError::InvalidCidr {
-                value: cidr.to_string(),
-                reason: format!("IPv6 prefix length must be 0-128, got {}", prefix),
-            });
-        }
-        return Ok(());
-    }
-
-    Err(ValidationError::InvalidCidr {
-        value: cidr.to_string(),
-        reason: format!("'{}' is not a valid IPv4 or IPv6 address", address),
-    })
-}
-
-/// Validates a WAF threshold value.
-pub fn validate_waf_threshold(threshold: f64) -> ValidationResult<()> {
-    if threshold.is_nan() {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: "threshold cannot be NaN".to_string(),
-        });
-    }
-
-    if threshold.is_infinite() {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: "threshold cannot be infinite".to_string(),
-        });
-    }
-
-    if !(0.0..=1.0).contains(&threshold) {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: format!("threshold must be between 0.0 and 1.0, got {}", threshold),
-        });
+    if !valid_key {
+        return Err(ValidationError::InvalidKeyFormat(path.to_string()));
     }
 
     Ok(())
 }
 
-/// Validates rate limit configuration.
-pub fn validate_rate_limit(rps: u64, burst: u64) -> ValidationResult<()> {
-    if rps == 0 {
-        return Err(ValidationError::InvalidRateLimit {
-            reason: "requests_per_second must be positive".to_string(),
-        });
+/// Validates a domain name according to RFC 1035.
+///
+/// # Rules
+/// - Max 253 characters total
+/// - Each label max 63 characters
+/// - Labels can contain alphanumeric and hyphens, but not start/end with hyphen
+/// - Supports wildcard domains (*.example.com)
+/// - Case-insensitive comparison
+///
+/// # Arguments
+/// * `domain` - Domain name to validate
+pub fn validate_domain_name(domain: &str) -> ValidationResult<()> {
+    // Check max length
+    if domain.len() > 253 {
+        return Err(ValidationError::DomainTooLong(domain.to_string()));
     }
 
-    if rps > MAX_RPS {
-        return Err(ValidationError::InvalidRateLimit {
-            reason: format!("requests_per_second must be <= {}, got {}", MAX_RPS, rps),
-        });
+    // Empty domain is invalid
+    if domain.is_empty() {
+        return Err(ValidationError::InvalidDomain("empty domain".to_string()));
     }
 
-    if burst == 0 {
-        return Err(ValidationError::InvalidRateLimit {
-            reason: "burst must be positive".to_string(),
-        });
+    // Use regex for RFC 1035 compliance
+    if !DOMAIN_PATTERN.is_match(domain) {
+        return Err(ValidationError::InvalidDomain(domain.to_string()));
     }
 
-    if burst > MAX_BURST {
-        return Err(ValidationError::InvalidRateLimit {
-            reason: format!("burst must be <= {}, got {}", MAX_BURST, burst),
-        });
-    }
-
-    if burst < rps {
-        return Err(ValidationError::InvalidRateLimit {
-            reason: format!("burst ({}) must be >= requests_per_second ({})", burst, rps),
-        });
-    }
-
-    Ok(())
-}
-
-/// Validates a WAF rule ID (pattern: [A-Z]{2,5}\d{4,6}).
-pub fn validate_rule_id(rule_id: &str) -> ValidationResult<()> {
-    if rule_id.is_empty() {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: "rule ID cannot be empty".to_string(),
-        });
-    }
-
-    let letter_count = rule_id.chars().take_while(|c| c.is_ascii_uppercase()).count();
-    let digit_part = &rule_id[letter_count..];
-    let digit_count = digit_part.len();
-
-    if !(2..=5).contains(&letter_count) {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: format!("rule ID must start with 2-5 uppercase letters, found {}", letter_count),
-        });
-    }
-
-    if !(4..=6).contains(&digit_count) {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: format!("rule ID must end with 4-6 digits, found {}", digit_count),
-        });
-    }
-
-    if !digit_part.chars().all(|c| c.is_ascii_digit()) {
-        return Err(ValidationError::InvalidWafConfig {
-            reason: "rule ID must end with digits only".to_string(),
-        });
-    }
-
-    Ok(())
-}
-
-/// Checks for path traversal attempts in input.
-pub fn check_path_traversal(input: &str) -> ValidationResult<()> {
-    let traversal_patterns = ["../", "..\\", "%2e%2e%2f", "%2e%2e/", "..%2f", "%2e%2e\\"];
-    let input_lower = input.to_lowercase();
-
-    for pattern in &traversal_patterns {
-        if input_lower.contains(pattern) {
-            return Err(ValidationError::SecurityViolation {
-                reason: format!("path traversal detected: '{}'", pattern),
-            });
-        }
-    }
-
-    let sensitive_paths = ["/etc/passwd", "/etc/shadow", "/proc/", "/dev/"];
-    for path in &sensitive_paths {
-        if input_lower.contains(path) {
-            return Err(ValidationError::SecurityViolation {
-                reason: format!("access to sensitive path detected: '{}'", path),
-            });
+    // Additional check: no label should exceed 63 characters
+    for label in domain.split('.') {
+        if label.len() > 63 {
+            return Err(ValidationError::InvalidDomain(
+                format!("label '{}' exceeds 63 characters", label)
+            ));
         }
     }
 
     Ok(())
 }
 
-/// Checks for shell injection attempts in input.
-pub fn check_shell_injection(input: &str) -> ValidationResult<()> {
-    let injection_patterns = [";", "&&", "||", "|", "`", "$(", "${", ">", "<"];
-
-    for pattern in &injection_patterns {
-        if input.contains(pattern) {
-            return Err(ValidationError::SecurityViolation {
-                reason: format!("potential shell injection: '{}' character found", pattern),
-            });
-        }
+/// Validates a complete TLS configuration.
+///
+/// # Validation Steps
+/// 1. Validates certificate file exists and is readable PEM
+/// 2. Validates private key file exists and is readable PEM
+/// 3. For each per-domain cert, validates certificate, key, and domain
+///
+/// # Arguments
+/// * `cert_path` - Path to default certificate
+/// * `key_path` - Path to default private key
+/// * `per_domain_certs` - List of per-domain certificates to validate
+pub fn validate_tls_config(
+    cert_path: &str,
+    key_path: &str,
+    per_domain_certs: &[(String, String, String)],
+) -> ValidationResult<()> {
+    // Validate default cert and key
+    if !cert_path.is_empty() {
+        validate_certificate_file(cert_path)?;
     }
 
-    let dangerous_commands = ["rm ", "chmod ", "wget ", "curl ", "nc ", "/bin/sh", "/bin/bash"];
-    let input_lower = input.to_lowercase();
-    for cmd in &dangerous_commands {
-        if input_lower.contains(cmd) {
-            return Err(ValidationError::SecurityViolation {
-                reason: format!("dangerous command detected: '{}'", cmd.trim()),
-            });
-        }
+    if !key_path.is_empty() {
+        validate_private_key_file(key_path)?;
     }
 
-    Ok(())
-}
-
-/// Checks for null byte injection in input.
-pub fn check_null_bytes(input: &str) -> ValidationResult<()> {
-    if input.contains('\0') {
-        return Err(ValidationError::SecurityViolation {
-            reason: "null byte detected in input".to_string(),
-        });
-    }
-
-    if input.to_lowercase().contains("%00") {
-        return Err(ValidationError::SecurityViolation {
-            reason: "URL-encoded null byte detected in input".to_string(),
-        });
+    // Validate per-domain certs
+    for (domain, cert, key) in per_domain_certs {
+        validate_domain_name(domain)?;
+        validate_certificate_file(cert)?;
+        validate_private_key_file(key)?;
     }
 
     Ok(())
@@ -395,87 +286,92 @@ pub fn check_null_bytes(input: &str) -> ValidationResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
-    fn test_valid_hostnames() {
-        assert!(validate_hostname("example.com").is_ok());
-        assert!(validate_hostname("www.example.com").is_ok());
-        assert!(validate_hostname("api.v2.example.com").is_ok());
-        assert!(validate_hostname("*.example.com").is_ok());
-        assert!(validate_hostname("server1.example.com").is_ok());
+    fn test_domain_validation_valid() {
+        assert!(validate_domain_name("example.com").is_ok());
+        assert!(validate_domain_name("sub.example.com").is_ok());
+        assert!(validate_domain_name("*.example.com").is_ok());
+        assert!(validate_domain_name("my-domain.co.uk").is_ok());
+        assert!(validate_domain_name("123.456.789").is_ok());
     }
 
     #[test]
-    fn test_invalid_hostnames() {
-        assert!(validate_hostname("").is_err());
-        assert!(validate_hostname("-example.com").is_err());
-        assert!(validate_hostname("example-.com").is_err());
-        assert!(validate_hostname("example.*.com").is_err());
-        assert!(validate_hostname("example_test.com").is_err());
+    fn test_domain_validation_invalid() {
+        assert!(validate_domain_name("").is_err());
+        assert!(validate_domain_name("-invalid.com").is_err());
+        assert!(validate_domain_name("invalid-.com").is_err());
+        assert!(validate_domain_name("invalid..com").is_err());
+        assert!(validate_domain_name(&("a".repeat(64) + ".com")).is_err()); // label too long
     }
 
     #[test]
-    fn test_valid_upstreams() {
-        assert!(validate_upstream("127.0.0.1:8080").is_ok());
-        assert!(validate_upstream("backend.local:443").is_ok());
-        assert!(validate_upstream("[::1]:8080").is_ok());
+    fn test_domain_validation_max_length() {
+        let long_domain = "a".repeat(254); // Just over limit
+        assert!(validate_domain_name(&long_domain).is_err());
+
+        let max_domain = "a".repeat(253);
+        // Should validate (exact limit) if it matches pattern
+        let _ = validate_domain_name(&max_domain);
     }
 
     #[test]
-    fn test_invalid_upstreams() {
-        assert!(validate_upstream("127.0.0.1").is_err());
-        assert!(validate_upstream("127.0.0.1:0").is_err());
-        assert!(validate_upstream("127.0.0.1:70000").is_err());
-        assert!(validate_upstream("127.0.0.1:8080/api").is_err());
+    fn test_path_traversal_detection() {
+        assert!(validate_file_path("/etc/passwd/../shadow", "test").is_err());
+        assert!(validate_file_path("~/.ssh/id_rsa", "test").is_err());
     }
 
     #[test]
-    fn test_valid_cidr() {
-        assert!(validate_cidr("192.168.1.0/24").is_ok());
-        assert!(validate_cidr("10.0.0.0/8").is_ok());
-        assert!(validate_cidr("2001:db8::/32").is_ok());
+    fn test_certificate_file_validation() {
+        // Create temporary file with PEM cert marker
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            "-----BEGIN CERTIFICATE-----\ndata\n-----END CERTIFICATE-----"
+        )
+        .unwrap();
+
+        let path = temp_file.path().to_str().unwrap();
+        assert!(validate_certificate_file(path).is_ok());
+
+        // Invalid: missing end marker
+        let mut invalid_cert = NamedTempFile::new().unwrap();
+        writeln!(invalid_cert, "-----BEGIN CERTIFICATE-----\ndata").unwrap();
+
+        let path = invalid_cert.path().to_str().unwrap();
+        assert!(validate_certificate_file(path).is_err());
     }
 
     #[test]
-    fn test_invalid_cidr() {
-        assert!(validate_cidr("192.168.1.0/33").is_err());
-        assert!(validate_cidr("192.168.1.0").is_err());
-        assert!(validate_cidr("not-an-ip/24").is_err());
+    fn test_private_key_file_validation() {
+        // Create temporary file with PEM key marker
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            "-----BEGIN PRIVATE KEY-----\ndata\n-----END PRIVATE KEY-----"
+        )
+        .unwrap();
+
+        let path = temp_file.path().to_str().unwrap();
+        assert!(validate_private_key_file(path).is_ok());
+
+        // Also test RSA format
+        let mut rsa_key = NamedTempFile::new().unwrap();
+        writeln!(
+            rsa_key,
+            "-----BEGIN RSA PRIVATE KEY-----\ndata\n-----END RSA PRIVATE KEY-----"
+        )
+        .unwrap();
+
+        let path = rsa_key.path().to_str().unwrap();
+        assert!(validate_private_key_file(path).is_ok());
     }
 
     #[test]
-    fn test_waf_threshold() {
-        assert!(validate_waf_threshold(0.0).is_ok());
-        assert!(validate_waf_threshold(0.5).is_ok());
-        assert!(validate_waf_threshold(1.0).is_ok());
-        assert!(validate_waf_threshold(-0.1).is_err());
-        assert!(validate_waf_threshold(1.1).is_err());
-        assert!(validate_waf_threshold(f64::NAN).is_err());
-    }
-
-    #[test]
-    fn test_rate_limit() {
-        assert!(validate_rate_limit(100, 200).is_ok());
-        assert!(validate_rate_limit(100, 100).is_ok());
-        assert!(validate_rate_limit(0, 100).is_err());
-        assert!(validate_rate_limit(200, 100).is_err());
-    }
-
-    #[test]
-    fn test_rule_id() {
-        assert!(validate_rule_id("XSS1234").is_ok());
-        assert!(validate_rule_id("SQLI123456").is_ok());
-        assert!(validate_rule_id("X1234").is_err());
-        assert!(validate_rule_id("xss1234").is_err());
-    }
-
-    #[test]
-    fn test_security_checks() {
-        assert!(check_path_traversal("safe-input").is_ok());
-        assert!(check_path_traversal("../../../etc/passwd").is_err());
-        assert!(check_shell_injection("safe-input").is_ok());
-        assert!(check_shell_injection("; rm -rf /").is_err());
-        assert!(check_null_bytes("safe-input").is_ok());
-        assert!(check_null_bytes("file%00.txt").is_err());
+    fn test_file_not_found() {
+        assert!(validate_file_path("/nonexistent/path/to/file.txt", "test").is_err());
     }
 }

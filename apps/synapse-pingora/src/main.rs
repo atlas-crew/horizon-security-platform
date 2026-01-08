@@ -48,6 +48,9 @@ use synapse_pingora::fingerprint::{
     ClientFingerprint, HttpHeaders, extract_client_fingerprint,
 };
 
+// Phase 6: Security hardening (Validation)
+use synapse_pingora::validation::validate_tls_config;
+
 // Phase 3: Entity Tracking (Feature Migration from risk-server)
 use synapse_pingora::entity::{
     EntityManager, EntityConfig, BlockDecision,
@@ -55,6 +58,9 @@ use synapse_pingora::entity::{
 
 // Phase 3: Tarpitting (Feature Migration from risk-server)
 use synapse_pingora::tarpit::{TarpitManager, TarpitConfig};
+
+// Phase 3: DLP Scanning (Feature Migration from risk-server)
+use synapse_pingora::dlp::{DlpScanner, DlpConfig};
 
 // ============================================================================
 // Configuration
@@ -289,7 +295,12 @@ impl Default for TlsConfig {
 }
 
 impl Config {
-    /// Load configuration from YAML file
+    /// Load configuration from YAML file with validation
+    ///
+    /// # Validation Steps
+    /// - Parses YAML configuration
+    /// - Validates TLS certificate paths and formats if enabled
+    /// - Validates domain names in per-domain certificates
     pub fn load(path: &str) -> Result<Self, String> {
         if !Path::new(path).exists() {
             return Err(format!("Config file not found: {}", path));
@@ -298,8 +309,26 @@ impl Config {
         let contents = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file: {}", e))?;
 
-        serde_yaml::from_str(&contents)
-            .map_err(|e| format!("Failed to parse config file: {}", e))
+        let config: Self = serde_yaml::from_str(&contents)
+            .map_err(|e| format!("Failed to parse config file: {}", e))?;
+
+        // Phase 6: Validate TLS configuration
+        if config.tls.enabled {
+            // Convert per_domain_certs to validation format
+            let per_domain_tuples: Vec<(String, String, String)> = config
+                .tls
+                .per_domain_certs
+                .iter()
+                .map(|c| (c.domain.clone(), c.cert_path.clone(), c.key_path.clone()))
+                .collect();
+
+            validate_tls_config(&config.tls.cert_path, &config.tls.key_path, &per_domain_tuples)
+                .map_err(|e| format!("TLS configuration validation failed: {}", e))?;
+
+            info!("TLS configuration validated successfully");
+        }
+
+        Ok(config)
     }
 
     /// Try to load config from default locations, fall back to defaults
@@ -504,6 +533,12 @@ pub struct RequestContext {
     tarpit_delay_ms: u64,
     /// Phase 3: Tarpit level reached
     tarpit_level: u32,
+    /// Phase 4: DLP match count from response scanning
+    dlp_match_count: usize,
+    /// Phase 4: DLP matched types (comma-separated)
+    dlp_types: String,
+    /// Phase 4: Accumulated response body for DLP scanning
+    response_body_buffer: Vec<u8>,
 }
 
 /// Rate limiter for early_request_filter
@@ -523,6 +558,8 @@ pub struct SynapseProxy {
     entity_manager: Arc<EntityManager>,
     /// Phase 3: Tarpit manager for progressive response delays
     tarpit_manager: Arc<TarpitManager>,
+    /// Phase 4: DLP scanner for sensitive data detection
+    dlp_scanner: Arc<DlpScanner>,
     /// Health checker for /_sensor/status endpoint
     health_checker: Arc<HealthChecker>,
     /// Metrics registry for collecting statistics
@@ -551,6 +588,7 @@ impl SynapseProxy {
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
             tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
+            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker,
             metrics_registry,
         }
@@ -563,6 +601,7 @@ impl SynapseProxy {
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(entity_config)),
             tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
+            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
         }
@@ -625,6 +664,9 @@ impl ProxyHttp for SynapseProxy {
             entity_blocked: None,
             tarpit_delay_ms: 0,
             tarpit_level: 0,
+            dlp_match_count: 0,
+            dlp_types: String::new(),
+            response_body_buffer: Vec::new(),
         }
     }
 
@@ -991,6 +1033,73 @@ impl ProxyHttp for SynapseProxy {
         Ok(())
     }
 
+    /// Response body filter - scan for sensitive data (DLP)
+    ///
+    /// Phase 4: Scans response body chunks for PII and sensitive data patterns.
+    /// Accumulates body for scanning and reports matches on end_of_stream.
+    fn response_body_filter(
+        &self,
+        _session: &mut Session,
+        body: &mut Option<Bytes>,
+        end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> Result<Option<std::time::Duration>>
+    where
+        Self::CTX: Send + Sync,
+    {
+        // Accumulate response body for DLP scanning
+        if let Some(ref body_chunk) = body {
+            // Only accumulate if under max scan size (5MB default)
+            if ctx.response_body_buffer.len() + body_chunk.len() <= 5 * 1024 * 1024 {
+                ctx.response_body_buffer.extend_from_slice(body_chunk);
+            }
+        }
+
+        // Scan on end of stream
+        if end_of_stream && !ctx.response_body_buffer.is_empty() && self.dlp_scanner.is_enabled() {
+            let scan_result = self.dlp_scanner.scan_bytes(&ctx.response_body_buffer);
+
+            if scan_result.has_matches {
+                // Collect unique types
+                let mut types: Vec<&str> = scan_result
+                    .matches
+                    .iter()
+                    .map(|m| m.data_type.as_str())
+                    .collect();
+                types.sort();
+                types.dedup();
+
+                ctx.dlp_match_count = scan_result.match_count;
+                ctx.dlp_types = types.join(",");
+
+                warn!(
+                    "DLP: {} matches found in response ({} bytes, {}μs) - types: {}",
+                    scan_result.match_count,
+                    scan_result.content_length,
+                    scan_result.scan_time_us,
+                    ctx.dlp_types
+                );
+
+                // Log each match for detailed analysis
+                for m in &scan_result.matches {
+                    debug!(
+                        "DLP match: {} ({}) severity={} at {}..{}",
+                        m.pattern_name,
+                        m.data_type.as_str(),
+                        m.severity.as_str(),
+                        m.start,
+                        m.end
+                    );
+                }
+            }
+
+            // Clear buffer after scanning
+            ctx.response_body_buffer.clear();
+        }
+
+        Ok(None) // No delay
+    }
+
     /// Logging at end of request
     async fn logging(
         &self,
@@ -1026,8 +1135,15 @@ impl ProxyHttp for SynapseProxy {
             .map(|b| b.blocked)
             .unwrap_or(false);
 
+        // Phase 4: Include DLP metrics in access log for dual-running validation
+        let dlp_info = if ctx.dlp_match_count > 0 {
+            format!(" dlp={}:{}", ctx.dlp_match_count, ctx.dlp_types)
+        } else {
+            String::new()
+        };
+
         info!(
-            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} entity_risk={:.1} entity_blocked={} tarpit={}ms@L{} backend={} fp={}",
+            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} entity_risk={:.1} entity_blocked={} tarpit={}ms@L{} backend={} fp={}{}",
             session.req_header().method,
             session.req_header().uri,
             status,
@@ -1039,7 +1155,8 @@ impl ProxyHttp for SynapseProxy {
             ctx.tarpit_delay_ms,
             ctx.tarpit_level,
             ctx.backend_idx,
-            fp_hash
+            fp_hash,
+            dlp_info
         );
     }
 }

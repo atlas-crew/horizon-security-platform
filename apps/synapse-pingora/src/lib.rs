@@ -24,6 +24,7 @@
 //! - [`fingerprint`] - JA4/JA4H TLS and HTTP fingerprinting
 //! - [`entity`] - Per-IP entity tracking with risk scoring and decay
 //! - [`tarpit`] - Progressive response delays for slow-drip defense
+//! - [`dlp`] - Data Loss Prevention with 23 sensitive data patterns
 
 // Phase 1: Core Features
 pub mod config;
@@ -44,6 +45,10 @@ pub mod reload;
 pub mod fingerprint;
 pub mod entity;
 pub mod tarpit;
+pub mod dlp;
+
+// Phase 6: Security Hardening
+pub mod validation;
 
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
@@ -74,4 +79,16 @@ pub use entity::{
 pub use tarpit::{
     TarpitConfig, TarpitState, TarpitStats,
     TarpitManager, TarpitDecision,
+};
+pub use dlp::{
+    DlpConfig, DlpScanner, DlpMatch, DlpStats, ScanResult,
+    SensitiveDataType, PatternSeverity,
+    validate_credit_card, validate_ssn, validate_iban,
+};
+
+// Re-export validation utilities
+pub use validation::{
+    ValidationError, ValidationResult,
+    validate_domain_name, validate_certificate_file, validate_private_key_file,
+    validate_tls_config,
 };

@@ -539,6 +539,12 @@ pub struct RequestContext {
     dlp_types: String,
     /// Phase 4: Accumulated response body for DLP scanning
     response_body_buffer: Vec<u8>,
+    /// Phase 4: Accumulated request body for DLP exfiltration scanning
+    request_body_buffer: Vec<u8>,
+    /// Phase 4: DLP match count from request body scanning
+    request_dlp_match_count: usize,
+    /// Phase 4: DLP matched types from request body (comma-separated)
+    request_dlp_types: String,
 }
 
 /// Rate limiter for early_request_filter
@@ -667,6 +673,9 @@ impl ProxyHttp for SynapseProxy {
             dlp_match_count: 0,
             dlp_types: String::new(),
             response_body_buffer: Vec::new(),
+            request_body_buffer: Vec::new(),
+            request_dlp_match_count: 0,
+            request_dlp_types: String::new(),
         }
     }
 
@@ -902,16 +911,10 @@ impl ProxyHttp for SynapseProxy {
         Ok(false)
     }
 
-    /// Request body filter - inspect request body chunks
+    /// Request body filter - scan for sensitive data exfiltration (DLP)
     ///
-    /// This hook is called for each chunk of the request body.
-    /// Currently just logs body size for visibility.
-    ///
-    /// TODO: Future DLP scanning integration:
-    /// - Scan for sensitive data patterns (SSN, credit cards, API keys)
-    /// - Check for data exfiltration attempts
-    /// - Apply content-type specific validation
-    /// - Integrate with external DLP service
+    /// Phase 4: Scans request body chunks for PII and sensitive data patterns.
+    /// Detects data exfiltration attempts by scanning outbound data.
     async fn request_body_filter(
         &self,
         _session: &mut Session,
@@ -919,31 +922,68 @@ impl ProxyHttp for SynapseProxy {
         end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        // Accumulate request body for DLP scanning
         if let Some(ref body_chunk) = body {
             let chunk_size = body_chunk.len();
             ctx.body_bytes_seen += chunk_size;
 
+            // Only accumulate if under max scan size (5MB default)
+            if ctx.request_body_buffer.len() + body_chunk.len() <= 5 * 1024 * 1024 {
+                ctx.request_body_buffer.extend_from_slice(body_chunk);
+            }
+
             debug!(
-                "Body chunk: {} bytes (total: {} bytes, eos: {})",
+                "Request body chunk: {} bytes (total: {} bytes, eos: {})",
                 chunk_size, ctx.body_bytes_seen, end_of_stream
             );
+        }
 
-            // TODO: DLP scanning would go here
-            // Example future implementation:
-            // ```
-            // if dlp_enabled {
-            //     let dlp_result = DlpScanner::scan(body_chunk);
-            //     if dlp_result.contains_sensitive_data {
-            //         return Err(Error::new(ErrorType::Custom("DLP violation")));
-            //     }
-            // }
-            // ```
+        // Scan on end of stream
+        if end_of_stream && !ctx.request_body_buffer.is_empty() && self.dlp_scanner.is_enabled() {
+            let scan_result = self.dlp_scanner.scan_bytes(&ctx.request_body_buffer);
+
+            if scan_result.has_matches {
+                // Collect unique types
+                let mut types: Vec<&str> = scan_result
+                    .matches
+                    .iter()
+                    .map(|m| m.data_type.as_str())
+                    .collect();
+                types.sort();
+                types.dedup();
+
+                ctx.request_dlp_match_count = scan_result.match_count;
+                ctx.request_dlp_types = types.join(",");
+
+                warn!(
+                    "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
+                    scan_result.match_count,
+                    scan_result.content_length,
+                    scan_result.scan_time_us,
+                    ctx.request_dlp_types,
+                    ctx.client_ip
+                );
+
+                // Log each match for detailed analysis
+                for m in &scan_result.matches {
+                    debug!(
+                        "DLP request match: {} ({}) severity={} masked={}",
+                        m.pattern_name,
+                        m.data_type.as_str(),
+                        m.severity.as_str(),
+                        m.masked_value
+                    );
+                }
+            }
+
+            // Clear buffer after scanning
+            ctx.request_body_buffer.clear();
         }
 
         if end_of_stream && ctx.body_bytes_seen > 0 {
             info!(
-                "Request body complete: {} bytes from {:?}",
-                ctx.body_bytes_seen, ctx.client_ip
+                "Request body complete: {} bytes from {:?}, DLP matches: {}",
+                ctx.body_bytes_seen, ctx.client_ip, ctx.request_dlp_match_count
             );
         }
 
@@ -1029,6 +1069,19 @@ impl ProxyHttp for SynapseProxy {
             "X-Tarpit-Level-Pingora",
             ctx.tarpit_level.to_string(),
         )?;
+
+        // Phase 4: Add request-side DLP headers for dual-running validation
+        // These headers allow risk-server to compare its DLP scanning with Pingora's
+        upstream_request.insert_header(
+            "X-DLP-Request-Violations-Pingora",
+            ctx.request_dlp_match_count.to_string(),
+        )?;
+        if !ctx.request_dlp_types.is_empty() {
+            upstream_request.insert_header(
+                "X-DLP-Request-Types-Pingora",
+                &ctx.request_dlp_types,
+            )?;
+        }
 
         Ok(())
     }
@@ -1136,8 +1189,14 @@ impl ProxyHttp for SynapseProxy {
             .unwrap_or(false);
 
         // Phase 4: Include DLP metrics in access log for dual-running validation
-        let dlp_info = if ctx.dlp_match_count > 0 {
-            format!(" dlp={}:{}", ctx.dlp_match_count, ctx.dlp_types)
+        let dlp_info = if ctx.request_dlp_match_count > 0 || ctx.dlp_match_count > 0 {
+            format!(
+                " dlp_req={}:{} dlp_resp={}:{}",
+                ctx.request_dlp_match_count,
+                if ctx.request_dlp_types.is_empty() { "-" } else { &ctx.request_dlp_types },
+                ctx.dlp_match_count,
+                if ctx.dlp_types.is_empty() { "-" } else { &ctx.dlp_types }
+            )
         } else {
             String::new()
         };

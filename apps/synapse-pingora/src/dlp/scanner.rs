@@ -9,7 +9,7 @@
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use lazy_static::lazy_static;
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -532,6 +532,47 @@ lazy_static! {
             .expect("Failed to build Aho-Corasick automaton")
     };
 
+    // ========================================================================
+    // RegexSet for Non-AC Patterns (Single-Pass Prefilter)
+    // ========================================================================
+    //
+    // Patterns without reliable literal prefixes for Aho-Corasick are grouped
+    // into a RegexSet for single-pass matching. This is O(n) vs O(n * patterns)
+    // for sequential regex execution.
+    //
+    // When RegexSet matches, we only run the individual pattern regex + validator.
+
+    /// Pattern indices that are NOT covered by Aho-Corasick prefiltering.
+    /// These patterns will use RegexSet for single-pass detection.
+    ///
+    /// Non-AC patterns:
+    ///  4: SSN formatted, 5: SSN unformatted
+    ///  7: US Phone, 8: Intl Phone
+    /// 10: AWS Secret Key
+    /// 19: IBAN, 20: IPv4
+    /// 24: Medical Record
+    static ref NON_AC_PATTERN_INDICES: Vec<usize> = vec![4, 5, 7, 8, 10, 19, 20, 24];
+
+    /// RegexSet for non-AC patterns - single pass detects which patterns have potential matches
+    static ref NON_AC_REGEX_SET: RegexSet = RegexSet::new(&[
+        // Index 0 -> Pattern 4: SSN formatted
+        r"\b\d{3}-\d{2}-\d{4}\b",
+        // Index 1 -> Pattern 5: SSN unformatted
+        r"\b\d{9}\b",
+        // Index 2 -> Pattern 7: US Phone
+        r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b",
+        // Index 3 -> Pattern 8: International Phone
+        r"\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}",
+        // Index 4 -> Pattern 10: AWS Secret Key
+        r"\b[a-zA-Z0-9+/]{40}\b",
+        // Index 5 -> Pattern 19: IBAN
+        r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
+        // Index 6 -> Pattern 20: IPv4
+        r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b",
+        // Index 7 -> Pattern 24: Medical Record
+        r"(?i)\b(?:MRN|medical[_\s-]?record[_\s-]?(?:number|#|num))[\s:]*[A-Z0-9]{6,}",
+    ]).expect("Failed to build non-AC RegexSet");
+
     /// Binary content types that should be skipped for DLP scanning
     static ref SKIP_CONTENT_TYPES: Vec<&'static str> = vec![
         "image/",
@@ -641,9 +682,17 @@ impl DlpScanner {
             }
         }
 
-        // Phase 2: Scan with patterns - prioritize AC-identified patterns, skip others
-        // For patterns with AC prefixes, only scan if AC found a candidate
-        // For patterns without AC prefixes (SSN, email, phone, IBAN, IP), always scan
+        // Phase 1b: Use RegexSet to find candidates for non-AC patterns (SSN, Phone, IBAN, IPv4, etc.)
+        // This is O(n) single-pass for all non-AC patterns combined
+        let regex_set_matches = NON_AC_REGEX_SET.matches(scan_content);
+        let mut non_ac_candidate_patterns: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for (set_idx, &pattern_idx) in NON_AC_PATTERN_INDICES.iter().enumerate() {
+            if regex_set_matches.matched(set_idx) {
+                non_ac_candidate_patterns.insert(pattern_idx);
+            }
+        }
+
+        // Phase 2: Scan with patterns - only scan patterns that have candidates from prefilters
         let ac_covered_patterns: std::collections::HashSet<usize> = AC_PREFIXES
             .iter()
             .map(|(_, idx)| *idx)
@@ -665,6 +714,11 @@ impl DlpScanner {
 
             // Skip patterns covered by AC if AC didn't find any candidates
             if ac_covered_patterns.contains(&pattern_idx) && !ac_candidate_patterns.contains(&pattern_idx) {
+                continue;
+            }
+
+            // Skip non-AC patterns if RegexSet didn't find any candidates
+            if NON_AC_PATTERN_INDICES.contains(&pattern_idx) && !non_ac_candidate_patterns.contains(&pattern_idx) {
                 continue;
             }
 

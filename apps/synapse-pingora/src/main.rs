@@ -430,10 +430,16 @@ static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
     None
 });
 
-// Thread-local Synapse engine instance (Engine uses RefCell, so !Sync)
-// Each Pingora worker thread gets its own instance.
+// Global shared Synapse engine instance (Shared across all Pingora workers)
+// Using RwLock for concurrent access.
+// Note: In extremely high-throughput scenarios, this lock might become a contention point.
+// For 100k RPS, we might need a sharded lock or channel-based aggregation.
+static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> = Lazy::new(|| {
+    Arc::new(parking_lot::RwLock::new(create_synapse_engine()))
+});
+
+// Thread-local buffer pool for request body handling (optimization)
 thread_local! {
-    static SYNAPSE: std::cell::RefCell<Synapse> = std::cell::RefCell::new(create_synapse_engine());
     static BUFFER_POOL: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::with_capacity(128));
 }
 
@@ -515,8 +521,8 @@ impl DetectionEngine {
             is_static: false,
         };
 
-        // Run the real detection engine (thread-local)
-        let verdict = SYNAPSE.with(|s| s.borrow().analyze(&request));
+        // Run the real detection engine (Shared state)
+        let verdict = SYNAPSE.read().analyze(&request);
 
         let elapsed = start.elapsed();
 
@@ -528,22 +534,22 @@ impl DetectionEngine {
 
     /// Record response status for profiling (feedback loop)
     pub fn record_status(path: &str, status: u16) {
-        SYNAPSE.with(|s| s.borrow().record_response_status(path, status));
+        SYNAPSE.read().record_response_status(path, status);
     }
 
     /// Get all learned profiles.
     pub fn get_profiles() -> Vec<synapse::EndpointProfile> {
-        SYNAPSE.with(|s| s.borrow().get_profiles())
+        SYNAPSE.read().get_profiles()
     }
 
     /// Load profiles (e.g. from persistence).
     pub fn load_profiles(profiles: Vec<synapse::EndpointProfile>) {
-        SYNAPSE.with(|s| s.borrow().load_profiles(profiles));
+        SYNAPSE.read().load_profiles(profiles);
     }
 
     /// Get the number of loaded rules (for diagnostics)
     pub fn rule_count() -> usize {
-        *RULE_COUNT
+        SYNAPSE.read().rule_count()
     }
 }
 

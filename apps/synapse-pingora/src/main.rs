@@ -531,6 +531,11 @@ impl DetectionEngine {
         SYNAPSE.with(|s| s.borrow().record_response_status(path, status));
     }
 
+    /// Get all learned profiles.
+    pub fn get_profiles() -> Vec<synapse::EndpointProfile> {
+        SYNAPSE.with(|s| s.borrow().get_profiles())
+    }
+
     /// Get the number of loaded rules (for diagnostics)
     pub fn rule_count() -> usize {
         *RULE_COUNT

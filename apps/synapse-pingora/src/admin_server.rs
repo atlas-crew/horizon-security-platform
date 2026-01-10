@@ -58,6 +58,8 @@ pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> s
         // Statistics
         .route("/stats", get(stats_handler))
         .route("/waf/stats", get(waf_stats_handler))
+        // Debugging / Profiling
+        .route("/debug/profiles", get(profiles_handler))
         // Root endpoint (API info)
         .route("/", get(root_handler))
         .layer(cors)
@@ -148,6 +150,12 @@ async fn stats_handler(State(state): State<AdminState>) -> impl IntoResponse {
 /// GET /waf/stats - WAF statistics
 async fn waf_stats_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let response = state.handler.handle_waf_stats();
+    wrap_response(response)
+}
+
+/// GET /debug/profiles - Get learned endpoint profiles
+async fn profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let response = state.handler.handle_get_profiles();
     wrap_response(response)
 }
 

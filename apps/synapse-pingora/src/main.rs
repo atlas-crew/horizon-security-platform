@@ -36,6 +36,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::oneshot;
 
 // Admin API imports
 use synapse_pingora::admin_server::start_admin_server;
@@ -511,6 +512,9 @@ impl DetectionEngine {
 // Pingora Proxy Implementation
 // ============================================================================
 
+/// Result from async DLP scan task
+pub type DlpScanResult = (usize, String, u64); // (match_count, types, scan_time_us)
+
 /// Per-request context flowing through all Pingora hooks
 pub struct RequestContext {
     /// Start time for the request (for logging)
@@ -549,6 +553,11 @@ pub struct RequestContext {
     request_content_type: Option<String>,
     /// Whether to skip DLP scanning for this request (binary content)
     skip_request_dlp: bool,
+    /// Phase 5: Async DLP scan receiver for parallel execution
+    /// The DLP scan runs in parallel with upstream routing, result awaited before headers sent
+    dlp_scan_rx: Option<oneshot::Receiver<DlpScanResult>>,
+    /// Phase 5: DLP scan time from async task (for metrics)
+    dlp_scan_time_us: u64,
 }
 
 /// Rate limiter for early_request_filter
@@ -682,6 +691,8 @@ impl ProxyHttp for SynapseProxy {
             request_dlp_types: String::new(),
             request_content_type: None,
             skip_request_dlp: false,
+            dlp_scan_rx: None,
+            dlp_scan_time_us: 0,
         }
     }
 
@@ -937,9 +948,18 @@ impl ProxyHttp for SynapseProxy {
     /// Phase 4: Scans request body chunks for PII and sensitive data patterns.
     /// Detects data exfiltration attempts by scanning outbound data.
     ///
+    /// Phase 5: Parallel execution optimization
+    /// Instead of blocking on DLP scan, we spawn it as a background task.
+    /// The scan runs in PARALLEL with:
+    /// - Upstream peer selection (upstream_peer)
+    /// - Connection establishment
+    /// - Request header modification (upstream_request_filter)
+    /// The DLP result is awaited in upstream_request_filter before sending headers.
+    ///
     /// Performance optimizations:
     /// - Content-type short circuit: Skip binary types (images, video, etc.)
     /// - Inspection depth cap: Only scan first N bytes of large payloads
+    /// - Parallel execution: DLP runs alongside WAF and routing
     async fn request_body_filter(
         &self,
         _session: &mut Session,
@@ -980,61 +1000,86 @@ impl ProxyHttp for SynapseProxy {
             );
         }
 
-        // Scan on end of stream
+        // On end of stream: spawn DLP scan as background task for parallel execution
+        // This allows DLP to run in parallel with upstream_peer and upstream_request_filter
         if end_of_stream && !ctx.request_body_buffer.is_empty() && self.dlp_scanner.is_enabled() {
-            let scan_result = self.dlp_scanner.scan_bytes(&ctx.request_body_buffer);
+            // Take ownership of the buffer to send to the async task
+            let body_data = std::mem::take(&mut ctx.request_body_buffer);
+            let scanner = Arc::clone(&self.dlp_scanner);
+            let client_ip = ctx.client_ip.clone();
 
-            // Log truncation if it occurred
-            if scan_result.truncated {
-                debug!(
-                    "DLP: Truncated {} bytes to {} for inspection",
-                    scan_result.original_length,
-                    scan_result.content_length
-                );
-            }
+            // Create oneshot channel for result
+            let (tx, rx) = oneshot::channel();
 
-            if scan_result.has_matches {
-                // Collect unique types
-                let mut types: Vec<&str> = scan_result
-                    .matches
-                    .iter()
-                    .map(|m| m.data_type.as_str())
-                    .collect();
-                types.sort();
-                types.dedup();
+            // Spawn DLP scan as background task - runs in PARALLEL with routing
+            tokio::spawn(async move {
+                let scan_result = scanner.scan_bytes(&body_data);
 
-                ctx.request_dlp_match_count = scan_result.match_count;
-                ctx.request_dlp_types = types.join(",");
+                // Process results
+                let (match_count, types_str, scan_time_us) = if scan_result.has_matches {
+                    // Collect unique types
+                    let mut types: Vec<&str> = scan_result
+                        .matches
+                        .iter()
+                        .map(|m| m.data_type.as_str())
+                        .collect();
+                    types.sort();
+                    types.dedup();
 
-                warn!(
-                    "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
-                    scan_result.match_count,
-                    scan_result.content_length,
-                    scan_result.scan_time_us,
-                    ctx.request_dlp_types,
-                    ctx.client_ip
-                );
+                    let types_str = types.join(",");
 
-                // Log each match for detailed analysis
-                for m in &scan_result.matches {
+                    // Log the detection (runs in background)
+                    warn!(
+                        "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
+                        scan_result.match_count,
+                        scan_result.content_length,
+                        scan_result.scan_time_us,
+                        types_str,
+                        client_ip
+                    );
+
+                    // Log each match for detailed analysis
+                    for m in &scan_result.matches {
+                        debug!(
+                            "DLP request match: {} ({}) severity={} masked={}",
+                            m.pattern_name,
+                            m.data_type.as_str(),
+                            m.severity.as_str(),
+                            m.masked_value
+                        );
+                    }
+
+                    (scan_result.match_count, types_str, scan_result.scan_time_us)
+                } else {
+                    (0, String::new(), scan_result.scan_time_us)
+                };
+
+                // Log truncation if it occurred
+                if scan_result.truncated {
                     debug!(
-                        "DLP request match: {} ({}) severity={} masked={}",
-                        m.pattern_name,
-                        m.data_type.as_str(),
-                        m.severity.as_str(),
-                        m.masked_value
+                        "DLP: Truncated {} bytes to {} for inspection",
+                        scan_result.original_length,
+                        scan_result.content_length
                     );
                 }
-            }
 
-            // Clear buffer after scanning
-            ctx.request_body_buffer.clear();
+                // Send result back (ignore error if receiver dropped)
+                let _ = tx.send((match_count, types_str, scan_time_us));
+            });
+
+            // Store receiver for awaiting in upstream_request_filter
+            ctx.dlp_scan_rx = Some(rx);
+
+            debug!(
+                "DLP: Spawned async scan for {} bytes from {:?}",
+                ctx.body_bytes_seen, ctx.client_ip
+            );
         }
 
         if end_of_stream && ctx.body_bytes_seen > 0 {
             info!(
-                "Request body complete: {} bytes from {:?}, DLP matches: {}",
-                ctx.body_bytes_seen, ctx.client_ip, ctx.request_dlp_match_count
+                "Request body complete: {} bytes from {:?}, DLP scan spawned",
+                ctx.body_bytes_seen, ctx.client_ip
             );
         }
 
@@ -1057,12 +1102,42 @@ impl ProxyHttp for SynapseProxy {
     }
 
     /// Modify request headers before sending to upstream
+    ///
+    /// Phase 5: This is where we await the DLP scan result that was spawned
+    /// in request_body_filter. The scan has been running in PARALLEL with:
+    /// - upstream_peer (backend selection)
+    /// - TCP connection establishment
+    /// This minimizes total latency by overlapping DLP scanning with network I/O.
     async fn upstream_request_filter(
         &self,
         _session: &mut Session,
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        // Phase 5: Await DLP scan result from parallel task
+        // The DLP scan was spawned in request_body_filter and has been running
+        // while we selected the backend and established the connection.
+        if let Some(rx) = ctx.dlp_scan_rx.take() {
+            match rx.await {
+                Ok((match_count, types, scan_time_us)) => {
+                    ctx.request_dlp_match_count = match_count;
+                    ctx.request_dlp_types = types;
+                    ctx.dlp_scan_time_us = scan_time_us;
+
+                    if match_count > 0 {
+                        debug!(
+                            "DLP async scan complete: {} matches, types={}, time={}us",
+                            match_count, ctx.request_dlp_types, scan_time_us
+                        );
+                    }
+                }
+                Err(_) => {
+                    // Task was cancelled or panicked
+                    warn!("DLP scan task failed or was cancelled");
+                }
+            }
+        }
+
         // Add Synapse headers for visibility
         upstream_request.insert_header("X-Synapse-Analyzed", "true")?;
 
@@ -1239,12 +1314,14 @@ impl ProxyHttp for SynapseProxy {
             .map(|b| b.blocked)
             .unwrap_or(false);
 
-        // Phase 4: Include DLP metrics in access log for dual-running validation
-        let dlp_info = if ctx.request_dlp_match_count > 0 || ctx.dlp_match_count > 0 {
+        // Phase 4/5: Include DLP metrics in access log for dual-running validation
+        // Phase 5 adds dlp_scan_time_us from parallel execution
+        let dlp_info = if ctx.request_dlp_match_count > 0 || ctx.dlp_match_count > 0 || ctx.dlp_scan_time_us > 0 {
             format!(
-                " dlp_req={}:{} dlp_resp={}:{}",
+                " dlp_req={}:{}:{}us dlp_resp={}:{}",
                 ctx.request_dlp_match_count,
                 if ctx.request_dlp_types.is_empty() { "-" } else { &ctx.request_dlp_types },
+                ctx.dlp_scan_time_us,
                 ctx.dlp_match_count,
                 if ctx.dlp_types.is_empty() { "-" } else { &ctx.dlp_types }
             )

@@ -518,6 +518,9 @@ lazy_static! {
 
         // JWT (index 23)
         ("eyJ", 23),
+
+        // Email (index 6) - All emails contain @
+        ("@", 6),
     ];
 
     /// Aho-Corasick automaton for fast prefix detection

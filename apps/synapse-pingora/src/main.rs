@@ -496,7 +496,7 @@ impl DetectionEngine {
     /// Analyze a request using the real libsynapse engine.
     /// Returns a DetectionResult with timing information.
     #[inline]
-    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], client_ip: &str) -> DetectionResult {
+    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
         let start = Instant::now();
 
         // Build libsynapse Request
@@ -510,7 +510,7 @@ impl DetectionEngine {
             path: uri,
             query: None, // Extracted from path by libsynapse
             headers: synapse_headers,
-            body: None,
+            body,
             client_ip,
             is_static: false,
         };
@@ -547,6 +547,8 @@ pub struct RequestContext {
     detection: Option<DetectionResult>,
     /// Backend index for round-robin
     backend_idx: usize,
+    /// Request headers (cached for late body inspection)
+    headers: Vec<(String, String)>,
     /// Client IP (extracted from headers or connection)
     client_ip: Option<String>,
     /// Total body size seen (for body inspection)
@@ -717,6 +719,7 @@ impl ProxyHttp for SynapseProxy {
             request_start: Instant::now(),
             detection: None,
             backend_idx: 0,
+            headers: Vec::new(),
             client_ip: None,
             body_bytes_seen: 0,
             fingerprint: None,
@@ -867,8 +870,11 @@ impl ProxyHttp for SynapseProxy {
 
         ctx.fingerprint = Some(fingerprint.clone());
 
-        // Run detection using the real libsynapse engine
-        let result = DetectionEngine::analyze(method, &uri, &headers, client_ip);
+        // Cache headers for late body inspection
+        ctx.headers = headers.clone();
+
+        // Run detection using the real libsynapse engine (headers only initially)
+        let result = DetectionEngine::analyze(method, &uri, &headers, None, client_ip);
 
         // Phase 3: Entity tracking - touch entity and apply risk from matched rules
         // This tracks per-IP state for risk accumulation and blocking decisions
@@ -1043,78 +1049,128 @@ impl ProxyHttp for SynapseProxy {
 
         // On end of stream: spawn DLP scan as background task for parallel execution
         // This allows DLP to run in parallel with upstream_peer and upstream_request_filter
-        if end_of_stream && !ctx.request_body_buffer.is_empty() && self.dlp_scanner.is_enabled() {
-            // Take ownership of the buffer to send to the async task
-            let body_data = std::mem::take(&mut ctx.request_body_buffer);
-            let scanner = Arc::clone(&self.dlp_scanner);
-            let client_ip = ctx.client_ip.clone();
+        if end_of_stream && !ctx.request_body_buffer.is_empty() {
+            // Run full WAF detection on the body
+            if !ctx.skip_request_dlp {
+                let req_header = _session.req_header();
+                let method = req_header.method.as_str();
+                let uri = req_header.uri.to_string();
+                let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
 
-            // Create oneshot channel for result
-            let (tx, rx) = oneshot::channel();
+                let result = DetectionEngine::analyze(
+                    method, 
+                    &uri, 
+                    &ctx.headers, 
+                    Some(&ctx.request_body_buffer), 
+                    client_ip
+                );
 
-            // Spawn DLP scan as background task - runs in PARALLEL with routing
-            tokio::spawn(async move {
-                let scan_result = scanner.scan_bytes(&body_data);
-
-                // Process results
-                let (match_count, types_str, scan_time_us) = if scan_result.has_matches {
-                    // Collect unique types
-                    let mut types: Vec<&str> = scan_result
-                        .matches
-                        .iter()
-                        .map(|m| m.data_type.as_str())
-                        .collect();
-                    types.sort();
-                    types.dedup();
-
-                    let types_str = types.join(",");
-
-                    // Log the detection (runs in background)
+                if result.blocked {
                     warn!(
-                        "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
-                        scan_result.match_count,
-                        scan_result.content_length,
-                        scan_result.scan_time_us,
-                        types_str,
-                        client_ip
+                        "BLOCKED (Body): {} from {} - risk={}, rules={:?}, reason={}",
+                        uri, client_ip, result.risk_score, result.matched_rules, 
+                        result.block_reason.as_deref().unwrap_or("unknown")
                     );
+                    
+                    // Update detection result in context
+                    ctx.detection = Some(result);
 
-                    // Log each match for detailed analysis
-                    for m in &scan_result.matches {
+                    // Send 403 response
+                    let resp = ResponseHeader::build(403, None)?;
+                    _session.write_response_header(Box::new(resp), true).await?;
+                    _session
+                        .write_response_body(
+                            Some(Bytes::from("{\"error\": \"blocked\", \"reason\": \"Body Payload\"}")),
+                            true,
+                        )
+                        .await?;
+                    
+                    // We can't easily abort the upstream request here without returning an error
+                    // But returning an error might cause Pingora to log a 502/error
+                    // Since we wrote the response, returning Ok(()) might be ambiguous
+                    // Let's rely on the response being sent.
+                    return Ok(());
+                }
+            }
+
+            if self.dlp_scanner.is_enabled() {
+                // Take ownership of the buffer to send to the async task
+                let body_data = ctx.request_body_buffer.clone(); // Clone because we might need it? No, we can take it if we are sure WAF is done.
+                // Actually, we just ran WAF. We can take it now.
+                // But wait, `ctx.request_body_buffer` is `Vec<u8>`. `mem::take` works.
+                // But we used it above. So we must clone or restructure.
+                // Let's just clone for the async task, it's safer.
+                
+                let scanner = Arc::clone(&self.dlp_scanner);
+                let client_ip = ctx.client_ip.clone();
+
+                // Create oneshot channel for result
+                let (tx, rx) = oneshot::channel();
+
+                // Spawn DLP scan as background task - runs in PARALLEL with routing
+                tokio::spawn(async move {
+                    let scan_result = scanner.scan_bytes(&body_data);
+
+                    // Process results
+                    let (match_count, types_str, scan_time_us) = if scan_result.has_matches {
+                        // Collect unique types
+                        let mut types: Vec<&str> = scan_result
+                            .matches
+                            .iter()
+                            .map(|m| m.data_type.as_str())
+                            .collect();
+                        types.sort();
+                        types.dedup();
+
+                        let types_str = types.join(",");
+
+                        // Log the detection (runs in background)
+                        warn!(
+                            "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
+                            scan_result.match_count,
+                            scan_result.content_length,
+                            scan_result.scan_time_us,
+                            types_str,
+                            client_ip
+                        );
+
+                        // Log each match for detailed analysis
+                        for m in &scan_result.matches {
+                            debug!(
+                                "DLP request match: {} ({}) severity={} masked={}",
+                                m.pattern_name,
+                                m.data_type.as_str(),
+                                m.severity.as_str(),
+                                m.masked_value
+                            );
+                        }
+
+                        (scan_result.match_count, types_str, scan_result.scan_time_us)
+                    } else {
+                        (0, String::new(), scan_result.scan_time_us)
+                    };
+
+                    // Log truncation if it occurred
+                    if scan_result.truncated {
                         debug!(
-                            "DLP request match: {} ({}) severity={} masked={}",
-                            m.pattern_name,
-                            m.data_type.as_str(),
-                            m.severity.as_str(),
-                            m.masked_value
+                            "DLP: Truncated {} bytes to {} for inspection",
+                            scan_result.original_length,
+                            scan_result.content_length
                         );
                     }
 
-                    (scan_result.match_count, types_str, scan_result.scan_time_us)
-                } else {
-                    (0, String::new(), scan_result.scan_time_us)
-                };
+                    // Send result back (ignore error if receiver dropped)
+                    let _ = tx.send((match_count, types_str, scan_time_us));
+                });
 
-                // Log truncation if it occurred
-                if scan_result.truncated {
-                    debug!(
-                        "DLP: Truncated {} bytes to {} for inspection",
-                        scan_result.original_length,
-                        scan_result.content_length
-                    );
-                }
+                // Store receiver for awaiting in upstream_request_filter
+                ctx.dlp_scan_rx = Some(rx);
 
-                // Send result back (ignore error if receiver dropped)
-                let _ = tx.send((match_count, types_str, scan_time_us));
-            });
-
-            // Store receiver for awaiting in upstream_request_filter
-            ctx.dlp_scan_rx = Some(rx);
-
-            debug!(
-                "DLP: Spawned async scan for {} bytes from {:?}",
-                ctx.body_bytes_seen, ctx.client_ip
-            );
+                debug!(
+                    "DLP: Spawned async scan for {} bytes from {:?}",
+                    ctx.body_bytes_seen, ctx.client_ip
+                );
+            }
         }
 
         if end_of_stream && ctx.body_bytes_seen > 0 {

@@ -71,7 +71,10 @@ use synapse_pingora::config_manager::ConfigManager;
 use synapse_pingora::site_waf::SiteWafManager;
 use synapse_pingora::ratelimit::RateLimitManager;
 use synapse_pingora::access::AccessListManager;
-use synapse_pingora::telemetry::{TelemetryClient, TelemetryConfig};
+use synapse_pingora::telemetry::{
+    TelemetryClient, TelemetryConfig, TelemetryEvent, 
+    ExternalActorContext, ExternalSignalContext, ExternalRequestContext
+};
 use parking_lot::RwLock;
 
 // ============================================================================

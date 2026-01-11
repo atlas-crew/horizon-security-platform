@@ -1,0 +1,56 @@
+# Synapse-Pingora Multi-Site Configuration
+# This file defines virtual hosts with per-site upstreams and policies
+
+server:
+  http_addr: "0.0.0.0:8080"
+  workers: 4
+  waf_threshold: 70
+  waf_enabled: true
+  log_level: info
+
+rate_limit:
+  rps: 10000
+  enabled: true
+
+sites:
+  # Default site for unmatched hosts
+  - hostname: "_"
+    upstreams:
+      - host: 127.0.0.1
+        port: 8081
+
+  # API backend
+  - hostname: api.example.com
+    upstreams:
+      - host: 10.0.1.10
+        port: 8080
+        weight: 2
+      - host: 10.0.1.11
+        port: 8080
+        weight: 1
+    waf:
+      enabled: true
+      threshold: 60
+    rate_limit:
+      rps: 5000
+      enabled: true
+
+  # Static content backend
+  - hostname: static.example.com
+    upstreams:
+      - host: 10.0.2.10
+        port: 80
+    waf:
+      enabled: false
+    rate_limit:
+      rps: 20000
+      enabled: true
+
+  # Wildcard subdomain support
+  - hostname: "*.example.com"
+    upstreams:
+      - host: 10.0.3.10
+        port: 8080
+    waf:
+      enabled: true
+      threshold: 80

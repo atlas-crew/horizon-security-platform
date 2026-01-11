@@ -445,6 +445,33 @@ impl TelemetryClient {
         self.send_batch_with_retry(&batch).await
     }
 
+    /// Reports a single event immediately (bypassing batching).
+    /// Used for critical security alerts like blocks.
+    ///
+    /// NOTE: This is a stub implementation. To enable HTTP reporting,
+    /// add reqwest to Cargo.toml and uncomment the HTTP client code.
+    pub async fn report(&self, event: TelemetryEvent) -> TelemetryResult<()> {
+        if !self.config.enabled {
+            return Ok(());
+        }
+
+        // Serialize event to JSON for transmission
+        let _payload = serde_json::to_value(&event)
+            .map_err(|e| TelemetryError::SerializationError(e.to_string()))?;
+
+        // TODO: Add reqwest to Cargo.toml and enable HTTP reporting
+        // let client = reqwest::Client::new();
+        // let response = client.post(&self.config.endpoint)
+        //     .json(&_payload)
+        //     .timeout(Duration::from_secs(2))
+        //     .send()
+        //     .await
+        //     .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
+
+        warn!("Telemetry reporting not implemented - event type {:?} discarded", event.event_type());
+        Ok(())
+    }
+
     async fn send_batch_with_retry(&self, batch: &TelemetryBatch) -> TelemetryResult<()> {
         let mut backoff = self.config.initial_backoff;
 

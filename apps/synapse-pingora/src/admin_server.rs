@@ -14,16 +14,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{header, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::api::{ApiHandler, ApiResponse};
+use crate::config_manager::{
+    CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
+    RateLimitRequest, AccessListRequest,
+};
 
 /// Admin server state shared across handlers.
 #[derive(Clone)]
@@ -53,14 +57,32 @@ pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> s
         .route("/reload", post(reload_handler))
         .route("/test", post(test_handler))
         .route("/restart", post(restart_handler))
-        // Site listing
-        .route("/sites", get(sites_handler))
+        // Site management (CRUD)
+        .route("/sites", get(sites_handler).post(create_site_handler))
+        .route("/sites/{hostname}", get(get_site_handler).put(update_site_handler).delete(delete_site_handler))
+        .route("/sites/{hostname}/waf", put(update_site_waf_handler))
+        .route("/sites/{hostname}/rate-limit", put(update_site_rate_limit_handler))
+        .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
         // Statistics
         .route("/stats", get(stats_handler))
         .route("/waf/stats", get(waf_stats_handler))
         // Debugging / Profiling
         .route("/debug/profiles", get(profiles_handler))
         .route("/debug/profiles/save", post(save_profiles_handler))
+        // Dashboard compatibility routes (/_sensor/ prefix)
+        // These map to the same handlers but with the prefix the dashboard expects
+        .route("/_sensor/status", get(sensor_status_handler))
+        .route("/_sensor/config", get(sensor_config_handler))
+        .route("/_sensor/health", get(health_handler))
+        // Stub endpoints - return empty data for dashboard compatibility
+        .route("/_sensor/entities", get(sensor_entities_handler))
+        .route("/_sensor/blocks", get(sensor_blocks_handler))
+        .route("/_sensor/trends", get(sensor_trends_handler))
+        .route("/_sensor/anomalies", get(sensor_anomalies_handler))
+        .route("/_sensor/campaigns", get(sensor_campaigns_handler))
+        .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
+        .route("/_sensor/actors", get(sensor_actors_handler))
+        .route("/_sensor/system/config", get(sensor_system_config_handler))
         // Root endpoint (API info)
         .route("/", get(root_handler))
         .layer(cors)
@@ -142,6 +164,77 @@ async fn sites_handler(State(state): State<AdminState>) -> impl IntoResponse {
     wrap_response(response)
 }
 
+// =============================================================================
+// Site CRUD Operations
+// =============================================================================
+
+/// POST /sites - Create a new site
+async fn create_site_handler(
+    State(state): State<AdminState>,
+    Json(request): Json<CreateSiteRequest>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_create_site(request);
+    wrap_response(response)
+}
+
+/// GET /sites/:hostname - Get site details
+async fn get_site_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_get_site(&hostname);
+    wrap_response(response)
+}
+
+/// PUT /sites/:hostname - Update site configuration
+async fn update_site_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+    Json(request): Json<UpdateSiteRequest>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_update_site(&hostname, request);
+    wrap_response(response)
+}
+
+/// DELETE /sites/:hostname - Delete a site
+async fn delete_site_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_delete_site(&hostname);
+    wrap_response(response)
+}
+
+/// PUT /sites/:hostname/waf - Update site WAF configuration
+async fn update_site_waf_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+    Json(request): Json<SiteWafRequest>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_update_site_waf(&hostname, request);
+    wrap_response(response)
+}
+
+/// PUT /sites/:hostname/rate-limit - Update site rate limit
+async fn update_site_rate_limit_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+    Json(request): Json<RateLimitRequest>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_update_site_rate_limit(&hostname, request);
+    wrap_response(response)
+}
+
+/// PUT /sites/:hostname/access-list - Update site access list
+async fn update_site_access_list_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+    Json(request): Json<AccessListRequest>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_update_site_access_list(&hostname, request);
+    wrap_response(response)
+}
+
 /// GET /stats - Runtime statistics
 async fn stats_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let response = state.handler.handle_stats();
@@ -154,8 +247,147 @@ async fn waf_stats_handler(State(state): State<AdminState>) -> impl IntoResponse
     wrap_response(response)
 }
 
+// =============================================================================
+// Dashboard Compatibility Routes (/_sensor/ prefix)
+// =============================================================================
+
+/// GET /_sensor/status - Dashboard status endpoint
+/// Returns a format compatible with the dashboard's expected response.
+async fn sensor_status_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let health = state.handler.handle_health();
+    let stats = state.handler.handle_stats();
+    let waf = state.handler.handle_waf_stats();
+
+    // Map to dashboard-expected format
+    let response = serde_json::json!({
+        "status": "running",
+        "uptime": stats.data.as_ref().map(|s| s.uptime_secs).unwrap_or(0),
+        "requestRate": 0,
+        "blockRate": waf.data.as_ref().map(|w| w.block_rate_percent).unwrap_or(0.0),
+        "fallbackRate": 0,
+        "waf": health.data.as_ref().map(|h| {
+            serde_json::json!({
+                "enabled": h.waf.enabled,
+                "analyzed": h.waf.analyzed,
+                "blocked": h.waf.blocked
+            })
+        }),
+        "proxy": {
+            "type": "pingora",
+            "version": env!("CARGO_PKG_VERSION")
+        }
+    });
+
+    (StatusCode::OK, Json(response))
+}
+
+/// GET /_sensor/config - Dashboard config endpoint
+/// Returns system configuration in dashboard-expected format.
+async fn sensor_config_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let sites = state.handler.handle_list_sites();
+
+    let response = serde_json::json!({
+        "success": true,
+        "data": {
+            "general": {
+                "port": 6190,
+                "sensorId": "synapse-pingora",
+                "sensorMode": "proxy"
+            },
+            "features": {
+                "atlasCrewMode": false,
+                "waf": true,
+                "rateLimit": true,
+                "accessLists": true
+            },
+            "sites": sites.data.map(|s| s.sites).unwrap_or_default()
+        }
+    });
+
+    (StatusCode::OK, Json(response))
+}
+
+/// GET /_sensor/entities - Returns empty entity list
+async fn sensor_entities_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({ "entities": [] })))
+}
+
+/// GET /_sensor/blocks - Returns empty blocks list
+async fn sensor_blocks_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({ "blocks": [] })))
+}
+
+/// GET /_sensor/trends - Returns empty trends data
+async fn sensor_trends_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "signalCounts": {},
+        "timeline": [],
+        "topSignals": []
+    })))
+}
+
+/// GET /_sensor/anomalies - Returns empty anomalies list
+async fn sensor_anomalies_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({ "data": [] })))
+}
+
+/// GET /_sensor/campaigns - Returns empty campaigns list
+async fn sensor_campaigns_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({ "data": [] })))
+}
+
+/// GET /_sensor/payload/bandwidth - Returns empty bandwidth data
+async fn sensor_bandwidth_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "totalBytes": 0,
+        "avgBytesPerRequest": 0,
+        "maxRequestSize": 0,
+        "timeline": []
+    })))
+}
+
+/// GET /_sensor/actors - Returns empty actors list
+async fn sensor_actors_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({ "actors": [] })))
+}
+
+/// GET /_sensor/system/config - Returns system configuration
+async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let sites = state.handler.handle_list_sites();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "general": {
+                "port": 6190,
+                "sensorId": "synapse-pingora",
+                "sensorMode": "proxy",
+                "demoMode": false
+            },
+            "waf": {
+                "enabled": true,
+                "allowIpSpoofing": false,
+                "trustedIpHeaders": ["X-Forwarded-For", "X-Real-IP"],
+                "trustPrivateProxyRanges": true,
+                "trustedProxyCidrs": []
+            },
+            "features": {
+                "atlasCrewMode": false,
+                "waf": true,
+                "rateLimit": true,
+                "accessLists": true,
+                "campaigns": false,
+                "actors": false,
+                "anomalies": false
+            },
+            "runtimeConfig": {},
+            "startupFlags": [],
+            "sites": sites.data.map(|s| s.sites).unwrap_or_default()
+        }
+    })))
+}
+
 use crate::persistence::SnapshotManager;
-use std::path::Path;
 
 /// GET /debug/profiles - Get learned endpoint profiles
 async fn profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
@@ -170,7 +402,7 @@ async fn save_profiles_handler(State(state): State<AdminState>) -> impl IntoResp
     let response = state.handler.handle_get_profiles();
 
     if let Some(profiles) = response.data {
-        if let Err(e) = SnapshotManager::save_profiles(&profiles, Path::new("data/profiles.json")) {
+        if let Err(e) = SnapshotManager::save_profiles(&profiles, std::path::Path::new("data/profiles.json")) {
             return wrap_response(crate::api::ApiResponse::<String>::err(format!("Failed to save: {}", e)));
         }
         return wrap_response(crate::api::ApiResponse::ok("Profiles saved to data/profiles.json".to_string()));

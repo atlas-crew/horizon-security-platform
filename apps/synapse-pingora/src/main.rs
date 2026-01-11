@@ -64,6 +64,16 @@ use synapse_pingora::tarpit::{TarpitManager, TarpitConfig};
 // Phase 3: DLP Scanning (Feature Migration from risk-server)
 use synapse_pingora::dlp::{DlpScanner, DlpConfig};
 
+// Multi-site configuration and routing
+use synapse_pingora::vhost::{VhostMatcher, SiteConfig};
+use synapse_pingora::config::ConfigLoader;
+use synapse_pingora::config_manager::ConfigManager;
+use synapse_pingora::site_waf::SiteWafManager;
+use synapse_pingora::ratelimit::RateLimitManager;
+use synapse_pingora::access::AccessListManager;
+use synapse_pingora::telemetry::{TelemetryClient, TelemetryConfig};
+use parking_lot::RwLock;
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -204,19 +214,21 @@ impl Default for LoggingConfig {
     }
 }
 
-use synapse_pingora::telemetry::{AlertForwarder, SecurityEvent, ActorContext, SignalContext, RequestContext};
+// NOTE: Old telemetry types removed - use TelemetryClient and TelemetryEvent instead
+// use synapse_pingora::telemetry::{AlertForwarder, SecurityEvent, ActorContext, SignalContext, RequestContext};
 
 // ... (existing imports)
 
-// Global Alert Forwarder (Shared)
-static ALERT_FORWARDER: Lazy<Option<AlertForwarder>> = Lazy::new(|| {
-    let config = Config::load_or_default();
-    if let Some(url) = config.detection.risk_server_url {
-        Some(AlertForwarder::new(url, "synapse-pingora".to_string()))
-    } else {
-        None
-    }
-});
+// Global Alert Forwarder (Legacy - replaced by TelemetryClient)
+// TODO: Migrate to TelemetryClient when refactoring telemetry integration
+// static ALERT_FORWARDER: Lazy<Option<AlertForwarder>> = Lazy::new(|| {
+//     let config = Config::load_or_default();
+//     if let Some(url) = config.detection.risk_server_url {
+//         Some(AlertForwarder::new(url, "synapse-pingora".to_string()))
+//     } else {
+//         None
+//     }
+// });
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DetectionConfig {
@@ -610,6 +622,8 @@ pub struct RequestContext {
     detection: Option<DetectionResult>,
     /// Backend index for round-robin
     backend_idx: usize,
+    /// Multi-site: Matched site configuration for this request
+    matched_site: Option<SiteConfig>,
     /// Request headers (cached for late body inspection)
     headers: Vec<(String, String)>,
     /// Client IP (extracted from headers or connection)
@@ -672,7 +686,7 @@ static REQUEST_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// The Synapse WAF Proxy
 pub struct SynapseProxy {
-    /// Backend servers for round-robin selection
+    /// Backend servers for round-robin selection (fallback/default)
     backends: Vec<(String, u16)>,
     /// Round-robin counter
     backend_counter: AtomicUsize,
@@ -688,6 +702,18 @@ pub struct SynapseProxy {
     health_checker: Arc<HealthChecker>,
     /// Metrics registry for collecting statistics
     metrics_registry: Arc<MetricsRegistry>,
+    /// Multi-site: Virtual host matcher for hostname-based routing
+    vhost_matcher: Option<Arc<RwLock<VhostMatcher>>>,
+    /// Multi-site: Configuration manager for CRUD operations
+    config_manager: Option<Arc<ConfigManager>>,
+    /// Multi-site: Per-site WAF configuration
+    site_waf_manager: Option<Arc<RwLock<SiteWafManager>>>,
+    /// Multi-site: Per-site rate limiting
+    rate_limit_manager: Option<Arc<RwLock<RateLimitManager>>>,
+    /// Multi-site: Per-site access lists
+    access_list_manager: Option<Arc<RwLock<AccessListManager>>>,
+    /// Phase 3: Telemetry client for Signal Horizon reporting
+    telemetry_client: Arc<TelemetryClient>,
 }
 
 impl SynapseProxy {
@@ -697,6 +723,7 @@ impl SynapseProxy {
             rps_limit,
             Arc::new(HealthChecker::default()),
             Arc::new(MetricsRegistry::new()),
+            Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
         )
     }
 
@@ -705,6 +732,7 @@ impl SynapseProxy {
         rps_limit: usize,
         health_checker: Arc<HealthChecker>,
         metrics_registry: Arc<MetricsRegistry>,
+        telemetry_client: Arc<TelemetryClient>,
     ) -> Self {
         Self {
             backends,
@@ -715,6 +743,12 @@ impl SynapseProxy {
             dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker,
             metrics_registry,
+            telemetry_client,
+            vhost_matcher: None,
+            config_manager: None,
+            site_waf_manager: None,
+            rate_limit_manager: None,
+            access_list_manager: None,
         }
     }
 
@@ -728,6 +762,43 @@ impl SynapseProxy {
             dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
+            telemetry_client: Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
+            vhost_matcher: None,
+            config_manager: None,
+            site_waf_manager: None,
+            rate_limit_manager: None,
+            access_list_manager: None,
+        }
+    }
+
+    /// Create a SynapseProxy with multi-site configuration support
+    pub fn with_multisite(
+        default_backends: Vec<(String, u16)>,
+        rps_limit: usize,
+        health_checker: Arc<HealthChecker>,
+        metrics_registry: Arc<MetricsRegistry>,
+        vhost_matcher: Arc<RwLock<VhostMatcher>>,
+        config_manager: Arc<ConfigManager>,
+        site_waf_manager: Arc<RwLock<SiteWafManager>>,
+        rate_limit_manager: Arc<RwLock<RateLimitManager>>,
+        access_list_manager: Arc<RwLock<AccessListManager>>,
+        telemetry_client: Arc<TelemetryClient>,
+    ) -> Self {
+        Self {
+            backends: default_backends,
+            backend_counter: AtomicUsize::new(0),
+            rps_limit,
+            entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
+            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
+            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
+            health_checker,
+            metrics_registry,
+            telemetry_client,
+            vhost_matcher: Some(vhost_matcher),
+            config_manager: Some(config_manager),
+            site_waf_manager: Some(site_waf_manager),
+            rate_limit_manager: Some(rate_limit_manager),
+            access_list_manager: Some(access_list_manager),
         }
     }
 
@@ -782,6 +853,7 @@ impl ProxyHttp for SynapseProxy {
             request_start: Instant::now(),
             detection: None,
             backend_idx: 0,
+            matched_site: None,
             headers: Vec::new(),
             client_ip: None,
             body_bytes_seen: 0,
@@ -848,6 +920,25 @@ impl ProxyHttp for SynapseProxy {
         let uri = req_header.uri.to_string();
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+        // ===== Multi-site: Virtual Host Matching =====
+        // Match request Host header to site configuration for per-site routing
+        if let Some(ref vhost) = self.vhost_matcher {
+            if let Some(host_header) = req_header.headers.get("host") {
+                if let Ok(host_str) = host_header.to_str() {
+                    let vhost_read = vhost.read();
+                    if let Some(site) = vhost_read.match_host(host_str) {
+                        ctx.matched_site = Some(site.clone());
+                        debug!(
+                            "Multi-site: matched host '{}' to site '{}'",
+                            host_str, site.hostname
+                        );
+                    } else {
+                        debug!("Multi-site: no site matched for host '{}'", host_str);
+                    }
+                }
+            }
+        }
 
         // Extract Content-Type for DLP optimization (skip binary types)
         ctx.request_content_type = req_header
@@ -1246,16 +1337,46 @@ impl ProxyHttp for SynapseProxy {
         Ok(())
     }
 
-    /// Select upstream backend (round-robin)
+    /// Select upstream backend (round-robin, or per-site upstreams if multi-site)
     async fn upstream_peer(
         &self,
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
+        // ===== Multi-site: Use matched site's upstreams if available =====
+        if let Some(ref site) = ctx.matched_site {
+            if !site.upstreams.is_empty() {
+                // Parse and round-robin through site's upstreams
+                let idx = self.backend_counter.fetch_add(1, Ordering::Relaxed) % site.upstreams.len();
+                let upstream = &site.upstreams[idx];
+
+                // Parse "host:port" format
+                let (host, port) = if let Some(colon_idx) = upstream.rfind(':') {
+                    let host = &upstream[..colon_idx];
+                    let port: u16 = upstream[colon_idx + 1..].parse().unwrap_or(80);
+                    (host.to_string(), port)
+                } else {
+                    (upstream.clone(), 80)
+                };
+
+                ctx.backend_idx = idx;
+                info!(
+                    "Multi-site: routing to site '{}' backend {}:{} (index {})",
+                    site.hostname, host, port, idx
+                );
+
+                let tls = site.tls_enabled;
+                let sni = if tls { site.hostname.clone() } else { String::new() };
+                let peer = HttpPeer::new((&host as &str, port), tls, sni);
+                return Ok(Box::new(peer));
+            }
+        }
+
+        // Fallback: use default backends
         let (host, port, idx) = self.next_backend();
         ctx.backend_idx = idx;
 
-        info!("Routing to backend {}:{} (index {})", host, port, idx);
+        info!("Routing to default backend {}:{} (index {})", host, port, idx);
 
         let peer = HttpPeer::new((&host as &str, port), false, String::new());
         Ok(Box::new(peer))
@@ -1481,43 +1602,46 @@ impl ProxyHttp for SynapseProxy {
                 self.metrics_registry.record_rule_match(&rule_id.to_string());
             }
 
-            // Phase 3: Send telemetry alert if blocked or high anomaly
-            if let Some(forwarder) = &*ALERT_FORWARDER {
-                if detection.blocked || detection.anomaly_score > 5.0 {
-                    let client_ip = session.client_ip().map(|ip| ip.to_string()).unwrap_or_else(|| "unknown".to_string());
-                    
-                    let event = SecurityEvent {
-                        sensor_id: "synapse-pingora".to_string(),
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                        actor: ActorContext {
-                            ip: client_ip,
-                            session_id: None, // Session tracking is Phase 3.1
-                            fingerprint: None, // Fingerprinting is Phase 3.2
-                        },
-                        signal: SignalContext {
-                            type_: if detection.blocked { "block" } else { "anomaly" }.to_string(),
-                            severity: if detection.anomaly_score > 8.0 { "critical" } else { "high" }.to_string(),
-                            details: serde_json::json!({
-                                "rule_id": detection.matched_rules.first(), // Primary rule
-                                "anomaly_score": detection.anomaly_score,
-                                "block_reason": detection.block_reason
-                            }),
-                        },
-                        request: RequestContext {
-                            path: session.req_header().uri.path().to_string(),
-                            method: session.req_header().method.to_string(),
-                            user_agent: session.req_header().headers.get("user-agent").and_then(|v| v.to_str().ok()).map(|s| s.to_string()),
-                        }
-                    };
-                    forwarder.send(event);
-                }
+            // Phase 3: Send telemetry alert if blocked or high risk detection
+            // Uses existing TelemetryEvent::WafBlock variant for security events
+            if self.telemetry_client.is_enabled() && (detection.blocked || detection.risk_score > 50) {
+                let client_ip = session.client_addr()
+                    .map(|addr| addr.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                let site = ctx.matched_site.as_ref()
+                    .map(|s| s.hostname.clone())
+                    .unwrap_or_else(|| "_default".to_string());
+
+                let rule_id = detection.matched_rules.first()
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "high_risk".to_string());
+
+                let severity = if detection.risk_score > 80 { "critical" }
+                    else if detection.risk_score > 50 { "high" }
+                    else { "medium" }.to_string();
+
+                let event = synapse_pingora::telemetry::TelemetryEvent::WafBlock {
+                    rule_id,
+                    severity,
+                    client_ip,
+                    site,
+                    path: session.req_header().uri.path().to_string(),
+                };
+
+                let client = Arc::clone(&self.telemetry_client);
+                tokio::spawn(async move {
+                    if let Err(e) = client.report(event).await {
+                        debug!("Failed to report security telemetry: {}", e);
+                    }
+                });
             }
         }
 
         // Phase 2: Report profiling metrics
         // We do this in logging to avoid blocking the request path
         // In a real system, we might sample this or use a background task
-        if let Some(detection) = &ctx.detection {
+        if let Some(_detection) = &ctx.detection {
             // Collect anomalies from the detection result (if we exposed them in DetectionResult)
             // For now, we just update the active profile count periodically
             // Ideally, DetectionResult should carry the anomalies
@@ -1582,16 +1706,109 @@ impl ProxyHttp for SynapseProxy {
 // ============================================================================
 
 use synapse_pingora::persistence::SnapshotManager;
+use synapse_pingora::config::ConfigFile as MultisiteConfigFile;
 
-// ... (existing imports)
+// ============================================================================
+// Multi-site Configuration Loading
+// ============================================================================
+
+/// Attempts to load multi-site configuration from YAML files.
+/// Returns (ConfigFile, Vec<SiteConfig>) if successful.
+fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)> {
+    let paths = ["config.sites.yaml", "config.yaml", "/etc/synapse-pingora/config.yaml"];
+
+    for path in &paths {
+        if !std::path::Path::new(path).exists() {
+            continue;
+        }
+
+        match ConfigLoader::load(path) {
+            Ok(config_file) => {
+                if !config_file.sites.is_empty() {
+                    let sites = ConfigLoader::to_site_configs(&config_file);
+                    info!(
+                        "Loaded multi-site configuration from {} with {} sites",
+                        path,
+                        sites.len()
+                    );
+                    return Some((config_file, sites));
+                }
+            }
+            Err(e) => {
+                debug!("Could not load multi-site config from {}: {}", path, e);
+            }
+        }
+    }
+
+    None
+}
+
+/// Creates all runtime managers from a multi-site configuration.
+fn create_multisite_managers(
+    config_file: &MultisiteConfigFile,
+    sites: &[SiteConfig],
+) -> (
+    Arc<RwLock<VhostMatcher>>,
+    Arc<RwLock<SiteWafManager>>,
+    Arc<RwLock<RateLimitManager>>,
+    Arc<RwLock<AccessListManager>>,
+) {
+    // Create VhostMatcher from sites
+    let vhost_matcher = VhostMatcher::new(sites.to_vec())
+        .unwrap_or_else(|e| {
+            warn!("Failed to create VhostMatcher: {}, using empty matcher", e);
+            VhostMatcher::new(Vec::new()).unwrap()
+        });
+
+    // Create SiteWafManager
+    let mut site_waf = SiteWafManager::new();
+    for site in &config_file.sites {
+        if let Some(ref waf) = site.waf {
+            let waf_config = synapse_pingora::site_waf::SiteWafConfig {
+                enabled: waf.enabled,
+                threshold: waf.threshold.unwrap_or(config_file.server.waf_threshold),
+                rule_overrides: std::collections::HashMap::new(),
+                custom_block_page: None,
+                default_action: synapse_pingora::site_waf::WafAction::Block,
+            };
+            site_waf.add_site(&site.hostname, waf_config);
+        }
+    }
+
+    // Create RateLimitManager
+    let rate_limit_mgr = RateLimitManager::new();
+    for site in &config_file.sites {
+        if let Some(ref rl) = site.rate_limit {
+            let rl_config = synapse_pingora::ratelimit::RateLimitConfig {
+                rps: rl.rps,
+                burst: rl.burst.unwrap_or(rl.rps * 2),
+                enabled: rl.enabled,
+                window_secs: 1,
+            };
+            rate_limit_mgr.add_site(&site.hostname, rl_config);
+        }
+    }
+
+    // Create AccessListManager (currently no per-site access lists in config schema)
+    let access_list_mgr = AccessListManager::new();
+
+    (
+        Arc::new(RwLock::new(vhost_matcher)),
+        Arc::new(RwLock::new(site_waf)),
+        Arc::new(RwLock::new(rate_limit_mgr)),
+        Arc::new(RwLock::new(access_list_mgr)),
+    )
+}
 
 fn main() {
-    // ... (logging init)
+    // Initialize logging
+    env_logger::init();
 
     info!("Starting Synapse-Pingora PoC");
 
-    // Load configuration
+    // Load configuration - try multi-site first, fall back to legacy
     let config = Config::load_or_default();
+    let multisite_config = try_load_multisite_config();
 
     // ... (metrics init)
 
@@ -1647,8 +1864,8 @@ fn main() {
     let rule_count = DetectionEngine::rule_count();
     info!("Synapse engine initialized with {} rules", rule_count);
 
-    // Configure backends from config
-    let backends: Vec<(String, u16)> = config
+    // Configure backends from legacy config (fallback)
+    let legacy_backends: Vec<(String, u16)> = config
         .upstreams
         .iter()
         .map(|u| (u.host.clone(), u.port))
@@ -1656,7 +1873,7 @@ fn main() {
 
     // Apply anomaly blocking configuration
     if config.detection.anomaly_blocking.enabled {
-        let mut synapse = SYNAPSE.write();
+        let synapse = SYNAPSE.write();
         let mut risk_config = synapse.risk_config();
         risk_config.blocking_mode = synapse::BlockingMode::Enforcement;
         risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
@@ -1668,13 +1885,65 @@ fn main() {
     let health_checker = Arc::new(HealthChecker::default());
     let metrics_registry = Arc::new(MetricsRegistry::new());
 
-    // Build the API handler
-    let api_handler = Arc::new(
-        ApiHandler::builder()
+    // Initialize Telemetry (Signal Horizon)
+    let telemetry_config = if let Some(url) = &config.detection.risk_server_url {
+        info!("Telemetry enabled, reporting to {}", url);
+        TelemetryConfig {
+            enabled: true,
+            endpoint: format!("{}/_sensor/report", url),
+            ..TelemetryConfig::default()
+        }
+    } else {
+        TelemetryConfig { enabled: false, ..TelemetryConfig::default() }
+    };
+    let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
+    if telemetry_client.is_enabled() {
+        telemetry_client.start_background_flush();
+    }
+
+    // Create multi-site managers if available
+    let config_manager: Option<Arc<ConfigManager>> = if let Some((ref config_file, ref sites)) = multisite_config {
+        let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
+            create_multisite_managers(config_file, sites);
+
+        // Create shared sites vector for ConfigManager
+        let sites_arc = Arc::new(RwLock::new(sites.clone()));
+        let config_arc = Arc::new(RwLock::new(config_file.clone()));
+
+        // Create ConfigManager with all managers
+        let manager = ConfigManager::new(
+            config_arc,
+            sites_arc,
+            Arc::clone(&vhost_matcher),
+            Arc::clone(&site_waf_mgr),
+            Arc::clone(&rate_limit_mgr),
+            Arc::clone(&access_list_mgr),
+        );
+
+        info!(
+            "Multi-site mode enabled: {} sites, {} exact matches",
+            sites.len(),
+            vhost_matcher.read().site_count()
+        );
+
+        Some(Arc::new(manager))
+    } else {
+        info!("Legacy single-backend mode (no multi-site config found)");
+        None
+    };
+
+    // Build the API handler with ConfigManager if available
+    let api_handler = Arc::new({
+        let mut builder = ApiHandler::builder()
             .health(Arc::clone(&health_checker))
-            .metrics(Arc::clone(&metrics_registry))
-            .build()
-    );
+            .metrics(Arc::clone(&metrics_registry));
+
+        if let Some(ref cm) = config_manager {
+            builder = builder.config_manager(Arc::clone(cm));
+        }
+
+        builder.build()
+    });
 
     // Start admin HTTP server in a separate thread with its own tokio runtime
     let admin_addr: SocketAddr = config.server.admin_listen.parse()
@@ -1700,13 +1969,51 @@ fn main() {
     let mut server = Server::new(None).expect("Failed to create server");
     server.bootstrap();
 
-    // Create and configure the proxy service with SHARED metrics/health
-    let proxy = SynapseProxy::with_health(
-        backends, 
-        config.rate_limit.rps,
-        Arc::clone(&health_checker),
-        Arc::clone(&metrics_registry)
-    );
+    // Create telemetry client (disabled by default, can be enabled via config)
+    let telemetry_client = Arc::new(TelemetryClient::new(TelemetryConfig {
+        enabled: false,
+        ..TelemetryConfig::default()
+    }));
+
+    // Create proxy service - use multi-site if available, otherwise legacy
+    let proxy = if let Some((ref config_file, ref sites)) = multisite_config {
+        let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
+            create_multisite_managers(config_file, sites);
+
+        // Re-create ConfigManager for proxy (shared via Arc)
+        let sites_arc = Arc::new(RwLock::new(sites.clone()));
+        let config_arc = Arc::new(RwLock::new(config_file.clone()));
+
+        let config_manager_for_proxy = Arc::new(ConfigManager::new(
+            config_arc,
+            sites_arc,
+            Arc::clone(&vhost_matcher),
+            Arc::clone(&site_waf_mgr),
+            Arc::clone(&rate_limit_mgr),
+            Arc::clone(&access_list_mgr),
+        ));
+
+        SynapseProxy::with_multisite(
+            legacy_backends.clone(),
+            config.rate_limit.rps,
+            Arc::clone(&health_checker),
+            Arc::clone(&metrics_registry),
+            vhost_matcher,
+            config_manager_for_proxy,
+            site_waf_mgr,
+            rate_limit_mgr,
+            access_list_mgr,
+            Arc::clone(&telemetry_client),
+        )
+    } else {
+        SynapseProxy::with_health(
+            legacy_backends,
+            config.rate_limit.rps,
+            Arc::clone(&health_checker),
+            Arc::clone(&metrics_registry),
+            Arc::clone(&telemetry_client),
+        )
+    };
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
     proxy_service.add_tcp(&config.server.listen);
@@ -2017,12 +2324,17 @@ tls:
         let backends = vec![("127.0.0.1".to_string(), 8080)];
         let health_checker = Arc::new(HealthChecker::default());
         let metrics_registry = Arc::new(MetricsRegistry::new());
+        let telemetry_client = Arc::new(TelemetryClient::new(TelemetryConfig {
+            enabled: false,
+            ..TelemetryConfig::default()
+        }));
 
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
             Arc::clone(&health_checker),
             Arc::clone(&metrics_registry),
+            Arc::clone(&telemetry_client),
         );
 
         // Verify health status is accessible through proxy

@@ -220,6 +220,30 @@ pub struct DetectionConfig {
     pub block_status: u16,
     #[serde(default = "default_rules_path")]
     pub rules_path: String,
+    /// Anomaly blocking settings (Phase 2)
+    #[serde(default)]
+    pub anomaly_blocking: AnomalyBlockingConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AnomalyBlockingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_anomaly_threshold")]
+    pub threshold: f64,
+}
+
+fn default_anomaly_threshold() -> f64 {
+    10.0
+}
+
+impl Default for AnomalyBlockingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: 10.0,
+        }
+    }
 }
 
 fn default_action() -> String {
@@ -245,6 +269,7 @@ impl Default for DetectionConfig {
             action: default_action(),
             block_status: default_block_status(),
             rules_path: default_rules_path(),
+            anomaly_blocking: AnomalyBlockingConfig::default(),
         }
     }
 }
@@ -1562,6 +1587,16 @@ fn main() {
         .iter()
         .map(|u| (u.host.clone(), u.port))
         .collect();
+
+    // Apply anomaly blocking configuration
+    if config.detection.anomaly_blocking.enabled {
+        let mut synapse = SYNAPSE.write();
+        let mut risk_config = synapse.risk_config();
+        risk_config.blocking_mode = synapse::risk::BlockingMode::Enforcement;
+        risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
+        synapse.set_risk_config(risk_config);
+        info!("Anomaly blocking ENABLED (threshold: {:.1})", config.detection.anomaly_blocking.threshold);
+    }
 
     // Create shared health checker and metrics registry for admin API
     let health_checker = Arc::new(HealthChecker::default());

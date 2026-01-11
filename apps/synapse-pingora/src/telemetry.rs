@@ -82,6 +82,34 @@ pub enum TelemetryEvent {
         active_connections: u64,
         requests_per_sec: f64,
     },
+    SensorReport {
+        sensor_id: String,
+        actor: ExternalActorContext,
+        signal: ExternalSignalContext,
+        request: ExternalRequestContext,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalActorContext {
+    pub ip: String,
+    pub session_id: Option<String>,
+    pub fingerprint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalSignalContext {
+    #[serde(rename = "type")]
+    pub signal_type: String,
+    pub severity: String,
+    pub details: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalRequestContext {
+    pub path: String,
+    pub method: String,
+    pub user_agent: Option<String>,
 }
 
 impl TelemetryEvent {
@@ -92,6 +120,7 @@ impl TelemetryEvent {
             Self::RateLimitHit { .. } => EventType::RateLimitHit,
             Self::ConfigReload { .. } => EventType::ConfigReload,
             Self::ServiceHealth { .. } => EventType::ServiceHealth,
+            Self::SensorReport { .. } => EventType::SensorReport,
         }
     }
 }

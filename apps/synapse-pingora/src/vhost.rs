@@ -12,6 +12,7 @@ use regex::Regex;
 use tracing::{debug, warn};
 use unicase::Ascii;
 use ahash::RandomState;
+use crate::config::{AccessControlConfig, HeaderConfig};
 
 /// Configuration for a single virtual host site.
 #[derive(Debug, Clone)]
@@ -30,6 +31,10 @@ pub struct SiteConfig {
     pub waf_threshold: Option<u8>,
     /// Whether WAF is enabled for this site
     pub waf_enabled: bool,
+    /// Access control configuration (optional)
+    pub access_control: Option<AccessControlConfig>,
+    /// Header manipulation configuration (optional)
+    pub headers: Option<HeaderConfig>,
 }
 
 impl Default for SiteConfig {
@@ -42,6 +47,8 @@ impl Default for SiteConfig {
             tls_key: None,
             waf_threshold: None,
             waf_enabled: true,
+            access_control: None,
+            headers: None,
         }
     }
 }

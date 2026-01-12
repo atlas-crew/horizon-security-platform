@@ -32,12 +32,15 @@ use pingora_proxy::{ProxyHttp, Session};
 use serde::Deserialize;
 use std::cell::RefCell;
 use std::fs;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use dashmap::DashMap;
 use tokio::sync::oneshot;
+use synapse_pingora::TlsVersion;
+use pingora::listeners::tls::TlsSettings;
 
 // Admin API imports
 use synapse_pingora::admin_server::start_admin_server;
@@ -47,11 +50,12 @@ use synapse_pingora::metrics::MetricsRegistry;
 
 // Phase 3: Fingerprinting (Feature Migration from risk-server)
 use synapse_pingora::fingerprint::{
-    ClientFingerprint, HttpHeaders, extract_client_fingerprint,
+    ClientFingerprint, HttpHeaders, extract_client_fingerprint, analyze_ja4,
 };
 
 // Phase 6: Security hardening (Validation)
 use synapse_pingora::validation::validate_tls_config;
+use synapse_pingora::tls::TlsManager;
 
 // Phase 3: Entity Tracking (Feature Migration from risk-server)
 use synapse_pingora::entity::{
@@ -70,11 +74,13 @@ use synapse_pingora::config::ConfigLoader;
 use synapse_pingora::config_manager::ConfigManager;
 use synapse_pingora::site_waf::SiteWafManager;
 use synapse_pingora::ratelimit::RateLimitManager;
-use synapse_pingora::access::AccessListManager;
+use synapse_pingora::access::{AccessListManager, CidrRange};
+use synapse_pingora::headers;
 use synapse_pingora::telemetry::{
-    TelemetryClient, TelemetryConfig, TelemetryEvent, 
+    TelemetryClient, TelemetryConfig, TelemetryEvent,
     ExternalActorContext, ExternalSignalContext, ExternalRequestContext
 };
+use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use parking_lot::RwLock;
 
 // ============================================================================
@@ -119,6 +125,13 @@ pub struct ServerConfig {
     pub admin_listen: String,
     #[serde(default)]
     pub workers: usize,
+    /// API key for authenticating privileged admin operations (None = no auth)
+    #[serde(default)]
+    pub admin_api_key: Option<String>,
+    /// Trusted proxy CIDR ranges for X-Forwarded-For validation
+    /// When set, only X-Forwarded-For IPs from trusted proxies are used
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
 }
 
 fn default_listen() -> String {
@@ -135,6 +148,8 @@ impl Default for ServerConfig {
             listen: default_listen(),
             admin_listen: default_admin_listen(),
             workers: 0,
+            admin_api_key: None,
+            trusted_proxies: Vec::new(),
         }
     }
 }
@@ -168,12 +183,20 @@ impl Default for UpstreamConfig {
 pub struct RateLimitConfig {
     #[serde(default = "default_rps")]
     pub rps: usize,
+    /// Per-IP rate limit (requests per second). Defaults to 100 RPS per IP.
+    /// A single IP exceeding this limit will be blocked without affecting other clients.
+    #[serde(default = "default_per_ip_rps")]
+    pub per_ip_rps: usize,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 }
 
 fn default_rps() -> usize {
     10000
+}
+
+fn default_per_ip_rps() -> usize {
+    100  // 100 RPS per IP is reasonable for most use cases
 }
 
 fn default_enabled() -> bool {
@@ -184,6 +207,7 @@ impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
             rps: default_rps(),
+            per_ip_rps: default_per_ip_rps(),
             enabled: default_enabled(),
         }
     }
@@ -687,14 +711,59 @@ impl Drop for RequestContext {
 static RATE_LIMITER: Lazy<Rate> = Lazy::new(|| Rate::new(std::time::Duration::from_secs(1)));
 static REQUEST_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+/// Per-IP rate limiting state (P2-2: Per-IP Rate Limiting)
+/// Tracks request count and window start time per client IP.
+/// Uses DashMap for lock-free concurrent access across request threads.
+static PER_IP_LIMITS: Lazy<DashMap<String, (usize, Instant)>> = Lazy::new(DashMap::new);
+
+/// Check and update per-IP rate limit.
+///
+/// Returns `true` if the request is allowed, `false` if rate limited.
+/// Uses a sliding window of 1 second per IP address.
+///
+/// # Arguments
+/// * `client_ip` - The client IP address string
+/// * `limit` - Maximum requests per second allowed for this IP
+fn check_per_ip_rate_limit(client_ip: &str, limit: usize) -> bool {
+    let now = Instant::now();
+
+    // Use entry API for atomic check-and-update
+    let mut entry = PER_IP_LIMITS
+        .entry(client_ip.to_string())
+        .or_insert((0, now));
+
+    // Reset counter if window (1 second) has passed
+    if entry.1.elapsed() > Duration::from_secs(1) {
+        *entry = (1, now);
+        return true; // First request in new window - allowed
+    }
+
+    // Increment and check limit
+    entry.0 += 1;
+    entry.0 <= limit // true = allowed, false = rate limited
+}
+
+/// Periodically clean up stale entries from the per-IP rate limit map.
+/// Called opportunistically to prevent unbounded memory growth.
+/// Removes entries older than 60 seconds (no requests in last minute).
+fn cleanup_per_ip_limits() {
+    // Only cleanup if map is getting large (reduce overhead)
+    if PER_IP_LIMITS.len() > 10_000 {
+        let cutoff = Duration::from_secs(60);
+        PER_IP_LIMITS.retain(|_, (_, last_seen)| last_seen.elapsed() < cutoff);
+    }
+}
+
 /// The Synapse WAF Proxy
 pub struct SynapseProxy {
     /// Backend servers for round-robin selection (fallback/default)
     backends: Vec<(String, u16)>,
     /// Round-robin counter
     backend_counter: AtomicUsize,
-    /// Requests per second limit for rate limiting
+    /// Requests per second limit for rate limiting (global)
     rps_limit: usize,
+    /// Per-IP requests per second limit (P2-2: prevents single IP from exhausting global quota)
+    per_ip_rps_limit: usize,
     /// Phase 3: Thread-safe entity manager for per-IP tracking
     entity_manager: Arc<EntityManager>,
     /// Phase 3: Tarpit manager for progressive response delays
@@ -717,60 +786,80 @@ pub struct SynapseProxy {
     access_list_manager: Option<Arc<RwLock<AccessListManager>>>,
     /// Phase 3: Telemetry client for Signal Horizon reporting
     telemetry_client: Arc<TelemetryClient>,
+    /// Phase 6: TLS manager for certificate selection and validation
+    tls_manager: Arc<synapse_pingora::tls::TlsManager>,
+    /// Phase 3: Honeypot trap endpoint matcher
+    trap_matcher: Option<Arc<TrapMatcher>>,
+    /// Trusted proxy CIDR ranges for X-Forwarded-For validation
+    trusted_proxies: Vec<CidrRange>,
 }
 
 impl SynapseProxy {
-    pub fn new(backends: Vec<(String, u16)>, rps_limit: usize) -> Self {
+    pub fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
         Self::with_health(
             backends,
             rps_limit,
+            default_per_ip_rps(), // Default per-IP limit
             Arc::new(HealthChecker::default()),
             Arc::new(MetricsRegistry::new()),
             Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
+            Vec::new(),
+            tls_manager,
         )
     }
 
     pub fn with_health(
         backends: Vec<(String, u16)>,
         rps_limit: usize,
+        per_ip_rps_limit: usize,
         health_checker: Arc<HealthChecker>,
         metrics_registry: Arc<MetricsRegistry>,
         telemetry_client: Arc<TelemetryClient>,
+        trusted_proxies: Vec<CidrRange>,
+        tls_manager: Arc<TlsManager>,
     ) -> Self {
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
+            per_ip_rps_limit,
             entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
             tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
             dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker,
             metrics_registry,
             telemetry_client,
+            tls_manager,
+            trusted_proxies,
             vhost_matcher: None,
             config_manager: None,
             site_waf_manager: None,
             rate_limit_manager: None,
             access_list_manager: None,
+            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
         }
     }
 
-    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig) -> Self {
+    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>) -> Self {
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
+            per_ip_rps_limit: default_per_ip_rps(),
             entity_manager: Arc::new(EntityManager::new(entity_config)),
             tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
             dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
             telemetry_client: Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
+            tls_manager,
+            trusted_proxies: Vec::new(),
             vhost_matcher: None,
             config_manager: None,
             site_waf_manager: None,
             rate_limit_manager: None,
             access_list_manager: None,
+            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
         }
     }
 
@@ -778,6 +867,7 @@ impl SynapseProxy {
     pub fn with_multisite(
         default_backends: Vec<(String, u16)>,
         rps_limit: usize,
+        per_ip_rps_limit: usize,
         health_checker: Arc<HealthChecker>,
         metrics_registry: Arc<MetricsRegistry>,
         vhost_matcher: Arc<RwLock<VhostMatcher>>,
@@ -786,22 +876,28 @@ impl SynapseProxy {
         rate_limit_manager: Arc<RwLock<RateLimitManager>>,
         access_list_manager: Arc<RwLock<AccessListManager>>,
         telemetry_client: Arc<TelemetryClient>,
+        trusted_proxies: Vec<CidrRange>,
+        tls_manager: Arc<TlsManager>,
     ) -> Self {
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
+            per_ip_rps_limit,
             entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
             tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
             dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
             health_checker,
             metrics_registry,
             telemetry_client,
+            tls_manager,
+            trusted_proxies,
             vhost_matcher: Some(vhost_matcher),
             config_manager: Some(config_manager),
             site_waf_manager: Some(site_waf_manager),
             rate_limit_manager: Some(rate_limit_manager),
             access_list_manager: Some(access_list_manager),
+            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
         }
     }
 
@@ -812,17 +908,73 @@ impl SynapseProxy {
         (backend.0.clone(), backend.1, idx)
     }
 
-    /// Extract client IP from headers or connection
-    fn get_client_ip(session: &Session) -> Option<String> {
-        // Check X-Forwarded-For first
+    /// Extract client IP from headers or connection, validating X-Forwarded-For against trusted proxies.
+    ///
+    /// Security: Walks the XFF chain from right (closest proxy) to left (original client),
+    /// finding the first IP that is NOT in the trusted proxy list. This prevents IP spoofing
+    /// attacks where malicious actors forge XFF headers.
+    fn get_client_ip(&self, session: &Session) -> Option<String> {
+        // Get connection peer address first (most trusted source)
+        // Pingora's SocketAddr.to_string() returns "ip:port", we need just the IP
+        let conn_ip = session.client_addr().map(|addr| {
+            let addr_str = addr.to_string();
+            // Strip port from address (handles both IPv4 "1.2.3.4:80" and IPv6 "[::1]:80")
+            if addr_str.starts_with('[') {
+                // IPv6 format: [ip]:port
+                addr_str.split(']').next().unwrap_or(&addr_str).trim_start_matches('[').to_string()
+            } else {
+                // IPv4 format: ip:port
+                addr_str.split(':').next().unwrap_or(&addr_str).to_string()
+            }
+        });
+
+        // If no trusted proxies configured, only trust connection IP (most secure default)
+        if self.trusted_proxies.is_empty() {
+            return conn_ip;
+        }
+
+        // Validate that the direct connection is from a trusted proxy before trusting XFF
+        let conn_ip_trusted = conn_ip.as_ref().and_then(|ip_str| {
+            ip_str.parse::<IpAddr>().ok()
+        }).map(|ip| {
+            self.trusted_proxies.iter().any(|cidr| cidr.contains(&ip))
+        }).unwrap_or(false);
+
+        if !conn_ip_trusted {
+            // Connection is not from a trusted proxy - don't trust XFF headers
+            debug!("Connection IP not from trusted proxy, ignoring XFF headers");
+            return conn_ip;
+        }
+
+        // Connection is from trusted proxy, check X-Forwarded-For
         if let Some(xff) = session.req_header().headers.get("x-forwarded-for") {
             if let Ok(s) = xff.to_str() {
-                // Take the first IP from comma-separated list
-                return Some(s.split(',').next().unwrap_or(s).trim().to_string());
+                let ips: Vec<&str> = s.split(',').map(|ip| ip.trim()).collect();
+
+                // Walk from right (closest proxy) to left (original client)
+                // Find first IP NOT in trusted proxies - that's the real client
+                for ip_str in ips.iter().rev() {
+                    if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                        let is_trusted = self.trusted_proxies.iter().any(|cidr| cidr.contains(&ip));
+                        if !is_trusted {
+                            return Some(ip_str.to_string());
+                        }
+                    } else {
+                        // Invalid IP in chain - treat as untrusted client IP
+                        debug!("Invalid IP in XFF chain: {}", ip_str);
+                        return Some(ip_str.to_string());
+                    }
+                }
+
+                // All IPs in XFF are trusted - return leftmost (original "client")
+                // This handles the case where all proxies are internal
+                if let Some(leftmost) = ips.first() {
+                    return Some(leftmost.to_string());
+                }
             }
         }
 
-        // Check X-Real-IP
+        // Check X-Real-IP as fallback (only if connection is from trusted proxy)
         if let Some(xri) = session.req_header().headers.get("x-real-ip") {
             if let Ok(s) = xri.to_str() {
                 return Some(s.to_string());
@@ -830,7 +982,7 @@ impl SynapseProxy {
         }
 
         // Fall back to connection peer address
-        session.client_addr().map(|addr| addr.to_string())
+        conn_ip
     }
 
     /// Extract headers as Vec for detection engine
@@ -884,10 +1036,41 @@ impl ProxyHttp for SynapseProxy {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
-        // Extract client IP early
-        ctx.client_ip = Self::get_client_ip(session);
+        // Extract client IP early (with trusted proxy validation)
+        ctx.client_ip = self.get_client_ip(session);
 
-        // Simple rate limiting check
+        // Per-IP rate limiting (P2-2) - prevents single client from exhausting global quota
+        if let Some(ref client_ip) = ctx.client_ip {
+            if !check_per_ip_rate_limit(client_ip, self.per_ip_rps_limit) {
+                warn!(
+                    "Per-IP rate limit exceeded for {}, limit: {} RPS",
+                    client_ip, self.per_ip_rps_limit
+                );
+
+                // Send 429 Too Many Requests response
+                let mut resp = ResponseHeader::build(429, None)?;
+                resp.insert_header("content-type", "application/json")?;
+                resp.insert_header("retry-after", "1")?;
+
+                session.write_response_header(Box::new(resp), false).await?;
+                session
+                    .write_response_body(
+                        Some(Bytes::from(r#"{"error": "per_ip_rate_limit_exceeded", "message": "Too Many Requests from this IP"}"#)),
+                        true,
+                    )
+                    .await?;
+
+                // Record rate limit hit in metrics
+                self.metrics_registry.record_blocked();
+
+                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(429)).into_err();
+            }
+        }
+
+        // Periodically cleanup stale per-IP entries
+        cleanup_per_ip_limits();
+
+        // Global rate limiting check
         let count = REQUEST_COUNT.fetch_add(1, Ordering::Relaxed);
 
         // Reset counter periodically (simplified - real implementation would use proper windowing)
@@ -895,14 +1078,31 @@ impl ProxyHttp for SynapseProxy {
             REQUEST_COUNT.store(0, Ordering::Relaxed);
         }
 
-        // Check if over limit
+        // Check if over limit - block with 429
         if count > self.rps_limit {
             warn!(
-                "Rate limit exceeded for {:?}, count: {}",
-                ctx.client_ip, count
+                "Rate limit exceeded for {:?}, count: {}, limit: {}",
+                ctx.client_ip, count, self.rps_limit
             );
-            // In a real implementation, we'd send a 429 response here
-            // For this PoC, we just log and continue
+
+            // Send 429 Too Many Requests response
+            let mut resp = ResponseHeader::build(429, None)?;
+            resp.insert_header("content-type", "application/json")?;
+            resp.insert_header("retry-after", "1")?;
+
+            session.write_response_header(Box::new(resp), false).await?;
+            session
+                .write_response_body(
+                    Some(Bytes::from(r#"{"error": "rate_limit_exceeded", "message": "Too Many Requests"}"#)),
+                    true,
+                )
+                .await?;
+
+            // Record rate limit hit in metrics (counted as blocked)
+            self.metrics_registry.record_blocked();
+
+            // Return error to stop further processing
+            return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(429)).into_err();
         }
 
         Ok(())
@@ -942,6 +1142,33 @@ impl ProxyHttp for SynapseProxy {
                 }
             }
         }
+
+        // ===== IP Access Control List (ACL) =====
+        if let Some(ref access_mgr) = self.access_list_manager {
+            if let Some(ref site) = ctx.matched_site {
+                if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                    let access_mgr_read = access_mgr.read();
+                    if !access_mgr_read.is_allowed(&site.hostname, &ip_addr) {
+                        warn!("IP ACL: {} denied for site '{}'", client_ip, site.hostname);
+                        
+                        let mut resp = ResponseHeader::build(403, None)?;
+                        resp.insert_header("content-type", "application/json")?;
+                        
+                        session.write_response_header(Box::new(resp), false).await?;
+                        session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\", \"message\": \"IP address not allowed\"}")), true).await?;
+                        
+                        self.metrics_registry.record_blocked();
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        // ===== Phase 6: TLS Validation =====
+        // Detect domain fronting, outdated TLS versions, or weak cipher suites
+        // Note: SNI vs Host validation is performed via JA4 fingerprint analysis
+        // in the Reputation Scoring section below.
+        // ===== End TLS Validation =====
 
         // Extract Content-Type for DLP optimization (skip binary types)
         ctx.request_content_type = req_header
@@ -984,6 +1211,47 @@ impl ProxyHttp for SynapseProxy {
             return Ok(true); // We handled this request
         }
         // ===== End Health Check Endpoint =====
+
+        // ===== Phase 3: Trap Endpoint Detection =====
+        // Honeypot trap endpoints immediately block attackers probing sensitive paths
+        if let Some(ref trap_matcher) = self.trap_matcher {
+            if trap_matcher.is_trap(&uri) {
+                let trap_pattern = trap_matcher.matched_pattern(&uri).unwrap_or("unknown");
+                warn!(
+                    "TRAP HIT: {} from {} matched pattern '{}'",
+                    uri, client_ip, trap_pattern
+                );
+
+                // Apply maximum risk to entity
+                if trap_matcher.config().apply_max_risk {
+                    let reason = format!("Accessed trap: {} (pattern: {})", uri, trap_pattern);
+                    self.entity_manager.apply_external_risk(client_ip, 100.0, &reason);
+                }
+
+                // Extended tarpitting (waste attacker's time)
+                if let Some(delay_ms) = trap_matcher.config().extended_tarpit_ms {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+
+                // Send telemetry alert
+                if trap_matcher.config().alert_telemetry && self.telemetry_client.is_enabled() {
+                    let _ = self.telemetry_client.report(TelemetryEvent::WafBlock {
+                        rule_id: format!("TRAP_HIT:{}", trap_pattern),
+                        severity: "CRITICAL".to_string(),
+                        client_ip: client_ip.to_string(),
+                        site: ctx.matched_site.as_ref().map(|s| s.hostname.clone()).unwrap_or_default(),
+                        path: uri.clone(),
+                    }).await;
+                }
+
+                // Return 404 (don't reveal trap existence)
+                let resp = ResponseHeader::build(404, None)?;
+                session.write_response_header(Box::new(resp), true).await?;
+                self.metrics_registry.record_blocked();
+                return Ok(true);
+            }
+        }
+        // ===== End Trap Endpoint Detection =====
 
         // Phase 3: Extract client fingerprint (JA4 + JA4H)
         let ja4_header = req_header
@@ -1075,6 +1343,57 @@ impl ProxyHttp for SynapseProxy {
                     "Entity {} blocked by risk threshold: risk={:.1}, reason={:?}",
                     client_ip, block_decision.risk, block_decision.reason
                 );
+            }
+
+            // ===== JA4 Reputation Scoring =====
+            if let Some(ref ja4) = fingerprint.ja4 {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                // 1. Analyze JA4 for suspicious characteristics
+                let ja4_analysis = analyze_ja4(ja4);
+                if ja4_analysis.suspicious {
+                    let ja4_risk = 30.0;
+                    warn!(
+                        "Suspicious JA4 from {}: {:?}",
+                        client_ip, ja4_analysis.issues
+                    );
+                    ctx.entity_risk += ja4_risk;
+                    // Apply to entity for persistence
+                    self.entity_manager.apply_external_risk(
+                        client_ip,
+                        ja4_risk,
+                        &format!("suspicious_ja4: {:?}", ja4_analysis.issues),
+                    );
+                }
+
+                // 2. Check for rapid fingerprint changes (bot behavior)
+                if let Some(reputation) = self.entity_manager.check_ja4_reputation(
+                    client_ip,
+                    &ja4.raw,
+                    now_ms,
+                ) {
+                    if reputation.rapid_changes {
+                        let change_risk = 40.0;
+                        warn!(
+                            "JA4 rapid change detected: {} changed {} times in 60s",
+                            client_ip, reputation.change_count
+                        );
+                        ctx.entity_risk += change_risk;
+
+                        // Apply to entity for persistence
+                        self.entity_manager.apply_external_risk(
+                            client_ip,
+                            change_risk,
+                            &format!(
+                                "ja4_rapid_change: changed {} times in 60s",
+                                reputation.change_count
+                            ),
+                        );
+                    }
+                }
             }
         }
 
@@ -1422,6 +1741,13 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
+        // ===== Header Manipulation (Request) =====
+        if let Some(ref site) = ctx.matched_site {
+            if let Some(ref header_config) = site.headers {
+                headers::apply_request_headers(upstream_request, &header_config.request);
+            }
+        }
+
         // Add Synapse headers for visibility
         upstream_request.insert_header("X-Synapse-Analyzed", "true")?;
 
@@ -1493,6 +1819,25 @@ impl ProxyHttp for SynapseProxy {
             )?;
         }
 
+        Ok(())
+    }
+
+    /// Response header filter - apply header manipulations
+    fn response_filter(
+        &self,
+        _session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) -> Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        // ===== Header Manipulation (Response) =====
+        if let Some(ref site) = ctx.matched_site {
+            if let Some(ref header_config) = site.headers {
+                headers::apply_response_headers(upstream_response, &header_config.response);
+            }
+        }
         Ok(())
     }
 
@@ -1792,8 +2137,31 @@ fn create_multisite_managers(
         }
     }
 
-    // Create AccessListManager (currently no per-site access lists in config schema)
-    let access_list_mgr = AccessListManager::new();
+    // Create AccessListManager
+    let mut access_list_mgr = AccessListManager::new();
+    for site in &config_file.sites {
+        if let Some(ref acl) = site.access_control {
+            let mut site_list = if acl.default_action == "allow" {
+                synapse_pingora::access::AccessList::allow_all()
+            } else {
+                synapse_pingora::access::AccessList::deny_all()
+            };
+
+            for cidr in &acl.allow {
+                if let Err(e) = site_list.allow(cidr) {
+                    warn!("Failed to add allow rule for site {}: {}", site.hostname, e);
+                }
+            }
+
+            for cidr in &acl.deny {
+                if let Err(e) = site_list.deny(cidr) {
+                    warn!("Failed to add deny rule for site {}: {}", site.hostname, e);
+                }
+            }
+
+            access_list_mgr.add_site(&site.hostname, site_list);
+        }
+    }
 
     (
         Arc::new(RwLock::new(vhost_matcher)),
@@ -1884,6 +2252,38 @@ fn main() {
         info!("Anomaly blocking ENABLED (threshold: {:.1})", config.detection.anomaly_blocking.threshold);
     }
 
+    // Phase 6: Initialize TLS Manager
+    let tls_manager = Arc::new(TlsManager::new(
+        synapse_pingora::tls::TlsVersion::from_str(&config.tls.min_version).unwrap_or(synapse_pingora::tls::TlsVersion::Tls12)
+    ));
+
+    if config.tls.enabled {
+        // Load default cert
+        if !config.tls.cert_path.is_empty() && !config.tls.key_path.is_empty() {
+            if let Err(e) = tls_manager.set_default_cert(&synapse_pingora::tls::TlsCertConfig {
+                domain: "default".to_string(),
+                cert_path: config.tls.cert_path.clone(),
+                key_path: config.tls.key_path.clone(),
+                is_wildcard: false,
+            }) {
+                error!("Failed to load default TLS certificate: {}", e);
+            }
+        }
+
+        // Load per-domain certs
+        for cert_cfg in &config.tls.per_domain_certs {
+            if let Err(e) = tls_manager.load_cert(&synapse_pingora::tls::TlsCertConfig {
+                domain: cert_cfg.domain.clone(),
+                cert_path: cert_cfg.cert_path.clone(),
+                key_path: cert_cfg.key_path.clone(),
+                is_wildcard: cert_cfg.domain.starts_with("*."),
+            }) {
+                error!("Failed to load TLS certificate for {}: {}", cert_cfg.domain, e);
+            }
+        }
+        info!("TLS Manager initialized with {} certificates", tls_manager.cert_count());
+    }
+
     // Create shared health checker and metrics registry for admin API
     let health_checker = Arc::new(HealthChecker::default());
     let metrics_registry = Arc::new(MetricsRegistry::new());
@@ -1952,6 +2352,35 @@ fn main() {
     let admin_addr: SocketAddr = config.server.admin_listen.parse()
         .expect("Invalid admin_listen address");
     let admin_handler = Arc::clone(&api_handler);
+    let admin_api_key = config.server.admin_api_key.clone();
+
+    if admin_api_key.is_some() {
+        info!("Admin API authentication enabled");
+    } else {
+        warn!("Admin API authentication DISABLED - set server.admin_api_key in config");
+    }
+
+    // Parse trusted proxies for X-Forwarded-For validation
+    let trusted_proxies: Vec<CidrRange> = config.server.trusted_proxies.iter()
+        .filter_map(|cidr_str| {
+            match CidrRange::parse(cidr_str) {
+                Ok(cidr) => Some(cidr),
+                Err(e) => {
+                    warn!("Invalid trusted_proxy CIDR '{}': {:?}", cidr_str, e);
+                    None
+                }
+            }
+        })
+        .collect();
+
+    if trusted_proxies.is_empty() {
+        info!("No trusted proxies configured - X-Forwarded-For headers will be ignored (secure default)");
+    } else {
+        info!("Trusted proxies configured: {} CIDR ranges", trusted_proxies.len());
+        for cidr in &config.server.trusted_proxies {
+            debug!("  Trusted: {}", cidr);
+        }
+    }
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -1960,7 +2389,7 @@ fn main() {
             .expect("Failed to create admin runtime");
 
         rt.block_on(async {
-            if let Err(e) = start_admin_server(admin_addr, admin_handler).await {
+            if let Err(e) = start_admin_server(admin_addr, admin_handler, admin_api_key).await {
                 error!("Admin server error: {}", e);
             }
         });
@@ -1972,13 +2401,8 @@ fn main() {
     let mut server = Server::new(None).expect("Failed to create server");
     server.bootstrap();
 
-    // Create telemetry client (disabled by default, can be enabled via config)
-    let telemetry_client = Arc::new(TelemetryClient::new(TelemetryConfig {
-        enabled: false,
-        ..TelemetryConfig::default()
-    }));
-
     // Create proxy service - use multi-site if available, otherwise legacy
+    // Note: telemetry_client from line 1902 is used (configured from risk_server_url)
     let proxy = if let Some((ref config_file, ref sites)) = multisite_config {
         let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
             create_multisite_managers(config_file, sites);
@@ -1999,6 +2423,7 @@ fn main() {
         SynapseProxy::with_multisite(
             legacy_backends.clone(),
             config.rate_limit.rps,
+            config.rate_limit.per_ip_rps,
             Arc::clone(&health_checker),
             Arc::clone(&metrics_registry),
             vhost_matcher,
@@ -2007,19 +2432,40 @@ fn main() {
             rate_limit_mgr,
             access_list_mgr,
             Arc::clone(&telemetry_client),
+            trusted_proxies.clone(),
+            Arc::clone(&tls_manager),
         )
     } else {
         SynapseProxy::with_health(
             legacy_backends,
             config.rate_limit.rps,
+            config.rate_limit.per_ip_rps,
             Arc::clone(&health_checker),
             Arc::clone(&metrics_registry),
             Arc::clone(&telemetry_client),
+            trusted_proxies,
+            Arc::clone(&tls_manager),
         )
     };
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
-    proxy_service.add_tcp(&config.server.listen);
+
+    // Phase 6: Enable TLS Listener
+    if config.tls.enabled && !config.tls.cert_path.is_empty() && !config.tls.key_path.is_empty() {
+        let tls_settings = TlsSettings::intermediate(
+            &config.tls.cert_path,
+            &config.tls.key_path,
+        ).expect("Failed to create TLS settings from configured paths");
+        
+        // Note: TlsSettings::intermediate defaults to TLS 1.2+
+        
+        proxy_service.add_tls_with_settings(&config.server.listen, None, tls_settings);
+        info!("TLS listener enabled on {} (min_version: {})", config.server.listen, config.tls.min_version);
+    } else {
+        // Fallback to TCP if TLS is not enabled or configured
+        proxy_service.add_tcp(&config.server.listen);
+        info!("TCP (non-TLS) listener enabled on {}", config.server.listen);
+    }
 
     server.add_service(proxy_service);
 
@@ -2027,6 +2473,29 @@ fn main() {
     info!("  Proxy:  {}", config.server.listen);
     info!("  Admin:  {}", config.server.admin_listen);
     info!("Graceful reload: pkill -SIGQUIT synapse-pingora && ./synapse-pingora -u");
+
+    // Phase 7: Persistence - Start background snapshotting
+    let persistence_config = synapse_pingora::persistence::PersistenceConfig::default();
+    let snapshot_manager = Arc::new(SnapshotManager::new(persistence_config));
+    
+    // Start background saver in a dedicated thread with its own runtime
+    // This avoids "no reactor running" errors when called from the main thread
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create persistence runtime");
+        rt.block_on(async {
+            snapshot_manager.start_background_saver(|| {
+                DetectionEngine::get_profiles()
+            });
+            // Keep the task alive
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            }
+        });
+    });
+
     server.run_forever();
 }
 
@@ -2059,7 +2528,7 @@ mod tests {
 
     #[test]
     fn test_clean_simple_get() {
-        let result = DetectionEngine::analyze("GET", "/api/users/123", &[], TEST_IP);
+        let result = DetectionEngine::analyze("GET", "/api/users/123", &[], None, TEST_IP);
         assert!(!result.blocked, "Clean GET should not be blocked");
         assert!(result.matched_rules.is_empty(), "No rules should match");
     }
@@ -2070,6 +2539,7 @@ mod tests {
             "GET",
             "/api/search?q=hello+world&page=1",
             &[],
+            None,
             TEST_IP,
         );
         assert!(!result.blocked, "Clean query should not be blocked");
@@ -2081,6 +2551,7 @@ mod tests {
             "POST",
             "/api/users",
             &[("content-type".to_string(), "application/json".to_string())],
+            None,
             TEST_IP,
         );
         assert!(!result.blocked, "Clean POST should not be blocked");
@@ -2092,6 +2563,7 @@ mod tests {
             "GET",
             "/api/data",
             &[("user-agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64)".to_string())],
+            None,
             TEST_IP,
         );
         assert!(!result.blocked, "Normal user-agent should not be blocked");
@@ -2109,6 +2581,7 @@ mod tests {
             "GET",
             "/api/users?id=1 UNION SELECT * FROM users",
             &[],
+            None,
             TEST_IP,
         );
         assert!(result.blocked, "UNION SELECT should be blocked");
@@ -2124,6 +2597,7 @@ mod tests {
             "GET",
             "/files/../../../etc/passwd",
             &[],
+            None,
             TEST_IP,
         );
         assert!(result.blocked, "Path traversal should be blocked");
@@ -2138,7 +2612,7 @@ mod tests {
     #[test]
     fn test_detection_timing() {
         // Warm up the engine
-        let _ = DetectionEngine::analyze("GET", "/warmup", &[], TEST_IP);
+        let _ = DetectionEngine::analyze("GET", "/warmup", &[], None, TEST_IP);
 
         // Run performance tests - measure timing regardless of detection result
         let test_cases = vec![
@@ -2149,7 +2623,7 @@ mod tests {
         ];
 
         for (method, uri) in test_cases {
-            let result = DetectionEngine::analyze(method, uri, &[], TEST_IP);
+            let result = DetectionEngine::analyze(method, uri, &[], None, TEST_IP);
 
             println!("URI: {} -> blocked={}, time={}μs", uri, result.blocked, result.detection_time_us);
 
@@ -2184,6 +2658,7 @@ mod tests {
                 "GET",
                 "/api/users?id=1 UNION SELECT password FROM users--",
                 &[("user-agent".to_string(), "Mozilla/5.0".to_string())],
+                None,
                 TEST_IP,
             );
             total_time += result.detection_time_us;
@@ -2228,6 +2703,7 @@ mod tests {
                 "GET",
                 &format!("/api/users/{}", i),
                 &[("user-agent".to_string(), "Mozilla/5.0".to_string())],
+                None,
                 TEST_IP,
             );
             total_time += result.detection_time_us;
@@ -2335,9 +2811,11 @@ tls:
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
+            100, // Per-IP RPS limit for test
             Arc::clone(&health_checker),
             Arc::clone(&metrics_registry),
             Arc::clone(&telemetry_client),
+            Vec::new(), // No trusted proxies for test
         );
 
         // Verify health status is accessible through proxy

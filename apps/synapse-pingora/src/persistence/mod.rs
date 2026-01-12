@@ -37,36 +37,75 @@ impl Default for PersistenceConfig {
 /// Manager for handling state snapshots.
 pub struct SnapshotManager {
     config: PersistenceConfig,
-    synapse: Arc<std::cell::RefCell<Synapse>>, // Note: In main.rs this is thread-local, we need a strategy
 }
 
-// NOTE: Synapse is thread-local in main.rs.
-// This poses a challenge for a global background task.
-//
-// Strategy:
-// 1. Each worker thread maintains its own `ProfileStore`.
-// 2. We can't easily "merge" them without a global lock or a message passing architecture.
-// 3. For Phase 2 MVP, we will implement persistence for the *Load Testing* use case
-//    where we might be running single-threaded or can accept per-thread files.
-//
-// Better Strategy for Production:
-// - Move `ProfileStore` to an `Arc<RwLock<...>>` shared across threads?
-// - OR have a dedicated "Learning Thread" that receives samples via channel.
-//
-// For now, let's implement the `save_profiles` logic that can be called.
-
 impl SnapshotManager {
-    /// Save profiles to disk.
+    pub fn new(config: PersistenceConfig) -> Self {
+        Self { config }
+    }
+
+    /// Start the background saver task.
+    ///
+    /// # Arguments
+    /// * `fetch_profiles` - A closure that returns the current profiles snapshot.
+    pub fn start_background_saver<F>(self: Arc<Self>, fetch_profiles: F)
+    where
+        F: Fn() -> Vec<synapse::EndpointProfile> + Send + Sync + 'static,
+    {
+        let config = self.config.clone();
+        
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(config.save_interval_secs));
+            
+            // Ensure data directory exists
+            if let Err(e) = tokio::fs::create_dir_all(&config.data_dir).await {
+                error!("Failed to create data directory {:?}: {}", config.data_dir, e);
+                return;
+            }
+
+            loop {
+                interval.tick().await;
+                
+                let profiles = fetch_profiles();
+                if profiles.is_empty() {
+                    continue;
+                }
+                
+                let path = config.data_dir.join("profiles.json");
+                let path_clone = path.clone();
+                let count = profiles.len();
+                
+                // Offload CPU-intensive serialization and blocking I/O to a worker thread
+                // This prevents hiccups in the async runtime (Pingora traffic)
+                let res = tokio::task::spawn_blocking(move || {
+                    Self::save_profiles(&profiles, &path_clone)
+                }).await;
+                
+                match res {
+                    Ok(Ok(_)) => info!("Saved {} profiles to {:?} (background)", count, path),
+                    Ok(Err(e)) => error!("Failed to save profiles: {}", e),
+                    Err(e) => error!("Save task panicked: {}", e),
+                }
+            }
+        });
+        
+        info!("Background persistence started (interval: {}s)", config.save_interval_secs);
+    }
+
+    /// Save profiles to disk (Synchronous/Blocking).
+    ///
+    /// Use this within `spawn_blocking` to avoid stalling the async runtime.
     pub fn save_profiles(profiles: &[synapse::EndpointProfile], path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(profiles)?;
-        // Write to temp file then rename for atomic write
+        
+        // Write to temp file then rename for atomic write (prevents corruption on crash)
         let tmp_path = path.with_extension("tmp");
         fs::write(&tmp_path, json)?;
         fs::rename(&tmp_path, path)?;
         Ok(())
     }
 
-    /// Load profiles from disk.
+    /// Load profiles from disk (Synchronous/Blocking).
     pub fn load_profiles(path: &Path) -> std::io::Result<Vec<synapse::EndpointProfile>> {
         if !path.exists() {
             return Ok(Vec::new());

@@ -40,4 +40,5 @@ pub use store::{
     // Decision types
     BlockDecision,
     RiskApplication,
+    Ja4ReputationResult,
 };

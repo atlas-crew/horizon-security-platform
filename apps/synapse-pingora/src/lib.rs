@@ -57,8 +57,14 @@ pub mod persistence;
 // Phase 3: Telemetry (Alerting)
 pub mod telemetry;
 
+// Phase 3: Honeypot Trap Detection
+pub mod trap;
+
 // Dashboard support
 pub mod block_log;
+
+// Header Manipulation
+pub mod headers;
 
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
@@ -102,6 +108,9 @@ pub use validation::{
     validate_domain_name, validate_certificate_file, validate_private_key_file,
     validate_tls_config,
 };
+
+// Re-export honeypot trap types
+pub use trap::{TrapConfig, TrapMatcher};
 
 // Re-export dashboard support types
 pub use block_log::{BlockLog, BlockEvent};

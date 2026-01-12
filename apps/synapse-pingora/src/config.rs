@@ -3,6 +3,7 @@
 //! This module handles YAML configuration parsing with security validations
 //! including file size limits, path validation, and schema verification.
 
+use crate::trap::TrapConfig;
 use crate::vhost::SiteConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -37,6 +38,9 @@ pub struct GlobalConfig {
     /// Log level (trace, debug, info, warn, error)
     #[serde(default = "default_log_level")]
     pub log_level: String,
+    /// Honeypot trap endpoint configuration
+    #[serde(default)]
+    pub trap_config: Option<TrapConfig>,
 }
 
 fn default_http_addr() -> String {
@@ -73,6 +77,7 @@ impl Default for GlobalConfig {
             waf_threshold: default_waf_threshold(),
             waf_enabled: true,
             log_level: default_log_level(),
+            trap_config: None,
         }
     }
 }
@@ -134,6 +139,45 @@ fn default_min_tls() -> String {
     "1.2".to_string()
 }
 
+/// Access control configuration for a site.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AccessControlConfig {
+    /// List of CIDR ranges to allow
+    #[serde(default)]
+    pub allow: Vec<String>,
+    /// List of CIDR ranges to deny
+    #[serde(default)]
+    pub deny: Vec<String>,
+    /// Default action if no rule matches (allow or deny)
+    #[serde(default)]
+    pub default_action: String,
+}
+
+/// Header manipulation configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HeaderConfig {
+    /// Headers to add/set/remove on the request
+    #[serde(default)]
+    pub request: HeaderOps,
+    /// Headers to add/set/remove on the response
+    #[serde(default)]
+    pub response: HeaderOps,
+}
+
+/// Header operations (add, set, remove).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HeaderOps {
+    /// Headers to add (appends if already exists)
+    #[serde(default)]
+    pub add: std::collections::HashMap<String, String>,
+    /// Headers to set (replaces if already exists)
+    #[serde(default)]
+    pub set: std::collections::HashMap<String, String>,
+    /// Headers to remove
+    #[serde(default)]
+    pub remove: Vec<String>,
+}
+
 /// Site-specific WAF configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SiteWafConfig {
@@ -170,6 +214,10 @@ pub struct SiteYamlConfig {
     pub waf: Option<SiteWafConfig>,
     /// Rate limiting configuration (optional)
     pub rate_limit: Option<RateLimitConfig>,
+    /// Access control (optional)
+    pub access_control: Option<AccessControlConfig>,
+    /// Header manipulation (optional)
+    pub headers: Option<HeaderConfig>,
 }
 
 /// Complete configuration file structure.
@@ -217,6 +265,38 @@ pub enum ConfigError {
 
     #[error("path traversal detected in: {path}")]
     PathTraversal { path: String },
+}
+
+/// Check if a path contains path traversal sequences.
+///
+/// Detects:
+/// - Literal `..` sequences
+/// - URL-encoded variants: `%2e%2e`, `%2E%2E`, mixed case
+/// - Double-URL-encoded: `%252e%252e`
+/// - Backslash variants: `..\`, `..\\`
+fn contains_path_traversal(path: &str) -> bool {
+    // Check literal parent directory reference
+    if path.contains("..") {
+        return true;
+    }
+
+    // Check URL-encoded variants (case-insensitive)
+    let path_lower = path.to_lowercase();
+    if path_lower.contains("%2e%2e") || path_lower.contains("%2e.") || path_lower.contains(".%2e") {
+        return true;
+    }
+
+    // Check double-URL-encoded
+    if path_lower.contains("%252e") {
+        return true;
+    }
+
+    // Check for null bytes (path truncation attack)
+    if path.contains('\0') || path_lower.contains("%00") {
+        return true;
+    }
+
+    false
 }
 
 /// Configuration loader with security validations.
@@ -326,13 +406,13 @@ impl ConfigLoader {
 
     /// Validates TLS configuration paths.
     fn validate_tls(tls: &TlsConfig) -> Result<(), ConfigError> {
-        // Check for path traversal
-        if tls.cert_path.contains("..") {
+        // Check for path traversal (including URL-encoded variants)
+        if contains_path_traversal(&tls.cert_path) {
             return Err(ConfigError::PathTraversal {
                 path: tls.cert_path.clone(),
             });
         }
-        if tls.key_path.contains("..") {
+        if contains_path_traversal(&tls.key_path) {
             return Err(ConfigError::PathTraversal {
                 path: tls.key_path.clone(),
             });
@@ -386,6 +466,8 @@ impl ConfigLoader {
                 tls_key: site.tls.as_ref().map(|t| t.key_path.clone()),
                 waf_threshold: site.waf.as_ref().and_then(|w| w.threshold),
                 waf_enabled: site.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
+                access_control: site.access_control.clone(),
+                headers: site.headers.clone(),
             })
             .collect()
     }
@@ -532,5 +614,38 @@ sites:
         assert_eq!(sites[0].hostname, "example.com");
         assert_eq!(sites[0].waf_threshold, Some(80));
         assert!(sites[0].waf_enabled);
+    }
+
+    #[test]
+    fn test_path_traversal_detection() {
+        use super::contains_path_traversal;
+
+        // Literal parent directory references
+        assert!(contains_path_traversal(".."));
+        assert!(contains_path_traversal("../etc/passwd"));
+        assert!(contains_path_traversal("/path/../secret"));
+        assert!(contains_path_traversal("path/to/../../root"));
+
+        // URL-encoded variants
+        assert!(contains_path_traversal("%2e%2e"));
+        assert!(contains_path_traversal("%2E%2E"));
+        assert!(contains_path_traversal("%2e."));
+        assert!(contains_path_traversal(".%2e"));
+
+        // Double-URL-encoded
+        assert!(contains_path_traversal("%252e%252e"));
+        assert!(contains_path_traversal("path/%252e%252e/file"));
+
+        // Null byte injection
+        assert!(contains_path_traversal("\x00"));
+        assert!(contains_path_traversal("path\x00/file"));
+        assert!(contains_path_traversal("%00"));
+        assert!(contains_path_traversal("path/%00/file"));
+
+        // Clean paths
+        assert!(!contains_path_traversal("/path/to/file"));
+        assert!(!contains_path_traversal("certs/server.pem"));
+        assert!(!contains_path_traversal("/etc/nginx/ssl/cert.pem"));
+        assert!(!contains_path_traversal("./relative/path")); // Single dot is OK
     }
 }

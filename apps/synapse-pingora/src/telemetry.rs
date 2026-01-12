@@ -546,8 +546,6 @@ impl TelemetryClient {
     }
 
     async fn send_batch(&self, batch: &TelemetryBatch) -> TelemetryResult<()> {
-        // In a real implementation, this would use reqwest or similar
-        // For now, we simulate the send
         debug!(
             batch_id = %batch.batch_id,
             event_count = batch.len(),
@@ -555,9 +553,41 @@ impl TelemetryClient {
             self.config.endpoint
         );
 
-        // Simulate network latency
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        // Build the batch payload
+        let payload = serde_json::json!({
+            "batch_id": batch.batch_id.to_string(),
+            "events": batch.events,
+            "timestamp_ms": SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        });
 
+        // Send HTTP POST to telemetry endpoint
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
+
+        let response = client
+            .post(&self.config.endpoint)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| {
+                warn!(error = %e, "Telemetry batch send failed");
+                TelemetryError::EndpointUnreachable { message: e.to_string() }
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            warn!(status = %status, "Telemetry endpoint returned error status");
+            return Err(TelemetryError::EndpointUnreachable {
+                message: format!("HTTP {}", status),
+            });
+        }
+
+        debug!(batch_id = %batch.batch_id, "Telemetry batch sent successfully");
         Ok(())
     }
 

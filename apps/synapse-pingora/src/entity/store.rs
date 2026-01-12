@@ -69,6 +69,12 @@ pub struct EntityState {
     pub ja4_fingerprint: Option<String>,
     /// Combined fingerprint hash (for correlation).
     pub combined_fingerprint: Option<String>,
+    /// Previous JA4 fingerprint (for change detection).
+    pub previous_ja4: Option<String>,
+    /// Count of JA4 changes within the tracking window.
+    pub ja4_change_count: u32,
+    /// Timestamp of last JA4 change (milliseconds).
+    pub last_ja4_change_ms: Option<u64>,
 }
 
 impl EntityState {
@@ -87,6 +93,9 @@ impl EntityState {
             matches: HashMap::new(),
             ja4_fingerprint: None,
             combined_fingerprint: None,
+            previous_ja4: None,
+            ja4_change_count: 0,
+            last_ja4_change_ms: None,
         }
     }
 
@@ -177,6 +186,15 @@ pub struct RiskApplication {
     pub final_risk: f64,
     /// Current match count for the rule.
     pub match_count: u32,
+}
+
+/// Result of JA4 reputation check.
+#[derive(Debug, Clone)]
+pub struct Ja4ReputationResult {
+    /// Whether rapid fingerprint changes were detected.
+    pub rapid_changes: bool,
+    /// Number of changes in the tracking window.
+    pub change_count: u32,
 }
 
 /// Thread-safe entity manager using DashMap.
@@ -390,7 +408,12 @@ impl EntityManager {
     /// Apply external risk (e.g., from anomaly detection).
     ///
     /// Creates the entity if it doesn't exist.
-    pub fn apply_external_risk(&self, ip: &str, risk: f64, _reason: &str) -> f64 {
+    ///
+    /// # Arguments
+    /// * `ip` - Client IP address
+    /// * `risk` - Risk points to add (will be clamped to max_risk)
+    /// * `reason` - Reason for risk application (logged at debug level)
+    pub fn apply_external_risk(&self, ip: &str, risk: f64, reason: &str) -> f64 {
         let now = now_ms();
         let max_risk = self.config.max_risk;
         self.maybe_evict();
@@ -405,9 +428,48 @@ impl EntityManager {
 
         entity.last_seen_at = now;
         entity.request_count += 1;
+        let old_risk = entity.risk;
         entity.risk = (entity.risk + risk.max(0.0)).min(max_risk);
 
+        // Log risk application for debugging and audit
+        if risk > 0.0 && !reason.is_empty() {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                ip = %ip,
+                old_risk = old_risk,
+                added_risk = risk,
+                new_risk = entity.risk,
+                reason = %reason,
+                "Applied external risk"
+            );
+            let _ = (old_risk, reason); // Suppress unused warning when tracing disabled
+        }
+
         entity.risk
+    }
+
+    /// Apply anomaly-based risk to an entity.
+    ///
+    /// Used for behavioral anomalies like honeypot hits, rapid fingerprint changes, etc.
+    /// Creates the entity if it doesn't exist.
+    ///
+    /// # Arguments
+    /// * `ip` - Client IP address
+    /// * `anomaly_type` - Type of anomaly detected (e.g., "honeypot_hit", "ja4_rapid_change")
+    /// * `risk` - Risk points to add
+    /// * `details` - Optional details about the anomaly
+    pub fn apply_anomaly_risk(
+        &self,
+        ip: &str,
+        anomaly_type: &str,
+        risk: f64,
+        details: Option<&str>,
+    ) -> f64 {
+        let reason = match details {
+            Some(d) => format!("{}: {}", anomaly_type, d),
+            None => anomaly_type.to_string(),
+        };
+        self.apply_external_risk(ip, risk, &reason)
     }
 
     /// Check if an entity should be blocked based on risk threshold.
@@ -543,6 +605,64 @@ impl EntityManager {
         entities
     }
 
+    /// Check JA4 reputation for an IP address.
+    /// Detects rapid fingerprint changes that indicate bot behavior.
+    ///
+    /// # Arguments
+    /// * `ip` - Client IP address
+    /// * `current_ja4` - Current JA4 fingerprint
+    /// * `now_ms` - Current timestamp in milliseconds
+    ///
+    /// # Returns
+    /// Reputation result if entity exists, None otherwise
+    pub fn check_ja4_reputation(
+        &self,
+        ip: &str,
+        current_ja4: &str,
+        now_ms: u64,
+    ) -> Option<Ja4ReputationResult> {
+        let mut entry = self.entities.get_mut(ip)?;
+
+        const RAPID_CHANGE_WINDOW_MS: u64 = 60_000; // 1 minute
+        const RAPID_CHANGE_THRESHOLD: u32 = 3;
+
+        let mut rapid_changes = false;
+
+        if let Some(ref prev_ja4) = entry.previous_ja4 {
+            if prev_ja4 != current_ja4 {
+                // Fingerprint changed!
+                let within_window = entry
+                    .last_ja4_change_ms
+                    .map(|t| now_ms.saturating_sub(t) < RAPID_CHANGE_WINDOW_MS)
+                    .unwrap_or(false);
+
+                if within_window {
+                    entry.ja4_change_count += 1;
+                    if entry.ja4_change_count >= RAPID_CHANGE_THRESHOLD {
+                        rapid_changes = true;
+                    }
+                } else {
+                    // Outside window - reset counter
+                    entry.ja4_change_count = 1;
+                }
+
+                entry.previous_ja4 = Some(current_ja4.to_string());
+                entry.last_ja4_change_ms = Some(now_ms);
+            }
+            // If fingerprint is same, don't update anything
+        } else {
+            // First fingerprint seen for this IP
+            entry.previous_ja4 = Some(current_ja4.to_string());
+            entry.last_ja4_change_ms = Some(now_ms);
+            entry.ja4_change_count = 0;
+        }
+
+        Some(Ja4ReputationResult {
+            rapid_changes,
+            change_count: entry.ja4_change_count,
+        })
+    }
+
     // Internal helpers
 
     /// Apply decay to an entity based on elapsed time.
@@ -587,17 +707,28 @@ impl EntityManager {
     }
 
     /// Evict the N oldest entities by last_seen_at timestamp.
+    ///
+    /// Uses sampling to avoid O(n) collection of all entities.
+    /// Samples up to 10x the eviction count, then evicts the oldest from the sample.
+    /// This provides probabilistically good eviction while maintaining O(sample_size) complexity.
     fn evict_oldest(&self, count: usize) {
-        // Collect (ip, last_seen_at) pairs
-        let mut candidates: Vec<(String, u64)> = self.entities
-            .iter()
-            .map(|e| (e.key().clone(), e.value().last_seen_at))
-            .collect();
+        // Sample size: 10x eviction count, capped at 1000 to avoid excessive memory
+        let sample_size = (count * 10).min(1000).min(self.entities.len());
 
-        // Sort by last_seen_at (oldest first)
-        candidates.sort_by_key(|(_, ts)| *ts);
+        if sample_size == 0 {
+            return;
+        }
 
-        // Evict oldest N
+        // Sample entities - DashMap iter() provides reasonable distribution
+        let mut candidates: Vec<(String, u64)> = Vec::with_capacity(sample_size);
+        for entry in self.entities.iter().take(sample_size) {
+            candidates.push((entry.key().clone(), entry.value().last_seen_at));
+        }
+
+        // Sort sampled candidates by last_seen_at (oldest first)
+        candidates.sort_unstable_by_key(|(_, ts)| *ts);
+
+        // Evict oldest N from sample
         for (ip, _) in candidates.into_iter().take(count) {
             if self.entities.remove(&ip).is_some() {
                 self.total_evicted.fetch_add(1, Ordering::Relaxed);
@@ -918,5 +1049,525 @@ mod tests {
         assert_eq!(repeat_multiplier(10), 1.5);
         assert_eq!(repeat_multiplier(11), 2.0);
         assert_eq!(repeat_multiplier(100), 2.0);
+    }
+
+    // ==================== JA4 Reputation Tests ====================
+
+    #[test]
+    fn test_ja4_first_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+
+        // Touch entity first to create it
+        manager.touch_entity("1.2.3.4");
+
+        // First fingerprint - should not trigger rapid changes
+        let result = manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 1000);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(!result.rapid_changes);
+        assert_eq!(result.change_count, 0);
+    }
+
+    #[test]
+    fn test_ja4_same_fingerprint_no_change() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Same fingerprint twice - no change
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 1000);
+        let result = manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 2000);
+
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(!result.rapid_changes);
+        assert_eq!(result.change_count, 0);
+    }
+
+    #[test]
+    fn test_ja4_rapid_changes_triggers() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // 3 different fingerprints within 60 seconds should trigger
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 1000);
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_2", 10000); // 10s later
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_3", 20000); // 20s later
+        let result = manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_4", 30000); // 30s later
+
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(result.rapid_changes);
+        assert!(result.change_count >= 3);
+    }
+
+    #[test]
+    fn test_ja4_changes_outside_window_reset() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // First change
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 1000);
+        manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_2", 10000);
+
+        // Change outside window (> 60 seconds later)
+        let result = manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_3", 100000);
+
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(!result.rapid_changes);
+        assert_eq!(result.change_count, 1); // Counter was reset
+    }
+
+    #[test]
+    fn test_ja4_nonexistent_entity() {
+        let manager = EntityManager::new(EntityConfig::default());
+
+        // Entity doesn't exist - should return None
+        let result = manager.check_ja4_reputation("1.2.3.4", "ja4_fingerprint_1", 1000);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_ja4_change_count_increments() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // First fingerprint
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp1", 1000).unwrap();
+        assert_eq!(r1.change_count, 0);
+
+        // Second fingerprint (change)
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp2", 2000).unwrap();
+        assert_eq!(r2.change_count, 1);
+
+        // Third fingerprint (change)
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp3", 3000).unwrap();
+        assert_eq!(r3.change_count, 2);
+
+        // Fourth fingerprint (change) - should trigger rapid_changes
+        let r4 = manager.check_ja4_reputation("1.2.3.4", "fp4", 4000).unwrap();
+        assert_eq!(r4.change_count, 3);
+        assert!(r4.rapid_changes);
+    }
+
+    // ==================== JA4 Reputation Edge Case Tests ====================
+
+    #[test]
+    fn test_ja4_window_boundary_exactly_at_60s() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // First fingerprint at t=0
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+
+        // Change at t=10s
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 10_000);
+
+        // Change exactly at 60s boundary (should still be within window)
+        let result = manager.check_ja4_reputation("1.2.3.4", "fp3", 70_000);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        // 70000 - 10000 = 60000ms exactly - this is NOT < 60000, so outside window
+        // Counter should reset
+        assert_eq!(result.change_count, 1);
+        assert!(!result.rapid_changes);
+    }
+
+    #[test]
+    fn test_ja4_window_boundary_just_inside() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // First fingerprint at t=0
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+
+        // Change at t=10s
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 10_000);
+
+        // Change at t=69.999s (just inside 60s window from last change)
+        let result = manager.check_ja4_reputation("1.2.3.4", "fp3", 69_999);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        // 69999 - 10000 = 59999ms < 60000ms - still within window
+        assert_eq!(result.change_count, 2);
+    }
+
+    #[test]
+    fn test_ja4_window_boundary_just_outside() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // First fingerprint at t=0
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+
+        // Change at t=10s
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 10_000);
+
+        // Change at t=70.001s (just outside 60s window from last change)
+        let result = manager.check_ja4_reputation("1.2.3.4", "fp3", 70_001);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        // 70001 - 10000 = 60001ms > 60000ms - outside window, counter resets
+        assert_eq!(result.change_count, 1);
+    }
+
+    #[test]
+    fn test_ja4_counter_reset_timing() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Build up to 2 changes within window
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 10_000);
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp3", 20_000).unwrap();
+        assert_eq!(r1.change_count, 2);
+
+        // Long delay - counter should reset
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp4", 100_000).unwrap();
+        assert_eq!(r2.change_count, 1); // Reset to 1
+
+        // Continue from reset - need 2 more changes to trigger
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp5", 110_000).unwrap();
+        assert_eq!(r3.change_count, 2);
+        assert!(!r3.rapid_changes);
+
+        let r4 = manager.check_ja4_reputation("1.2.3.4", "fp6", 120_000).unwrap();
+        assert_eq!(r4.change_count, 3);
+        assert!(r4.rapid_changes);
+    }
+
+    #[test]
+    fn test_ja4_empty_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Empty fingerprint should be treated as valid (just an empty string)
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "", 1000);
+        assert!(r1.is_some());
+
+        // Change from empty to non-empty
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp1", 2000).unwrap();
+        assert_eq!(r2.change_count, 1);
+
+        // Change back to empty
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "", 3000).unwrap();
+        assert_eq!(r3.change_count, 2);
+    }
+
+    #[test]
+    fn test_ja4_whitespace_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Whitespace is a valid (though unusual) fingerprint
+        manager.check_ja4_reputation("1.2.3.4", "   ", 1000);
+
+        // Different whitespace is a change
+        let r = manager.check_ja4_reputation("1.2.3.4", "\t", 2000).unwrap();
+        assert_eq!(r.change_count, 1);
+    }
+
+    #[test]
+    fn test_ja4_very_long_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Very long fingerprint
+        let long_fp = "a".repeat(10000);
+        let r1 = manager.check_ja4_reputation("1.2.3.4", &long_fp, 1000);
+        assert!(r1.is_some());
+
+        // Different long fingerprint
+        let long_fp2 = "b".repeat(10000);
+        let r2 = manager.check_ja4_reputation("1.2.3.4", &long_fp2, 2000).unwrap();
+        assert_eq!(r2.change_count, 1);
+    }
+
+    #[test]
+    fn test_ja4_unicode_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Unicode fingerprint (shouldn't happen in practice but should handle)
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "日本語", 1000);
+        assert!(r1.is_some());
+
+        // Different unicode
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "中文", 2000).unwrap();
+        assert_eq!(r2.change_count, 1);
+
+        // Emoji
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "🔒🔑", 3000).unwrap();
+        assert_eq!(r3.change_count, 2);
+    }
+
+    #[test]
+    fn test_ja4_case_sensitivity() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Fingerprints are case-sensitive
+        manager.check_ja4_reputation("1.2.3.4", "ABC", 1000);
+
+        // Different case = different fingerprint
+        let r = manager.check_ja4_reputation("1.2.3.4", "abc", 2000).unwrap();
+        assert_eq!(r.change_count, 1);
+
+        // Back to original case
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "ABC", 3000).unwrap();
+        assert_eq!(r2.change_count, 2);
+    }
+
+    #[test]
+    fn test_ja4_timestamp_overflow_protection() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Set up fingerprint at very high timestamp
+        manager.check_ja4_reputation("1.2.3.4", "fp1", u64::MAX - 1000);
+
+        // Change with timestamp that would overflow if subtracted incorrectly
+        let r = manager.check_ja4_reputation("1.2.3.4", "fp2", u64::MAX);
+        assert!(r.is_some());
+        let r = r.unwrap();
+        // saturating_sub should prevent overflow
+        assert_eq!(r.change_count, 1);
+    }
+
+    #[test]
+    fn test_ja4_timestamp_zero() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Timestamp 0 should work
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+        assert!(r1.is_some());
+
+        // Change with timestamp 0 (same time)
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp2", 0).unwrap();
+        // 0 - 0 = 0 < 60000, so within window
+        assert_eq!(r2.change_count, 1);
+    }
+
+    #[test]
+    fn test_ja4_rapid_threshold_exactly_3() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Setup: First fingerprint
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+
+        // 1 change
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp2", 1000).unwrap();
+        assert_eq!(r1.change_count, 1);
+        assert!(!r1.rapid_changes);
+
+        // 2 changes
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp3", 2000).unwrap();
+        assert_eq!(r2.change_count, 2);
+        assert!(!r2.rapid_changes);
+
+        // 3 changes - should trigger
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp4", 3000).unwrap();
+        assert_eq!(r3.change_count, 3);
+        assert!(r3.rapid_changes);
+    }
+
+    #[test]
+    fn test_ja4_rapid_stays_triggered() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Build up to trigger threshold
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 1000);
+        manager.check_ja4_reputation("1.2.3.4", "fp3", 2000);
+        let r = manager.check_ja4_reputation("1.2.3.4", "fp4", 3000).unwrap();
+        assert!(r.rapid_changes);
+
+        // Additional changes should keep triggering
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp5", 4000).unwrap();
+        assert!(r2.rapid_changes);
+        assert_eq!(r2.change_count, 4);
+
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp6", 5000).unwrap();
+        assert!(r3.rapid_changes);
+        assert_eq!(r3.change_count, 5);
+    }
+
+    #[test]
+    fn test_ja4_multiple_entities_isolated() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.1.1.1");
+        manager.touch_entity("2.2.2.2");
+
+        // Build up changes for entity 1
+        manager.check_ja4_reputation("1.1.1.1", "fp1", 0);
+        manager.check_ja4_reputation("1.1.1.1", "fp2", 1000);
+        manager.check_ja4_reputation("1.1.1.1", "fp3", 2000);
+        let r1 = manager.check_ja4_reputation("1.1.1.1", "fp4", 3000).unwrap();
+        assert!(r1.rapid_changes);
+
+        // Entity 2 should be unaffected
+        let r2 = manager.check_ja4_reputation("2.2.2.2", "other_fp", 3000);
+        assert!(r2.is_some());
+        let r2 = r2.unwrap();
+        assert!(!r2.rapid_changes);
+        assert_eq!(r2.change_count, 0);
+    }
+
+    #[test]
+    fn test_ja4_same_fingerprint_repeated_no_change() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Set initial fingerprint
+        manager.check_ja4_reputation("1.2.3.4", "constant_fp", 0);
+
+        // Repeatedly check same fingerprint - should not increment
+        for i in 1..10 {
+            let r = manager.check_ja4_reputation("1.2.3.4", "constant_fp", i * 1000).unwrap();
+            assert_eq!(r.change_count, 0);
+            assert!(!r.rapid_changes);
+        }
+    }
+
+    #[test]
+    fn test_ja4_alternating_fingerprints() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Alternating between two fingerprints should still count as changes
+        manager.check_ja4_reputation("1.2.3.4", "fp_a", 0);
+        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp_b", 1000).unwrap();
+        assert_eq!(r1.change_count, 1);
+
+        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp_a", 2000).unwrap();
+        assert_eq!(r2.change_count, 2);
+
+        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp_b", 3000).unwrap();
+        assert_eq!(r3.change_count, 3);
+        assert!(r3.rapid_changes);
+    }
+
+    #[test]
+    fn test_ja4_concurrent_checks() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let manager = Arc::new(EntityManager::new(EntityConfig::default()));
+        manager.touch_entity("1.2.3.4");
+
+        let mut handles = vec![];
+
+        // Spawn multiple threads checking same entity
+        for thread_id in 0..5 {
+            let manager = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                for i in 0..10 {
+                    let fp = format!("fp_t{}_i{}", thread_id, i);
+                    let ts = (thread_id * 10000 + i * 100) as u64;
+                    let _ = manager.check_ja4_reputation("1.2.3.4", &fp, ts);
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Should complete without panics
+        // Entity should still exist
+        assert!(manager.get_entity("1.2.3.4").is_some());
+    }
+
+    #[test]
+    fn test_ja4_with_fingerprint_association() {
+        let manager = EntityManager::new(EntityConfig::default());
+
+        // Create entity with fingerprint via touch
+        manager.touch_entity_with_fingerprint(
+            "1.2.3.4",
+            Some("initial_ja4"),
+            Some("combined_hash"),
+        );
+
+        // Check reputation should work
+        let r = manager.check_ja4_reputation("1.2.3.4", "different_ja4", 1000);
+        assert!(r.is_some());
+        let r = r.unwrap();
+        // First check sets previous_ja4, so no change counted
+        // Wait, entity was touched with ja4, but check_ja4_reputation looks at previous_ja4 field
+        // which is different from ja4_fingerprint field
+        assert_eq!(r.change_count, 0); // First reputation check
+    }
+
+    #[test]
+    fn test_entity_state_ja4_fields() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Check sequence of operations
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 1000);
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 2000);
+        manager.check_ja4_reputation("1.2.3.4", "fp3", 3000);
+
+        // Verify internal state through entry API
+        let entry = manager.entities.get("1.2.3.4").unwrap();
+        assert_eq!(entry.previous_ja4.as_deref(), Some("fp3"));
+        assert_eq!(entry.ja4_change_count, 2);
+        assert!(entry.last_ja4_change_ms.is_some());
+    }
+
+    #[test]
+    fn test_ja4_after_entity_release() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Build up some changes
+        manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
+        manager.check_ja4_reputation("1.2.3.4", "fp2", 1000);
+
+        // Release entity - note: release_entity only resets risk, blocked, and matches
+        // but does NOT reset JA4 tracking fields (previous_ja4, ja4_change_count, etc.)
+        manager.release_entity("1.2.3.4");
+
+        // Entity still exists with cleared risk but JA4 state preserved
+        // Touch to update timestamps
+        manager.touch_entity("1.2.3.4");
+
+        // Check with a different fingerprint - since previous_ja4 is preserved ("fp2"),
+        // this will count as another change
+        let r = manager.check_ja4_reputation("1.2.3.4", "new_fp", 5000);
+        assert!(r.is_some());
+        let r = r.unwrap();
+        // JA4 change count continues from where it was (1 change from fp1->fp2)
+        // Now adding fp2->new_fp = 2 changes total
+        // But timestamp 5000 vs 1000 = 4000ms which is within 60s window
+        assert_eq!(r.change_count, 2);
+        assert!(!r.rapid_changes); // Need 3+ for rapid_changes
+    }
+
+    #[test]
+    fn test_ja4_special_characters_in_fingerprint() {
+        let manager = EntityManager::new(EntityConfig::default());
+        manager.touch_entity("1.2.3.4");
+
+        // Fingerprints with special characters
+        let special_fps = [
+            "t13d1516h2_8daaf6152771_02713d6af862",  // Real JA4 format
+            "fp-with-dashes",
+            "fp_with_underscores",
+            "fp.with.dots",
+            "fp/with/slashes",
+            "fp\\with\\backslashes",
+            "fp:with:colons",
+            "fp;with;semicolons",
+        ];
+
+        for (i, fp) in special_fps.iter().enumerate() {
+            let r = manager.check_ja4_reputation("1.2.3.4", fp, (i * 1000) as u64);
+            assert!(r.is_some(), "Failed for fingerprint: {}", fp);
+        }
     }
 }

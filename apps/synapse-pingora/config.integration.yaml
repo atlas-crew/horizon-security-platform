@@ -1,0 +1,24 @@
+server:
+  listen: "0.0.0.0:6190"
+  workers: 1
+  admin_listen: "0.0.0.0:6191"
+
+upstreams:
+  - host: "127.0.0.1"
+    port: 8080
+
+detection:
+  sqli: true
+  xss: true
+  path_traversal: true
+  action: "block"
+  block_status: 403
+  rules_path: "../risk-server/libsynapse/rules.json"
+  anomaly_blocking:
+    enabled: true
+    threshold: 8.0
+  risk_server_url: "http://localhost:8001" # Enable Alert Forwarder
+
+logging:
+  level: "info"
+  format: "text"

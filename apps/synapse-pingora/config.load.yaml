@@ -1,0 +1,35 @@
+server:
+  listen: "0.0.0.0:6190"
+  workers: 0 # Auto-detect CPUs
+  admin_listen: "0.0.0.0:6191"
+
+upstreams:
+  - host: "upstream"
+    port: 8080
+
+rate_limit:
+  rps: 100000 # High limit for stress test
+  enabled: true
+
+logging:
+  level: "warn" # Reduce logging noise for performance
+  format: "text"
+  access_log: false # Disable access logs for max throughput
+
+detection:
+  sqli: true
+  xss: true
+  path_traversal: true
+  command_injection: true
+  action: "block"
+  block_status: 403
+  rules_path: "../risk-server/libsynapse/rules.json"
+  anomaly_blocking:
+    enabled: true
+    threshold: 10.0
+
+tls:
+  enabled: true
+  cert_path: "/app/certs/cert.pem"
+  key_path: "/app/certs/key.pem"
+  min_version: "1.2"

@@ -65,6 +65,46 @@ This tests:
 - Parallel processing (Rayon).
 - Zero-copy FlatBuffer serialization.
 
+### 4. Running End-to-End Benchmarks (Full Proxy)
+To measure the real-world performance of the full proxy stack (Pingora + libsynapse), run the E2E benchmark suite using the compiled binary. This captures the total overhead including network I/O, context switching, and buffer management.
+
+#### **A. Compilation**
+Ensure the proxy is compiled in release mode with maximum optimizations (LTO, codegen-units=1):
+```bash
+# From project root
+pnpm nx build synapse-pingora --prod
+# OR
+cd apps/synapse-pingora
+cargo build --release
+```
+
+#### **B. Environment Setup**
+1. **Start Mock Upstream:**
+   ```bash
+   node mock_upstream.mjs > mock.log 2>&1 &
+   ```
+2. **Start Proxy Binary:**
+   Use the `config.load.yaml` (or `config.bench.yaml`) configuration for optimized performance:
+   ```bash
+   ./target/release/synapse-pingora apps/synapse-pingora/config.load.yaml > proxy.log 2>&1 &
+   ```
+
+#### **C. Load Generation**
+Use `k6` to simulate high-concurrency traffic. Use the `high_load.js` script for sustained constant-arrival-rate testing:
+```bash
+k6 run --quiet high_load.js
+```
+
+#### **D. Observability**
+Monitor the internal metrics via the Admin API to observe real-time WAF overhead and profiling behavior:
+```bash
+# Check WAF detection latency and anomaly counts
+curl -s http://localhost:6191/metrics | grep synapse_
+```
+
+#### **E. Result Analysis**
+Analyze the `proxy.log` for internal timing metrics and check the `k6` summary for throughput (RPS) and P99 latencies. Compare the `http_req_duration` from k6 with the `synapse_waf_detection_avg_us` to calculate the percentage of latency contributed by the WAF.
+
 ## Analysis Guidelines
 *   **Variance:** Pay attention to outliers. A variance >10% often indicates regex backtracking issues on specific payloads.
 *   **Scaling:** Compare "Baseline Complex" (no body) vs "Heavy Complex" to isolate the cost of body inspection.

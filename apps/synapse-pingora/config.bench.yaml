@@ -1,0 +1,25 @@
+# Synapse-Pingora Load Test Config
+server:
+  listen: "127.0.0.1:6190"
+  workers: 4 # Fixed workers for consistency
+
+upstreams:
+  - host: "127.0.0.1"
+    port: 8080
+
+rate_limit:
+  rps: 1000000 # Effectively disabled for bench
+  enabled: true
+
+logging:
+  level: "warn" # Reduce log noise during bench
+  format: "text"
+  access_log: false
+
+detection:
+  sqli: true
+  xss: true
+  path_traversal: true
+  command_injection: true
+  action: "block"
+  block_status: 403

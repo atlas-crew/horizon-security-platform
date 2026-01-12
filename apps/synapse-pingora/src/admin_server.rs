@@ -3,9 +3,9 @@
 //! Provides HTTP endpoints for the dashboard to manage Pingora:
 //! - GET /health - Service health and WAF statistics
 //! - GET /metrics - Prometheus metrics
-//! - POST /reload - Reload configuration
-//! - POST /test - Test configuration (dry-run)
-//! - POST /restart - Restart service (placeholder)
+//! - POST /reload - Reload configuration (requires auth)
+//! - POST /test - Test configuration (dry-run, requires auth)
+//! - POST /restart - Restart service (requires auth)
 //! - GET /sites - List configured sites
 //! - GET /stats - Runtime statistics
 //! - GET /waf/stats - WAF statistics
@@ -14,15 +14,17 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, Query, State},
+    body::Body,
+    extract::{Path, Query, Request, State},
     http::{header, Method, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::api::{ApiHandler, ApiResponse};
 use crate::config_manager::{
@@ -34,6 +36,39 @@ use crate::config_manager::{
 #[derive(Clone)]
 pub struct AdminState {
     pub handler: Arc<ApiHandler>,
+    /// API key for authenticating privileged operations (None = no auth required)
+    pub admin_api_key: Option<String>,
+}
+
+/// Authentication middleware for privileged admin endpoints.
+/// Checks X-Admin-Key header against configured API key.
+async fn require_auth(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // If no API key is configured, allow all requests (backwards compatibility)
+    let Some(ref expected_key) = state.admin_api_key else {
+        return Ok(next.run(request).await);
+    };
+
+    // Check X-Admin-Key header
+    let provided_key = request
+        .headers()
+        .get("X-Admin-Key")
+        .and_then(|v| v.to_str().ok());
+
+    match provided_key {
+        Some(key) if key == expected_key => Ok(next.run(request).await),
+        Some(_) => {
+            warn!("Admin auth failed: invalid API key");
+            Err(StatusCode::UNAUTHORIZED)
+        }
+        None => {
+            warn!("Admin auth failed: missing X-Admin-Key header");
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
 }
 
 /// Starts the admin HTTP server.
@@ -41,8 +76,13 @@ pub struct AdminState {
 /// # Arguments
 /// * `addr` - Socket address to bind (e.g., "0.0.0.0:6191")
 /// * `handler` - API handler with references to health, metrics, reloader, etc.
-pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> std::io::Result<()> {
-    let state = AdminState { handler };
+/// * `admin_api_key` - Optional API key for authenticating privileged operations
+pub async fn start_admin_server(
+    addr: SocketAddr,
+    handler: Arc<ApiHandler>,
+    admin_api_key: Option<String>,
+) -> std::io::Result<()> {
+    let state = AdminState { handler, admin_api_key };
 
     // CORS configuration for dashboard access
     let cors = CorsLayer::new()
@@ -50,32 +90,32 @@ pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> s
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
 
-    let app = Router::new()
-        // Health and metrics (no auth)
-        .route("/health", get(health_handler))
-        .route("/metrics", get(metrics_handler))
-        // Configuration management
+    // Routes that require authentication (privileged operations)
+    let auth_routes = Router::new()
         .route("/reload", post(reload_handler))
         .route("/test", post(test_handler))
         .route("/restart", post(restart_handler))
-        // Site management (CRUD)
-        .route("/sites", get(sites_handler).post(create_site_handler))
-        .route("/sites/{hostname}", get(get_site_handler).put(update_site_handler).delete(delete_site_handler))
+        .route("/sites", post(create_site_handler))
+        .route("/sites/{hostname}", put(update_site_handler).delete(delete_site_handler))
         .route("/sites/{hostname}/waf", put(update_site_waf_handler))
         .route("/sites/{hostname}/rate-limit", put(update_site_rate_limit_handler))
         .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
-        // Statistics
+        .route("/debug/profiles/save", post(save_profiles_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
+    // Routes that don't require authentication (read-only or health checks)
+    let public_routes = Router::new()
+        .route("/health", get(health_handler))
+        .route("/metrics", get(metrics_handler))
+        .route("/sites", get(sites_handler))
+        .route("/sites/{hostname}", get(get_site_handler))
         .route("/stats", get(stats_handler))
         .route("/waf/stats", get(waf_stats_handler))
-        // Debugging / Profiling
         .route("/debug/profiles", get(profiles_handler))
-        .route("/debug/profiles/save", post(save_profiles_handler))
         // Dashboard compatibility routes (/_sensor/ prefix)
-        // These map to the same handlers but with the prefix the dashboard expects
         .route("/_sensor/status", get(sensor_status_handler))
         .route("/_sensor/config", get(sensor_config_handler))
         .route("/_sensor/health", get(health_handler))
-        // Stub endpoints - return empty data for dashboard compatibility
         .route("/_sensor/entities", get(sensor_entities_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
@@ -84,8 +124,11 @@ pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> s
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
-        // Root endpoint (API info)
-        .route("/", get(root_handler))
+        .route("/", get(root_handler));
+
+    let app = Router::new()
+        .merge(auth_routes)
+        .merge(public_routes)
         .layer(cors)
         .with_state(state);
 
@@ -403,7 +446,111 @@ async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl I
                 "actors": false,
                 "anomalies": false
             },
-            "runtimeConfig": {},
+            "runtimeConfig": {
+                "risk": {
+                    "autoblockThreshold": 80,
+                    "riskDecayPerMinute": 5.0,
+                    "maxRiskHistory": 100
+                },
+                "state": {
+                    "maxBlockHistory": 500,
+                    "maxIpsTracked": 10000,
+                    "maxKeysPerIp": 50,
+                    "maxValuesPerKey": 500,
+                    "cleanupWindowMs": 300000
+                },
+                "session": {
+                    "enabled": true,
+                    "maxSessions": 10000,
+                    "expirationMs": 1800000,
+                    "cookieName": "synapse_session",
+                    "headerName": "X-Session-Id",
+                    "cleanupIntervalMs": 60000
+                },
+                "trends": {
+                    "enabled": true,
+                    "bucketSizeMs": 60000,
+                    "retentionHours": 24,
+                    "maxSignalsPerBucket": 5000,
+                    "anomalyCheckIntervalMs": 30000
+                },
+                "anomalyRisk": {
+                    "fingerprintChange": 25,
+                    "sessionSharing": 30,
+                    "tokenReuse": 20,
+                    "velocitySpike": 35,
+                    "rotationPattern": 40,
+                    "timingAnomaly": 15,
+                    "impossibleTravel": 50,
+                    "oversizedRequest": 20,
+                    "oversizedResponse": 25,
+                    "bandwidthSpike": 30,
+                    "exfiltrationPattern": 45,
+                    "uploadPattern": 35
+                },
+                "payload": {
+                    "enabled": true,
+                    "windowSizeMs": 60000,
+                    "retentionWindows": 60,
+                    "maxEndpoints": 1000,
+                    "maxEntities": 10000,
+                    "oversizeThreshold": 3.0,
+                    "spikeThreshold": 5.0,
+                    "warmupRequests": 50,
+                    "exfiltrationRatio": 100,
+                    "uploadRatio": 50,
+                    "minLargePayload": 100000
+                },
+                "credentialStuffing": {
+                    "enabled": true,
+                    "failureWindowMs": 300000,
+                    "failureThresholdSuspicious": 5,
+                    "failureThresholdHigh": 10,
+                    "failureThresholdBlock": 20,
+                    "distributedMinIps": 3,
+                    "distributedWindowMs": 600000,
+                    "takeoverWindowMs": 300000,
+                    "takeoverMinFailures": 3,
+                    "lowSlowMinHours": 6,
+                    "lowSlowMinPerHour": 2,
+                    "maxEntities": 10000,
+                    "broadcastIntervalMs": 5000
+                },
+                "ha": {
+                    "sensorMode": "standalone",
+                    "peerUrl": null,
+                    "syncIntervalMs": 100,
+                    "heartbeatIntervalMs": 5000,
+                    "reconnectBaseDelayMs": 1000,
+                    "reconnectMaxDelayMs": 30000,
+                    "maxQueueSize": 10000,
+                    "maxClockDriftMs": 300000,
+                    "maxMessageSize": 1000000,
+                    "messageRateLimit": 1000,
+                    "enableSplitBrainDetection": true,
+                    "heartbeatTimeoutMs": 15000,
+                    "primaryElectionMode": "manual"
+                },
+                "dashboard": {
+                    "pollIntervalMs": 1000,
+                    "wsHeartbeatIntervalMs": 30000,
+                    "wsMaxClients": 50
+                },
+                "nginx": {
+                    "listenPort": 6190,
+                    "statusPort": 6191,
+                    "statusAllow": ["127.0.0.1", "::1"],
+                    "proxyReadTimeoutMs": 60000,
+                    "proxySendTimeoutMs": 60000,
+                    "clientBodyBufferSizeKb": 128,
+                    "clientMaxBodySizeMb": 10,
+                    "gzipEnabled": true,
+                    "sslEnabled": false,
+                    "certificateId": null,
+                    "accessListId": null,
+                    "customDirectives": null
+                }
+            },
             "startupFlags": [],
             "sites": sites.data.map(|s| s.sites).unwrap_or_default()
         }
@@ -467,7 +614,7 @@ mod tests {
 
     fn create_test_app() -> Router {
         let handler = Arc::new(ApiHandler::builder().build());
-        let state = AdminState { handler };
+        let state = AdminState { handler, admin_api_key: None };
 
         Router::new()
             .route("/health", get(health_handler))

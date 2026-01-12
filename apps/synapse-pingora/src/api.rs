@@ -109,24 +109,31 @@ impl ApiHandler {
 
     /// Handles GET /sites request.
     pub fn handle_list_sites(&self) -> ApiResponse<SiteListResponse> {
-        match &self.reloader {
-            Some(reloader) => {
-                let config = reloader.config();
-                let config_read = config.read();
-                let sites: Vec<SiteInfo> = config_read
-                    .sites
-                    .iter()
-                    .map(|s| SiteInfo {
-                        hostname: s.hostname.clone(),
-                        upstreams: s.upstreams.iter().map(|u| format!("{}:{}", u.host, u.port)).collect(),
-                        tls_enabled: s.tls.is_some(),
-                        waf_enabled: s.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
-                    })
-                    .collect();
-                ApiResponse::ok(SiteListResponse { sites })
-            }
-            None => ApiResponse::err("Configuration not available"),
+        // Try ConfigReloader first (legacy path)
+        if let Some(reloader) = &self.reloader {
+            let config = reloader.config();
+            let config_read = config.read();
+            let sites: Vec<SiteInfo> = config_read
+                .sites
+                .iter()
+                .map(|s| SiteInfo {
+                    hostname: s.hostname.clone(),
+                    upstreams: s.upstreams.iter().map(|u| format!("{}:{}", u.host, u.port)).collect(),
+                    tls_enabled: s.tls.is_some(),
+                    waf_enabled: s.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
+                })
+                .collect();
+            return ApiResponse::ok(SiteListResponse { sites });
         }
+
+        // Fall back to ConfigManager (multi-site mode)
+        if let Some(config_manager) = &self.config_manager {
+            let sites = config_manager.get_sites_info();
+            return ApiResponse::ok(SiteListResponse { sites });
+        }
+
+        // Legacy single-backend mode: return empty sites (not an error)
+        ApiResponse::ok(SiteListResponse { sites: vec![] })
     }
 
     /// Handles GET /stats request.

@@ -395,6 +395,17 @@ impl ConfigManager {
         sites.iter().map(|s| s.hostname.clone()).collect()
     }
 
+    /// Returns full site info for all sites (for API response).
+    pub fn get_sites_info(&self) -> Vec<crate::api::SiteInfo> {
+        let sites = self.sites.read();
+        sites.iter().map(|s| crate::api::SiteInfo {
+            hostname: s.hostname.clone(),
+            upstreams: s.upstreams.clone(),
+            tls_enabled: s.tls_enabled,
+            waf_enabled: s.waf_enabled,
+        }).collect()
+    }
+
     /// Updates an existing site configuration.
     pub fn update_site(&self, hostname: &str, req: UpdateSiteRequest) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();

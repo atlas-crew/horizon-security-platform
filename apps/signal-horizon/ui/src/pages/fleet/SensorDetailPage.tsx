@@ -268,7 +268,7 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
           {/* Key Processes */}
           <h4 className="text-md font-semibold text-ink-primary mt-6 mb-3">Key Processes</h4>
           <div className="space-y-2">
-            {['atlascrew-waf', 'atlascrew-agent', 'atlascrew-collector', 'nginx'].map((proc) => (
+            {['atlascrew-waf', 'atlascrew-agent', 'atlascrew-collector', 'synapse-pingora'].map((proc) => (
               <div key={proc} className="flex items-center justify-between">
                 <span className="text-ink-secondary">{proc}</span>
                 <span className="text-status-success text-xs">● Running</span>
@@ -669,7 +669,7 @@ function LogsTab({ data, logType, setLogType }: { data: any; logType: string; se
 }
 
 function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
-  const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'nginx' | 'history'>('general');
+  const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'history'>('general');
 
   const mockConfig = {
     general: {
@@ -699,7 +699,7 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
     <div className="space-y-6">
       {/* Config Tabs */}
       <div className="flex gap-2">
-        {(['general', 'kernel', 'nginx', 'history'] as const).map((tab) => (
+        {(['general', 'kernel', 'pingora', 'history'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setConfigTab(tab)}
@@ -709,7 +709,7 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
                 : 'bg-surface-subtle text-ink-secondary hover:bg-surface-card'
             }`}
           >
-            {tab === 'nginx' ? 'Nginx Config' : tab === 'history' ? 'Change History' : tab}
+            {tab === 'pingora' ? 'Synapse-Pingora Config' : tab === 'history' ? 'Change History' : tab}
           </button>
         ))}
       </div>
@@ -774,10 +774,10 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
         </div>
       )}
 
-      {configTab === 'nginx' && (
+      {configTab === 'pingora' && (
         <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-ink-primary">Nginx Configuration</h3>
+            <h3 className="text-lg font-semibold text-ink-primary">Synapse-Pingora Configuration</h3>
             <div className="flex gap-2">
               <button className="px-3 py-1.5 text-xs border border-border-subtle rounded hover:bg-surface-subtle">Validate</button>
               <button className="px-3 py-1.5 text-xs border border-border-subtle rounded hover:bg-surface-subtle">Download</button>
@@ -785,35 +785,23 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
             </div>
           </div>
           <pre className="bg-surface-base border border-border-subtle rounded-lg p-4 font-mono text-sm text-ink-secondary overflow-x-auto">
-{`# /etc/nginx/nginx.conf
-user www-data;
-worker_processes auto;
-pid /run/nginx.pid;
+{`# /etc/synapse-pingora/config.yaml
+server:
+  listen: "0.0.0.0:443"
 
-events {
-    worker_connections 1024;
-    use epoll;
-    multi_accept on;
-}
+upstreams:
+  - host: "127.0.0.1"
+    port: 3003
 
-http {
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
+logging:
+  level: "info"
+  access_log: true
 
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    # Logging
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-
-    # Virtual Host Configs
-    include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*;
-}`}
+tls:
+  enabled: true
+  cert_path: "/etc/ssl/certs/signal-horizon.crt"
+  key_path: "/etc/ssl/private/signal-horizon.key"
+`}
           </pre>
         </div>
       )}
@@ -823,7 +811,7 @@ http {
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
           <div className="space-y-4">
             {[
-              { date: '2024-01-15 14:30', user: 'admin', change: 'Updated nginx keepalive timeout from 60 to 65', revertable: true },
+              { date: '2024-01-15 14:30', user: 'admin', change: 'Updated synapse-pingora upstream keepalive from 60 to 65', revertable: true },
               { date: '2024-01-14 09:15', user: 'admin', change: 'Enabled verbose logging', revertable: true },
               { date: '2024-01-12 16:45', user: 'system', change: 'Auto-update: agent version 4.2.0 → 4.2.1', revertable: false },
               { date: '2024-01-10 11:20', user: 'admin', change: 'Modified kernel parameter net.core.somaxconn', revertable: true },

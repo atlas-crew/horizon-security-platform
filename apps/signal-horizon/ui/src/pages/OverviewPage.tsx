@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Download,
   Settings,
+  Database,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useHorizonStore } from '../stores/horizonStore';
@@ -192,7 +193,7 @@ export default function OverviewPage() {
       </header>
 
       {/* Stats Grid */}
-      <section aria-label="Key metrics" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <section aria-label="Key metrics" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard
           icon={Shield}
           label="Active Campaigns"
@@ -220,6 +221,13 @@ export default function OverviewPage() {
           value={`${stats.sensorsOnline}`}
           sublabel="1 sensor offline"
           tone="text-ac-blue"
+        />
+        <StatCard
+          icon={Database}
+          label="API Discovery"
+          value={stats.apiStats?.discoveryEvents ?? 0}
+          sublabel={`${stats.apiStats?.schemaViolations ?? 0} schema changes`}
+          tone="text-ac-purple"
         />
       </section>
 

@@ -349,6 +349,11 @@ export interface DashboardSnapshotMessage {
     recentThreats: Threat[];
     /** Sensor statistics by sensor ID */
     sensorStats: Record<string, number>;
+    /** API security statistics */
+    apiStats: {
+      discoveryEvents: number;
+      schemaViolations: number;
+    };
   };
   /** Snapshot generation timestamp */
   timestamp: number;
@@ -438,7 +443,9 @@ export type SignalType =
   | 'CREDENTIAL_STUFFING'
   | 'RATE_ANOMALY'
   | 'BOT_SIGNATURE'
-  | 'IMPOSSIBLE_TRAVEL';
+  | 'IMPOSSIBLE_TRAVEL'
+  | 'TEMPLATE_DISCOVERY'
+  | 'SCHEMA_VIOLATION';
 
 /**
  * Threat severity levels for prioritization and alerting.
@@ -482,7 +489,7 @@ export interface ImpossibleTravelMetadata extends GeoMetadata {
 export type SignalMetadata =
   | ({ signalType: 'CREDENTIAL_STUFFING' } & GeoMetadata)
   | ({ signalType: 'IMPOSSIBLE_TRAVEL' } & ImpossibleTravelMetadata)
-  | ({ signalType: 'IP_THREAT' | 'FINGERPRINT_THREAT' | 'CAMPAIGN_INDICATOR' | 'RATE_ANOMALY' | 'BOT_SIGNATURE' } & Record<string, unknown>);
+  | ({ signalType: 'IP_THREAT' | 'FINGERPRINT_THREAT' | 'CAMPAIGN_INDICATOR' | 'RATE_ANOMALY' | 'BOT_SIGNATURE' | 'TEMPLATE_DISCOVERY' | 'SCHEMA_VIOLATION' } & Record<string, unknown>);
 
 /**
  * Core threat signal structure sent by sensors.
@@ -524,6 +531,8 @@ export type ThreatSignal = {
   | { signalType: 'CAMPAIGN_INDICATOR'; metadata?: Record<string, unknown> }
   | { signalType: 'RATE_ANOMALY'; metadata?: Record<string, unknown> }
   | { signalType: 'BOT_SIGNATURE'; metadata?: Record<string, unknown> }
+  | { signalType: 'TEMPLATE_DISCOVERY'; metadata?: Record<string, unknown> }
+  | { signalType: 'SCHEMA_VIOLATION'; metadata?: Record<string, unknown> }
 );
 
 /**

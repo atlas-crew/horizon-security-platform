@@ -77,6 +77,14 @@ export const ThreatSignalSchema = z.discriminatedUnion('signalType', [
     signalType: z.literal('BOT_SIGNATURE'),
     metadata: DefaultMetadataSchema,
   }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('TEMPLATE_DISCOVERY'),
+    metadata: DefaultMetadataSchema,
+  }),
+  BaseThreatSignalSchema.extend({
+    signalType: z.literal('SCHEMA_VIOLATION'),
+    metadata: DefaultMetadataSchema,
+  }),
 ]);
 
 export type ValidatedThreatSignal = z.infer<typeof ThreatSignalSchema>;

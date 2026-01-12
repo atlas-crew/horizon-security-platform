@@ -209,47 +209,28 @@ pm2 start dist/server.js --name signal-horizon -i max
 
 ## Load Balancer Configuration
 
-### NGINX Example
+### Synapse-Pingora Example
 
-```nginx
-upstream signal_horizon {
-    server 127.0.0.1:3003;
-    keepalive 32;
-}
+```yaml
+# /etc/synapse-pingora/config.yaml
+server:
+  listen: "0.0.0.0:443"
 
-server {
-    listen 443 ssl http2;
-    server_name signal-horizon.example.com;
+upstreams:
+  - host: "127.0.0.1"
+    port: 3003
 
-    ssl_certificate /etc/ssl/certs/signal-horizon.crt;
-    ssl_certificate_key /etc/ssl/private/signal-horizon.key;
+logging:
+  level: "info"
+  access_log: true
 
-    # WebSocket support
-    location /ws/ {
-        proxy_pass http://signal_horizon;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 86400;
-    }
-
-    # API endpoints
-    location /api/ {
-        proxy_pass http://signal_horizon;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Static UI files
-    location / {
-        proxy_pass http://signal_horizon;
-        proxy_set_header Host $host;
-    }
-}
+tls:
+  enabled: true
+  cert_path: "/etc/ssl/certs/signal-horizon.crt"
+  key_path: "/etc/ssl/private/signal-horizon.key"
 ```
+
+Ensure your edge proxy supports WebSocket upgrades for `/ws`.
 
 ### AWS ALB
 

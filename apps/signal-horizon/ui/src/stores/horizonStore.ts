@@ -70,6 +70,10 @@ interface HorizonState {
     activeCampaigns: number;
     blockedIndicators: number;
     sensorsOnline: number;
+    apiStats: {
+      discoveryEvents: number;
+      schemaViolations: number;
+    };
   };
 
   // Actions
@@ -80,6 +84,10 @@ interface HorizonState {
     activeCampaigns: Campaign[];
     recentThreats: Threat[];
     sensorStats: Record<string, number>;
+    apiStats: {
+      discoveryEvents: number;
+      schemaViolations: number;
+    };
   }) => void;
   addCampaign: (campaign: Campaign) => void;
   updateCampaign: (id: string, updates: Partial<Campaign>) => void;
@@ -105,6 +113,10 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
     activeCampaigns: 0,
     blockedIndicators: 0,
     sensorsOnline: 0,
+    apiStats: {
+      discoveryEvents: 0,
+      schemaViolations: 0,
+    },
   },
 
   // Actions
@@ -125,6 +137,7 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
         totalThreats: data.recentThreats.length,
         fleetThreats: data.recentThreats.filter((t) => t.isFleetThreat).length,
         sensorsOnline: data.sensorStats.CONNECTED || 0,
+        apiStats: data.apiStats,
       },
     }),
 

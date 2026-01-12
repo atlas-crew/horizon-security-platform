@@ -333,7 +333,7 @@ export class DashboardGateway {
           ? { tenantId: conn.tenantId }
           : undefined;
 
-      const [activeCampaigns, recentThreats, sensorStats] = await Promise.all([
+      const [activeCampaigns, recentThreats, sensorStats, discoveryCount, violationCount] = await Promise.all([
         this.prisma.campaign.findMany({
           where: {
             status: 'ACTIVE',
@@ -352,6 +352,20 @@ export class DashboardGateway {
           _count: { id: true },
           where: sensorTenantFilter,
         }),
+        this.prisma.signal.count({
+          where: {
+            signalType: 'TEMPLATE_DISCOVERY',
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            ...(conn.isFleetAdmin ? {} : { tenantId: conn.tenantId || undefined }),
+          },
+        }),
+        this.prisma.signal.count({
+          where: {
+            signalType: 'SCHEMA_VIOLATION',
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            ...(conn.isFleetAdmin ? {} : { tenantId: conn.tenantId || undefined }),
+          },
+        }),
       ]);
 
       this.send(conn, {
@@ -363,6 +377,10 @@ export class DashboardGateway {
             (acc, s) => ({ ...acc, [s.connectionState]: s._count.id }),
             {} as Record<string, number>
           ),
+          apiStats: {
+            discoveryEvents: discoveryCount,
+            schemaViolations: violationCount,
+          },
         },
         timestamp: Date.now(),
         sequenceId: this.nextSequenceId(),

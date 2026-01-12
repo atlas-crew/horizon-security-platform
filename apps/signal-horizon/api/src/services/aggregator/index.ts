@@ -200,7 +200,7 @@ export class Aggregator {
     const seen = new Map<string, IncomingSignal>();
 
     for (const signal of signals) {
-      const key = `${signal.signalType}:${signal.sourceIp ?? signal.fingerprint}`;
+      const key = this.buildDedupeKey(signal);
       const existing = seen.get(key);
 
       if (existing) {
@@ -215,6 +215,28 @@ export class Aggregator {
     }
 
     return Array.from(seen.values());
+  }
+
+  private buildDedupeKey(signal: IncomingSignal): string {
+    const base = `${signal.signalType}:`;
+
+    if (signal.sourceIp) {
+      return `${base}${signal.sourceIp}`;
+    }
+
+    if (signal.fingerprint) {
+      return `${base}${signal.fingerprint}`;
+    }
+
+    if (signal.signalType === 'TEMPLATE_DISCOVERY' || signal.signalType === 'SCHEMA_VIOLATION') {
+      const template =
+        (signal.metadata as Record<string, unknown> | undefined)?.template;
+      if (typeof template === 'string' && template.length > 0) {
+        return `${base}template:${template}`;
+      }
+    }
+
+    return `${base}unknown`;
   }
 
   private severityRank(severity: Severity): number {

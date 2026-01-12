@@ -60,6 +60,8 @@ function getSignalTypeLabel(type: string): string {
     RATE_ANOMALY: 'Rate Anomaly',
     BOT_SIGNATURE: 'Bot',
     IMPOSSIBLE_TRAVEL: 'Impossible Travel',
+    TEMPLATE_DISCOVERY: 'API Discovery',
+    SCHEMA_VIOLATION: 'Schema Change',
   };
   return labels[type] || type;
 }

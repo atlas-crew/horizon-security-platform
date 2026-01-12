@@ -150,8 +150,8 @@ export function FleetOverviewPage() {
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
         <QuickAction icon="🔍" title="Run Diagnostics" description="Check sensor health & connectivity" />
-        <QuickAction icon="📋" title="View Access Logs" description="Nginx access & error logs" />
-        <QuickAction icon="⚙️" title="Configure Sensors" description="Kernel params & nginx config" onClick={() => navigate('/fleet/config')} />
+        <QuickAction icon="📋" title="View Access Logs" description="Synapse-Pingora access & error logs" />
+        <QuickAction icon="⚙️" title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} />
         <QuickAction icon="🌐" title="Test Connectivity" description="Run network connectivity tests" />
       </div>
 

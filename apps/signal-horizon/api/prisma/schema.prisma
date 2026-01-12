@@ -216,6 +216,8 @@ enum SignalType {
   RATE_ANOMALY // Unusual request patterns
   BOT_SIGNATURE // Automated bot detection
   IMPOSSIBLE_TRAVEL // Login from geographically impossible locations
+  TEMPLATE_DISCOVERY // New API endpoint discovered
+  SCHEMA_VIOLATION // Request/Response schema violation detected
 }
 
 enum Severity {

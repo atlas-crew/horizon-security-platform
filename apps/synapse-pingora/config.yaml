@@ -11,7 +11,7 @@ server:
 
 upstreams:
   - host: "127.0.0.1"
-    port: 5001
+    port: 5555  # CHIMERA_API_PORT - Flask API from demo-targets
 
 rate_limit:
   rps: 10000

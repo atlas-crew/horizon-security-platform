@@ -4,11 +4,12 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde::Deserialize;
 
 use dashmap::DashMap;
 
 /// Configuration for tarpit behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TarpitConfig {
     /// Base delay in milliseconds (default: 1000ms = 1 second).
     pub base_delay_ms: u64,

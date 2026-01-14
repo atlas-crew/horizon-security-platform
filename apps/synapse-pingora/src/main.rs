@@ -102,6 +102,12 @@ pub struct Config {
     pub detection: DetectionConfig,
     #[serde(default)]
     pub tls: TlsConfig,
+    #[serde(default)]
+    pub telemetry: TelemetryConfig,
+    #[serde(default)]
+    pub tarpit: TarpitConfig,
+    #[serde(default)]
+    pub dlp: DlpConfig,
 }
 
 impl Default for Config {
@@ -113,6 +119,9 @@ impl Default for Config {
             logging: LoggingConfig::default(),
             detection: DetectionConfig::default(),
             tls: TlsConfig::default(),
+            telemetry: TelemetryConfig::default(),
+            tarpit: TarpitConfig::default(),
+            dlp: DlpConfig::default(),
         }
     }
 }
@@ -805,6 +814,9 @@ impl SynapseProxy {
             Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
             Vec::new(),
             tls_manager,
+            TarpitConfig::default(),
+            DlpConfig::default(),
+            Arc::new(EntityManager::new(EntityConfig::default())),
         )
     }
 
@@ -817,15 +829,18 @@ impl SynapseProxy {
         telemetry_client: Arc<TelemetryClient>,
         trusted_proxies: Vec<CidrRange>,
         tls_manager: Arc<TlsManager>,
+        tarpit_config: TarpitConfig,
+        dlp_config: DlpConfig,
+        entity_manager: Arc<EntityManager>,
     ) -> Self {
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit,
-            entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
-            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
-            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
+            entity_manager,
+            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
             health_checker,
             metrics_registry,
             telemetry_client,
@@ -840,15 +855,15 @@ impl SynapseProxy {
         }
     }
 
-    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>) -> Self {
+    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit: default_per_ip_rps(),
             entity_manager: Arc::new(EntityManager::new(entity_config)),
-            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
-            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
+            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
             telemetry_client: Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
@@ -878,15 +893,18 @@ impl SynapseProxy {
         telemetry_client: Arc<TelemetryClient>,
         trusted_proxies: Vec<CidrRange>,
         tls_manager: Arc<TlsManager>,
+        tarpit_config: TarpitConfig,
+        dlp_config: DlpConfig,
+        entity_manager: Arc<EntityManager>,
     ) -> Self {
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit,
-            entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
-            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
-            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
+            entity_manager,
+            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
             health_checker,
             metrics_registry,
             telemetry_client,
@@ -1124,6 +1142,10 @@ impl ProxyHttp for SynapseProxy {
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
 
+        // Record endpoint hit for API profiling/discovery
+        let path = req_header.uri.path();
+        self.metrics_registry.record_endpoint(path, method);
+
         // ===== Multi-site: Virtual Host Matching =====
         // Match request Host header to site configuration for per-site routing
         if let Some(ref vhost) = self.vhost_matcher {
@@ -1147,8 +1169,12 @@ impl ProxyHttp for SynapseProxy {
         if let Some(ref access_mgr) = self.access_list_manager {
             if let Some(ref site) = ctx.matched_site {
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
-                    let access_mgr_read = access_mgr.read();
-                    if !access_mgr_read.is_allowed(&site.hostname, &ip_addr) {
+                    let is_denied = {
+                        let access_mgr_read = access_mgr.read();
+                        !access_mgr_read.is_allowed(&site.hostname, &ip_addr)
+                    };
+
+                    if is_denied {
                         warn!("IP ACL: {} denied for site '{}'", client_ip, site.hostname);
                         
                         let mut resp = ResponseHeader::build(403, None)?;
@@ -1823,14 +1849,12 @@ impl ProxyHttp for SynapseProxy {
     }
 
     /// Response header filter - apply header manipulations
-    fn response_filter(
+    async fn response_filter(
         &self,
         _session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()>
-    where
-        Self::CTX: Send + Sync,
     {
         // ===== Header Manipulation (Response) =====
         if let Some(ref site) = ctx.matched_site {
@@ -2335,11 +2359,15 @@ fn main() {
         None
     };
 
+    // Create shared EntityManager for both admin API and proxy
+    let shared_entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
+
     // Build the API handler with ConfigManager if available
     let api_handler = Arc::new({
         let mut builder = ApiHandler::builder()
             .health(Arc::clone(&health_checker))
-            .metrics(Arc::clone(&metrics_registry));
+            .metrics(Arc::clone(&metrics_registry))
+            .entity_manager(Arc::clone(&shared_entity_manager));
 
         if let Some(ref cm) = config_manager {
             builder = builder.config_manager(Arc::clone(cm));
@@ -2434,6 +2462,9 @@ fn main() {
             Arc::clone(&telemetry_client),
             trusted_proxies.clone(),
             Arc::clone(&tls_manager),
+            config.tarpit.clone(),
+            config.dlp.clone(),
+            Arc::clone(&shared_entity_manager),
         )
     } else {
         SynapseProxy::with_health(
@@ -2445,6 +2476,9 @@ fn main() {
             Arc::clone(&telemetry_client),
             trusted_proxies,
             Arc::clone(&tls_manager),
+            config.tarpit.clone(),
+            config.dlp.clone(),
+            Arc::clone(&shared_entity_manager),
         )
     };
 
@@ -2472,6 +2506,8 @@ fn main() {
     info!("Synapse-Pingora ready");
     info!("  Proxy:  {}", config.server.listen);
     info!("  Admin:  {}", config.server.admin_listen);
+    info!("  Tarpit: enabled={}, base_delay={}ms, max_delay={}ms",
+        config.tarpit.enabled, config.tarpit.base_delay_ms, config.tarpit.max_delay_ms);
     info!("Graceful reload: pkill -SIGQUIT synapse-pingora && ./synapse-pingora -u");
 
     // Phase 7: Persistence - Start background snapshotting
@@ -2808,6 +2844,7 @@ tls:
             ..TelemetryConfig::default()
         }));
 
+        let tls_manager = Arc::new(synapse_pingora::tls::TlsManager::default());
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
@@ -2816,6 +2853,9 @@ tls:
             Arc::clone(&metrics_registry),
             Arc::clone(&telemetry_client),
             Vec::new(), // No trusted proxies for test
+            Arc::clone(&tls_manager),
+            TarpitConfig::default(),
+            DlpConfig::default(),
         );
 
         // Verify health status is accessible through proxy

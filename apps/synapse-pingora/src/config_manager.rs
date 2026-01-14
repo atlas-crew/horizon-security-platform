@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::access::AccessListManager;
-use crate::config::ConfigFile;
+use crate::config::{AccessControlConfig, ConfigFile};
 use crate::ratelimit::RateLimitManager;
 use crate::site_waf::SiteWafManager;
 use crate::validation::{validate_hostname, validate_upstream, validate_cidr, validate_waf_threshold, validate_rate_limit, ValidationError};
@@ -274,6 +274,12 @@ impl ConfigManager {
             tls_key: None,
             waf_threshold: req.waf.as_ref().and_then(|w| w.threshold.map(|t| (t * 100.0) as u8)),
             waf_enabled: req.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
+            access_control: req.access_list.as_ref().map(|access_list| AccessControlConfig {
+                allow: access_list.allow.clone(),
+                deny: access_list.deny.clone(),
+                default_action: "allow".to_string(),
+            }),
+            headers: None,
         };
 
         // Apply changes
@@ -505,6 +511,11 @@ impl ConfigManager {
 
             // Update access list
             if let Some(al_req) = req.access_list {
+                site.access_control = Some(AccessControlConfig {
+                    allow: al_req.allow.clone(),
+                    deny: al_req.deny.clone(),
+                    default_action: "allow".to_string(),
+                });
                 let mut access_list = crate::access::AccessList::allow_all();
 
                 for cidr in &al_req.allow {

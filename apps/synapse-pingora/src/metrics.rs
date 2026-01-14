@@ -26,6 +26,34 @@ pub struct MetricsRegistry {
     start_time: Option<Instant>,
 }
 
+/// Per-endpoint statistics for API profiling.
+#[derive(Debug, Clone)]
+pub struct EndpointStats {
+    /// Number of hits to this endpoint
+    pub hit_count: u64,
+    /// First time this endpoint was seen (ms since epoch)
+    pub first_seen: u64,
+    /// Last time this endpoint was seen (ms since epoch)
+    pub last_seen: u64,
+    /// HTTP methods observed (for variance)
+    pub methods: Vec<String>,
+}
+
+impl Default for EndpointStats {
+    fn default() -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        Self {
+            hit_count: 0,
+            first_seen: now,
+            last_seen: now,
+            methods: Vec::new(),
+        }
+    }
+}
+
 /// Profiling and anomaly detection metrics (Phase 2).
 #[derive(Debug, Default)]
 pub struct ProfilingMetrics {
@@ -37,6 +65,8 @@ pub struct ProfilingMetrics {
     pub avg_anomaly_score: AtomicU64, // Scaled by 1000
     /// Requests with anomalies
     pub requests_with_anomalies: AtomicU64,
+    /// Per-endpoint statistics (path -> stats)
+    pub endpoint_stats: Arc<RwLock<HashMap<String, EndpointStats>>>,
 }
 
 impl ProfilingMetrics {
@@ -49,9 +79,9 @@ impl ProfilingMetrics {
     pub fn record_anomaly(&self, anomaly_type: &str, score: f64) {
         let mut anomalies = self.anomalies_detected.write();
         *anomalies.entry(anomaly_type.to_string()).or_insert(0) += 1;
-        
+
         self.requests_with_anomalies.fetch_add(1, Ordering::Relaxed);
-        
+
         // Update rolling average (simplified)
         let scaled_score = (score * 1000.0) as u64;
         let current = self.avg_anomaly_score.load(Ordering::Relaxed);
@@ -61,6 +91,43 @@ impl ProfilingMetrics {
             (current * 9 + scaled_score) / 10 // EMA with alpha 0.1
         };
         self.avg_anomaly_score.store(new, Ordering::Relaxed);
+    }
+
+    /// Record an endpoint hit for API profiling.
+    pub fn record_endpoint(&self, path: &str, method: &str) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        let mut stats = self.endpoint_stats.write();
+        let entry = stats.entry(path.to_string()).or_insert_with(|| EndpointStats {
+            hit_count: 0,
+            first_seen: now,
+            last_seen: now,
+            methods: Vec::new(),
+        });
+
+        entry.hit_count += 1;
+        entry.last_seen = now;
+
+        // Track unique methods
+        let method_str = method.to_string();
+        if !entry.methods.contains(&method_str) {
+            entry.methods.push(method_str);
+        }
+
+        // Update active profiles count
+        let count = stats.len() as u64;
+        self.profiles_active.store(count, Ordering::Relaxed);
+    }
+
+    /// Get all endpoint statistics for the profiling API.
+    pub fn get_endpoint_stats(&self) -> Vec<(String, EndpointStats)> {
+        let stats = self.endpoint_stats.read();
+        stats.iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 }
 
@@ -248,6 +315,16 @@ impl MetricsRegistry {
         }
     }
 
+    /// Records an endpoint hit for API profiling/discovery.
+    pub fn record_endpoint(&self, path: &str, method: &str) {
+        self.profiling_metrics.record_endpoint(path, method);
+    }
+
+    /// Gets all endpoint statistics for the profiling API.
+    pub fn get_endpoint_stats(&self) -> Vec<(String, EndpointStats)> {
+        self.profiling_metrics.get_endpoint_stats()
+    }
+
     /// Records backend response.
     pub fn record_backend(&self, backend: &str, success: bool, response_time_us: u64) {
         let mut backends = self.backend_metrics.write();
@@ -404,6 +481,43 @@ impl MetricsRegistry {
         output.push_str(&format!("synapse_uptime_seconds {}\n", self.uptime_secs()));
 
         output
+    }
+
+    /// Resets all metrics to zero (for demo/testing purposes).
+    /// Note: Does NOT reset uptime - that tracks since service start.
+    pub fn reset(&self) {
+        // Reset request counters
+        self.request_counts.total.store(0, Ordering::Relaxed);
+        self.request_counts.success_2xx.store(0, Ordering::Relaxed);
+        self.request_counts.redirect_3xx.store(0, Ordering::Relaxed);
+        self.request_counts.client_error_4xx.store(0, Ordering::Relaxed);
+        self.request_counts.server_error_5xx.store(0, Ordering::Relaxed);
+        self.request_counts.blocked.store(0, Ordering::Relaxed);
+
+        // Reset latency histogram
+        for count in &self.latencies.counts {
+            count.store(0, Ordering::Relaxed);
+        }
+        self.latencies.sum_us.store(0, Ordering::Relaxed);
+        self.latencies.count.store(0, Ordering::Relaxed);
+
+        // Reset WAF metrics
+        self.waf_metrics.analyzed.store(0, Ordering::Relaxed);
+        self.waf_metrics.blocked.store(0, Ordering::Relaxed);
+        self.waf_metrics.challenged.store(0, Ordering::Relaxed);
+        self.waf_metrics.logged.store(0, Ordering::Relaxed);
+        self.waf_metrics.detection_time_us.store(0, Ordering::Relaxed);
+        self.waf_metrics.rule_matches.write().clear();
+
+        // Reset profiling metrics
+        self.profiling_metrics.profiles_active.store(0, Ordering::Relaxed);
+        self.profiling_metrics.anomalies_detected.write().clear();
+        self.profiling_metrics.avg_anomaly_score.store(0, Ordering::Relaxed);
+        self.profiling_metrics.requests_with_anomalies.store(0, Ordering::Relaxed);
+        self.profiling_metrics.endpoint_stats.write().clear();
+
+        // Reset backend metrics
+        self.backend_metrics.write().clear();
     }
 }
 

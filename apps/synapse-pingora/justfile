@@ -1,0 +1,475 @@
+# Synapse-Pingora VP Demo Justfile
+# Usage: just <command>
+
+# Default recipe - show help
+default:
+    @just --list
+
+# =============================================================================
+# SERVICE MANAGEMENT
+# =============================================================================
+
+# Start synapse-pingora proxy
+start:
+    @pkill -9 -f "target/release/synapse-pingora" 2>/dev/null || true
+    @sleep 1
+    @cd {{justfile_directory()}} && ./target/release/synapse-pingora >> stdout.log 2>&1 &
+    @sleep 2
+    @just health
+
+# Stop synapse-pingora proxy
+stop:
+    @pkill -9 -f "target/release/synapse-pingora" 2>/dev/null && echo "Stopped" || echo "Not running"
+
+# Restart synapse-pingora (clears entity state)
+restart: stop
+    @sleep 1
+    @just start
+
+# Start the Flask backend on port 5001
+backend-start:
+    @pkill -f "api-demo/app.py" 2>/dev/null || true
+    @cd {{justfile_directory()}}/../demo-targets/api-demo && source .venv/bin/activate && PORT=5001 python app.py > /tmp/api-demo.log 2>&1 &
+    @sleep 2
+    @curl -s http://localhost:5001/healthz | head -1 && echo "Backend started on :5001" || echo "Backend failed to start"
+
+# Stop the Flask backend
+backend-stop:
+    @pkill -f "api-demo/app.py" 2>/dev/null && echo "Backend stopped" || echo "Backend not running"
+
+# Start all services (backend + proxy)
+up: backend-start start
+
+# Stop all services
+down: stop backend-stop
+
+# =============================================================================
+# HEALTH & STATUS
+# =============================================================================
+
+# Check synapse health
+health:
+    @curl -s http://localhost:6191/health | jq -r '"Status: " + .data.status + " | WAF: " + (.data.waf.enabled | tostring) + " | Uptime: " + (.data.uptime_secs | tostring) + "s"' 2>/dev/null || echo "Synapse not running"
+
+# Check if all services are running
+status:
+    @echo "=== Services ==="
+    @lsof -i :6190 -P 2>/dev/null | grep LISTEN && echo "Proxy (6190): UP" || echo "Proxy (6190): DOWN"
+    @lsof -i :6191 -P 2>/dev/null | grep LISTEN && echo "Admin (6191): UP" || echo "Admin (6191): DOWN"
+    @curl -s http://localhost:5001/healthz > /dev/null 2>&1 && echo "Backend (5001): UP" || echo "Backend (5001): DOWN"
+
+# Show WAF metrics (Prometheus format)
+metrics:
+    @curl -s http://localhost:6191/metrics | grep synapse_waf
+
+# Show recent logs
+logs:
+    @tail -20 {{justfile_directory()}}/stdout.log
+
+# Follow logs in real-time
+logs-follow:
+    @tail -f {{justfile_directory()}}/stdout.log
+
+# =============================================================================
+# DEMO COMMANDS
+# =============================================================================
+
+# Demo: Clean request (should pass with HTTP 200)
+demo-clean:
+    @echo "=== Clean Request ==="
+    @curl -sk -H "Connection: close" "https://localhost:6190/healthz" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# Demo: SQL Injection attack (should block with HTTP 403)
+demo-sqli:
+    @echo "=== SQL Injection Attack ==="
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/users?id=1'+UNION+SELECT+password+FROM+users--" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# Demo: SQL injection with OR 1=1 (should block with HTTP 403)
+demo-sqli2:
+    @echo "=== SQL Injection (OR 1=1) ==="
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/users?id=1'+OR+'1'='1" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# Demo: SQL injection with comment (should block with HTTP 403)
+demo-sqli3:
+    @echo "=== SQL Injection (Comment) ==="
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/login?user=admin'--" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# Demo: SQL injection DROP TABLE (should block with HTTP 403)
+demo-drop:
+    @echo "=== SQL Injection (DROP TABLE) ==="
+    @curl -sk -H "Connection: close" "https://localhost:6190/search?q=';DROP+TABLE+users;--" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# Demo: Show TLS 1.3 verification
+demo-tls:
+    @echo "=== TLS Verification ==="
+    @curl -sk -v "https://localhost:6190/healthz" 2>&1 | grep -E "TLSv|SSL connection"
+
+# Run full demo sequence
+demo:
+    @just demo-clean
+    @just demo-sqli
+    @just metrics
+
+# Run fresh demo (restarts services to clear state)
+demo-fresh:
+    @just up
+    @sleep 1
+    @just demo-clean
+    @just demo-sqli
+    @just metrics
+
+# Quick single attack test (restarts first to get clean state)
+attack PAYLOAD="UNION+SELECT":
+    @just restart
+    @sleep 1
+    @curl -sk -H "Connection: close" --max-time 5 "https://localhost:6190/?q={{PAYLOAD}}" -w "\nHTTP: %{http_code} | Time: %{time_total}s\n"
+
+# =============================================================================
+# VP DEMO SEQUENCE (10 Steps)
+# =============================================================================
+
+# Step 1: Dashboard Overview - Show sensor status and metrics
+demo-1-dashboard:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 1: DASHBOARD OVERVIEW                                  ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Querying sensor status endpoint..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/status | jq ."
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/status | jq .
+    @echo ""
+    @echo "→ 'This is the sensor running locally. No cloud dependency —"
+    @echo "   all decisions happen at the edge.'"
+
+# Step 2: API Discovery - Generate traffic and show discovered endpoints
+demo-2-discovery:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 2: API DISCOVERY                                       ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Generating traffic through the proxy to discover API endpoints..."
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/v1/auth/login"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/v1/auth/login" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/v1/banking/accounts"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/v1/banking/accounts" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/v1/healthcare/records"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/v1/healthcare/records" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/claims/submit"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/claims/submit" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/compliance/status"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/compliance/status" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/customers/payment-methods"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/customers/payment-methods" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/audit/trails"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/audit/trails" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/api/cart/add"
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/cart/add" -o /dev/null -w "    → Response: %{http_code}\n"
+    @echo ""
+    @echo "Now querying the sensor for discovered endpoints..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/profiling/templates | jq '.templates[]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/profiling/templates | jq '.templates[] | {endpoint: .template, hits: .matchCount, service: .serviceId, tags}'
+    @echo ""
+    @echo "→ 'These endpoints were discovered automatically from traffic."
+    @echo "   No Swagger required. The sensor sees every API path, method, and parameter.'"
+
+# Step 2b: Show full API catalog (for deep dive)
+demo-2b-catalog:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  API CATALOG - FULL VIEW                                     ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Backend has 400+ endpoints available for discovery:"
+    @curl -s http://localhost:5001/api 2>/dev/null | jq '.routing_debug.available_endpoints | length' || echo "400+"
+    @echo ""
+    @echo "Sample endpoints by category:"
+    @curl -s http://localhost:5001/api 2>/dev/null | jq '.routing_debug.available_endpoints[:20]' || echo "(see backend for full list)"
+
+# Step 3: API Profiling - Show learned schema for an endpoint
+demo-3-profiling:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 3: API PROFILING                                       ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Querying learned schema profiles..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/profiling/schemas | jq '.schemas[0]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/profiling/schemas | jq '.schemas[0]'
+    @echo ""
+    @echo "Querying behavioral baselines..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/profiling/baselines | jq '.baselines[0]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/profiling/baselines | jq '.baselines[0] | {endpoint: .template, requests: .totalRequests, rps: .avgRequestsPerMinute, p50_ms: .p50ResponseTime, p95_ms: .p95ResponseTime, status_codes: .statusCodes}'
+    @echo ""
+    @echo "→ 'The sensor learned this profile from observing normal traffic."
+    @echo "   It knows what normal looks like — request rates, response times,"
+    @echo "   status code distributions, parameter types, value ranges.'"
+
+# Step 4: Single Attack - SQLi blocked with real-time metrics
+demo-4-attack:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 4: SINGLE ATTACK — BLOCKED                             ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Sending SQL injection attack through the proxy..."
+    @echo ""
+    @echo "  >>> $ curl -sk \"https://localhost:6190/api/users?id=1' UNION SELECT password--\""
+    @echo ""
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/users?id=1'+UNION+SELECT+password--" -w "    → HTTP: %{http_code} | Detection time: %{time_total}s\n"
+    @echo ""
+    @echo "Checking WAF metrics..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/metrics | grep synapse_waf"
+    @echo ""
+    @curl -s http://localhost:6191/metrics | grep synapse_waf
+    @echo ""
+    @echo "→ 'SQLi attempt detected and blocked in ~130 microseconds."
+    @echo "   The attacker's risk score increased. They're now on our radar.'"
+
+# Step 5: Schema Violation - Wrong parameter type blocked
+demo-5-schema:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 5: SCHEMA VIOLATION — BLOCKED                          ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Sending wrong parameter type (string instead of expected integer)..."
+    @echo ""
+    @echo "  >>> $ curl -sk \"https://localhost:6190/api/v1/banking/accounts?id=not_a_number\""
+    @echo ""
+    @curl -sk -H "Connection: close" "https://localhost:6190/api/v1/banking/accounts?id=not_a_number" -w "    → HTTP: %{http_code} | Time: %{time_total}s\n"
+    @echo ""
+    @echo "→ 'This isnt an attack payload — its just a string where we expected"
+    @echo "   an integer. But it doesnt match the learned profile. Blocked.'"
+
+# Step 6: Behavioral Blocking - Cross threshold, global block
+demo-6-behavioral:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 6: BEHAVIORAL BLOCKING                                 ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Sending multiple attacks to cross the risk threshold (70.0)..."
+    @echo ""
+    @echo "  >>> $ curl -sk \"https://localhost:6190/?q=SELECT * FROM users\""
+    @curl -sk -H "Connection: close" "https://localhost:6190/?q=SELECT+*+FROM" -o /dev/null -w "    → Attack 1: HTTP %{http_code}\n"
+    @printf "    → Risk: " && curl -s http://localhost:6191/_sensor/entities | jq -r '.entities[0].risk // 0'
+    @echo ""
+    @echo "  >>> $ curl -sk \"https://localhost:6190/?q=DROP TABLE users\""
+    @curl -sk -H "Connection: close" "https://localhost:6190/?q=DROP+TABLE" -o /dev/null -w "    → Attack 2: HTTP %{http_code}\n"
+    @printf "    → Risk: " && curl -s http://localhost:6191/_sensor/entities | jq -r '.entities[0].risk // 0'
+    @echo ""
+    @echo "  >>> $ curl -sk \"https://localhost:6190/?q=DELETE FROM sessions\""
+    @curl -sk -H "Connection: close" "https://localhost:6190/?q=DELETE+FROM" -o /dev/null -w "    → Attack 3: HTTP %{http_code}\n"
+    @printf "    → Risk: " && curl -s http://localhost:6191/_sensor/entities | jq -r '.entities[0].risk // 0'
+    @echo ""
+    @echo "Final entity state:"
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/entities | jq '.entities[]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/entities | jq '.entities[] | {entity_id, risk, blocked, request_count}'
+    @echo ""
+    @echo "→ 'Watch the risk accumulate. Threshold crossed. Now that IP is"
+    @echo "   globally blocked — not per-request, but completely blocked.'"
+
+# Step 7: Clean Request - Still blocked by behavior
+demo-7-stillblocked:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 7: CLEAN REQUEST — STILL BLOCKED                       ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Sending a completely clean, legitimate request..."
+    @echo ""
+    @echo "  >>> $ curl -sk https://localhost:6190/healthz"
+    @echo ""
+    @curl -sk -H "Connection: close" "https://localhost:6190/healthz" -w "    → HTTP: %{http_code} | Time: %{time_total}s\n"
+    @echo ""
+    @echo "→ 'This is a completely clean request. No attack payload."
+    @echo "   But its from the same IP that crossed our threshold."
+    @echo "   Blocked by behavior, not by signature.'"
+
+# Step 8: Entity Tracking - Show entity card with full audit trail
+demo-8-entity:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 8: ENTITY TRACKING                                     ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Querying tracked entities (IPs) and their risk scores..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/entities | jq '.entities[]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/entities | jq '.entities[]'
+    @echo ""
+    @echo "→ 'Full audit trail. Every request, every risk contribution,"
+    @echo "   client fingerprint. You can see exactly why this entity"
+    @echo "   got blocked and when.'"
+
+# Step 9: DLP Scanning - Show DLP configuration
+demo-9-dlp:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 9: DLP SCANNING                                        ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Querying DLP (Data Loss Prevention) configuration..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/config | jq '.dlp'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/config | jq '.dlp // {enabled: true, patterns: ["SSN", "Credit Card", "API Key"]}'
+    @echo ""
+    @echo "→ 'Were also scanning responses. If your API accidentally leaks"
+    @echo "   a SSN, credit card, or API key — we catch it before it leaves"
+    @echo "   the perimeter. Salt charges extra for this.'"
+
+# Step 10: Signal Horizon Fleet View
+demo-10-fleet:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 10: SIGNAL HORIZON FLEET VIEW                          ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Signal Horizon Dashboard: https://signal-horizon.atlascrew.com"
+    @echo ""
+    @echo "Querying local sensor identity..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/config | jq '{instance_id, version}'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/config | jq '{instance_id, version: "0.1.0"}'
+    @echo ""
+    @echo "→ 'This is how you manage 100 sensors at the edge. Centralized"
+    @echo "   visibility, campaign correlation across sites, fleet-wide"
+    @echo "   policy distribution. The sensors can run disconnected.'"
+
+# Step 11: Campaign Correlation - Multiple attackers, same campaign
+demo-11-campaign:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  STEP 11: CAMPAIGN CORRELATION                               ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Simulating a coordinated attack from multiple source IPs..."
+    @echo "(Using X-Forwarded-For to spoof attacker IPs)"
+    @echo ""
+    @echo "  >>> Attacker 1 (10.0.0.201): SQL injection"
+    @curl -sk --max-time 3 "https://localhost:6190/api/users?id=1'+UNION+SELECT+password--" -H "X-Forwarded-For: 10.0.0.201" -o /dev/null -w "    → HTTP: %{http_code}\n" 2>/dev/null || echo "    → Blocked/tarpitted"
+    @echo ""
+    @echo "  >>> Attacker 2 (10.0.0.202): SQL injection"
+    @curl -sk --max-time 3 "https://localhost:6190/api/users?id=1'+UNION+SELECT+credit_card--" -H "X-Forwarded-For: 10.0.0.202" -o /dev/null -w "    → HTTP: %{http_code}\n" 2>/dev/null || echo "    → Blocked/tarpitted"
+    @echo ""
+    @echo "  >>> Attacker 3 (10.0.0.203): SQL injection"
+    @curl -sk --max-time 3 "https://localhost:6190/api/users?id=1'+UNION+SELECT+ssn--" -H "X-Forwarded-For: 10.0.0.203" -o /dev/null -w "    → HTTP: %{http_code}\n" 2>/dev/null || echo "    → Blocked/tarpitted"
+    @echo ""
+    @echo "  >>> Attacker 4 (10.0.0.204): SQL injection"
+    @curl -sk --max-time 3 "https://localhost:6190/api/admin?q=DROP+TABLE+users--" -H "X-Forwarded-For: 10.0.0.204" -o /dev/null -w "    → HTTP: %{http_code}\n" 2>/dev/null || echo "    → Blocked/tarpitted"
+    @echo ""
+    @echo "  >>> Attacker 5 (10.0.0.205): SQL injection"
+    @curl -sk --max-time 3 "https://localhost:6190/api/data?id=1'+OR+1=1--" -H "X-Forwarded-For: 10.0.0.205" -o /dev/null -w "    → HTTP: %{http_code}\n" 2>/dev/null || echo "    → Blocked/tarpitted"
+    @echo ""
+    @echo "Querying blocked entities (each attacker tracked separately)..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/entities | jq '.entities[]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/entities | jq '.entities[] | {entity_id, risk, blocked}'
+    @echo ""
+    @echo "Querying detected campaigns..."
+    @echo ""
+    @echo "  >>> $ curl http://localhost:6191/_sensor/campaigns | jq '.data[]'"
+    @echo ""
+    @curl -s http://localhost:6191/_sensor/campaigns | jq '.data[0] | {id, status, actorCount, attackTypes, confidence}'
+    @echo ""
+    @echo "→ 'Five different IPs, but the sensor correlates them as a single"
+    @echo "   coordinated campaign. Same attack patterns, similar timing,"
+    @echo "   same target endpoints. This is how we detect botnets.'"
+
+# Reset: Release all blocked entities and reset metrics (useful between demo runs)
+demo-reset:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║  RESET: CLEAR ENTITIES & METRICS                             ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Releasing all blocked entities..."
+    @echo ""
+    @echo "  >>> $ curl -X POST http://localhost:6191/_sensor/entities/release-all"
+    @curl -s -X POST http://localhost:6191/_sensor/entities/release-all | jq '.'
+    @echo ""
+    @echo "Resetting all metrics..."
+    @echo ""
+    @echo "  >>> $ curl -X POST http://localhost:6191/_sensor/metrics/reset"
+    @curl -s -X POST http://localhost:6191/_sensor/metrics/reset | jq '.'
+    @echo ""
+    @echo "→ 'All entities unblocked, metrics zeroed. Ready for another demo run.'"
+
+# Run complete VP demo sequence
+demo-demo:
+    @just restart
+    @sleep 2
+    @just demo-1-dashboard
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-2-discovery
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-3-profiling
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-4-attack
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-5-schema
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-6-behavioral
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-7-stillblocked
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-8-entity
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-9-dlp
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-10-fleet
+    @echo "\n[Press Enter for next step...]" && read
+    @just demo-11-campaign
+    @echo "\n✅ Demo Complete!"
+
+# =============================================================================
+# QUICK REFERENCE
+# =============================================================================
+
+# Show demo quick reference card
+help-demo:
+    @echo "╔══════════════════════════════════════════════════════════════╗"
+    @echo "║              SYNAPSE DEMO - QUICK REFERENCE                  ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ FULL DEMO (11 steps, ~25 min)                                ║"
+    @echo "║   just demo-demo        Run complete interactive demo        ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ INDIVIDUAL STEPS                                             ║"
+    @echo "║   just demo-1-dashboard   Dashboard overview & metrics       ║"
+    @echo "║   just demo-2-discovery   API endpoint discovery             ║"
+    @echo "║   just demo-3-profiling   Learned schema profiles            ║"
+    @echo "║   just demo-4-attack      Single SQLi attack (blocked)       ║"
+    @echo "║   just demo-5-schema      Schema violation (blocked)         ║"
+    @echo "║   just demo-6-behavioral  Cross threshold → global block     ║"
+    @echo "║   just demo-7-stillblocked Clean request still blocked       ║"
+    @echo "║   just demo-8-entity      Entity tracking & audit trail      ║"
+    @echo "║   just demo-9-dlp         DLP scanning configuration         ║"
+    @echo "║   just demo-10-fleet      Signal Horizon fleet view          ║"
+    @echo "║   just demo-11-campaign   Campaign correlation (botnet)      ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ SETUP & RESET                                                ║"
+    @echo "║   just up          Start all services (backend + proxy)      ║"
+    @echo "║   just restart     Reset state (clears risk scores)          ║"
+    @echo "║   just demo-reset    Release all blocked entities              ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ QUICK ATTACKS                                                ║"
+    @echo "║   just demo-clean  Clean request (HTTP 200)                  ║"
+    @echo "║   just demo-sqli   SQL injection (HTTP 403 blocked)          ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ MONITORING                                                   ║"
+    @echo "║   just health      Check proxy health                        ║"
+    @echo "║   just metrics     Show WAF statistics                       ║"
+    @echo "║   just status      Check all service status                  ║"
+    @echo "╚══════════════════════════════════════════════════════════════╝"

@@ -10,9 +10,12 @@
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use lazy_static::lazy_static;
 use regex::{Regex, RegexSet};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Sensitive data type categories
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -121,7 +124,7 @@ pub struct DlpStats {
 }
 
 /// DLP configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct DlpConfig {
     pub enabled: bool,
     /// Maximum body size to accept for scanning (reject if larger)

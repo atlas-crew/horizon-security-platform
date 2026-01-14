@@ -196,6 +196,9 @@ pub async fn start_admin_server(
         .route("/_sensor/config", get(sensor_config_handler))
         .route("/_sensor/health", get(health_handler))
         .route("/_sensor/entities", get(sensor_entities_handler))
+        .route("/_sensor/entities/release-all", post(sensor_release_all_handler))
+        .route("/_sensor/entities/:ip", delete(sensor_release_entity_handler))
+        .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
@@ -456,6 +459,66 @@ async fn sensor_entities_handler(
     let limit = params.limit.unwrap_or(100);
     let entities = state.handler.handle_list_entities(limit);
     (StatusCode::OK, Json(serde_json::json!({ "entities": entities })))
+}
+
+/// DELETE /_sensor/entities/{ip} - Release (unblock) a specific entity
+async fn sensor_release_entity_handler(
+    Path(ip): Path<String>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    if let Some(entity_manager) = state.handler.entity_manager() {
+        let released = entity_manager.release_entity(&ip);
+        if released {
+            info!("Released entity: {}", ip);
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "message": format!("Entity {} released", ip)
+            })))
+        } else {
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "success": false,
+                "message": format!("Entity {} not found", ip)
+            })))
+        }
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "success": false,
+            "message": "Entity tracking not enabled"
+        })))
+    }
+}
+
+/// POST /_sensor/entities/release-all - Release (unblock) all entities
+async fn sensor_release_all_handler(
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    if let Some(entity_manager) = state.handler.entity_manager() {
+        let count = entity_manager.release_all();
+        info!("Released {} entities", count);
+        (StatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "released": count,
+            "message": format!("Released {} entities", count)
+        })))
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "success": false,
+            "message": "Entity tracking not enabled"
+        })))
+    }
+}
+
+/// POST /_sensor/metrics/reset - Reset all metrics (for demo/testing)
+async fn sensor_metrics_reset_handler(
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let metrics = state.handler.metrics();
+    metrics.reset();
+    info!("Metrics reset");
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "All metrics reset to zero"
+    })))
 }
 
 /// Query parameters for blocks endpoint
@@ -1300,107 +1363,97 @@ struct DiscoveryQuery {
 fn default_discovery_limit() -> usize { 20 }
 
 /// GET /_sensor/profiling/templates - Returns endpoint templates discovered by profiler
-async fn profiling_templates_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp_millis() as u64;
+async fn profiling_templates_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    // Get real endpoint stats from metrics registry
+    let endpoint_stats = state.handler.metrics().get_endpoint_stats();
 
-    // Seed data matching EndpointTemplate interface
-    let templates = vec![
-        serde_json::json!({
-            "template": "/api/users",
-            "matchCount": 90,
-            "examples": ["/api/users", "/api/users?page=1", "/api/users?page=2&limit=10"],
-            "firstSeen": now - 3600000,
-            "lastSeen": now,
-            "serviceId": "user-service",
-            "tags": ["REST", "Public"]
-        }),
-        serde_json::json!({
-            "template": "/api/users/{id}",
-            "matchCount": 156,
-            "examples": ["/api/users/123", "/api/users/456", "/api/users/789"],
-            "firstSeen": now - 7200000,
-            "lastSeen": now - 60000,
-            "serviceId": "user-service",
-            "tags": ["REST", "Public", "PII"]
-        }),
-        serde_json::json!({
-            "template": "/api/products/{id}",
-            "matchCount": 45,
-            "examples": ["/api/products/sku-001", "/api/products/sku-002"],
-            "firstSeen": now - 7200000,
-            "lastSeen": now - 300000,
-            "serviceId": "product-service",
-            "tags": ["REST", "Public"]
-        }),
-        serde_json::json!({
-            "template": "/api/auth/login",
-            "matchCount": 120,
-            "examples": ["/api/auth/login"],
-            "firstSeen": now - 86400000,
-            "lastSeen": now - 60000,
-            "serviceId": "auth-service",
-            "tags": ["Auth", "Critical"]
-        }),
-        serde_json::json!({
-            "template": "/api/auth/refresh",
-            "matchCount": 85,
-            "examples": ["/api/auth/refresh"],
-            "firstSeen": now - 86400000,
-            "lastSeen": now - 120000,
-            "serviceId": "auth-service",
-            "tags": ["Auth"]
-        }),
-        serde_json::json!({
-            "template": "/api/admin/users",
-            "matchCount": 15,
-            "examples": ["/api/admin/users", "/api/admin/users?role=admin"],
-            "firstSeen": now - 1800000,
-            "lastSeen": now - 120000,
-            "serviceId": "admin-service",
-            "tags": ["Admin", "Internal", "PII"]
-        }),
-        serde_json::json!({
-            "template": "/api/search",
-            "matchCount": 200,
-            "examples": ["/api/search?q=test", "/api/search?q=product&category=electronics"],
-            "firstSeen": now - 172800000,
-            "lastSeen": now,
-            "serviceId": "search-service",
-            "tags": ["REST", "Public"]
-        }),
-        serde_json::json!({
-            "template": "/api/orders",
-            "matchCount": 67,
-            "examples": ["/api/orders", "/api/orders?status=pending"],
-            "firstSeen": now - 43200000,
-            "lastSeen": now - 180000,
-            "serviceId": "order-service",
-            "tags": ["REST", "Auth", "PCI"]
-        }),
-        serde_json::json!({
-            "template": "/api/orders/{id}",
-            "matchCount": 134,
-            "examples": ["/api/orders/ord-123", "/api/orders/ord-456"],
-            "firstSeen": now - 43200000,
-            "lastSeen": now - 60000,
-            "serviceId": "order-service",
-            "tags": ["REST", "Auth", "PCI"]
-        }),
-        serde_json::json!({
-            "template": "/api/checkout",
-            "matchCount": 42,
-            "examples": ["/api/checkout"],
-            "firstSeen": now - 21600000,
-            "lastSeen": now - 300000,
-            "serviceId": "payment-service",
-            "tags": ["Auth", "PCI", "Critical"]
-        }),
-    ];
+    // Convert to template format expected by the dashboard
+    let templates: Vec<serde_json::Value> = endpoint_stats
+        .into_iter()
+        .map(|(path, stats)| {
+            // Infer service ID from path prefix
+            let service_id = infer_service_id(&path);
+            // Infer tags based on path patterns
+            let tags = infer_endpoint_tags(&path);
+
+            serde_json::json!({
+                "template": path,
+                "matchCount": stats.hit_count,
+                "examples": [path.clone()],
+                "firstSeen": stats.first_seen,
+                "lastSeen": stats.last_seen,
+                "serviceId": service_id,
+                "tags": tags,
+                "methods": stats.methods
+            })
+        })
+        .collect();
 
     (StatusCode::OK, Json(serde_json::json!({
         "templates": templates,
         "count": templates.len()
     })))
+}
+
+/// Infer service ID from path prefix
+fn infer_service_id(path: &str) -> &'static str {
+    if path.contains("/auth") {
+        "auth-service"
+    } else if path.contains("/admin") {
+        "admin-service"
+    } else if path.contains("/users") || path.contains("/user") {
+        "user-service"
+    } else if path.contains("/product") {
+        "product-service"
+    } else if path.contains("/order") {
+        "order-service"
+    } else if path.contains("/payment") || path.contains("/checkout") {
+        "payment-service"
+    } else if path.contains("/search") {
+        "search-service"
+    } else if path.contains("/banking") {
+        "banking-service"
+    } else if path.contains("/healthcare") {
+        "healthcare-service"
+    } else if path.contains("/ecommerce") {
+        "ecommerce-service"
+    } else if path.contains("/genai") {
+        "genai-service"
+    } else {
+        "api-gateway"
+    }
+}
+
+/// Infer endpoint tags based on path patterns
+fn infer_endpoint_tags(path: &str) -> Vec<&'static str> {
+    let mut tags = vec!["REST"];
+
+    if path.contains("/auth") || path.contains("/login") {
+        tags.push("Auth");
+        if path.contains("/login") {
+            tags.push("Critical");
+        }
+    }
+    if path.contains("/admin") {
+        tags.push("Admin");
+        tags.push("Internal");
+    }
+    if path.contains("/user") || path.contains("/account") {
+        tags.push("PII");
+    }
+    if path.contains("/payment") || path.contains("/checkout") || path.contains("/banking") {
+        tags.push("PCI");
+        tags.push("Critical");
+    }
+    if path.contains("/healthcare") || path.contains("/records") {
+        tags.push("PHI");
+        tags.push("Critical");
+    }
+    if !path.contains("/admin") && !path.contains("/internal") {
+        tags.push("Public");
+    }
+
+    tags
 }
 
 /// GET /_sensor/profiling/baselines - Returns traffic baselines per endpoint

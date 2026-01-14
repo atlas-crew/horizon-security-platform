@@ -209,6 +209,35 @@ logs-follow:
     @tail -f {{justfile_directory()}}/stdout.log
 
 # =============================================================================
+# QUERY COMMANDS
+# =============================================================================
+
+# Show all tracked entities (IPs) with risk scores
+entities:
+    @echo "=== Tracked Entities ==="
+    @curl -s http://localhost:6191/_sensor/entities | jq '.entities[] | {entity_id, risk, blocked, request_count, last_seen}'
+
+# Show only blocked entities
+blocked:
+    @echo "=== Blocked Entities ==="
+    @curl -s http://localhost:6191/_sensor/entities | jq '[.entities[] | select(.blocked == true)] | if length == 0 then "No blocked entities" else .[] | {entity_id, risk, blocked_at: .last_seen} end'
+
+# Show detected attack campaigns
+campaigns:
+    @echo "=== Attack Campaigns ==="
+    @curl -s http://localhost:6191/_sensor/campaigns | jq '.data[] | {id, status, actorCount, attackTypes, confidence, firstSeen, lastSeen}'
+
+# Show recent blocked requests with details
+requests:
+    @echo "=== Recent Requests ==="
+    @curl -s http://localhost:6191/_sensor/requests 2>/dev/null | jq '.requests[:10] | .[] | {timestamp, client_ip, method, path, status, rule_triggered}' 2>/dev/null || echo "Request log not available (enable in config)"
+
+# Show entity details for a specific IP
+entity IP:
+    @echo "=== Entity Details: {{IP}} ==="
+    @curl -s "http://localhost:6191/_sensor/entities/{{IP}}" | jq '.'
+
+# =============================================================================
 # DEMO COMMANDS
 # =============================================================================
 
@@ -604,6 +633,13 @@ help-demo:
     @echo "║   just demo-preflight  Pre-flight check (verify services)    ║"
     @echo "║   just restart         Reset state (clears risk scores)      ║"
     @echo "║   just demo-reset      Release all blocked entities          ║"
+    @echo "╠══════════════════════════════════════════════════════════════╣"
+    @echo "║ QUERY DATA                                                   ║"
+    @echo "║   just entities       Show all tracked entities (IPs)        ║"
+    @echo "║   just blocked        Show only blocked entities             ║"
+    @echo "║   just campaigns      Show detected attack campaigns         ║"
+    @echo "║   just requests       Show recent request log                ║"
+    @echo "║   just entity <IP>    Show details for specific IP           ║"
     @echo "╠══════════════════════════════════════════════════════════════╣"
     @echo "║ QUICK ATTACKS                                                ║"
     @echo "║   just demo-clean  Clean request (HTTP 200)                  ║"

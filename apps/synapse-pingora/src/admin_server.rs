@@ -203,6 +203,9 @@ pub async fn start_admin_server(
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
+        .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
+        .route("/_sensor/campaigns/:id/actors", get(sensor_campaign_actors_handler))
+        .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
         .route("/_sensor/stuffing", get(sensor_stuffing_handler))
@@ -399,6 +402,8 @@ async fn sensor_status_handler(State(state): State<AdminState>) -> impl IntoResp
     // Map to dashboard-expected format
     let response = serde_json::json!({
         "status": "running",
+        "sensorId": "synapse-pingora",
+        "mode": "proxy",
         "uptime": stats.data.as_ref().map(|s| s.uptime_secs).unwrap_or(0),
         "requestRate": 0,
         "blockRate": waf.data.as_ref().map(|w| w.block_rate_percent).unwrap_or(0.0),
@@ -774,6 +779,324 @@ async fn sensor_campaigns_handler() -> impl IntoResponse {
     ];
 
     (StatusCode::OK, Json(serde_json::json!({ "data": campaigns })))
+}
+
+/// GET /_sensor/campaigns/:id - Campaign detail
+async fn sensor_campaign_detail_handler(Path(id): Path<String>) -> impl IntoResponse {
+    let now = chrono::Utc::now();
+
+    // Campaign data lookup (would come from real store in production)
+    let campaign_data = match id.as_str() {
+        "camp-001" => Some(serde_json::json!({
+            "id": "camp-001",
+            "status": "active",
+            "actorCount": 12,
+            "confidence": 87,
+            "attackTypes": ["credential_stuffing", "rate_abuse"],
+            "firstSeen": (now - chrono::Duration::hours(4)).to_rfc3339(),
+            "lastActivity": (now - chrono::Duration::minutes(8)).to_rfc3339(),
+            "totalRequests": 2450,
+            "blockedRequests": 1890,
+            "rulesTriggered": 156,
+            "riskScore": 78,
+            "correlationReasons": [
+                {
+                    "type": "shared_fingerprint",
+                    "confidence": 92,
+                    "description": "12 actors sharing identical browser fingerprint despite different IPs",
+                    "actors": ["192.168.1.100", "192.168.1.101", "192.168.1.102", "10.0.0.50", "10.0.0.51"]
+                },
+                {
+                    "type": "timing_correlation",
+                    "confidence": 85,
+                    "description": "Request patterns show coordinated timing within 50ms windows",
+                    "actors": ["192.168.1.100", "192.168.1.101", "192.168.1.102"]
+                },
+                {
+                    "type": "behavioral_similarity",
+                    "confidence": 78,
+                    "description": "Identical request sequences targeting /api/auth endpoints",
+                    "actors": ["192.168.1.100", "10.0.0.50", "10.0.0.51", "172.16.0.10"]
+                }
+            ]
+        })),
+        "camp-002" => Some(serde_json::json!({
+            "id": "camp-002",
+            "status": "active",
+            "actorCount": 5,
+            "confidence": 72,
+            "attackTypes": ["sql_injection", "path_traversal"],
+            "firstSeen": (now - chrono::Duration::hours(2)).to_rfc3339(),
+            "lastActivity": (now - chrono::Duration::minutes(15)).to_rfc3339(),
+            "totalRequests": 380,
+            "blockedRequests": 342,
+            "rulesTriggered": 89,
+            "riskScore": 85,
+            "correlationReasons": [
+                {
+                    "type": "attack_sequence",
+                    "confidence": 88,
+                    "description": "Sequential SQLi probes followed by path traversal attempts",
+                    "actors": ["203.0.113.10", "203.0.113.11", "203.0.113.12"]
+                },
+                {
+                    "type": "shared_user_agent",
+                    "confidence": 65,
+                    "description": "Uncommon user agent string shared across all actors",
+                    "actors": ["203.0.113.10", "203.0.113.11", "203.0.113.12", "203.0.113.13", "203.0.113.14"]
+                }
+            ]
+        })),
+        "camp-003" => Some(serde_json::json!({
+            "id": "camp-003",
+            "status": "detected",
+            "actorCount": 3,
+            "confidence": 65,
+            "attackTypes": ["enumeration", "scraping"],
+            "firstSeen": (now - chrono::Duration::hours(6)).to_rfc3339(),
+            "lastActivity": (now - chrono::Duration::minutes(45)).to_rfc3339(),
+            "totalRequests": 8500,
+            "blockedRequests": 2100,
+            "rulesTriggered": 42,
+            "riskScore": 45,
+            "correlationReasons": [
+                {
+                    "type": "behavioral_similarity",
+                    "confidence": 70,
+                    "description": "Systematic enumeration of /api/users/* endpoints",
+                    "actors": ["198.51.100.1", "198.51.100.2", "198.51.100.3"]
+                }
+            ]
+        })),
+        "camp-004" => Some(serde_json::json!({
+            "id": "camp-004",
+            "status": "resolved",
+            "actorCount": 8,
+            "confidence": 91,
+            "attackTypes": ["xss", "csrf"],
+            "firstSeen": (now - chrono::Duration::hours(12)).to_rfc3339(),
+            "lastActivity": (now - chrono::Duration::hours(3)).to_rfc3339(),
+            "totalRequests": 1200,
+            "blockedRequests": 1180,
+            "rulesTriggered": 234,
+            "riskScore": 92,
+            "resolvedAt": (now - chrono::Duration::hours(2)).to_rfc3339(),
+            "resolvedReason": "All actors blocked and added to blocklist",
+            "correlationReasons": [
+                {
+                    "type": "shared_fingerprint",
+                    "confidence": 95,
+                    "description": "All actors using identical headless browser configuration",
+                    "actors": ["45.33.32.1", "45.33.32.2", "45.33.32.3", "45.33.32.4"]
+                },
+                {
+                    "type": "network_proximity",
+                    "confidence": 88,
+                    "description": "All IPs from same AS (AS12345 - Known bad actor network)",
+                    "actors": ["45.33.32.1", "45.33.32.2", "45.33.32.3", "45.33.32.4", "45.33.32.5", "45.33.32.6", "45.33.32.7", "45.33.32.8"]
+                }
+            ]
+        })),
+        _ => None,
+    };
+
+    match campaign_data {
+        Some(data) => (StatusCode::OK, Json(serde_json::json!({ "data": data }))),
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Campaign not found" }))),
+    }
+}
+
+/// GET /_sensor/campaigns/:id/actors - Campaign actors
+async fn sensor_campaign_actors_handler(Path(id): Path<String>) -> impl IntoResponse {
+    let now = chrono::Utc::now();
+
+    // Mock actors data based on campaign
+    let actors: Vec<serde_json::Value> = match id.as_str() {
+        "camp-001" => vec![
+            serde_json::json!({
+                "ip": "192.168.1.100",
+                "risk": 85,
+                "sessionCount": 3,
+                "fingerprintCount": 1,
+                "jsExecuted": false,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(10)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(4)).to_rfc3339(),
+                "role": "leader",
+                "requestsInCampaign": 450,
+                "blockedInCampaign": 380
+            }),
+            serde_json::json!({
+                "ip": "192.168.1.101",
+                "risk": 72,
+                "sessionCount": 2,
+                "fingerprintCount": 1,
+                "jsExecuted": false,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(12)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(3)).to_rfc3339(),
+                "role": "follower",
+                "requestsInCampaign": 320,
+                "blockedInCampaign": 245
+            }),
+            serde_json::json!({
+                "ip": "192.168.1.102",
+                "risk": 68,
+                "sessionCount": 2,
+                "fingerprintCount": 1,
+                "jsExecuted": false,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(15)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(3)).to_rfc3339(),
+                "role": "follower",
+                "requestsInCampaign": 280,
+                "blockedInCampaign": 210
+            }),
+            serde_json::json!({
+                "ip": "10.0.0.50",
+                "risk": 65,
+                "sessionCount": 1,
+                "fingerprintCount": 1,
+                "jsExecuted": false,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(20)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(2)).to_rfc3339(),
+                "role": "follower",
+                "requestsInCampaign": 180,
+                "blockedInCampaign": 145
+            }),
+        ],
+        "camp-002" => vec![
+            serde_json::json!({
+                "ip": "203.0.113.10",
+                "risk": 92,
+                "sessionCount": 5,
+                "fingerprintCount": 2,
+                "jsExecuted": true,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(18)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(2)).to_rfc3339(),
+                "role": "leader",
+                "requestsInCampaign": 150,
+                "blockedInCampaign": 142
+            }),
+            serde_json::json!({
+                "ip": "203.0.113.11",
+                "risk": 78,
+                "sessionCount": 3,
+                "fingerprintCount": 2,
+                "jsExecuted": true,
+                "suspicious": true,
+                "lastActivity": (now - chrono::Duration::minutes(22)).to_rfc3339(),
+                "joinedAt": (now - chrono::Duration::hours(1)).to_rfc3339(),
+                "role": "follower",
+                "requestsInCampaign": 95,
+                "blockedInCampaign": 88
+            }),
+        ],
+        _ => vec![],
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({ "actors": actors })))
+}
+
+/// GET /_sensor/campaigns/:id/timeline - Campaign timeline events
+async fn sensor_campaign_timeline_handler(Path(id): Path<String>) -> impl IntoResponse {
+    let now = chrono::Utc::now();
+
+    // Mock timeline events based on campaign
+    let events: Vec<serde_json::Value> = match id.as_str() {
+        "camp-001" => vec![
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(4)).to_rfc3339(),
+                "type": "actor_joined",
+                "actorIp": "192.168.1.100",
+                "description": "First actor detected - credential stuffing pattern identified",
+                "risk": 45
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(3) - chrono::Duration::minutes(45)).to_rfc3339(),
+                "type": "detection",
+                "actorIp": "192.168.1.100",
+                "description": "Campaign correlation triggered - shared fingerprint detected",
+                "risk": 55
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(3)).to_rfc3339(),
+                "type": "actor_joined",
+                "actorIp": "192.168.1.101",
+                "description": "Second actor joined - same fingerprint cluster",
+                "risk": 62
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(3)).to_rfc3339(),
+                "type": "actor_joined",
+                "actorIp": "192.168.1.102",
+                "description": "Third actor joined - timing correlation confirmed",
+                "risk": 68
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(2) - chrono::Duration::minutes(30)).to_rfc3339(),
+                "type": "escalation",
+                "actorIp": "192.168.1.100",
+                "description": "Campaign escalated to high priority - rate abuse detected",
+                "risk": 75,
+                "ruleId": 941100
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(2)).to_rfc3339(),
+                "type": "block",
+                "actorIp": "192.168.1.100",
+                "description": "Actor blocked - risk threshold exceeded",
+                "risk": 85,
+                "ruleId": 941100
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::minutes(30)).to_rfc3339(),
+                "type": "attack",
+                "actorIp": "10.0.0.50",
+                "description": "Continued attack from new IP in fingerprint cluster",
+                "risk": 72,
+                "ruleId": 942100
+            }),
+        ],
+        "camp-002" => vec![
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(2)).to_rfc3339(),
+                "type": "actor_joined",
+                "actorIp": "203.0.113.10",
+                "description": "SQL injection probe detected from new actor",
+                "risk": 65,
+                "ruleId": 942100
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(1) - chrono::Duration::minutes(45)).to_rfc3339(),
+                "type": "attack",
+                "actorIp": "203.0.113.10",
+                "description": "Path traversal attempt following SQLi probe",
+                "risk": 78,
+                "ruleId": 930110
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::hours(1)).to_rfc3339(),
+                "type": "actor_joined",
+                "actorIp": "203.0.113.11",
+                "description": "Second actor joined - same attack sequence detected",
+                "risk": 72
+            }),
+            serde_json::json!({
+                "timestamp": (now - chrono::Duration::minutes(30)).to_rfc3339(),
+                "type": "block",
+                "actorIp": "203.0.113.10",
+                "description": "Actor blocked after repeated SQLi attempts",
+                "risk": 92,
+                "ruleId": 942100
+            }),
+        ],
+        _ => vec![],
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({ "data": events })))
 }
 
 /// GET /_sensor/payload/bandwidth - Returns empty bandwidth data

@@ -67,9 +67,13 @@ demo-preflight:
     echo ""
     PASS=0
     FAIL=0
+    WARN=0
+    TOTAL=9
+
+    echo "── CORE SERVICES ──────────────────────────────────────────────"
 
     # Check 1: Backend API (Flask on 5001)
-    printf "  [1/5] Backend API (localhost:5001)............."
+    printf "  [1/$TOTAL] Backend API (localhost:5001)..........."
     if curl -sf http://localhost:5001/healthz > /dev/null 2>&1; then
         echo " ✓ UP"
         PASS=$((PASS + 1))
@@ -79,7 +83,7 @@ demo-preflight:
     fi
 
     # Check 2: Synapse Admin API (6191)
-    printf "  [2/5] Synapse Admin API (localhost:6191)......."
+    printf "  [2/$TOTAL] Synapse Admin API (localhost:6191)....."
     if curl -sf http://localhost:6191/health > /dev/null 2>&1; then
         echo " ✓ UP"
         PASS=$((PASS + 1))
@@ -89,7 +93,7 @@ demo-preflight:
     fi
 
     # Check 3: Synapse Proxy (HTTPS 6190)
-    printf "  [3/5] Synapse Proxy TLS (localhost:6190)......."
+    printf "  [3/$TOTAL] Synapse Proxy TLS (localhost:6190)....."
     if curl -sfk https://localhost:6190/healthz > /dev/null 2>&1; then
         echo " ✓ UP"
         PASS=$((PASS + 1))
@@ -99,7 +103,7 @@ demo-preflight:
     fi
 
     # Check 4: WAF is enabled
-    printf "  [4/5] WAF Protection............................"
+    printf "  [4/$TOTAL] WAF Protection........................."
     WAF_STATUS=$(curl -s http://localhost:6191/health 2>/dev/null | jq -r '.data.waf.enabled // false')
     if [ "$WAF_STATUS" = "true" ]; then
         echo " ✓ ENABLED"
@@ -109,8 +113,8 @@ demo-preflight:
         FAIL=$((FAIL + 1))
     fi
 
-    # Check 5: Backend is routable through proxy
-    printf "  [5/5] End-to-end routing........................"
+    # Check 5: End-to-end routing
+    printf "  [5/$TOTAL] End-to-end routing....................."
     RESP=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:6190/healthz 2>/dev/null)
     if [ "$RESP" = "200" ]; then
         echo " ✓ OK"
@@ -121,13 +125,71 @@ demo-preflight:
     fi
 
     echo ""
+    echo "── DASHBOARDS ─────────────────────────────────────────────────"
+
+    # Check 6: Risk-server Dashboard (5176)
+    printf "  [6/$TOTAL] Risk Dashboard (localhost:5176)........"
+    RESP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5176 2>/dev/null)
+    if [ "$RESP" = "200" ] || [ "$RESP" = "302" ]; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ⚠ DOWN (optional)"
+        WARN=$((WARN + 1))
+    fi
+
+    # Check 7: Signal Horizon UI (5180)
+    printf "  [7/$TOTAL] Signal Horizon UI (localhost:5180)...."
+    RESP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5180 2>/dev/null)
+    if [ "$RESP" = "200" ] || [ "$RESP" = "302" ]; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ⚠ DOWN (optional)"
+        WARN=$((WARN + 1))
+    fi
+
+    echo ""
+    echo "── SIGNAL HORIZON FLEET ───────────────────────────────────────"
+
+    # Check 8: Signal Horizon API (3100)
+    printf "  [8/$TOTAL] Signal Horizon API (localhost:3100)...."
+    if curl -sf http://localhost:3100/api/v1/beam/health > /dev/null 2>&1; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ⚠ DOWN (optional)"
+        WARN=$((WARN + 1))
+    fi
+
+    # Check 9: Signal Horizon → Synapse Connection
+    printf "  [9/$TOTAL] Horizon → Synapse connection..........."
+    CONN_STATUS=$(curl -s http://localhost:3100/api/v1/beam/health 2>/dev/null | jq -r '.connected // false')
+    if [ "$CONN_STATUS" = "true" ]; then
+        echo " ✓ CONNECTED"
+        PASS=$((PASS + 1))
+    else
+        echo " ⚠ DISCONNECTED (optional)"
+        WARN=$((WARN + 1))
+    fi
+
+    echo ""
     echo "───────────────────────────────────────────────────────────────"
-    if [ $FAIL -eq 0 ]; then
-        echo "  ✅ ALL CHECKS PASSED ($PASS/5) — Ready for demo!"
+
+    # Core checks are 1-5, dashboards/fleet are optional (6-9)
+    CORE_FAIL=$FAIL
+
+    if [ $CORE_FAIL -eq 0 ]; then
+        if [ $WARN -eq 0 ]; then
+            echo "  ✅ ALL CHECKS PASSED ($PASS/$TOTAL) — Full demo ready!"
+        else
+            echo "  ✅ CORE CHECKS PASSED (5/5) — Basic demo ready!"
+            echo "  ⚠  Optional services down: $WARN (dashboards/fleet)"
+        fi
         echo ""
         echo "  Run: just demo-demo"
     else
-        echo "  ❌ CHECKS FAILED: $FAIL/5"
+        echo "  ❌ CORE CHECKS FAILED: $CORE_FAIL/5"
         echo ""
         echo "  To start services: just up"
         exit 1

@@ -60,6 +60,9 @@ pub mod telemetry;
 // Phase 3: Honeypot Trap Detection
 pub mod trap;
 
+// Phase 4: Campaign Correlation
+pub mod correlation;
+
 // Dashboard support
 pub mod block_log;
 

@@ -52,8 +52,15 @@ use crate::correlation::{
     FingerprintIndex, IndexStats,
 };
 use crate::correlation::detectors::{
-    Detector, DetectorError, DetectorResult, Ja4RotationDetector, RotationConfig,
-    SharedFingerprintDetector,
+    Detector, DetectorError, DetectorResult,
+    // Fingerprint detectors
+    SharedFingerprintDetector, Ja4RotationDetector, RotationConfig,
+    // New detectors
+    AttackSequenceDetector, AttackSequenceConfig, AttackPayload,
+    AuthTokenDetector, AuthTokenConfig,
+    BehavioralSimilarityDetector, BehavioralConfig,
+    TimingCorrelationDetector, TimingConfig,
+    NetworkProximityDetector, NetworkProximityConfig,
 };
 
 // ============================================================================
@@ -100,6 +107,91 @@ pub struct ManagerConfig {
     ///
     /// Default: 0.85
     pub shared_confidence: f64,
+
+    // ========================================================================
+    // Attack Sequence Detector Configuration (weight: 50)
+    // ========================================================================
+
+    /// Minimum IPs sharing same payload to trigger detection.
+    ///
+    /// Default: 2
+    pub attack_sequence_min_ips: usize,
+
+    /// Time window for attack sequence correlation.
+    ///
+    /// Default: 300 seconds (5 minutes)
+    pub attack_sequence_window: Duration,
+
+    // ========================================================================
+    // Auth Token Detector Configuration (weight: 45)
+    // ========================================================================
+
+    /// Minimum IPs sharing token structure to trigger detection.
+    ///
+    /// Default: 2
+    pub auth_token_min_ips: usize,
+
+    /// Time window for auth token correlation.
+    ///
+    /// Default: 600 seconds (10 minutes)
+    pub auth_token_window: Duration,
+
+    // ========================================================================
+    // Behavioral Similarity Detector Configuration (weight: 30)
+    // ========================================================================
+
+    /// Minimum IPs with same behavior pattern.
+    ///
+    /// Default: 2
+    pub behavioral_min_ips: usize,
+
+    /// Minimum sequence length to consider for behavioral analysis.
+    ///
+    /// Default: 3
+    pub behavioral_min_sequence: usize,
+
+    /// Time window for behavioral pattern observation.
+    ///
+    /// Default: 300 seconds (5 minutes)
+    pub behavioral_window: Duration,
+
+    // ========================================================================
+    // Timing Correlation Detector Configuration (weight: 25)
+    // ========================================================================
+
+    /// Minimum IPs with synchronized timing.
+    ///
+    /// Default: 3
+    pub timing_min_ips: usize,
+
+    /// Time bucket size for synchronization detection in milliseconds.
+    ///
+    /// Default: 100ms
+    pub timing_bucket_ms: u64,
+
+    /// Minimum requests in same bucket to consider correlated.
+    ///
+    /// Default: 5
+    pub timing_min_bucket_hits: usize,
+
+    /// Time window for timing analysis.
+    ///
+    /// Default: 60 seconds
+    pub timing_window: Duration,
+
+    // ========================================================================
+    // Network Proximity Detector Configuration (weight: 15)
+    // ========================================================================
+
+    /// Minimum IPs in same network segment.
+    ///
+    /// Default: 3
+    pub network_min_ips: usize,
+
+    /// Enable subnet-based correlation (/24 for IPv4).
+    ///
+    /// Default: true
+    pub network_check_subnet: bool,
 }
 
 impl Default for ManagerConfig {
@@ -112,6 +204,24 @@ impl Default for ManagerConfig {
             background_scanning: true,
             track_combined: true,
             shared_confidence: 0.85,
+            // Attack sequence detector (weight: 50)
+            attack_sequence_min_ips: 2,
+            attack_sequence_window: Duration::from_secs(300),
+            // Auth token detector (weight: 45)
+            auth_token_min_ips: 2,
+            auth_token_window: Duration::from_secs(600),
+            // Behavioral similarity detector (weight: 30)
+            behavioral_min_ips: 2,
+            behavioral_min_sequence: 3,
+            behavioral_window: Duration::from_secs(300),
+            // Timing correlation detector (weight: 25)
+            timing_min_ips: 3,
+            timing_bucket_ms: 100,
+            timing_min_bucket_hits: 5,
+            timing_window: Duration::from_secs(60),
+            // Network proximity detector (weight: 15)
+            network_min_ips: 3,
+            network_check_subnet: true,
         }
     }
 }
@@ -211,6 +321,9 @@ pub struct ManagerStats {
 
     /// Statistics from the campaign store.
     pub campaign_stats: CampaignStoreStats,
+
+    /// Detections count by detector type.
+    pub detections_by_type: std::collections::HashMap<String, u64>,
 }
 
 // ============================================================================
@@ -234,6 +347,16 @@ pub struct ManagerStats {
 ///   Only updates indexes, no detection logic.
 /// - **Detection** (`run_detection_cycle`): Called periodically by background
 ///   worker or on-demand. Processes all detectors and applies campaign updates.
+///
+/// # Detectors (ordered by weight)
+///
+/// 1. Attack Sequence (50) - Same attack payloads across actors
+/// 2. Auth Token (45) - Same JWT structure/issuer across IPs
+/// 3. HTTP Fingerprint (40) - Identical browser fingerprint (JA4H)
+/// 4. TLS Fingerprint (35) - Same TLS signature (JA4)
+/// 5. Behavioral Similarity (30) - Identical navigation/timing patterns
+/// 6. Timing Correlation (25) - Coordinated request timing (botnets)
+/// 7. Network Proximity (15) - Same ASN or /24 subnet
 pub struct CampaignManager {
     /// Manager configuration.
     config: ManagerConfig,
@@ -244,16 +367,38 @@ pub struct CampaignManager {
     /// Campaign state storage.
     store: Arc<CampaignStore>,
 
-    /// Shared fingerprint detector.
-    shared_detector: SharedFingerprintDetector,
+    // ========================================================================
+    // All 7 Detectors (ordered by weight)
+    // ========================================================================
 
-    /// JA4 rotation detector.
-    rotation_detector: Ja4RotationDetector,
+    /// Attack sequence detector (weight: 50 - highest signal).
+    attack_sequence_detector: AttackSequenceDetector,
+
+    /// Auth token detector (weight: 45).
+    auth_token_detector: AuthTokenDetector,
+
+    /// HTTP fingerprint detector (weight: 40).
+    http_fingerprint_detector: SharedFingerprintDetector,
+
+    /// TLS fingerprint / JA4 rotation detector (weight: 35).
+    tls_fingerprint_detector: Ja4RotationDetector,
+
+    /// Behavioral similarity detector (weight: 30).
+    behavioral_detector: BehavioralSimilarityDetector,
+
+    /// Timing correlation detector (weight: 25).
+    timing_detector: TimingCorrelationDetector,
+
+    /// Network proximity detector (weight: 15 - lowest signal).
+    network_detector: NetworkProximityDetector,
 
     /// Internal statistics (atomic counters for thread safety).
     stats_fingerprints_registered: AtomicU64,
     stats_detections_run: AtomicU64,
     stats_campaigns_created: AtomicU64,
+
+    /// Per-detector detection counts.
+    stats_detections_by_type: RwLock<std::collections::HashMap<String, u64>>,
 
     /// Last scan timestamp (protected by RwLock for safe concurrent access).
     last_scan: RwLock<Option<Instant>>,
@@ -270,30 +415,82 @@ impl CampaignManager {
 
     /// Create a new campaign manager with custom configuration.
     pub fn with_config(config: ManagerConfig) -> Self {
-        // Create shared fingerprint detector
-        let shared_detector = SharedFingerprintDetector::with_config(
+        // ====================================================================
+        // Initialize all 7 detectors from config
+        // ====================================================================
+
+        // 1. Attack Sequence Detector (weight: 50)
+        let attack_sequence_config = AttackSequenceConfig {
+            min_ips: config.attack_sequence_min_ips,
+            window: config.attack_sequence_window,
+            similarity_threshold: 0.95, // Default similarity threshold
+        };
+        let attack_sequence_detector = AttackSequenceDetector::new(attack_sequence_config);
+
+        // 2. Auth Token Detector (weight: 45)
+        let auth_token_config = AuthTokenConfig {
+            min_ips: config.auth_token_min_ips,
+            window: config.auth_token_window,
+        };
+        let auth_token_detector = AuthTokenDetector::new(auth_token_config);
+
+        // 3. HTTP Fingerprint Detector (weight: 40)
+        let http_fingerprint_detector = SharedFingerprintDetector::with_config(
             config.shared_threshold,
             config.shared_confidence,
             config.scan_interval.as_millis() as u64,
         );
 
-        // Create rotation detector
+        // 4. TLS Fingerprint / JA4 Rotation Detector (weight: 35)
         let rotation_config = RotationConfig {
             min_fingerprints: config.rotation_threshold,
             window: config.rotation_window,
             track_combined: config.track_combined,
         };
-        let rotation_detector = Ja4RotationDetector::new(rotation_config);
+        let tls_fingerprint_detector = Ja4RotationDetector::new(rotation_config);
+
+        // 5. Behavioral Similarity Detector (weight: 30)
+        let behavioral_config = BehavioralConfig {
+            min_ips: config.behavioral_min_ips,
+            min_sequence_length: config.behavioral_min_sequence,
+            window: config.behavioral_window,
+        };
+        let behavioral_detector = BehavioralSimilarityDetector::new(behavioral_config);
+
+        // 6. Timing Correlation Detector (weight: 25)
+        let timing_config = TimingConfig {
+            min_ips: config.timing_min_ips,
+            bucket_size: Duration::from_millis(config.timing_bucket_ms),
+            min_bucket_hits: config.timing_min_bucket_hits,
+            window: config.timing_window,
+        };
+        let timing_detector = TimingCorrelationDetector::new(timing_config);
+
+        // 7. Network Proximity Detector (weight: 15)
+        let network_config = NetworkProximityConfig {
+            min_ips: config.network_min_ips,
+            check_subnet: config.network_check_subnet,
+            check_asn: false, // ASN lookup requires external data
+        };
+        let network_detector = NetworkProximityDetector::new(network_config);
 
         Self {
             config,
             index: Arc::new(FingerprintIndex::new()),
             store: Arc::new(CampaignStore::new()),
-            shared_detector,
-            rotation_detector,
+            // All 7 detectors
+            attack_sequence_detector,
+            auth_token_detector,
+            http_fingerprint_detector,
+            tls_fingerprint_detector,
+            behavioral_detector,
+            timing_detector,
+            network_detector,
+            // Statistics
             stats_fingerprints_registered: AtomicU64::new(0),
             stats_detections_run: AtomicU64::new(0),
             stats_campaigns_created: AtomicU64::new(0),
+            stats_detections_by_type: RwLock::new(std::collections::HashMap::new()),
             last_scan: RwLock::new(None),
             shutdown: AtomicBool::new(false),
         }
@@ -318,7 +515,7 @@ impl CampaignManager {
         self.index.update_entity(&ip_str, Some(&fingerprint), None);
 
         // Record in rotation detector
-        self.rotation_detector.record_fingerprint(ip, fingerprint);
+        self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint);
 
         // Increment stats
         self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
@@ -344,7 +541,7 @@ impl CampaignManager {
 
         // Record in rotation detector if tracking combined
         if self.config.track_combined {
-            self.rotation_detector.record_fingerprint(ip, fingerprint);
+            self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint);
         }
 
         // Increment stats
@@ -380,7 +577,7 @@ impl CampaignManager {
         // Record JA4 in rotation detector
         if let Some(ref fp) = ja4 {
             if !fp.is_empty() {
-                self.rotation_detector.record_fingerprint(ip, fp.clone());
+                self.tls_fingerprint_detector.record_fingerprint(ip, fp.clone());
                 registered = true;
             }
         }
@@ -389,7 +586,7 @@ impl CampaignManager {
         if self.config.track_combined {
             if let Some(ref fp) = combined {
                 if !fp.is_empty() {
-                    self.rotation_detector.record_fingerprint(ip, fp.clone());
+                    self.tls_fingerprint_detector.record_fingerprint(ip, fp.clone());
                     registered = true;
                 }
             }
@@ -400,13 +597,136 @@ impl CampaignManager {
         }
     }
 
-    /// Run all detectors and process updates.
+    // ========================================================================
+    // New Detector Registration Methods
+    // ========================================================================
+
+    /// Record an attack payload observation for campaign correlation.
+    ///
+    /// Called when an attack is detected (SQLi, XSS, etc.) to correlate
+    /// identical payloads across different IPs. Weight: 50 (highest signal).
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the attacker
+    /// * `payload_hash` - Hash of the normalized attack payload
+    /// * `attack_type` - Classification (sqli, xss, path_traversal, etc.)
+    /// * `path` - Target path of the attack
+    pub fn record_attack(&self, ip: IpAddr, payload_hash: String, attack_type: String, path: String) {
+        self.attack_sequence_detector.record_attack(ip, AttackPayload {
+            payload_hash,
+            attack_type,
+            target_path: path,
+            timestamp: std::time::Instant::now(),
+        });
+    }
+
+    /// Record a JWT token observation for campaign correlation.
+    ///
+    /// Called when a JWT is seen in request headers. Correlates IPs
+    /// using tokens with identical structure or issuer. Weight: 45.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `jwt` - The raw JWT string (header.payload.signature)
+    pub fn record_token(&self, ip: IpAddr, jwt: &str) {
+        self.auth_token_detector.record_jwt(ip, jwt);
+    }
+
+    /// Record a request for behavioral and timing analysis.
+    ///
+    /// Should be called for every request to build behavioral patterns
+    /// and detect timing correlations. Updates multiple detectors:
+    /// - Behavioral detector (weight: 30) - navigation patterns
+    /// - Timing detector (weight: 25) - request synchronization
+    /// - Network detector (weight: 15) - subnet correlation
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `method` - HTTP method (GET, POST, etc.)
+    /// * `path` - Request path
+    pub fn record_request(&self, ip: IpAddr, method: &str, path: &str) {
+        self.behavioral_detector.record_request(ip, method, path);
+        self.timing_detector.record_request(ip);
+        self.network_detector.register_ip(ip);
+    }
+
+    /// Record a request with full context for all applicable detectors.
+    ///
+    /// Convenience method that records data to multiple detectors at once.
+    /// Call this during request processing to capture all correlation signals.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `method` - HTTP method
+    /// * `path` - Request path
+    /// * `ja4` - Optional JA4 TLS fingerprint
+    /// * `jwt` - Optional JWT from Authorization header
+    pub fn record_request_full(
+        &self,
+        ip: IpAddr,
+        method: &str,
+        path: &str,
+        ja4: Option<&str>,
+        jwt: Option<&str>,
+    ) {
+        // Record for behavioral/timing/network
+        self.record_request(ip, method, path);
+
+        // Record JA4 fingerprint
+        if let Some(fp) = ja4 {
+            if !fp.is_empty() {
+                self.register_ja4(ip, fp.to_string());
+            }
+        }
+
+        // Record JWT token
+        if let Some(token) = jwt {
+            if !token.is_empty() {
+                self.record_token(ip, token);
+            }
+        }
+    }
+
+    // ========================================================================
+    // Campaign Scoring
+    // ========================================================================
+
+    /// Calculate weighted campaign score from all correlation reasons.
+    ///
+    /// The score is computed as the weighted average of all correlation
+    /// reasons, where each reason's contribution is:
+    /// `weight * confidence / total_reasons`
+    ///
+    /// # Arguments
+    /// * `campaign` - The campaign to score
+    ///
+    /// # Returns
+    /// A score between 0.0 and 50.0 (max weight * max confidence)
+    pub fn calculate_campaign_score(&self, campaign: &Campaign) -> f64 {
+        if campaign.correlation_reasons.is_empty() {
+            return 0.0;
+        }
+
+        let total_weighted: f64 = campaign
+            .correlation_reasons
+            .iter()
+            .map(|r| r.correlation_type.weight() as f64 * r.confidence)
+            .sum();
+
+        total_weighted / campaign.correlation_reasons.len() as f64
+    }
+
+    /// Run all 7 detectors and process updates with weighted scoring.
     ///
     /// Called periodically by background worker or on-demand.
-    /// This is the main detection cycle that:
-    /// 1. Runs the shared fingerprint detector
-    /// 2. Runs the JA4 rotation detector
-    /// 3. Creates or updates campaigns based on results
+    /// Runs detectors in order of their weights (highest first):
+    /// 1. Attack Sequence (50) - Same attack payloads
+    /// 2. Auth Token (45) - Same JWT structure/issuer
+    /// 3. HTTP Fingerprint (40) - Identical JA4H
+    /// 4. TLS Fingerprint (35) - Same JA4
+    /// 5. Behavioral Similarity (30) - Navigation patterns
+    /// 6. Timing Correlation (25) - Synchronized requests
+    /// 7. Network Proximity (15) - Same ASN/subnet
     ///
     /// # Returns
     /// Number of campaign updates processed.
@@ -416,21 +736,39 @@ impl CampaignManager {
     pub async fn run_detection_cycle(&self) -> DetectorResult<usize> {
         let mut total_updates = 0;
 
-        // Run shared fingerprint detector
-        let shared_updates = self.shared_detector.analyze(&self.index)?;
-        for update in shared_updates {
-            self.process_campaign_update(update);
-            total_updates += 1;
+        // Define detector list with names for logging and stats
+        // Ordered by weight (highest first) for priority processing
+        let detectors: Vec<(&dyn Detector, &str)> = vec![
+            (&self.attack_sequence_detector as &dyn Detector, "attack_sequence"),
+            (&self.auth_token_detector as &dyn Detector, "auth_token"),
+            (&self.http_fingerprint_detector as &dyn Detector, "http_fingerprint"),
+            (&self.tls_fingerprint_detector as &dyn Detector, "tls_fingerprint"),
+            (&self.behavioral_detector as &dyn Detector, "behavioral"),
+            (&self.timing_detector as &dyn Detector, "timing"),
+            (&self.network_detector as &dyn Detector, "network"),
+        ];
+
+        for (detector, name) in detectors {
+            match detector.analyze(&self.index) {
+                Ok(updates) => {
+                    let update_count = updates.len();
+                    for update in updates {
+                        self.process_campaign_update(update);
+                        total_updates += 1;
+                    }
+                    // Track per-detector stats
+                    if update_count > 0 {
+                        let mut stats = self.stats_detections_by_type.write().await;
+                        *stats.entry(name.to_string()).or_insert(0) += update_count as u64;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Detector {} failed: {}", name, e);
+                }
+            }
         }
 
-        // Run rotation detector
-        let rotation_updates = self.rotation_detector.analyze(&self.index)?;
-        for update in rotation_updates {
-            self.process_campaign_update(update);
-            total_updates += 1;
-        }
-
-        // Update stats
+        // Update global stats
         self.stats_detections_run.fetch_add(1, Ordering::Relaxed);
         {
             let mut last_scan = self.last_scan.write().await;
@@ -511,9 +849,8 @@ impl CampaignManager {
 
     /// Check if an IP should trigger immediate detection.
     ///
-    /// Used for event-driven detection on new requests. Returns true if
-    /// the IP's fingerprint group has reached a threshold that warrants
-    /// immediate analysis.
+    /// Used for event-driven detection on new requests. Checks all 7 detectors
+    /// to see if any threshold has been reached that warrants immediate analysis.
     ///
     /// # Arguments
     /// * `ip` - The IP address to check
@@ -521,8 +858,14 @@ impl CampaignManager {
     /// # Returns
     /// `true` if immediate detection should be triggered.
     pub fn should_trigger_detection(&self, ip: &IpAddr) -> bool {
-        self.shared_detector.should_trigger(ip, &self.index)
-            || self.rotation_detector.should_trigger(ip, &self.index)
+        // Check detectors in order of weight (short-circuit on first match)
+        self.attack_sequence_detector.should_trigger(ip, &self.index)
+            || self.auth_token_detector.should_trigger(ip, &self.index)
+            || self.http_fingerprint_detector.should_trigger(ip, &self.index)
+            || self.tls_fingerprint_detector.should_trigger(ip, &self.index)
+            || self.behavioral_detector.should_trigger(ip, &self.index)
+            || self.timing_detector.should_trigger(ip, &self.index)
+            || self.network_detector.should_trigger(ip, &self.index)
     }
 
     /// Get all active campaigns for API response.
@@ -580,6 +923,12 @@ impl CampaignManager {
                 .unwrap_or(None)
         };
 
+        let detections_by_type = self
+            .stats_detections_by_type
+            .try_read()
+            .map(|guard| guard.clone())
+            .unwrap_or_default();
+
         ManagerStats {
             fingerprints_registered: self.stats_fingerprints_registered.load(Ordering::Relaxed),
             detections_run: self.stats_detections_run.load(Ordering::Relaxed),
@@ -587,6 +936,7 @@ impl CampaignManager {
             last_scan,
             index_stats: self.index.stats(),
             campaign_stats: self.store.stats(),
+            detections_by_type,
         }
     }
 
@@ -698,8 +1048,8 @@ impl CampaignManager {
     pub fn clear(&self) {
         self.index.clear();
         self.store.clear();
-        self.shared_detector.clear_processed();
-        self.rotation_detector.cleanup_old_observations();
+        self.http_fingerprint_detector.clear_processed();
+        self.tls_fingerprint_detector.cleanup_old_observations();
     }
 }
 

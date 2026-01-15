@@ -152,7 +152,7 @@ impl SharedFingerprintDetector {
         );
 
         let reason = CorrelationReason::new(
-            CorrelationType::SharedFingerprint,
+            CorrelationType::HttpFingerprint,
             confidence,
             description,
             group.ips.clone(),
@@ -167,9 +167,11 @@ impl SharedFingerprintDetector {
 
         // Build update with correlation reason
         CampaignUpdate {
+            campaign_id: Some(campaign.id.clone()),
             status: Some(campaign.status),
             confidence: Some(confidence),
             attack_types: None,
+            add_member_ips: Some(group.ips.clone()),
             add_correlation_reason: Some(reason),
             increment_requests: None,
             increment_blocked: None,
@@ -362,7 +364,7 @@ mod tests {
         assert!(updates[0].add_correlation_reason.is_some());
 
         let reason = updates[0].add_correlation_reason.as_ref().unwrap();
-        assert_eq!(reason.correlation_type, CorrelationType::SharedFingerprint);
+        assert_eq!(reason.correlation_type, CorrelationType::HttpFingerprint);
         assert_eq!(reason.evidence.len(), 3);
     }
 

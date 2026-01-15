@@ -487,11 +487,13 @@ impl Detector for Ja4RotationDetector {
                     .clamp(0.5, 0.95);
 
                 CampaignUpdate {
+                    campaign_id: None,
                     status: None,
                     confidence: Some(confidence),
                     attack_types: Some(vec!["fingerprint_rotation".to_string()]),
+                    add_member_ips: Some(ip_strings.clone()),
                     add_correlation_reason: Some(CorrelationReason::new(
-                        CorrelationType::Ja4Rotation,
+                        CorrelationType::TlsFingerprint,
                         confidence,
                         format!(
                             "{} IPs rotating JA4 fingerprints within {}s window",

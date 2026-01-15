@@ -30,9 +30,9 @@
 //!     confidence: 0.85,
 //!     attack_types: vec!["SQLi".to_string()],
 //!     correlation_reasons: vec![CorrelationReason {
-//!         correlation_type: CorrelationType::SharedFingerprint,
+//!         correlation_type: CorrelationType::HttpFingerprint,
 //!         confidence: 0.9,
-//!         description: "Identical JA4 fingerprint".to_string(),
+//!         description: "Identical JA4H fingerprint".to_string(),
 //!         evidence: vec!["192.168.1.100".to_string(), "192.168.1.101".to_string()],
 //!     }],
 //!     first_seen: Utc::now(),
@@ -126,38 +126,117 @@ impl std::fmt::Display for CampaignStatus {
 /// Type of correlation that linked actors together.
 ///
 /// Different correlation engines detect different types of relationships
-/// between threat actors.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+/// between threat actors. Each type has an associated weight that indicates
+/// the strength of the correlation signal.
+///
+/// Signal Weights:
+/// - AttackSequence:      50 - Same attack payloads across actors (strongest)
+/// - AuthToken:           45 - Same JWT structure/issuer across IPs
+/// - HttpFingerprint:     40 - Identical browser fingerprint (JA4H)
+/// - TlsFingerprint:      35 - Same TLS signature (JA4)
+/// - BehavioralSimilarity: 30 - Identical navigation/timing patterns
+/// - TimingCorrelation:   25 - Coordinated request timing (botnets)
+/// - NetworkProximity:    15 - Same ASN or /24 subnet (weakest)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum CorrelationType {
-    /// Actors share identical or highly similar fingerprints.
-    /// This suggests the same client software or tooling.
-    SharedFingerprint,
+    /// Same attack payloads across different actors.
+    /// Examples: Identical SQLi probes, same XSS vectors, matching exploit attempts.
+    /// Weight: 50 (highest - very strong correlation signal)
+    AttackSequence,
 
-    /// Actors exhibit JA4 fingerprint rotation patterns.
-    /// Rapid fingerprint changes indicate evasion attempts.
-    Ja4Rotation,
+    /// Same JWT structure or issuer across different IPs.
+    /// Indicates stolen/shared tokens or automated tooling.
+    /// Weight: 45
+    AuthToken,
 
-    /// Actors show timing-based correlation.
-    /// Request patterns arrive in coordinated bursts or sequences.
-    TimingCorrelation,
+    /// Different IPs with identical HTTP fingerprint (JA4H).
+    /// Suggests same browser/automation software.
+    /// Weight: 40
+    HttpFingerprint,
 
-    /// Actors exhibit similar attack behaviors.
-    /// Same attack types, targets, or payloads suggest coordination.
+    /// Same TLS fingerprint (JA4) across sessions.
+    /// Indicates same TLS stack/client.
+    /// Weight: 35
+    TlsFingerprint,
+
+    /// Identical navigation or timing patterns.
+    /// Same page sequences, identical delays between requests.
+    /// Weight: 30
     BehavioralSimilarity,
 
-    /// Actors originate from related network segments.
-    /// Same ASN, subnet, or geographic region increases correlation likelihood.
+    /// Coordinated request timing (botnets).
+    /// Requests arrive in synchronized bursts.
+    /// Weight: 25
+    TimingCorrelation,
+
+    /// Same ASN or /24 subnet.
+    /// Weak signal alone but strengthens other correlations.
+    /// Weight: 15 (lowest)
     NetworkProximity,
+}
+
+impl CorrelationType {
+    /// Returns the weight for this correlation type.
+    /// Higher weights indicate stronger correlation signals.
+    pub fn weight(&self) -> u8 {
+        match self {
+            Self::AttackSequence => 50,
+            Self::AuthToken => 45,
+            Self::HttpFingerprint => 40,
+            Self::TlsFingerprint => 35,
+            Self::BehavioralSimilarity => 30,
+            Self::TimingCorrelation => 25,
+            Self::NetworkProximity => 15,
+        }
+    }
+
+    /// Returns all correlation types ordered by weight (highest first).
+    pub fn all_by_weight() -> Vec<Self> {
+        vec![
+            Self::AttackSequence,
+            Self::AuthToken,
+            Self::HttpFingerprint,
+            Self::TlsFingerprint,
+            Self::BehavioralSimilarity,
+            Self::TimingCorrelation,
+            Self::NetworkProximity,
+        ]
+    }
+
+    /// Returns true if this is a fingerprint-based correlation.
+    pub fn is_fingerprint(&self) -> bool {
+        matches!(self, Self::HttpFingerprint | Self::TlsFingerprint)
+    }
+
+    /// Returns true if this is a behavioral correlation.
+    pub fn is_behavioral(&self) -> bool {
+        matches!(self, Self::BehavioralSimilarity | Self::TimingCorrelation)
+    }
+
+    /// Returns a human-readable display name.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::AttackSequence => "Attack Sequence",
+            Self::AuthToken => "Auth Token",
+            Self::HttpFingerprint => "HTTP Fingerprint",
+            Self::TlsFingerprint => "TLS Fingerprint",
+            Self::BehavioralSimilarity => "Behavioral Similarity",
+            Self::TimingCorrelation => "Timing Correlation",
+            Self::NetworkProximity => "Network Proximity",
+        }
+    }
 }
 
 impl std::fmt::Display for CorrelationType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SharedFingerprint => write!(f, "shared_fingerprint"),
-            Self::Ja4Rotation => write!(f, "ja4_rotation"),
-            Self::TimingCorrelation => write!(f, "timing_correlation"),
+            Self::AttackSequence => write!(f, "attack_sequence"),
+            Self::AuthToken => write!(f, "auth_token"),
+            Self::HttpFingerprint => write!(f, "http_fingerprint"),
+            Self::TlsFingerprint => write!(f, "tls_fingerprint"),
             Self::BehavioralSimilarity => write!(f, "behavioral_similarity"),
+            Self::TimingCorrelation => write!(f, "timing_correlation"),
             Self::NetworkProximity => write!(f, "network_proximity"),
         }
     }
@@ -339,6 +418,9 @@ impl Campaign {
 /// All fields are optional; only non-None fields will be applied.
 #[derive(Debug, Clone, Default)]
 pub struct CampaignUpdate {
+    /// Campaign ID for creating new campaigns or targeting specific campaigns.
+    pub campaign_id: Option<String>,
+
     /// New status for the campaign.
     pub status: Option<CampaignStatus>,
 
@@ -347,6 +429,9 @@ pub struct CampaignUpdate {
 
     /// Replace attack types with this list.
     pub attack_types: Option<Vec<String>>,
+
+    /// Add member IPs to the campaign.
+    pub add_member_ips: Option<Vec<String>>,
 
     /// Add a new correlation reason.
     pub add_correlation_reason: Option<CorrelationReason>,
@@ -1238,38 +1323,80 @@ mod tests {
     // ========================================================================
 
     #[test]
+    fn test_correlation_type_weights() {
+        assert_eq!(CorrelationType::AttackSequence.weight(), 50);
+        assert_eq!(CorrelationType::AuthToken.weight(), 45);
+        assert_eq!(CorrelationType::HttpFingerprint.weight(), 40);
+        assert_eq!(CorrelationType::TlsFingerprint.weight(), 35);
+        assert_eq!(CorrelationType::BehavioralSimilarity.weight(), 30);
+        assert_eq!(CorrelationType::TimingCorrelation.weight(), 25);
+        assert_eq!(CorrelationType::NetworkProximity.weight(), 15);
+    }
+
+    #[test]
+    fn test_correlation_type_all_by_weight() {
+        let all = CorrelationType::all_by_weight();
+        assert_eq!(all.len(), 7);
+        assert_eq!(all[0], CorrelationType::AttackSequence);
+        assert_eq!(all[6], CorrelationType::NetworkProximity);
+    }
+
+    #[test]
     fn test_correlation_type_display() {
-        assert_eq!(
-            format!("{}", CorrelationType::SharedFingerprint),
-            "shared_fingerprint"
-        );
-        assert_eq!(format!("{}", CorrelationType::Ja4Rotation), "ja4_rotation");
-        assert_eq!(
-            format!("{}", CorrelationType::TimingCorrelation),
-            "timing_correlation"
-        );
-        assert_eq!(
-            format!("{}", CorrelationType::BehavioralSimilarity),
-            "behavioral_similarity"
-        );
-        assert_eq!(
-            format!("{}", CorrelationType::NetworkProximity),
-            "network_proximity"
-        );
+        assert_eq!(format!("{}", CorrelationType::AttackSequence), "attack_sequence");
+        assert_eq!(format!("{}", CorrelationType::AuthToken), "auth_token");
+        assert_eq!(format!("{}", CorrelationType::HttpFingerprint), "http_fingerprint");
+        assert_eq!(format!("{}", CorrelationType::TlsFingerprint), "tls_fingerprint");
+        assert_eq!(format!("{}", CorrelationType::BehavioralSimilarity), "behavioral_similarity");
+        assert_eq!(format!("{}", CorrelationType::TimingCorrelation), "timing_correlation");
+        assert_eq!(format!("{}", CorrelationType::NetworkProximity), "network_proximity");
+    }
+
+    #[test]
+    fn test_correlation_type_is_fingerprint() {
+        assert!(!CorrelationType::AttackSequence.is_fingerprint());
+        assert!(!CorrelationType::AuthToken.is_fingerprint());
+        assert!(CorrelationType::HttpFingerprint.is_fingerprint());
+        assert!(CorrelationType::TlsFingerprint.is_fingerprint());
+        assert!(!CorrelationType::BehavioralSimilarity.is_fingerprint());
+        assert!(!CorrelationType::TimingCorrelation.is_fingerprint());
+        assert!(!CorrelationType::NetworkProximity.is_fingerprint());
+    }
+
+    #[test]
+    fn test_correlation_type_is_behavioral() {
+        assert!(!CorrelationType::AttackSequence.is_behavioral());
+        assert!(!CorrelationType::AuthToken.is_behavioral());
+        assert!(!CorrelationType::HttpFingerprint.is_behavioral());
+        assert!(!CorrelationType::TlsFingerprint.is_behavioral());
+        assert!(CorrelationType::BehavioralSimilarity.is_behavioral());
+        assert!(CorrelationType::TimingCorrelation.is_behavioral());
+        assert!(!CorrelationType::NetworkProximity.is_behavioral());
+    }
+
+    #[test]
+    fn test_correlation_type_display_name() {
+        assert_eq!(CorrelationType::AttackSequence.display_name(), "Attack Sequence");
+        assert_eq!(CorrelationType::AuthToken.display_name(), "Auth Token");
+        assert_eq!(CorrelationType::HttpFingerprint.display_name(), "HTTP Fingerprint");
+        assert_eq!(CorrelationType::TlsFingerprint.display_name(), "TLS Fingerprint");
+        assert_eq!(CorrelationType::BehavioralSimilarity.display_name(), "Behavioral Similarity");
+        assert_eq!(CorrelationType::TimingCorrelation.display_name(), "Timing Correlation");
+        assert_eq!(CorrelationType::NetworkProximity.display_name(), "Network Proximity");
     }
 
     #[test]
     fn test_correlation_reason_new() {
         let reason = CorrelationReason::new(
-            CorrelationType::SharedFingerprint,
+            CorrelationType::HttpFingerprint,
             0.95,
-            "Identical JA4 fingerprint detected",
+            "Identical JA4H fingerprint detected",
             vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()],
         );
 
-        assert_eq!(reason.correlation_type, CorrelationType::SharedFingerprint);
+        assert_eq!(reason.correlation_type, CorrelationType::HttpFingerprint);
         assert!((reason.confidence - 0.95).abs() < 0.001);
-        assert_eq!(reason.description, "Identical JA4 fingerprint detected");
+        assert_eq!(reason.description, "Identical JA4H fingerprint detected");
         assert_eq!(reason.evidence.len(), 2);
     }
 
@@ -1414,7 +1541,7 @@ mod tests {
             confidence: 0.85,
             attack_types: vec!["SQLi".to_string()],
             correlation_reasons: vec![CorrelationReason {
-                correlation_type: CorrelationType::SharedFingerprint,
+                correlation_type: CorrelationType::HttpFingerprint,
                 confidence: 0.9,
                 description: "Test correlation".to_string(),
                 evidence: vec!["10.0.0.1".to_string()],

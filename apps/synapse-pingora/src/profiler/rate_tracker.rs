@@ -270,19 +270,23 @@ mod tests {
         let mut rt = RateTracker::new();
         let base_time = 1000000u64;
 
-        // Record 10 requests over 10 seconds
+        // Record 10 requests over 10 seconds (at 0s, 1s, 2s, ..., 9s)
         for i in 0..10 {
             rt.record(base_time + i * 1000);
         }
 
-        // Rate in 10-second window (10 requests)
-        // Normalized to per-minute: 10 * (60000 / 10000) = 60
+        // Rate in 10-second window at now=base+10000
+        // cutoff = 10000 - 10000 = 0, filter is ts > 0
+        // Requests at 1s, 2s, ..., 9s = 9 requests (ts=0 excluded)
+        // Rate = 9 * 60000 / 10000 = 54 req/min
         let rate = rt.rate_in_window(base_time + 10000, 10_000);
-        assert!((rate - 60.0).abs() < 1.0);
+        assert!((rate - 54.0).abs() < 1.0);
 
-        // Rate in 5-second window (should be ~5 requests from most recent)
+        // Rate in 5-second window (requests at 5s, 6s, 7s, 8s, 9s = 5 requests)
+        // cutoff = 10000 - 5000 = 5000, filter is ts > 5000
+        // Requests at 6s, 7s, 8s, 9s = 4 requests
         let rate_5s = rt.rate_in_window(base_time + 10000, 5_000);
-        // 5 requests * 60000 / 5000 = 60 req/min
+        // 4 requests * 60000 / 5000 = 48 req/min
         assert!(rate_5s > 0.0);
     }
 
@@ -319,8 +323,16 @@ mod tests {
         let rate = rt.current_rate(60_000);
         assert_eq!(rate, 0.0);
 
-        // At 59999ms, the request at 0 should still be in window
+        // At 59999ms with saturating_sub:
+        // cutoff = 59999 - 60000 = 0 (saturates to 0)
+        // filter is ts > 0, so request at ts=0 is excluded
         let rate_earlier = rt.current_rate(59_999);
-        assert_eq!(rate_earlier, 1.0);
+        assert_eq!(rate_earlier, 0.0);
+
+        // Test with a request actually inside the window
+        rt.record(1); // request at ts=1
+        // At 60000ms, cutoff = 0, ts=1 > 0 is true
+        let rate_with_in_window = rt.current_rate(60_000);
+        assert_eq!(rate_with_in_window, 1.0);
     }
 }

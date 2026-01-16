@@ -35,6 +35,21 @@ pub enum AnomalySignalType {
     RateBurst,
     /// Too many parameters
     ParamCountAnomaly,
+
+    // ========================================================================
+    // Header Anomaly Signals (W4.1 HeaderProfiler)
+    // ========================================================================
+
+    /// Required header (seen in >95% of baseline) is missing
+    HeaderMissingRequired,
+    /// Unexpected header not seen in baseline
+    HeaderUnexpected,
+    /// Header value is anomalous (unusual pattern, format)
+    HeaderValueAnomaly,
+    /// Header value entropy is anomalous (z-score > 3 sigma)
+    HeaderEntropyAnomaly,
+    /// Header value length is outside expected range
+    HeaderLengthAnomaly,
 }
 
 impl AnomalySignalType {
@@ -49,10 +64,21 @@ impl AnomalySignalType {
             Self::ContentTypeMismatch => "content_type_mismatch",
             Self::RateBurst => "rate_burst",
             Self::ParamCountAnomaly => "param_count_anomaly",
+            // Header anomaly signals
+            Self::HeaderMissingRequired => "header_missing_required",
+            Self::HeaderUnexpected => "header_unexpected",
+            Self::HeaderValueAnomaly => "header_value_anomaly",
+            Self::HeaderEntropyAnomaly => "header_entropy_anomaly",
+            Self::HeaderLengthAnomaly => "header_length_anomaly",
         }
     }
 
     /// Get the default severity for this signal type.
+    ///
+    /// Severity scale (1-10):
+    /// - 1-3: Low (informational, minor deviations)
+    /// - 4-6: Medium (notable anomalies, worth investigation)
+    /// - 7-10: High (likely malicious, strong indicators)
     pub fn default_severity(&self) -> u8 {
         match self {
             Self::PayloadSizeHigh => 5,
@@ -63,6 +89,38 @@ impl AnomalySignalType {
             Self::ContentTypeMismatch => 5,
             Self::RateBurst => 6,
             Self::ParamCountAnomaly => 3,
+            // Header anomaly severities (matching spec: missing=10, unexpected=5, value=15, entropy=20)
+            // Mapped to 1-10 scale: missing=4, unexpected=2, value=5, entropy=6, length=4
+            Self::HeaderMissingRequired => 4,    // Was: risk 10 -> severity 4
+            Self::HeaderUnexpected => 2,          // Was: risk 5 -> severity 2
+            Self::HeaderValueAnomaly => 5,        // Was: risk 15 -> severity 5
+            Self::HeaderEntropyAnomaly => 6,      // Was: risk 20 -> severity 6
+            Self::HeaderLengthAnomaly => 4,       // Was: risk 10 -> severity 4
+        }
+    }
+
+    /// Get the default risk contribution for this signal type.
+    ///
+    /// Risk contribution scale (0-50):
+    /// - 0-10: Low risk addition
+    /// - 11-25: Medium risk addition
+    /// - 26-50: High risk addition
+    pub fn default_risk(&self) -> u16 {
+        match self {
+            Self::PayloadSizeHigh => 15,
+            Self::PayloadSizeLow => 5,
+            Self::UnexpectedParam => 8,
+            Self::MissingExpectedParam => 5,
+            Self::ParamValueAnomaly => 12,
+            Self::ContentTypeMismatch => 15,
+            Self::RateBurst => 20,
+            Self::ParamCountAnomaly => 8,
+            // Header anomaly risk contributions (matching spec)
+            Self::HeaderMissingRequired => 10,
+            Self::HeaderUnexpected => 5,
+            Self::HeaderValueAnomaly => 15,
+            Self::HeaderEntropyAnomaly => 20,
+            Self::HeaderLengthAnomaly => 10,
         }
     }
 }
@@ -296,5 +354,74 @@ mod tests {
             "Test burst".to_string(),
         );
         assert_eq!(signal.severity, 6);
+    }
+
+    // ========================================================================
+    // Header anomaly signal tests
+    // ========================================================================
+
+    #[test]
+    fn test_header_anomaly_signal_types_as_str() {
+        assert_eq!(
+            AnomalySignalType::HeaderMissingRequired.as_str(),
+            "header_missing_required"
+        );
+        assert_eq!(
+            AnomalySignalType::HeaderUnexpected.as_str(),
+            "header_unexpected"
+        );
+        assert_eq!(
+            AnomalySignalType::HeaderValueAnomaly.as_str(),
+            "header_value_anomaly"
+        );
+        assert_eq!(
+            AnomalySignalType::HeaderEntropyAnomaly.as_str(),
+            "header_entropy_anomaly"
+        );
+        assert_eq!(
+            AnomalySignalType::HeaderLengthAnomaly.as_str(),
+            "header_length_anomaly"
+        );
+    }
+
+    #[test]
+    fn test_header_anomaly_default_severities() {
+        assert_eq!(AnomalySignalType::HeaderMissingRequired.default_severity(), 4);
+        assert_eq!(AnomalySignalType::HeaderUnexpected.default_severity(), 2);
+        assert_eq!(AnomalySignalType::HeaderValueAnomaly.default_severity(), 5);
+        assert_eq!(AnomalySignalType::HeaderEntropyAnomaly.default_severity(), 6);
+        assert_eq!(AnomalySignalType::HeaderLengthAnomaly.default_severity(), 4);
+    }
+
+    #[test]
+    fn test_header_anomaly_default_risks() {
+        assert_eq!(AnomalySignalType::HeaderMissingRequired.default_risk(), 10);
+        assert_eq!(AnomalySignalType::HeaderUnexpected.default_risk(), 5);
+        assert_eq!(AnomalySignalType::HeaderValueAnomaly.default_risk(), 15);
+        assert_eq!(AnomalySignalType::HeaderEntropyAnomaly.default_risk(), 20);
+        assert_eq!(AnomalySignalType::HeaderLengthAnomaly.default_risk(), 10);
+    }
+
+    #[test]
+    fn test_header_anomaly_in_result() {
+        let mut result = AnomalyResult::new();
+        result.add(
+            AnomalySignalType::HeaderMissingRequired,
+            4,
+            "Missing Authorization header".to_string(),
+        );
+        result.add(
+            AnomalySignalType::HeaderEntropyAnomaly,
+            6,
+            "High entropy in X-Token".to_string(),
+        );
+
+        assert!(result.has_anomalies());
+        assert_eq!(result.signal_count(), 2);
+        assert_eq!(result.total_score, 10.0); // 4 + 6
+
+        let types = result.signal_types();
+        assert!(types.contains(&AnomalySignalType::HeaderMissingRequired));
+        assert!(types.contains(&AnomalySignalType::HeaderEntropyAnomaly));
     }
 }

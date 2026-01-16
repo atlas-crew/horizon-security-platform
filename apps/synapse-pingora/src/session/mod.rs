@@ -57,4 +57,5 @@ pub use manager::{
     SessionManager,
     SessionState,
     SessionStats,
+    SessionStatsSnapshot,
 };

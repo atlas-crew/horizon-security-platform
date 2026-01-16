@@ -201,14 +201,32 @@ export class RuleDistributor {
    * @param tenantId - The tenant making the request (required for authorization)
    * @param ruleIds - IDs of rules to distribute
    * @param sensorIds - Target sensor IDs (must belong to tenantId)
-   * @param options - Rollout strategy options
+   * @param options - Rollout strategy options (strategy-specific fields optional)
    * @throws {TenantIsolationError} if any sensor does not belong to the tenant
    */
   async distributeRules(
     tenantId: string,
     ruleIds: string[],
     sensorIds: string[],
-    options: { strategy: RolloutConfig['strategy']; canaryPercentage?: number }
+    options: {
+      strategy: RolloutConfig['strategy'];
+      // Canary options
+      canaryPercentage?: number;
+      // Scheduled options
+      scheduledTime?: Date;
+      // Rolling strategy options
+      rollingBatchSize?: number;
+      healthCheckTimeout?: number;
+      maxFailuresBeforeAbort?: number;
+      rollbackOnFailure?: boolean;
+      healthCheckIntervalMs?: number;
+      // Blue/Green strategy options
+      stagingTimeout?: number;
+      switchTimeout?: number;
+      requireAllSensorsStaged?: boolean;
+      minStagedPercentage?: number;
+      cleanupDelayMs?: number;
+    }
   ): Promise<DeploymentResult> {
     // SECURITY: Validate tenant owns all target sensors BEFORE any operation
     await this.validateSensorOwnership(tenantId, sensorIds);
@@ -224,9 +242,25 @@ export class RuleDistributor {
       priority: index,
     }));
 
+    // Build RolloutConfig from options, including strategy-specific fields
     const config: RolloutConfig = {
       strategy: options.strategy,
+      // Canary options
       canaryPercentages: options.canaryPercentage ? [options.canaryPercentage, 50, 100] : undefined,
+      // Scheduled options
+      scheduledTime: options.scheduledTime,
+      // Rolling strategy options
+      rollingBatchSize: options.rollingBatchSize,
+      healthCheckTimeout: options.healthCheckTimeout,
+      maxFailuresBeforeAbort: options.maxFailuresBeforeAbort,
+      rollbackOnFailure: options.rollbackOnFailure,
+      healthCheckIntervalMs: options.healthCheckIntervalMs,
+      // Blue/Green strategy options
+      stagingTimeout: options.stagingTimeout,
+      switchTimeout: options.switchTimeout,
+      requireAllSensorsStaged: options.requireAllSensorsStaged,
+      minStagedPercentage: options.minStagedPercentage,
+      cleanupDelayMs: options.cleanupDelayMs,
     };
 
     return this.pushRulesWithStrategyInternal(sensorIds, rules, config, tenantId);

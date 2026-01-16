@@ -36,10 +36,15 @@
 //! - `X-Challenge-Type`: Type of challenge issued (cookie/js/captcha/tarpit/block)
 
 pub mod cookie_manager;
+pub mod injection_tracker;
 pub mod js_challenge_manager;
 pub mod progression_manager;
 
 pub use cookie_manager::{CookieChallenge, CookieConfig, CookieError, CookieManager, CookieStats};
+pub use injection_tracker::{
+    HeadlessIndicators, InjectionRecord, InjectionSummary, InjectionTracker,
+    InjectionTrackerConfig, InjectionTrackerStats,
+};
 pub use js_challenge_manager::{JsChallenge, JsChallengeConfig, JsChallengeManager, JsChallengeStats};
 pub use progression_manager::{
     ActorChallengeState, ChallengeLevel, ProgressionConfig, ProgressionManager, ProgressionStats,

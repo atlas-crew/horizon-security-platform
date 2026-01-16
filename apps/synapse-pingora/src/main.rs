@@ -83,6 +83,11 @@ use synapse_pingora::telemetry::{
 use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::block_log::{BlockLog, BlockEvent};
 use synapse_pingora::correlation::CampaignManager;
+use synapse_pingora::shadow::{ShadowMirrorConfig, ShadowMirrorManager, MirrorPayload};
+
+// Phase 5: Actor and Session State Management (previously sleeping capabilities)
+use synapse_pingora::actor::{ActorConfig, ActorManager, RuleMatch as ActorRuleMatch};
+use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::RwLock;
 
 // ============================================================================
@@ -645,6 +650,31 @@ impl DetectionEngine {
     }
 }
 
+/// Categorize a rule ID into an attack category for actor history tracking.
+/// Rule IDs are generally numeric, with ranges indicating attack types.
+fn categorize_rule_id(rule_id: u32) -> String {
+    match rule_id {
+        // SQL Injection rules (900xxx, 940xxx, 941xxx, 942xxx)
+        900000..=900999 | 940000..=942999 => "sqli".to_string(),
+        // XSS rules (941xxx)
+        941000..=941999 => "xss".to_string(),
+        // Path Traversal rules (930xxx)
+        930000..=930999 => "path_traversal".to_string(),
+        // RCE/Command Injection rules (932xxx)
+        932000..=932999 => "rce".to_string(),
+        // LFI/RFI rules (931xxx)
+        931000..=931999 => "lfi".to_string(),
+        // Protocol Attack rules (920xxx, 921xxx)
+        920000..=921999 => "protocol".to_string(),
+        // Scanner Detection rules (913xxx)
+        913000..=913999 => "scanner".to_string(),
+        // Request Limits rules (911xxx, 912xxx)
+        911000..=912999 => "request_limits".to_string(),
+        // Default category
+        _ => format!("rule_{}", rule_id / 1000 * 1000),
+    }
+}
+
 // ============================================================================
 // Pingora Proxy Implementation
 // ============================================================================
@@ -805,6 +835,12 @@ pub struct SynapseProxy {
     trusted_proxies: Vec<CidrRange>,
     /// Block log for dashboard visibility
     block_log: Arc<BlockLog>,
+    /// Phase 5: Actor state manager for behavioral tracking and risk scoring
+    actor_manager: Arc<ActorManager>,
+    /// Phase 5: Session state manager for session validation and hijack detection
+    session_manager: Arc<SessionManager>,
+    /// Phase 7: Shadow mirror manager for honeypot delivery
+    shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
 }
 
 impl SynapseProxy {
@@ -822,6 +858,8 @@ impl SynapseProxy {
             DlpConfig::default(),
             Arc::new(EntityManager::new(EntityConfig::default())),
             Arc::new(BlockLog::default()),
+            Arc::new(ActorManager::new(ActorConfig::default())),
+            Arc::new(SessionManager::new(SessionConfig::default())),
         )
     }
 
@@ -838,6 +876,8 @@ impl SynapseProxy {
         dlp_config: DlpConfig,
         entity_manager: Arc<EntityManager>,
         block_log: Arc<BlockLog>,
+        actor_manager: Arc<ActorManager>,
+        session_manager: Arc<SessionManager>,
     ) -> Self {
         Self {
             backends,
@@ -859,6 +899,8 @@ impl SynapseProxy {
             access_list_manager: None,
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
             block_log,
+            actor_manager,
+            session_manager,
         }
     }
 
@@ -883,6 +925,8 @@ impl SynapseProxy {
             access_list_manager: None,
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
             block_log: Arc::new(BlockLog::default()),
+            actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
+            session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
         }
     }
 
@@ -905,6 +949,8 @@ impl SynapseProxy {
         dlp_config: DlpConfig,
         entity_manager: Arc<EntityManager>,
         block_log: Arc<BlockLog>,
+        actor_manager: Arc<ActorManager>,
+        session_manager: Arc<SessionManager>,
     ) -> Self {
         Self {
             backends: default_backends,
@@ -926,6 +972,8 @@ impl SynapseProxy {
             access_list_manager: Some(access_list_manager),
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
             block_log,
+            actor_manager,
+            session_manager,
         }
     }
 
@@ -1437,6 +1485,131 @@ impl ProxyHttp for SynapseProxy {
                 }
             }
         }
+
+        // ===== Phase 5: Actor State Management =====
+        // Track behavioral patterns, rule matches, and risk scoring per actor
+        // Actors are correlated via IP + fingerprint (unlike EntityManager's simple IP-based tracking)
+        if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+            // Get or create actor based on IP + fingerprint correlation
+            let actor_id = self.actor_manager.get_or_create_actor(
+                ip_addr,
+                fingerprint.ja4.as_ref().map(|j| j.raw.as_str()),
+            );
+
+            // Record rule matches to actor's history
+            for &rule_id in &result.matched_rules {
+                let category = categorize_rule_id(rule_id);
+                let risk_contribution = result.risk_score as f64 / result.matched_rules.len().max(1) as f64;
+                self.actor_manager.record_rule_match(
+                    &actor_id,
+                    &format!("rule_{}", rule_id),
+                    risk_contribution,
+                    &category,
+                );
+                debug!(
+                    "Actor {} recorded rule match: rule_{} category={} risk={:.1}",
+                    actor_id, rule_id, category, risk_contribution
+                );
+            }
+
+            // Check if actor is blocked based on accumulated risk
+            if self.actor_manager.is_blocked(&actor_id) {
+                warn!(
+                    "Actor {} (IP: {}) is BLOCKED - denying request to {}",
+                    actor_id, client_ip, uri
+                );
+
+                // Record block event
+                self.block_log.record(BlockEvent::new(
+                    client_ip.to_string(),
+                    method.to_string(),
+                    uri.clone(),
+                    result.risk_score,
+                    result.matched_rules.clone(),
+                    format!("actor_blocked:{}", actor_id),
+                    ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+                ));
+
+                let resp = ResponseHeader::build(403, None)?;
+                session.write_response_header(Box::new(resp), true).await?;
+                session
+                    .write_response_body(
+                        Some(Bytes::from("{\"error\": \"blocked\", \"reason\": \"actor_blocked\"}")),
+                        true,
+                    )
+                    .await?;
+                self.metrics_registry.record_blocked();
+                return Ok(true);
+            }
+        }
+        // ===== End Actor State Management =====
+
+        // ===== Phase 5: Session State Management =====
+        // Validate session tokens and detect potential hijacking via JA4 fingerprint binding
+        // Extract session token from Cookie or Authorization header
+        let session_token = headers.iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("cookie"))
+            .and_then(|(_, value)| {
+                // Extract session cookie (common patterns: session, sessionid, JSESSIONID, etc.)
+                value.split(';')
+                    .map(|s| s.trim())
+                    .find(|cookie| {
+                        let lower = cookie.to_lowercase();
+                        lower.starts_with("session=") ||
+                        lower.starts_with("sessionid=") ||
+                        lower.starts_with("jsessionid=") ||
+                        lower.starts_with("phpsessid=") ||
+                        lower.starts_with("sid=")
+                    })
+                    .map(|cookie| {
+                        cookie.splitn(2, '=').nth(1).unwrap_or("").to_string()
+                    })
+            });
+
+        if let Some(token) = session_token {
+            if !token.is_empty() {
+                // Hash the token for storage (don't store raw tokens)
+                let token_hash = format!("{:x}", md5::compute(&token));
+
+                if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                    let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
+                    let session_decision = self.session_manager.validate_request(
+                        &token_hash,
+                        ip_addr,
+                        ja4_str,
+                    );
+
+                    match session_decision {
+                        SessionDecision::Valid => {
+                            debug!("Session validated for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                        }
+                        SessionDecision::New => {
+                            debug!("New session created for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                        }
+                        SessionDecision::Suspicious(alert) => {
+                            warn!(
+                                "POTENTIAL SESSION HIJACK: {} - type={:?}, original={}, new={}, confidence={:.2}",
+                                client_ip, alert.alert_type, alert.original_value, alert.new_value, alert.confidence
+                            );
+                            // Apply risk for potential hijacking
+                            ctx.entity_risk += 50.0 * alert.confidence;
+                            self.entity_manager.apply_external_risk(
+                                client_ip,
+                                50.0 * alert.confidence,
+                                &format!("session_hijack_alert: {:?}", alert.alert_type),
+                            );
+                        }
+                        SessionDecision::Expired => {
+                            debug!("Session expired for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                        }
+                        SessionDecision::Invalid(reason) => {
+                            warn!("Invalid session for {}: {} (token_hash: {})", client_ip, reason, &token_hash[..8]);
+                        }
+                    }
+                }
+            }
+        }
+        // ===== End Session State Management =====
 
         // Phase 3: Tarpitting - apply progressive delays to suspicious actors
         // Apply tarpit if: (1) there were matched rules, OR (2) entity has high risk
@@ -2405,6 +2578,14 @@ fn main() {
     // Create shared CampaignManager for threat correlation
     let campaign_manager = Arc::new(CampaignManager::new());
 
+    // Phase 5: Create shared ActorManager for behavioral tracking across admin API and proxy
+    let shared_actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
+    info!("ActorManager initialized with default config");
+
+    // Phase 5: Create shared SessionManager for session validation and hijack detection
+    let shared_session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
+    info!("SessionManager initialized with default config");
+
     // Build the API handler with ConfigManager if available
     let api_handler = Arc::new({
         let mut builder = ApiHandler::builder()
@@ -2412,7 +2593,9 @@ fn main() {
             .metrics(Arc::clone(&metrics_registry))
             .entity_manager(Arc::clone(&shared_entity_manager))
             .block_log(Arc::clone(&shared_block_log))
-            .campaign_manager(Arc::clone(&campaign_manager));
+            .campaign_manager(Arc::clone(&campaign_manager))
+            .actor_manager(Arc::clone(&shared_actor_manager))
+            .session_manager(Arc::clone(&shared_session_manager));
 
         if let Some(ref cm) = config_manager {
             builder = builder.config_manager(Arc::clone(cm));
@@ -2511,6 +2694,8 @@ fn main() {
             config.dlp.clone(),
             Arc::clone(&shared_entity_manager),
             Arc::clone(&shared_block_log),
+            Arc::clone(&shared_actor_manager),
+            Arc::clone(&shared_session_manager),
         )
     } else {
         SynapseProxy::with_health(
@@ -2526,6 +2711,8 @@ fn main() {
             config.dlp.clone(),
             Arc::clone(&shared_entity_manager),
             Arc::clone(&shared_block_log),
+            Arc::clone(&shared_actor_manager),
+            Arc::clone(&shared_session_manager),
         )
     };
 
@@ -2915,6 +3102,8 @@ tls:
         let tls_manager = Arc::new(synapse_pingora::tls::TlsManager::default());
         let entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
         let block_log = Arc::new(BlockLog::default());
+        let actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
+        let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
@@ -2928,6 +3117,8 @@ tls:
             DlpConfig::default(),
             entity_manager,
             block_log,
+            actor_manager,
+            session_manager,
         );
 
         // Verify health status is accessible through proxy

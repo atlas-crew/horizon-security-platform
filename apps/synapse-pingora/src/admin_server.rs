@@ -96,6 +96,7 @@ use axum::{
 use serde::Deserialize;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
+use subtle::ConstantTimeEq;
 
 use crate::api::{ApiHandler, ApiResponse};
 use crate::config_manager::{
@@ -130,10 +131,21 @@ async fn require_auth(
         .and_then(|v| v.to_str().ok());
 
     match provided_key {
-        Some(key) if key == expected_key => Ok(next.run(request).await),
-        Some(_) => {
-            warn!("Admin auth failed: invalid API key");
-            Err(StatusCode::UNAUTHORIZED)
+        Some(key) => {
+            // Security: Use constant-time comparison to prevent timing attacks
+            // An attacker could otherwise measure response times to incrementally
+            // guess the API key byte-by-byte
+            let key_bytes = key.as_bytes();
+            let expected_bytes = expected_key.as_bytes();
+            let is_valid = key_bytes.len() == expected_bytes.len()
+                && bool::from(key_bytes.ct_eq(expected_bytes));
+
+            if is_valid {
+                Ok(next.run(request).await)
+            } else {
+                warn!("Admin auth failed: invalid API key");
+                Err(StatusCode::UNAUTHORIZED)
+            }
         }
         None => {
             warn!("Admin auth failed: missing X-Admin-Key header");
@@ -208,6 +220,7 @@ pub async fn start_admin_server(
         .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
+        .route("/_sensor/sessions", get(sensor_sessions_handler))
         .route("/_sensor/stuffing", get(sensor_stuffing_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
         .route("/_sensor/system/overview", get(sensor_system_overview_handler))
@@ -1060,9 +1073,128 @@ async fn sensor_bandwidth_handler() -> impl IntoResponse {
     })))
 }
 
-/// GET /_sensor/actors - Returns empty actors list
-async fn sensor_actors_handler() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({ "actors": [] })))
+/// Query parameters for actors endpoint
+#[derive(Debug, Deserialize)]
+struct ActorsQuery {
+    limit: Option<usize>,
+}
+
+/// GET /_sensor/actors - Returns actors from ActorManager with behavioral tracking data
+async fn sensor_actors_handler(
+    Query(params): Query<ActorsQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100);
+
+    match state.handler.actor_manager() {
+        Some(manager) => {
+            let actors = manager.list_actors(limit, 0);
+            let actor_data: Vec<serde_json::Value> = actors
+                .into_iter()
+                .map(|actor| {
+                    serde_json::json!({
+                        "actorId": actor.actor_id,
+                        "riskScore": actor.risk_score,
+                        "ruleMatches": actor.rule_matches.iter().map(|rm| {
+                            serde_json::json!({
+                                "ruleId": rm.rule_id,
+                                "timestamp": rm.timestamp,
+                                "riskContribution": rm.risk_contribution,
+                                "category": rm.category
+                            })
+                        }).collect::<Vec<_>>(),
+                        "anomalyCount": actor.anomaly_count,
+                        "sessionIds": actor.session_ids,
+                        "firstSeen": actor.first_seen,
+                        "lastSeen": actor.last_seen,
+                        "ips": actor.ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>(),
+                        "fingerprints": actor.fingerprints.iter().cloned().collect::<Vec<_>>(),
+                        "isBlocked": actor.is_blocked,
+                        "blockReason": actor.block_reason,
+                        "blockedSince": actor.blocked_since
+                    })
+                })
+                .collect();
+
+            // Also include stats if available
+            let stats = manager.stats();
+            (StatusCode::OK, Json(serde_json::json!({
+                "actors": actor_data,
+                "stats": {
+                    "totalActors": stats.total_actors.load(std::sync::atomic::Ordering::Relaxed),
+                    "blockedActors": stats.blocked_actors.load(std::sync::atomic::Ordering::Relaxed),
+                    "correlationsMade": stats.correlations_made.load(std::sync::atomic::Ordering::Relaxed),
+                    "evictions": stats.evictions.load(std::sync::atomic::Ordering::Relaxed),
+                    "totalCreated": stats.total_created.load(std::sync::atomic::Ordering::Relaxed),
+                    "totalRuleMatches": stats.total_rule_matches.load(std::sync::atomic::Ordering::Relaxed)
+                }
+            })))
+        }
+        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [], "stats": null })))
+    }
+}
+
+/// Query parameters for sessions endpoint
+#[derive(Debug, Deserialize)]
+struct SessionsQuery {
+    limit: Option<usize>,
+}
+
+/// GET /_sensor/sessions - Returns sessions from SessionManager with hijack detection data
+async fn sensor_sessions_handler(
+    Query(params): Query<SessionsQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100);
+
+    match state.handler.session_manager() {
+        Some(manager) => {
+            let sessions = manager.list_sessions(limit, 0);
+            let session_data: Vec<serde_json::Value> = sessions
+                .into_iter()
+                .map(|session| {
+                    serde_json::json!({
+                        "sessionId": session.session_id,
+                        "tokenHash": &session.token_hash[..8], // Only show first 8 chars for security
+                        "actorId": session.actor_id,
+                        "creationTime": session.creation_time,
+                        "lastActivity": session.last_activity,
+                        "requestCount": session.request_count,
+                        "boundJa4": session.bound_ja4,
+                        "boundIp": session.bound_ip.map(|ip| ip.to_string()),
+                        "isSuspicious": session.is_suspicious,
+                        "hijackAlerts": session.hijack_alerts.iter().map(|alert| {
+                            serde_json::json!({
+                                "sessionId": alert.session_id,
+                                "alertType": format!("{:?}", alert.alert_type),
+                                "originalValue": alert.original_value,
+                                "newValue": alert.new_value,
+                                "timestamp": alert.timestamp,
+                                "confidence": alert.confidence
+                            })
+                        }).collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+
+            // Also include stats if available
+            let stats = manager.stats();
+            (StatusCode::OK, Json(serde_json::json!({
+                "sessions": session_data,
+                "stats": {
+                    "totalSessions": stats.total_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                    "activeSessions": stats.active_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                    "suspiciousSessions": stats.suspicious_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                    "expiredSessions": stats.expired_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                    "hijackAlerts": stats.hijack_alerts.load(std::sync::atomic::Ordering::Relaxed),
+                    "evictions": stats.evictions.load(std::sync::atomic::Ordering::Relaxed),
+                    "totalCreated": stats.total_created.load(std::sync::atomic::Ordering::Relaxed),
+                    "totalInvalidated": stats.total_invalidated.load(std::sync::atomic::Ordering::Relaxed)
+                }
+            })))
+        }
+        None => (StatusCode::OK, Json(serde_json::json!({ "sessions": [], "stats": null })))
+    }
 }
 
 /// GET /_sensor/stuffing - Returns credential stuffing detection data

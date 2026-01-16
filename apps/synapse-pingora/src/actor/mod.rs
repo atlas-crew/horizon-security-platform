@@ -50,5 +50,6 @@ pub use manager::{
     ActorManager,
     ActorState,
     ActorStats,
+    ActorStatsSnapshot,
     RuleMatch,
 };

@@ -47,18 +47,67 @@ const PushConfigBodySchema = z.object({
   sensorIds: z.string().array().min(1),
 });
 
+/** Valid command types for fleet operations */
+const VALID_COMMAND_TYPES = ['push_config', 'push_rules', 'update', 'restart', 'sync_blocklist'] as const;
+
 const SendCommandBodySchema = z.object({
-  commandType: z.string().min(1),
+  commandType: z.enum(VALID_COMMAND_TYPES),
   sensorIds: z.string().array().min(1),
   payload: z.record(z.unknown()),
 });
 
+/**
+ * Schema for rule push requests with deployment strategy options.
+ *
+ * @property ruleIds - Array of rule IDs to deploy (required, at least one)
+ * @property sensorIds - Array of target sensor IDs (required, at least one)
+ * @property strategy - Deployment strategy (default: 'immediate')
+ *   - 'immediate': Push to all sensors at once
+ *   - 'canary': Gradual rollout (e.g., 10% → 50% → 100%)
+ *   - 'scheduled': Deploy at a specific future time
+ *   - 'rolling': Deploy in batches with health checks between each
+ *   - 'blue_green': Stage to all sensors, then atomic switch
+ *
+ * Canary Strategy Options:
+ * @property canaryPercentage - Initial percentage of sensors for canary (1-100)
+ *
+ * Scheduled Strategy Options:
+ * @property scheduledTime - ISO 8601 datetime for scheduled deployment
+ *
+ * Rolling Strategy Options:
+ * @property rollingBatchSize - Number of sensors to deploy per batch (1-100, default: 1)
+ * @property healthCheckTimeout - Max time (ms) to wait for health confirmation (5000-300000, default: 30000)
+ * @property maxFailuresBeforeAbort - Max failures before aborting deployment (1-100, default: 3)
+ * @property rollbackOnFailure - Whether to rollback deployed sensors on abort (default: true)
+ * @property healthCheckIntervalMs - Interval (ms) between health checks (1000-60000, default: 5000)
+ *
+ * Blue/Green Strategy Options:
+ * @property stagingTimeout - Max time (ms) to wait for all sensors to stage (10000-600000, default: 60000)
+ * @property switchTimeout - Max time (ms) to wait for atomic switch completion (5000-300000, default: 30000)
+ * @property requireAllSensorsStaged - Require 100% of sensors to stage before switch (default: true)
+ * @property minStagedPercentage - Minimum percentage of sensors that must stage (1-100, default: 100)
+ * @property cleanupDelayMs - Delay (ms) before cleaning up old deployment (60000-3600000, default: 300000)
+ */
 const PushRulesBodySchema = z.object({
   ruleIds: z.string().array().min(1),
   sensorIds: z.string().array().min(1),
-  strategy: z.enum(['immediate', 'canary', 'scheduled']).default('immediate'),
+  strategy: z.enum(['immediate', 'canary', 'scheduled', 'rolling', 'blue_green']).default('immediate'),
+  // Canary strategy options
   canaryPercentage: z.number().min(1).max(100).optional(),
+  // Scheduled strategy options
   scheduledTime: z.string().datetime().optional(),
+  // Rolling strategy options
+  rollingBatchSize: z.number().min(1).max(100).optional(),
+  healthCheckTimeout: z.number().min(5000).max(300000).optional(),
+  maxFailuresBeforeAbort: z.number().min(1).max(100).optional(),
+  rollbackOnFailure: z.boolean().optional(),
+  healthCheckIntervalMs: z.number().min(1000).max(60000).optional(),
+  // Blue/Green strategy options
+  stagingTimeout: z.number().min(10000).max(600000).optional(),
+  switchTimeout: z.number().min(5000).max(300000).optional(),
+  requireAllSensorsStaged: z.boolean().optional(),
+  minStagedPercentage: z.number().min(1).max(100).optional(),
+  cleanupDelayMs: z.number().min(60000).max(3600000).optional(),
 });
 
 const SensorIdParamSchema = z.object({
@@ -474,7 +523,11 @@ export function createFleetRoutes(
         }
 
         // Extract performance metrics from metadata or generate mock data
-        const meta = (sensor.metadata as Record<string, unknown>) || {};
+        // Safe extraction with null coalescing for untyped JSON metadata
+        const meta: Record<string, unknown> =
+          sensor.metadata && typeof sensor.metadata === 'object' && !Array.isArray(sensor.metadata)
+            ? (sensor.metadata as Record<string, unknown>)
+            : {};
 
         res.json({
           current: {
@@ -652,6 +705,11 @@ export function createFleetRoutes(
     }
   );
 
+const SensorLogsQuerySchema = z.object({
+  type: z.enum(['access', 'error', 'system']).default('access'),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
   /**
    * GET /api/v1/fleet/sensors/:sensorId/logs
    * Get log entries for a sensor
@@ -660,10 +718,12 @@ export function createFleetRoutes(
     '/sensors/:sensorId/logs',
     requireScope('fleet:read'),
     validateParams(SensorIdParamSchema),
+    validateQuery(SensorLogsQuerySchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const { type = 'access', limit = '100' } = req.query;
+        const validatedQuery = req.query as unknown as z.infer<typeof SensorLogsQuerySchema>;
+        const { type, limit } = validatedQuery;
         const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
@@ -676,7 +736,7 @@ export function createFleetRoutes(
           return;
         }
 
-        const logCount = Math.min(parseInt(limit as string, 10), 500);
+        const logCount = limit;
 
         // Generate mock log entries based on type
         const logs = Array.from({ length: logCount }, (_, i) => {
@@ -1183,7 +1243,7 @@ export function createFleetRoutes(
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
             fleetCommander!.sendCommand(sensorId, {
-              type: commandType as 'push_config' | 'push_rules' | 'update' | 'restart' | 'sync_blocklist',
+              type: commandType,
               payload,
             })
           )
@@ -1310,15 +1370,18 @@ export function createFleetRoutes(
         },
       });
 
-      const status = sensors.map((sensor) => ({
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        syncedRules: sensor.ruleSyncState?.length ?? 0,
-        syncStatus: sensor.ruleSyncState?.map((r: { status: string; ruleId: string; }) => ({
-          ruleId: r.ruleId,
-          status: r.status,
-        })) ?? [],
-      }));
+      const status = sensors.map((sensor) => {
+        const ruleSyncStates = sensor.ruleSyncState ?? [];
+        return {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          syncedRules: ruleSyncStates.length,
+          syncStatus: ruleSyncStates.map((r) => ({
+            ruleId: r.ruleId,
+            status: r.status,
+          })),
+        };
+      });
 
       res.json({ status });
     } catch (error) {
@@ -1332,7 +1395,14 @@ export function createFleetRoutes(
 
   /**
    * POST /api/v1/fleet/rules/push
-   * Push rules to sensors with optional rollout strategy
+   * Push rules to sensors with optional rollout strategy.
+   *
+   * Supports five deployment strategies:
+   * - immediate: Push to all sensors at once (default)
+   * - canary: Gradual rollout with configurable percentage stages
+   * - scheduled: Deploy at a specific future time
+   * - rolling: Deploy in batches with health checks between each batch
+   * - blue_green: Stage rules to all sensors, then perform atomic switch
    */
   router.post(
     '/rules/push',
@@ -1347,8 +1417,27 @@ export function createFleetRoutes(
           return;
         }
 
-        const { ruleIds, sensorIds, strategy, canaryPercentage } =
-          req.body as z.infer<typeof PushRulesBodySchema>;
+        const {
+          ruleIds,
+          sensorIds,
+          strategy,
+          // Canary options
+          canaryPercentage,
+          // Scheduled options
+          scheduledTime,
+          // Rolling strategy options
+          rollingBatchSize,
+          healthCheckTimeout,
+          maxFailuresBeforeAbort,
+          rollbackOnFailure,
+          healthCheckIntervalMs,
+          // Blue/Green strategy options
+          stagingTimeout,
+          switchTimeout,
+          requireAllSensorsStaged,
+          minStagedPercentage,
+          cleanupDelayMs,
+        } = req.body as z.infer<typeof PushRulesBodySchema>;
         const auth = req.auth!;
 
         // Validate sensors belong to tenant
@@ -1366,14 +1455,33 @@ export function createFleetRoutes(
           return;
         }
 
-        // Distribute rules based on strategy
+        // Build strategy-specific options
+        const strategyOptions: Parameters<typeof ruleDistributor.distributeRules>[3] = {
+          strategy: strategy as 'immediate' | 'canary' | 'scheduled' | 'rolling' | 'blue_green',
+          // Canary options
+          canaryPercentage,
+          // Scheduled options (convert ISO string to Date if provided)
+          scheduledTime: scheduledTime ? new Date(scheduledTime) : undefined,
+          // Rolling strategy options
+          rollingBatchSize,
+          healthCheckTimeout,
+          maxFailuresBeforeAbort,
+          rollbackOnFailure,
+          healthCheckIntervalMs,
+          // Blue/Green strategy options
+          stagingTimeout,
+          switchTimeout,
+          requireAllSensorsStaged,
+          minStagedPercentage,
+          cleanupDelayMs,
+        };
+
+        // Distribute rules based on strategy (tenant validated by service)
         const deployment = await ruleDistributor.distributeRules(
+          auth.tenantId,
           ruleIds,
           sensorIds,
-          {
-            strategy: strategy as 'immediate' | 'canary' | 'scheduled',
-            canaryPercentage,
-          }
+          strategyOptions
         );
 
         res.status(202).json({
@@ -1434,8 +1542,8 @@ export function createFleetRoutes(
           return;
         }
 
-        // Retry distribution (implementation deferred to ruleDistributor)
-        const result = await ruleDistributor.retryFailedRules(sensorId);
+        // Retry distribution (tenant validated by service)
+        const result = await ruleDistributor.retryFailedRules(auth.tenantId, sensorId);
 
         res.json({
           message: 'Rule retry initiated',

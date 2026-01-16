@@ -434,6 +434,7 @@ export class BandwidthAggregatorService {
 
   /**
    * Query bandwidth from multiple sensors in parallel
+   * Uses AbortController for proper timeout cleanup to prevent memory leaks
    */
   private async querySensorsBandwidth(sensorIds: string[]): Promise<SensorBandwidthResponse[]> {
     if (!this.tunnelBroker) {
@@ -444,20 +445,27 @@ export class BandwidthAggregatorService {
     const timeout = this.config.queryTimeoutMs;
 
     const promises = sensorIds.map(async (sensorId) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
       try {
-        const response = await Promise.race([
-          this.querySensorBandwidth(sensorId),
-          new Promise<SensorBandwidthResponse>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), timeout)
-          ),
-        ]);
+        const response = await this.querySensorBandwidth(sensorId, controller.signal);
         return response;
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return {
+            sensorId,
+            success: false,
+            error: 'Query timeout',
+          };
+        }
         return {
           sensorId,
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error',
         };
+      } finally {
+        clearTimeout(timeoutId);
       }
     });
 
@@ -466,10 +474,20 @@ export class BandwidthAggregatorService {
 
   /**
    * Query bandwidth from a single sensor via tunnel
+   * @param sensorId - The sensor to query
+   * @param signal - Optional AbortSignal for cancellation
    */
-  private async querySensorBandwidth(sensorId: string): Promise<SensorBandwidthResponse> {
+  private async querySensorBandwidth(
+    sensorId: string,
+    signal?: AbortSignal
+  ): Promise<SensorBandwidthResponse> {
     if (!this.tunnelBroker) {
       return { sensorId, success: false, error: 'No tunnel broker' };
+    }
+
+    // Check for early abort
+    if (signal?.aborted) {
+      return { sensorId, success: false, error: 'Query aborted' };
     }
 
     // Check if sensor has active tunnel
@@ -484,6 +502,11 @@ export class BandwidthAggregatorService {
         type: 'get-bandwidth-stats',
         payload: {},
       });
+
+      // Check for abort after async operation
+      if (signal?.aborted) {
+        return { sensorId, success: false, error: 'Query aborted' };
+      }
 
       if (response.type === 'bandwidth-stats' && response.payload) {
         return {

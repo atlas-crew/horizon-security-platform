@@ -251,8 +251,18 @@ export type TunnelMessageType =
 export interface LegacyTunnelMessage {
   type: TunnelMessageType;
   sessionId?: string;
+  requestId?: string;
   payload: unknown;
   timestamp: string;
+}
+
+/**
+ * Response from a direct sensor request (sendRequest).
+ */
+export interface TunnelRequestResponse {
+  type: string;
+  payload: unknown;
+  requestId: string;
 }
 
 /**
@@ -1158,6 +1168,11 @@ export class TunnelBroker extends EventEmitter {
     try {
       const message = this.parseMessage(data);
 
+      // Check if this is a response to a pending request (e.g., bandwidth stats)
+      if (this.handleSensorResponse(sensorId, message)) {
+        return; // Response handled, no further processing needed
+      }
+
       // Emit event for external listeners (e.g., SynapseProxyService)
       this.emit('tunnel:message', sensorId, message);
 
@@ -1425,6 +1440,133 @@ export class TunnelBroker extends EventEmitter {
     }
 
     return stats;
+  }
+
+  // ==========================================================================
+  // Direct Sensor Communication (for bandwidth aggregation, etc.)
+  // ==========================================================================
+
+  /**
+   * Pending requests waiting for responses from sensors.
+   * Maps requestId -> { resolve, reject, timeout }
+   */
+  private pendingRequests = new Map<
+    string,
+    {
+      resolve: (value: TunnelRequestResponse) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+      sensorId: string;
+    }
+  >();
+
+  /**
+   * Get information about a sensor's tunnel connection.
+   *
+   * @param sensorId - The sensor ID to check
+   * @returns Tunnel info or null if not connected
+   */
+  getSensorTunnelInfo(sensorId: string): { connected: boolean; connectedAt?: Date; capabilities?: string[] } | null {
+    const tunnel = this.legacyTunnels.get(sensorId);
+    if (!tunnel) {
+      return null;
+    }
+
+    return {
+      connected: tunnel.socket.readyState === WebSocket.OPEN,
+      connectedAt: tunnel.connectedAt,
+      capabilities: tunnel.capabilities,
+    };
+  }
+
+  /**
+   * Send a request to a sensor and wait for a response.
+   * This is used for direct sensor queries like bandwidth stats.
+   *
+   * @param sensorId - The sensor to send the request to
+   * @param request - The request payload with type and payload fields
+   * @param timeoutMs - Timeout in milliseconds (default: 10000)
+   * @returns Promise resolving to the response
+   */
+  async sendRequest(
+    sensorId: string,
+    request: { type: string; payload: unknown },
+    timeoutMs = 10000
+  ): Promise<TunnelRequestResponse> {
+    const tunnel = this.legacyTunnels.get(sensorId);
+    if (!tunnel || tunnel.socket.readyState !== WebSocket.OPEN) {
+      throw new Error('Sensor not connected');
+    }
+
+    const requestId = randomUUID();
+
+    return new Promise((resolve, reject) => {
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error('Request timeout'));
+      }, timeoutMs);
+
+      // Store pending request
+      this.pendingRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        sensorId,
+      });
+
+      // Send request to sensor
+      // Note: We use type assertion here because direct sensor requests
+      // may use custom message types not in TunnelMessageType enum
+      const message: LegacyTunnelMessage = {
+        type: request.type as TunnelMessageType,
+        requestId,
+        payload: request.payload,
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        tunnel.socket.send(JSON.stringify(message));
+        this.logger.debug({ sensorId, requestId, type: request.type }, 'Sent request to sensor');
+      } catch (error) {
+        this.pendingRequests.delete(requestId);
+        clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error('Failed to send request'));
+      }
+    });
+  }
+
+  /**
+   * Handle a response from a sensor (called from message handler).
+   * Matches responses to pending requests by requestId.
+   *
+   * @param sensorId - The sensor that sent the response
+   * @param message - The response message
+   * @returns True if the message was handled as a response
+   */
+  private handleSensorResponse(sensorId: string, message: LegacyTunnelMessage): boolean {
+    if (!message.requestId) {
+      return false;
+    }
+
+    const pending = this.pendingRequests.get(message.requestId);
+    if (!pending || pending.sensorId !== sensorId) {
+      return false;
+    }
+
+    // Clear timeout and remove from pending
+    clearTimeout(pending.timeout);
+    this.pendingRequests.delete(message.requestId);
+
+    // Resolve with the response
+    pending.resolve({
+      type: message.type,
+      payload: message.payload,
+      requestId: message.requestId,
+    });
+
+    this.logger.debug({ sensorId, requestId: message.requestId }, 'Received response from sensor');
+    return true;
   }
 
   // ==========================================================================

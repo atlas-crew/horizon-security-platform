@@ -9,9 +9,28 @@ import type { Logger } from 'pino';
 import { z } from 'zod';
 import { requireScope } from '../middleware/auth.js';
 import { validateParams, validateQuery } from '../middleware/validation.js';
-import { getErrorMessage } from '../../utils/errors.js';
 import { BandwidthAggregatorService } from '../../services/fleet/bandwidth-aggregator.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
+
+/**
+ * Sanitize error messages for client responses
+ * Prevents leaking internal implementation details
+ */
+function sanitizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    // Only expose safe, generic error messages
+    const safeMessages = [
+      'Sensor not found',
+      'Not authorized',
+      'Invalid request',
+      'Service unavailable',
+    ];
+    if (safeMessages.some((msg) => error.message.includes(msg))) {
+      return error.message;
+    }
+  }
+  return 'An unexpected error occurred';
+}
 
 // ======================== Validation Schemas ========================
 
@@ -71,7 +90,7 @@ export function createFleetBandwidthRoutes(
       res.status(500).json({
         success: false,
         error: 'Failed to get fleet bandwidth statistics',
-        message: getErrorMessage(error),
+        message: sanitizeErrorMessage(error),
       });
     }
   });
@@ -106,7 +125,7 @@ export function createFleetBandwidthRoutes(
         res.status(500).json({
           success: false,
           error: 'Failed to get bandwidth timeline',
-          message: getErrorMessage(error),
+          message: sanitizeErrorMessage(error),
         });
       }
     }
@@ -133,7 +152,7 @@ export function createFleetBandwidthRoutes(
       res.status(500).json({
         success: false,
         error: 'Failed to get endpoint bandwidth statistics',
-        message: getErrorMessage(error),
+        message: sanitizeErrorMessage(error),
       });
     }
   });
@@ -169,7 +188,7 @@ export function createFleetBandwidthRoutes(
         res.status(500).json({
           success: false,
           error: 'Failed to get billing metrics',
-          message: getErrorMessage(error),
+          message: sanitizeErrorMessage(error),
         });
       }
     }
@@ -197,7 +216,8 @@ export function createFleetBandwidthRoutes(
           data: stats,
         });
       } catch (error) {
-        if (getErrorMessage(error).includes('not found')) {
+        const errorMsg = error instanceof Error ? error.message : '';
+        if (errorMsg.includes('not found')) {
           res.status(404).json({
             success: false,
             error: 'Sensor not found',
@@ -209,7 +229,7 @@ export function createFleetBandwidthRoutes(
         res.status(500).json({
           success: false,
           error: 'Failed to get sensor bandwidth statistics',
-          message: getErrorMessage(error),
+          message: sanitizeErrorMessage(error),
         });
       }
     }

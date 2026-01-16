@@ -11,7 +11,6 @@ import {
   Activity,
   DollarSign,
   Server,
-  Clock,
   TrendingUp,
   Download,
   type LucideIcon,
@@ -504,10 +503,25 @@ export default function BandwidthDashboardPage() {
     );
   }
 
+  // Safely extract data with null guards
   const stats = fleetStats.data;
   const timelineData = timeline.data;
   const endpointData = endpoints.data;
   const billingData = billing.data;
+
+  // Handle case where queries succeeded but returned no data
+  if (!stats && !timelineData && !endpointData && !billingData) {
+    return (
+      <div className="p-6">
+        <div className="bg-yellow-500/10 border border-yellow-500/50 p-4">
+          <h2 className="text-lg font-semibold text-yellow-400">No Data Available</h2>
+          <p className="text-ink-secondary mt-1">
+            Bandwidth data is not currently available. This may be because no sensors are connected or reporting metrics.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6" role="main" aria-label="Bandwidth dashboard">

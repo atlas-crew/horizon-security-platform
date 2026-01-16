@@ -545,6 +545,30 @@ model ConfigTemplate {
   @@map("config_templates")
 }
 
+model PolicyTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  severity    String   @default("standard") // strict, standard, dev
+  config      Json     // Full PolicyConfig object
+  metadata    Json?    // PolicyTemplateMetadata
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  version     String   @default("1.0.0")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([severity])
+  @@index([isDefault])
+  @@index([isActive])
+  @@index([tenantId, isDefault]) // Query default templates per tenant
+  @@index([tenantId, severity, isActive]) // Filter by severity
+  @@map("policy_templates")
+}
+
 model SensorSyncState {
   id       String @id @default(cuid())
   sensorId String @unique
@@ -939,4 +963,68 @@ model BlockDecision {
   @@index([entityId])
   @@index([sourceIp])
   @@map("beam_block_decisions")
+}
+
+// =============================================================================
+// Firmware Release Management (Phase 2C)
+// =============================================================================
+
+/// Release represents a firmware version available for deployment
+model Release {
+  id        String   @id @default(cuid())
+  version   String   @unique
+  changelog String   @db.Text
+  binaryUrl String
+  sha256    String
+  size      Int
+  createdAt DateTime @default(now())
+  createdBy String
+
+  // Relations
+  rollouts Rollout[]
+
+  @@index([createdAt])
+  @@map("releases")
+}
+
+/// Rollout tracks the deployment of a release to sensors
+model Rollout {
+  id         String   @id @default(cuid())
+  releaseId  String
+  strategy   String   // immediate, canary, rolling
+  status     String   @default("pending") // pending, in_progress, completed, failed, cancelled
+  targetTags String[] // sensor tags to target
+  batchSize  Int      @default(10)
+  batchDelay Int      @default(60) // seconds between batches
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Relations
+  release  Release           @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  progress RolloutProgress[]
+
+  @@index([status])
+  @@index([releaseId])
+  @@index([status, startedAt])
+  @@map("rollouts")
+}
+
+/// RolloutProgress tracks update progress for each sensor in a rollout
+model RolloutProgress {
+  id        String   @id @default(cuid())
+  rolloutId String
+  sensorId  String
+  status    String   @default("pending") // pending, downloading, ready, activated, failed, cancelled
+  error     String?
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  rollout Rollout @relation(fields: [rolloutId], references: [id], onDelete: Cascade)
+
+  @@unique([rolloutId, sensorId])
+  @@index([rolloutId])
+  @@index([sensorId])
+  @@index([status])
+  @@map("rollout_progress")
 }

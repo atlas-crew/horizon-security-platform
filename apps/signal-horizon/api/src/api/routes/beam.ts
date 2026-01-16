@@ -1,11 +1,17 @@
 /**
  * Beam Analytics Routes
- * Proxies and aggregates data from risk-server for the Beam analytics dashboard
+ * Proxies and aggregates data from risk-server or synapse-pingora for the Beam analytics dashboard
+ *
+ * Data sources (in priority order):
+ * 1. Synapse Direct (SYNAPSE_DIRECT_URL) - Direct connection to synapse-pingora admin API
+ * 2. Risk Server (RISK_SERVER_URL) - Upstream Synapse proxy with full analytics
+ * 3. Demo Data - Fallback when no live data source available
  */
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { Logger } from 'pino';
 import { config } from '../../config.js';
+import { getSynapseDirectAdapter } from '../../services/synapse-direct.js';
 import type {
   BeamAnalyticsResponse,
   BandwidthAnalytics,
@@ -266,28 +272,53 @@ export function createBeamRoutes(logger: Logger): Router {
 
   /**
    * GET /api/v1/beam/analytics
-   * Returns combined analytics data from risk-server with demo fallbacks
+   * Returns combined analytics data from synapse-pingora or risk-server with demo fallbacks
    */
   router.get('/analytics', async (_req: Request, res: Response, _next: NextFunction) => {
     log.debug('Fetching beam analytics data');
 
-    // Fetch data from risk-server in parallel
-    const [sensorData, bandwidthData, anomalyData] = await Promise.all([
-      fetchFromRiskServer('/_sensor/status', log),
-      fetchFromRiskServer('/_sensor/payload/bandwidth', log),
-      fetchFromRiskServer('/_sensor/anomalies', log),
-    ]);
+    // Check for synapse direct adapter first
+    const synapseAdapter = getSynapseDirectAdapter();
 
-    // Transform risk-server data
-    const sensor = transformSensorMetrics(sensorData);
-    const bandwidth = transformBandwidthData(bandwidthData);
-    const threats = transformThreats(anomalyData);
+    let sensor: SensorMetrics;
+    let bandwidth: BandwidthAnalytics;
+    let threats: ThreatSummary;
+    let dataSource: 'synapse-direct' | 'risk-server' | 'mixed' | 'demo';
+
+    if (synapseAdapter) {
+      // Use direct synapse-pingora connection
+      log.debug('Using synapse-direct adapter');
+
+      const [sensorData, bandwidthData, threatData] = await Promise.all([
+        synapseAdapter.getSensorStatus(),
+        synapseAdapter.getBandwidthAnalytics(),
+        synapseAdapter.getThreatSummary(),
+      ]);
+
+      sensor = sensorData || transformSensorMetrics(null);
+      bandwidth = bandwidthData || transformBandwidthData(null);
+      threats = threatData || transformThreats(null);
+      dataSource = sensorData ? 'synapse-direct' : 'demo';
+    } else {
+      // Fetch data from risk-server in parallel
+      const [sensorData, bandwidthData, anomalyData] = await Promise.all([
+        fetchFromRiskServer('/_sensor/status', log),
+        fetchFromRiskServer('/_sensor/payload/bandwidth', log),
+        fetchFromRiskServer('/_sensor/anomalies', log),
+      ]);
+
+      // Transform risk-server data
+      sensor = transformSensorMetrics(sensorData);
+      bandwidth = transformBandwidthData(bandwidthData);
+      threats = transformThreats(anomalyData);
+
+      // Determine data source
+      const hasLiveData = sensorData !== null || bandwidthData !== null || anomalyData !== null;
+      dataSource = hasLiveData ? 'risk-server' : 'demo';
+    }
+
     const traffic = buildTrafficOverview(sensor, bandwidth);
     const topEndpoints = transformTopEndpoints(bandwidth);
-
-    // Determine data source
-    const hasLiveData = sensorData !== null || bandwidthData !== null || anomalyData !== null;
-    const dataSource = hasLiveData ? 'mixed' : 'demo';
 
     const response: BeamAnalyticsResponse = {
       // Real data from risk-server (or transformed)
@@ -315,13 +346,27 @@ export function createBeamRoutes(logger: Logger): Router {
    * Returns just traffic overview data
    */
   router.get('/traffic', async (_req: Request, res: Response, _next: NextFunction) => {
-    const [sensorData, bandwidthData] = await Promise.all([
-      fetchFromRiskServer('/_sensor/status', log),
-      fetchFromRiskServer('/_sensor/payload/bandwidth', log),
-    ]);
+    const synapseAdapter = getSynapseDirectAdapter();
 
-    const sensor = transformSensorMetrics(sensorData);
-    const bandwidth = transformBandwidthData(bandwidthData);
+    let sensor: SensorMetrics;
+    let bandwidth: BandwidthAnalytics;
+
+    if (synapseAdapter) {
+      const [sensorData, bandwidthData] = await Promise.all([
+        synapseAdapter.getSensorStatus(),
+        synapseAdapter.getBandwidthAnalytics(),
+      ]);
+      sensor = sensorData || transformSensorMetrics(null);
+      bandwidth = bandwidthData || transformBandwidthData(null);
+    } else {
+      const [sensorData, bandwidthData] = await Promise.all([
+        fetchFromRiskServer('/_sensor/status', log),
+        fetchFromRiskServer('/_sensor/payload/bandwidth', log),
+      ]);
+      sensor = transformSensorMetrics(sensorData);
+      bandwidth = transformBandwidthData(bandwidthData);
+    }
+
     const traffic = buildTrafficOverview(sensor, bandwidth);
 
     res.json({
@@ -335,8 +380,17 @@ export function createBeamRoutes(logger: Logger): Router {
    * Returns threat/anomaly summary
    */
   router.get('/threats', async (_req: Request, res: Response, _next: NextFunction) => {
-    const anomalyData = await fetchFromRiskServer('/_sensor/anomalies', log);
-    const threats = transformThreats(anomalyData);
+    const synapseAdapter = getSynapseDirectAdapter();
+
+    let threats: ThreatSummary;
+
+    if (synapseAdapter) {
+      const threatData = await synapseAdapter.getThreatSummary();
+      threats = threatData || transformThreats(null);
+    } else {
+      const anomalyData = await fetchFromRiskServer('/_sensor/anomalies', log);
+      threats = transformThreats(anomalyData);
+    }
 
     res.json({
       threats,
@@ -361,19 +415,43 @@ export function createBeamRoutes(logger: Logger): Router {
 
   /**
    * GET /api/v1/beam/health
-   * Check risk-server connectivity
+   * Check synapse-pingora or risk-server connectivity
    */
   router.get('/health', async (_req: Request, res: Response, _next: NextFunction) => {
-    const sensorData = await fetchFromRiskServer('/_sensor/status', log);
-    const connected = sensorData !== null;
+    const synapseAdapter = getSynapseDirectAdapter();
 
-    res.json({
-      riskServer: {
-        url: config.riskServer.url,
-        connected,
-        checkedAt: new Date().toISOString(),
-      },
-    });
+    if (synapseAdapter) {
+      const health = await synapseAdapter.healthCheck();
+
+      res.json({
+        synapseDirect: {
+          url: config.synapseDirect.url,
+          connected: health.connected,
+          status: health.status,
+          uptime: health.uptime,
+          checkedAt: new Date().toISOString(),
+        },
+        riskServer: {
+          url: config.riskServer.url,
+          connected: false,
+          note: 'Bypassed - using synapse-direct',
+        },
+      });
+    } else {
+      const sensorData = await fetchFromRiskServer('/_sensor/status', log);
+      const connected = sensorData !== null;
+
+      res.json({
+        synapseDirect: {
+          enabled: false,
+        },
+        riskServer: {
+          url: config.riskServer.url,
+          connected,
+          checkedAt: new Date().toISOString(),
+        },
+      });
+    }
   });
 
   log.info('Beam analytics routes initialized');

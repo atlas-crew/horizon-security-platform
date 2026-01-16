@@ -13,7 +13,10 @@
  */
 
 import type { Logger } from 'pino';
-import type { TunnelBroker, TunnelMessage } from '../websocket/tunnel-broker.js';
+import type { TunnelBroker, LegacyTunnelMessage } from '../websocket/tunnel-broker.js';
+
+// Alias for backward compatibility
+type TunnelMessage = LegacyTunnelMessage;
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 
@@ -160,6 +163,8 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/rules',
   '/_sensor/actors',
   '/_sensor/evaluate',
+  '/_sensor/profiling',
+  '/_sensor/payload',
 ] as const;
 
 /** Sensor ID format validation */

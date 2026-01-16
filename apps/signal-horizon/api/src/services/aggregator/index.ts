@@ -302,11 +302,83 @@ export class Aggregator {
       });
     }
 
+    // 4. Persist API Discovery signals to Endpoint model
+    if (signal.signalType === 'TEMPLATE_DISCOVERY' || signal.signalType === 'SCHEMA_VIOLATION') {
+      void this.processDiscoverySignal(signal, stored.id);
+    }
+
     return {
       ...signal,
       anonFingerprint,
       id: stored.id,
     };
+  }
+
+  /**
+   * Process API Discovery signals to maintain Endpoint inventory
+   */
+  private async processDiscoverySignal(signal: IncomingSignal, signalId: string): Promise<void> {
+    try {
+      const metadata = signal.metadata as Record<string, any>;
+      const method = metadata.method || 'UNKNOWN';
+      const pathTemplate = metadata.template || metadata.path || 'unknown';
+      const service = metadata.service || 'default';
+      
+      // Upsert Endpoint record
+      const endpoint = await this.prisma.endpoint.upsert({
+        where: {
+          tenantId_sensorId_method_pathTemplate: {
+            tenantId: signal.tenantId,
+            sensorId: signal.sensorId,
+            method,
+            pathTemplate,
+          },
+        },
+        create: {
+          tenantId: signal.tenantId,
+          sensorId: signal.sensorId,
+          method,
+          path: metadata.path || pathTemplate,
+          pathTemplate,
+          service,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+          requestCount: 1,
+          hasSchema: !!metadata.schema,
+          requestSchema: metadata.schema ? (metadata.schema as Prisma.InputJsonValue) : undefined,
+          metadata: {
+            tags: metadata.tags || [],
+            parameters: metadata.parameters,
+          },
+        },
+        update: {
+          lastSeenAt: new Date(),
+          requestCount: { increment: 1 },
+          hasSchema: !!metadata.schema || undefined, // Only update if true
+        },
+      });
+
+      // Record schema violation if applicable
+      if (signal.signalType === 'SCHEMA_VIOLATION') {
+        await this.prisma.endpointSchemaChange.create({
+          data: {
+            endpointId: endpoint.id,
+            tenantId: signal.tenantId,
+            changeType: 'violation',
+            field: metadata.field || 'unknown',
+            oldValue: metadata.expectedType || null,
+            newValue: metadata.receivedType || null,
+            riskLevel: 'medium',
+            detectedAt: new Date(),
+          },
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        { error, signalId, signalType: signal.signalType },
+        'Failed to process discovery signal'
+      );
+    }
   }
 
   /**

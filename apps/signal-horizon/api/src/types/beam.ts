@@ -93,6 +93,13 @@ export interface SensorMetrics {
   latencyP50: number;
   latencyP95: number;
   latencyP99: number;
+  /** HTTP status code breakdown from Prometheus metrics */
+  statusCounts?: {
+    '2xx': number;
+    '3xx': number;
+    '4xx': number;
+    '5xx': number;
+  };
 }
 
 // ============================================================================
@@ -161,7 +168,8 @@ export interface BeamAnalyticsResponse {
 
   // Metadata
   fetchedAt: string;
-  dataSource: 'live' | 'demo' | 'mixed';
+  /** Data source: synapse-direct (pingora), risk-server, mixed, or demo */
+  dataSource: 'synapse-direct' | 'risk-server' | 'live' | 'demo' | 'mixed';
 }
 
 // ============================================================================

@@ -58,6 +58,19 @@ const envSchema = z.object({
   // Risk Server (upstream Synapse proxy)
   RISK_SERVER_URL: z.string().url().default('http://localhost:3000'),
 
+  // Direct Synapse-Pingora connection (optional)
+  // When set, beam routes will fetch directly from synapse-pingora admin API
+  // instead of going through risk-server
+  SYNAPSE_DIRECT_URL: z.string().url().optional(),
+
+  // Sensor Bridge (bridges synapse-pingora to fleet management)
+  // Requires SYNAPSE_DIRECT_URL to be set
+  SENSOR_BRIDGE_ENABLED: z.enum(['true', 'false']).default('false'),
+  SENSOR_BRIDGE_API_KEY: z.string().optional(),
+  SENSOR_BRIDGE_SENSOR_ID: z.string().default('synapse-pingora-1'),
+  SENSOR_BRIDGE_SENSOR_NAME: z.string().default('Synapse Pingora WAF'),
+  SENSOR_BRIDGE_HEARTBEAT_MS: positiveIntString(5000, 120000).catch(15000), // 5s - 2min
+
   // ClickHouse (optional - for historical data)
   CLICKHOUSE_ENABLED: z.enum(['true', 'false']).default('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
@@ -137,6 +150,21 @@ function loadConfig() {
       url: env.RISK_SERVER_URL,
     },
 
+    // Direct Synapse-Pingora connection (optional)
+    synapseDirect: {
+      url: env.SYNAPSE_DIRECT_URL,
+      enabled: !!env.SYNAPSE_DIRECT_URL,
+    },
+
+    // Sensor Bridge (bridges synapse-pingora to fleet management)
+    sensorBridge: {
+      enabled: env.SENSOR_BRIDGE_ENABLED === 'true' && !!env.SYNAPSE_DIRECT_URL,
+      apiKey: env.SENSOR_BRIDGE_API_KEY,
+      sensorId: env.SENSOR_BRIDGE_SENSOR_ID,
+      sensorName: env.SENSOR_BRIDGE_SENSOR_NAME,
+      heartbeatIntervalMs: env.SENSOR_BRIDGE_HEARTBEAT_MS,
+    },
+
     // ClickHouse for historical data (optional)
     clickhouse: {
       enabled: env.CLICKHOUSE_ENABLED === 'true',
@@ -158,6 +186,8 @@ function loadConfig() {
     console.log(`   WebSocket paths: ${config.websocket.sensorPath}, ${config.websocket.dashboardPath}`);
     console.log(`   Log level: ${config.logging.level}`);
     console.log(`   Risk Server: ${config.riskServer.url}`);
+    console.log(`   Synapse Direct: ${config.synapseDirect.enabled ? config.synapseDirect.url : 'disabled'}`);
+    console.log(`   Sensor Bridge: ${config.sensorBridge.enabled ? `${config.sensorBridge.sensorId} (${config.sensorBridge.sensorName})` : 'disabled'}`);
     console.log(`   ClickHouse: ${config.clickhouse.enabled ? `${config.clickhouse.host}:${config.clickhouse.port}` : 'disabled'}`);
   }
 

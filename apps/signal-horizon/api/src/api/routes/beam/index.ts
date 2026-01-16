@@ -6,6 +6,8 @@ import { createEndpointsRouter } from './endpoints.js';
 import { createRulesRouter } from './rules.js';
 import { createThreatsRouter } from './threats.js';
 import { createAnalyticsRouter } from './analytics.js';
+import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
+import { config } from '../../../config.js';
 
 export function createBeamRouter(
   prisma: PrismaClient,
@@ -13,6 +15,31 @@ export function createBeamRouter(
 ): Router {
   const router = Router();
   const beamLogger = logger.child({ module: 'beam' });
+
+  // Health check for synapse connectivity
+  router.get('/health', async (_req, res) => {
+    const synapseAdapter = getSynapseDirectAdapter();
+
+    if (synapseAdapter) {
+      const health = await synapseAdapter.healthCheck();
+      return res.json({
+        synapseDirect: {
+          url: config.synapseDirect.url,
+          connected: health.connected,
+          status: health.status,
+          uptime: health.uptime,
+          checkedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    return res.json({
+      synapseDirect: {
+        enabled: false,
+        note: 'SYNAPSE_DIRECT_URL not configured',
+      },
+    });
+  });
 
   router.use('/dashboard', createDashboardRouter(prisma, beamLogger));
   router.use('/endpoints', createEndpointsRouter(prisma, beamLogger));

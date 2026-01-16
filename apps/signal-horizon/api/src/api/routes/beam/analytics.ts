@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { asyncHandler } from '../../../lib/errors.js';
+import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
 
 export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Router {
   const router = Router();
@@ -91,15 +92,32 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
     const totalRequests = timeline.reduce((sum, t) => sum + t.requests, 0);
     const totalBlocked = (blockDecisions as BlockDecision[]).length;
 
-    logger.info({ tenantId, blockCount: totalBlocked }, 'Analytics data fetched');
+    // Check for synapse-direct adapter for live sensor metrics
+    const synapseAdapter = getSynapseDirectAdapter();
+    let sensorMetrics = null;
+    let dataSource: 'synapse-direct' | 'live' | 'demo' = (blockDecisions as BlockDecision[]).length > 0 ? 'live' : 'demo';
+
+    if (synapseAdapter) {
+      try {
+        sensorMetrics = await synapseAdapter.getSensorStatus();
+        if (sensorMetrics) {
+          dataSource = 'synapse-direct';
+          logger.info({ tenantId, source: 'synapse-direct' }, 'Using synapse-pingora sensor metrics');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to fetch synapse-direct metrics, using fallback');
+      }
+    }
+
+    logger.info({ tenantId, blockCount: totalBlocked, dataSource }, 'Analytics data fetched');
 
     return res.json({
       traffic: {
-        totalRequests,
-        totalBlocked,
+        totalRequests: sensorMetrics?.requestsTotal || totalRequests,
+        totalBlocked: sensorMetrics?.blocksTotal || totalBlocked,
         totalBandwidthIn: timeline.reduce((sum, t) => sum + t.bytesIn, 0),
         totalBandwidthOut: timeline.reduce((sum, t) => sum + t.bytesOut, 0),
-        blockRate: totalRequests > 0 ? (totalBlocked / totalRequests) * 100 : 0,
+        blockRate: totalRequests > 0 ? ((sensorMetrics?.blocksTotal || totalBlocked) / (sensorMetrics?.requestsTotal || totalRequests)) * 100 : 0,
         timeline,
       },
       bandwidth: {
@@ -115,7 +133,7 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
         avgBytesPerRequest: 6000,
       },
       threats: {
-        total: totalBlocked,
+        total: sensorMetrics?.blocksTotal || totalBlocked,
         bySeverity: severityCounts,
         byType: threatTypeCounts,
         recentEvents: (blockDecisions as BlockDecision[]).slice(0, 10).map((block: BlockDecision) => ({
@@ -130,7 +148,7 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
           blocked: block.action === 'BLOCK',
         })),
       },
-      sensor: {
+      sensor: sensorMetrics || {
         requestsTotal: totalRequests,
         blocksTotal: totalBlocked,
         entitiesTracked: totalEndpoints,
@@ -158,7 +176,7 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
         code5xx: Math.round(totalRequests * 0.005),
       },
       fetchedAt: now.toISOString(),
-      dataSource: (blockDecisions as BlockDecision[]).length > 0 ? 'live' : 'demo',
+      dataSource,
     });
   }));
 

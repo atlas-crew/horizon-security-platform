@@ -20,12 +20,19 @@ import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
 import { createSynapseRoutes } from './synapse.js';
 import { createAPIIntelligenceRoutes } from './api-intelligence.js';
+import { createFleetControlRoutes } from './fleet-control.js';
+import { createFleetFilesRoutes } from './fleet-files.js';
+import { createFleetReleasesRoutes } from './fleet-releases.js';
+import { createFleetPolicyRoutes } from './fleet-policy.js';
+import { createFleetSessionsRoutes } from './fleet-sessions.js';
+import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 import type { SynapseProxyService } from '../../services/synapse-proxy.js';
+import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -34,6 +41,8 @@ export interface ApiRouterOptions {
   fleetCommander?: FleetCommander;
   ruleDistributor?: RuleDistributor;
   synapseProxy?: SynapseProxyService;
+  tunnelBroker?: TunnelBroker;
+  sessionQueryService?: FleetSessionQueryService;
 }
 
 export function createApiRouter(
@@ -91,6 +100,36 @@ export function createApiRouter(
   // Mount API Intelligence routes for endpoint discovery and schema violations
   router.use('/api-intelligence', createAPIIntelligenceRoutes(prisma, logger));
   logger.info('API Intelligence routes mounted at /api/v1/api-intelligence');
+
+  // Mount Fleet Control routes for remote sensor management
+  router.use('/fleet-control', createFleetControlRoutes(prisma, logger, {
+    tunnelBroker: options.tunnelBroker,
+  }));
+  logger.info('Fleet Control routes mounted at /api/v1/fleet-control');
+
+  // Mount Fleet Files routes for secure file transfer
+  router.use('/fleet', createFleetFilesRoutes(prisma, logger, {
+    tunnelBroker: options.tunnelBroker,
+  }));
+  logger.info('Fleet Files routes mounted at /api/v1/fleet/:sensorId/files');
+
+  // Mount Fleet Releases routes for firmware/update management
+  router.use('/releases', createFleetReleasesRoutes(prisma, logger, {
+    tunnelBroker: options.tunnelBroker,
+  }));
+  logger.info('Fleet Releases routes mounted at /api/v1/releases');
+
+  // Mount Fleet Policy routes for global security policy management
+  router.use('/fleet/policies', createFleetPolicyRoutes(prisma, logger, {
+    fleetCommander: options.fleetCommander,
+  }));
+  logger.info('Fleet Policy routes mounted at /api/v1/fleet/policies');
+
+  // Mount Fleet Sessions routes for global session search and management
+  router.use('/fleet', createFleetSessionsRoutes(prisma, logger, {
+    sessionQueryService: options.sessionQueryService,
+  }));
+  logger.info('Fleet Sessions routes mounted at /api/v1/fleet/sessions');
 
   return router;
 }

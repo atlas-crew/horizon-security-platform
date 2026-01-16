@@ -33,6 +33,8 @@ import { CommandSender } from './protocols/command-sender.js';
 // Tunnel broker for remote access
 import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
 import { SynapseProxyService } from './services/synapse-proxy.js';
+import { initSynapseDirectAdapter } from './services/synapse-direct.js';
+import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'node:crypto';
 
@@ -320,6 +322,38 @@ async function start() {
     logger.info('ClickHouse disabled - using PostgreSQL only (demo mode)');
   }
 
+  // Initialize Synapse Direct adapter for synapse-pingora connection (if configured)
+  if (config.synapseDirect.enabled && config.synapseDirect.url) {
+    initSynapseDirectAdapter(config.synapseDirect.url, logger);
+    logger.info({ url: config.synapseDirect.url }, 'Synapse Direct adapter initialized');
+  }
+
+  // Initialize Sensor Bridge (bridges synapse-pingora to fleet management via WebSocket)
+  if (config.sensorBridge.enabled && config.synapseDirect.url && config.sensorBridge.apiKey) {
+    const bridge = initSensorBridge({
+      hubWsUrl: `ws://localhost:${config.server.port}${config.websocket.sensorPath}`,
+      pingoraAdminUrl: config.synapseDirect.url,
+      apiKey: config.sensorBridge.apiKey,
+      sensorId: config.sensorBridge.sensorId,
+      sensorName: config.sensorBridge.sensorName,
+      heartbeatIntervalMs: config.sensorBridge.heartbeatIntervalMs,
+    }, logger);
+    // Delay start to ensure WebSocket gateway is ready
+    setTimeout(() => {
+      bridge.start().catch((err) => {
+        logger.error({ err }, 'Failed to start sensor bridge');
+      });
+    }, 2000);
+    logger.info(
+      { sensorId: config.sensorBridge.sensorId, sensorName: config.sensorBridge.sensorName },
+      'Sensor bridge initialized (will connect after gateway is ready)'
+    );
+  } else if (config.sensorBridge.enabled) {
+    logger.warn(
+      'Sensor bridge enabled but missing SYNAPSE_DIRECT_URL or SENSOR_BRIDGE_API_KEY'
+    );
+  }
+
   // Initialize Hunt service (always available, routes to ClickHouse when enabled)
   huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
 
@@ -482,6 +516,11 @@ async function shutdown(signal: string) {
   await synapseProxy?.shutdown?.();
   await tunnelBroker?.shutdown?.();
   tunnelWss?.close();
+  const sensorBridge = getSensorBridge();
+  if (sensorBridge) {
+    await sensorBridge.stop();
+    logger.info('Sensor bridge stopped');
+  }
   logger.info('Fleet services stopped');
 
   // Close ClickHouse connection

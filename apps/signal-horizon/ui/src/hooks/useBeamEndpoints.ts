@@ -25,6 +25,10 @@ interface ApiEndpoint {
   service: string;
   lastSeenAt: string;
   createdAt: string;
+  requestCount?: number;
+  avgLatencyMs?: number;
+  p95LatencyMs?: number;
+  errorRate?: number;
   sensor?: { id: string; name: string };
   _count?: { schemaChanges: number; ruleBindings: number };
 }
@@ -228,9 +232,12 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
         sensitiveFields: [],
         protectionStatus: (ep._count?.ruleBindings ?? 0) > 0 ? 'protected' : 'unprotected',
         activeRules: [],
-        requestCount24h: 0, // Not provided by current API
+        requestCount24h: ep.requestCount || 0,
         lastSeen: ep.lastSeenAt,
         firstSeen: ep.createdAt,
+        avgLatencyMs: ep.avgLatencyMs ?? undefined,
+        p95LatencyMs: ep.p95LatencyMs ?? undefined,
+        errorRate: ep.errorRate ?? undefined,
       }));
 
       setEndpoints(transformedEndpoints);

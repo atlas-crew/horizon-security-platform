@@ -1,4 +1,4 @@
-
+import { useState, useMemo } from 'react';
 import {
   BarChart3,
   Search,
@@ -6,10 +6,8 @@ import {
   FileCode,
   AlertTriangle,
   CheckCircle,
-  Clock,
   Filter,
 } from 'lucide-react';
-import { clsx } from 'clsx';
 import {
   ResponsiveContainer,
   BarChart,
@@ -22,10 +20,32 @@ import {
   Area,
 } from 'recharts';
 import { useApiIntelligence } from '../hooks/useApiIntelligence';
-import { LoadingSpinner, StatsGridSkeleton, TableSkeleton } from '../components/LoadingStates';
+import { StatsGridSkeleton, TableSkeleton } from '../components/LoadingStates';
+import { StatsCard, EndpointsTable, ViolationsFeed } from '../components/api-intelligence';
 
 export default function ApiIntelligencePage() {
-  const { stats, endpoints, signals, isLoading, error } = useApiIntelligence();
+  const {
+    stats,
+    endpoints,
+    signals,
+    isLoading,
+    error,
+    refetch,
+    lastUpdated,
+    pagination,
+    setPagination,
+    totalEndpoints,
+    hasMore,
+  } = useApiIntelligence({ pollInterval: 30000 });
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredEndpoints = useMemo(() =>
+    endpoints.filter(ep =>
+      ep.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ep.service.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [endpoints, searchQuery]
+  );
 
   if (isLoading) {
     return (
@@ -45,9 +65,16 @@ export default function ApiIntelligencePage() {
   if (error) {
     return (
       <div className="p-6 text-center text-ac-red">
-        <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+        <AlertTriangle className="w-12 h-12 mx-auto mb-2" aria-hidden="true" />
         <h2 className="text-xl">Failed to load API Intelligence</h2>
         <p>{error.message}</p>
+        <button
+          onClick={() => refetch()}
+          className="mt-4 px-4 py-2 bg-ac-blue text-white rounded hover:bg-ac-blue/90 transition-colors"
+          aria-label="Retry loading API intelligence data"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -58,20 +85,30 @@ export default function ApiIntelligencePage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-light text-ink-primary">API Intelligence</h1>
-          <p className="text-ink-secondary mt-1">
-            Fleet-wide endpoint discovery and schema validation
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-ink-secondary">
+              Fleet-wide endpoint discovery and schema validation
+            </p>
+            {lastUpdated && (
+              <span className="text-xs text-ink-muted">
+                Last updated: {new Date(lastUpdated).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-outline h-9 px-3 text-xs">
-            <Filter className="w-4 h-4 mr-2" />
+          <button className="btn-outline h-9 px-3 text-xs" aria-label="Filter endpoints">
+            <Filter className="w-4 h-4 mr-2" aria-hidden="true" />
             Filter
           </button>
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
             <input
               type="text"
               placeholder="Search endpoints..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search endpoints"
               className="h-9 pl-9 pr-4 bg-surface-base border border-border-subtle rounded text-sm w-64 focus:border-link focus:ring-1 focus:ring-link outline-none"
             />
           </div>
@@ -80,28 +117,28 @@ export default function ApiIntelligencePage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        <StatsCard
           label="Total Endpoints"
           value={stats?.totalEndpoints ?? 0}
           sublabel={`+${stats?.newThisWeek ?? 0} new this week`}
           icon={FileCode}
           tone="text-ac-blue"
         />
-        <StatCard
+        <StatsCard
           label="Schema Violations (24h)"
           value={stats?.schemaViolations24h ?? 0}
           sublabel={`${stats?.schemaViolations7d ?? 0} in 7 days`}
           icon={ShieldAlert}
           tone="text-ac-orange"
         />
-        <StatCard
+        <StatsCard
           label="Coverage"
-          value="94%"
+          value={`${stats?.coveragePercent ?? 0}%`}
           sublabel="Endpoints with schema"
           icon={CheckCircle}
           tone="text-ac-green"
         />
-        <StatCard
+        <StatsCard
           label="Discovery Rate"
           value={`+${stats?.newToday ?? 0}`}
           sublabel="New endpoints today"
@@ -159,114 +196,42 @@ export default function ApiIntelligencePage() {
         </div>
       </div>
 
+      {/* Endpoints Table and Violations Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Endpoints Table */}
-        <div className="card lg:col-span-2">
-          <div className="card-header flex justify-between items-center">
-            <h2 className="font-medium text-ink-primary">Discovered Endpoints</h2>
-            <span className="text-xs text-ink-muted">{stats?.totalEndpoints} total</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-ink-muted uppercase bg-surface-subtle border-b border-border-subtle">
-                <tr>
-                  <th className="px-4 py-3">Method</th>
-                  <th className="px-4 py-3">Path</th>
-                  <th className="px-4 py-3">Service</th>
-                  <th className="px-4 py-3">Risk</th>
-                  <th className="px-4 py-3">Schema</th>
-                  <th className="px-4 py-3">Last Seen</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {endpoints.map((ep) => (
-                  <tr key={ep.id} className="hover:bg-surface-subtle transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-semibold">
-                      <span className={clsx(
-                        'px-2 py-0.5 rounded',
-                        ep.method === 'GET' && 'bg-ac-blue/10 text-ac-blue',
-                        ep.method === 'POST' && 'bg-ac-green/10 text-ac-green',
-                        ep.method === 'DELETE' && 'bg-ac-red/10 text-ac-red',
-                        ep.method === 'PUT' && 'bg-ac-orange/10 text-ac-orange',
-                      )}>{ep.method}</span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-ink-primary">{ep.path}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{ep.service}</td>
-                    <td className="px-4 py-3">
-                      <span className={clsx(
-                        'px-2 py-0.5 text-xs rounded border',
-                        ep.riskLevel === 'critical' && 'bg-ac-red/10 text-ac-red border-ac-red/30',
-                        ep.riskLevel === 'high' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
-                        ep.riskLevel === 'medium' && 'bg-ac-yellow/10 text-ac-yellow border-ac-yellow/30',
-                        ep.riskLevel === 'low' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
-                      )}>
-                        {ep.riskLevel.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {ep.hasSchema ? (
-                        <CheckCircle className="w-4 h-4 text-ac-green" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 text-ac-orange" />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-ink-muted text-xs">
-                      {new Date(ep.lastSeenAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Recent Violations Feed */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="font-medium text-ink-primary">Recent Violations</h2>
-          </div>
-          <div className="card-body space-y-4 max-h-[600px] overflow-y-auto">
-            {signals.map((signal) => (
-              <div key={signal.id} className="p-3 bg-surface-subtle rounded border border-border-subtle">
-                <div className="flex justify-between items-start mb-1">
-                  <span className="font-mono text-xs font-semibold text-ac-red bg-ac-red/10 px-1.5 py-0.5 rounded">
-                    {signal.metadata.violationType || 'SCHEMA_VIOLATION'}
-                  </span>
-                  <span className="text-[10px] text-ink-muted flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {new Date(signal.createdAt).toLocaleTimeString()}
-                  </span>
-                </div>
-                <div className="text-sm font-medium text-ink-primary mb-1">
-                  {signal.metadata.method} {signal.metadata.endpoint}
-                </div>
-                <div className="text-xs text-ink-secondary">
-                  {signal.metadata.violationMessage || 'Request did not match schema definition.'}
-                </div>
+        <div className="lg:col-span-2">
+          <EndpointsTable
+            endpoints={filteredEndpoints}
+            totalCount={totalEndpoints}
+            emptyMessage={searchQuery ? 'No endpoints match your search' : undefined}
+          />
+          {/* Pagination Controls */}
+          {totalEndpoints > pagination.limit && (
+            <div className="flex justify-between items-center p-4 border-t border-border-subtle bg-surface-base rounded-b">
+              <span className="text-sm text-ink-muted">
+                Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, totalEndpoints)} of {totalEndpoints}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+                  disabled={pagination.offset === 0}
+                  className="btn-outline text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Go to previous page"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPagination(p => ({ ...p, offset: p.offset + p.limit }))}
+                  disabled={!hasMore}
+                  className="btn-outline text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Go to next page"
+                >
+                  Next
+                </button>
               </div>
-            ))}
-            {signals.length === 0 && (
-              <div className="text-center text-ink-muted py-8">
-                No recent violations
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, sublabel, icon: Icon, tone }: any) {
-  return (
-    <div className="card p-4 flex items-center justify-between">
-      <div>
-        <div className="text-xs tracking-wider uppercase text-ink-muted mb-1">{label}</div>
-        <div className="text-2xl font-light text-ink-primary">{value}</div>
-        <div className="text-xs text-ink-secondary mt-1">{sublabel}</div>
-      </div>
-      <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center bg-surface-subtle", tone)}>
-        <Icon className="w-5 h-5" />
+        <ViolationsFeed signals={signals} />
       </div>
     </div>
   );

@@ -326,7 +326,7 @@ export class SensorBridge {
       memory: 25 + Math.random() * 5,
       disk: 10 + Math.random() * 2,
       requestsLastMinute,
-      avgLatencyMs: Number.isFinite(metrics.stats?.avg_latency_ms) ? metrics.stats.avg_latency_ms : 5,
+      avgLatencyMs: Number.isFinite(metrics.stats?.avg_latency_ms) ? metrics.stats?.avg_latency_ms || 5 : 5,
       configHash: `cfg-${metrics.health?.version ?? 'unknown'}`,
       rulesHash: `rules-${Date.now()}`,
     };

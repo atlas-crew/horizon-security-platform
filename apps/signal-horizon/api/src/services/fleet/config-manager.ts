@@ -310,8 +310,11 @@ export class ConfigManager {
 
   /**
    * Push configuration to sensors
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorIds - Target sensor IDs (must all belong to tenantId)
+   * @param templateId - The configuration template to deploy
    */
-  async pushConfig(sensorIds: string[], templateId: string): Promise<DeploymentResult> {
+  async pushConfig(tenantId: string, sensorIds: string[], templateId: string): Promise<DeploymentResult> {
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not initialized');
     }
@@ -324,7 +327,7 @@ export class ConfigManager {
     this.logger.info({ sensorIds, templateId }, 'Pushing config to sensors');
 
     // Send push_config command to each sensor
-    const commandIds = await this.fleetCommander.sendCommandToMultiple(sensorIds, {
+    const commandIds = await this.fleetCommander.sendCommandToMultiple(tenantId, sensorIds, {
       type: 'push_config',
       payload: {
         templateId,

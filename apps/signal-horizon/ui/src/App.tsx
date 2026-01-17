@@ -34,6 +34,7 @@ import CampaignDetailPage from './pages/CampaignDetailPage';
 import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
+import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import { fleetRoutes } from './routes/fleet.routes';
 import { beamRoutes } from './routes/beam.routes';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -44,6 +45,7 @@ const primaryNavItems = [
   { path: '/campaigns', icon: Target, label: 'Active Campaigns' },
   { path: '/hunting', icon: Search, label: 'Threat Hunting' },
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
+  { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/warroom', icon: Users, label: 'War Room' },
 ];
 
@@ -321,6 +323,7 @@ function App() {
                 <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
+                <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}

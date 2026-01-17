@@ -69,9 +69,17 @@ const DEFAULT_CONFIG: WarRoomConfig = {
   maxActivityLimit: 200,
 };
 
-export function createWarRoomRoutes(prisma: PrismaClient, logger: import('pino').Logger): Router {
+export interface WarRoomRoutesOptions {
+  warRoomService?: WarRoomService;
+}
+
+export function createWarRoomRoutes(
+  prisma: PrismaClient,
+  logger: import('pino').Logger,
+  options: WarRoomRoutesOptions = {}
+): Router {
   const router = Router();
-  const warRoomService = new WarRoomService(prisma, logger, DEFAULT_CONFIG);
+  const warRoomService = options.warRoomService ?? new WarRoomService(prisma, logger, DEFAULT_CONFIG);
 
   /**
    * GET /api/v1/warrooms

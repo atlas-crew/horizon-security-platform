@@ -377,6 +377,11 @@ export class TunnelBroker extends EventEmitter {
         bytesPerSecond: 1024 * 1024 * 5, // 5MB/sec
         maxSessionsPerSensor: 2,
       },
+      update: {
+        messagesPerSecond: 10,
+        bytesPerSecond: 1024 * 1024 * 10, // 10MB/sec
+        maxSessionsPerSensor: 1,
+      },
       ...options.rateLimits,
     };
 
@@ -1001,6 +1006,7 @@ export class TunnelBroker extends EventEmitter {
       diag: 0,
       control: 0,
       files: 0,
+      update: 0,
     };
 
     for (const session of this.sessions.values()) {
@@ -1421,6 +1427,7 @@ export class TunnelBroker extends EventEmitter {
         diag: 0,
         control: 0,
         files: 0,
+        update: 0,
       },
     };
 

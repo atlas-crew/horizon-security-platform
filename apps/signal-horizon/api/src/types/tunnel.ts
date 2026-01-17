@@ -29,7 +29,8 @@ export type TunnelChannel =
   | 'logs'     // Log streaming
   | 'diag'     // Diagnostics collection
   | 'control'  // Service control operations
-  | 'files';   // File transfer
+  | 'files'    // File transfer
+  | 'update';  // Firmware updates
 
 /**
  * Session lifecycle states for tunnel channels.
@@ -857,6 +858,67 @@ export type FilesMessage =
   | FileErrorMessage;
 
 // =============================================================================
+// Update Channel Messages
+// =============================================================================
+
+/**
+ * Update download request.
+ */
+export interface UpdateDownloadMessage extends TunnelMessageBase {
+  channel: 'update';
+  type: 'download';
+  requestId: string;
+  release: {
+    version: string;
+    changelog: string;
+    binary_url: string;
+    sha256: string;
+    size: number;
+    released_at: string;
+  };
+}
+
+/**
+ * Update progress message.
+ */
+export interface UpdateProgressMessage extends TunnelMessageBase {
+  channel: 'update';
+  type: 'progress';
+  requestId: string;
+  stage: 'downloading' | 'verifying' | 'installing' | 'restarting';
+  progress: number;
+  message?: string;
+}
+
+/**
+ * Update result message.
+ */
+export interface UpdateResultMessage extends TunnelMessageBase {
+  channel: 'update';
+  type: 'result';
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Update error message.
+ */
+export interface UpdateErrorMessage extends TunnelMessageBase {
+  channel: 'update';
+  type: 'error';
+  requestId: string;
+  code: string;
+  message: string;
+}
+
+export type UpdateMessage =
+  | UpdateDownloadMessage
+  | UpdateProgressMessage
+  | UpdateResultMessage
+  | UpdateErrorMessage;
+
+// =============================================================================
 // Session Management Messages
 // =============================================================================
 
@@ -967,7 +1029,8 @@ export type TunnelMessage =
   | LogsMessage
   | DiagMessage
   | ControlMessage
-  | FilesMessage;
+  | FilesMessage
+  | UpdateMessage;
 
 /**
  * Tunnel protocol message including session management.
@@ -1045,6 +1108,11 @@ export const DEFAULT_CHANNEL_RATE_LIMITS: Record<TunnelChannel, ChannelRateLimit
     messagesPerSecond: 50,
     bytesPerSecond: 1024 * 1024 * 5, // 5MB/sec
     maxSessionsPerSensor: 2,
+  },
+  update: {
+    messagesPerSecond: 10,
+    bytesPerSecond: 1024 * 1024 * 10, // 10MB/sec
+    maxSessionsPerSensor: 1,
   },
 };
 

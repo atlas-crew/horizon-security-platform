@@ -812,7 +812,7 @@ const SensorLogsQuerySchema = z.object({
 
         // Create restart command
         if (fleetCommander) {
-          await fleetCommander.sendCommand(sensorId, {
+          await fleetCommander.sendCommand(auth.tenantId, sensorId, {
             type: 'restart',
             payload: {},
           });
@@ -1139,6 +1139,7 @@ const SensorLogsQuerySchema = z.object({
         const { templateId, sensorIds } = req.body as z.infer<
           typeof PushConfigBodySchema
         >;
+        const auth = req.auth!;
 
         const template = await configManager.getTemplate(templateId);
         if (!template) {
@@ -1149,7 +1150,7 @@ const SensorLogsQuerySchema = z.object({
         // Send push_config command to each sensor
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
-            fleetCommander!.sendCommand(sensorId, {
+            fleetCommander!.sendCommand(auth.tenantId, sensorId, {
               type: 'push_config',
               payload: {
                 templateId,
@@ -1239,10 +1240,11 @@ const SensorLogsQuerySchema = z.object({
         const { commandType, sensorIds, payload } = req.body as z.infer<
           typeof SendCommandBodySchema
         >;
+        const auth = req.auth!;
 
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
-            fleetCommander!.sendCommand(sensorId, {
+            fleetCommander!.sendCommand(auth.tenantId, sensorId, {
               type: commandType,
               payload,
             })

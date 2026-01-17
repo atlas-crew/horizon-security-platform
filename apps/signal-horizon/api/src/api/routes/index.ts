@@ -26,6 +26,7 @@ import { createFleetReleasesRoutes } from './fleet-releases.js';
 import { createFleetPolicyRoutes } from './fleet-policy.js';
 import { createFleetSessionsRoutes } from './fleet-sessions.js';
 import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
+import { createPlaybookRoutes } from './playbooks.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
@@ -34,6 +35,7 @@ import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 import type { SynapseProxyService } from '../../services/synapse-proxy.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
+import type { WarRoomService } from '../../services/warroom/index.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -44,6 +46,7 @@ export interface ApiRouterOptions {
   synapseProxy?: SynapseProxyService;
   tunnelBroker?: TunnelBroker;
   sessionQueryService?: FleetSessionQueryService;
+  warRoomService?: WarRoomService;
 }
 
 export function createApiRouter(
@@ -61,7 +64,9 @@ export function createApiRouter(
   router.use('/campaigns', createCampaignRoutes(prisma));
   router.use('/threats', createThreatRoutes(prisma));
   router.use('/blocklist', createBlocklistRoutes(prisma));
-  router.use('/warrooms', createWarRoomRoutes(prisma, logger));
+  router.use('/warrooms', createWarRoomRoutes(prisma, logger, {
+    warRoomService: options.warRoomService,
+  }));
   router.use('/intel', createIntelRoutes(prisma, logger));
 
   // Mount hunt routes if HuntService is provided
@@ -117,6 +122,7 @@ export function createApiRouter(
   // Mount Fleet Releases routes for firmware/update management
   router.use('/releases', createFleetReleasesRoutes(prisma, logger, {
     tunnelBroker: options.tunnelBroker,
+    fleetCommander: options.fleetCommander,
   }));
   logger.info('Fleet Releases routes mounted at /api/v1/releases');
 
@@ -137,6 +143,13 @@ export function createApiRouter(
     tunnelBroker: options.tunnelBroker,
   }));
   logger.info('Fleet Bandwidth routes mounted at /api/v1/fleet/bandwidth');
+
+  // Mount Playbook routes for incident response automation
+  router.use('/playbooks', createPlaybookRoutes(prisma, logger, {
+    fleetCommander: options.fleetCommander,
+    warRoomService: options.warRoomService,
+  }));
+  logger.info('Playbook routes mounted at /api/v1/playbooks');
 
   return router;
 }

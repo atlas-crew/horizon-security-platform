@@ -23,6 +23,7 @@ import { HuntService } from './services/hunt/index.js';
 import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService } from './storage/clickhouse/index.js';
 // Fleet management services
+import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
@@ -135,6 +136,7 @@ let ruleDistributor: RuleDistributor;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
+let warRoomService: WarRoomService;
 let tunnelWss: WebSocketServer;
 
 // ============================================================================
@@ -379,6 +381,14 @@ async function start() {
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
   tunnelBroker = new TunnelBroker(logger);
   synapseProxy = new SynapseProxyService(tunnelBroker, logger);
+  
+  // Default War Room config
+  const warRoomConfig: WarRoomConfig = {
+    autoCreateForCrossTenant: true,
+    autoCreateForCritical: true,
+    maxActivityLimit: 200,
+  };
+  warRoomService = new WarRoomService(prisma, logger, warRoomConfig);
 
   // Create WebSocket server for tunnel connections (noServer mode - we handle upgrades manually)
   tunnelWss = new WebSocketServer({ noServer: true });
@@ -398,6 +408,8 @@ async function start() {
     fleetCommander,
     ruleDistributor,
     synapseProxy,
+    tunnelBroker,
+    warRoomService,
   });
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
@@ -422,6 +434,7 @@ async function start() {
 
   // Wire up broadcaster to dashboard gateway
   broadcaster.setDashboardGateway(dashboardGateway);
+  warRoomService.setDashboardGateway(dashboardGateway);
 
   // Start protocol handlers for fleet management
   commandSender.start();

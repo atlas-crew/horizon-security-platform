@@ -106,6 +106,55 @@ export class RuleDistributor {
    */
   setFleetCommander(commander: FleetCommander): void {
     this.fleetCommander = commander;
+
+    // Listen for command completion to update deployment state
+    this.fleetCommander.on('command-success', (cmd) => {
+      // Check if this command is related to an active Blue/Green deployment
+      const payload = cmd.result as Record<string, unknown> | undefined;
+      const deploymentId = payload?.deploymentId as string | undefined;
+      
+      // Some sensors might return deploymentId in result, others might just ack the command
+      // We need to track command IDs -> deployment IDs mapping, or iterate active deployments
+      // Since we don't have a direct map, we iterate active deployments to find matching sensor + context
+      
+      // Optimization: If payload has deploymentId, use it.
+      if (deploymentId && this.activeDeployments.has(deploymentId)) {
+        // Determine if this was staging or activation
+        // This requires context from the command itself, which we don't have here easily
+        // But we can infer from the command type 'push_rules' and the payload structure if we had access to the original command payload
+        // However, `cmd` from event only has result.
+        
+        // BETTER APPROACH: Use the payload sent in the command acknowledgment
+        // The sensor should echo back the deploymentId and phase (staging/activation)
+        
+        // For now, let's assume if we get a success for a sensor in an active deployment, we check what we were waiting for
+        const deployment = this.activeDeployments.get(deploymentId);
+        if (deployment) {
+           const status = deployment.sensorStatus.get(cmd.sensorId);
+           if (status) {
+             if (deployment.status === 'staging' && status.stagingStatus === 'pending') {
+               this.updateSensorStagingStatus(deploymentId, cmd.sensorId, true);
+             } else if (deployment.status === 'switching') {
+               this.updateSensorActivationStatus(deploymentId, cmd.sensorId, true);
+             }
+           }
+        }
+      }
+    });
+
+    this.fleetCommander.on('command-failed', (cmd) => {
+       // Iterate active deployments to find if this command failure impacts them
+       // This is O(N) where N is active deployments, usually small
+       for (const deployment of this.activeDeployments.values()) {
+         const status = deployment.sensorStatus.get(cmd.sensorId);
+         if (status) {
+           if (deployment.status === 'staging' && status.stagingStatus === 'pending') {
+             this.updateSensorStagingStatus(deployment.deploymentId, cmd.sensorId, false, cmd.error);
+           }
+           // Activation failure handling if needed
+         }
+       }
+    });
   }
 
   // =============================================================================
@@ -289,13 +338,13 @@ export class RuleDistributor {
    * Internal method for pushing rules with a rollout strategy.
    * SECURITY NOTE: This method does NOT validate tenant ownership.
    * Callers MUST validate ownership via validateSensorOwnership() first.
-   * @param tenantId - Required for scheduled deployments (persistence)
+   * @param tenantId - Required for FleetCommander calls and scheduled deployments
    */
   private async pushRulesWithStrategyInternal(
     sensorIds: string[],
     rules: Rule[],
     config: RolloutConfig,
-    tenantId?: string
+    tenantId: string
   ): Promise<DeploymentResult> {
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not initialized');
@@ -310,23 +359,23 @@ export class RuleDistributor {
 
     switch (config.strategy) {
       case 'immediate':
-        deploymentResult = await this.deployImmediate(sensorIds, rules);
+        deploymentResult = await this.deployImmediate(tenantId, sensorIds, rules);
         break;
 
       case 'canary':
-        deploymentResult = await this.deployCanary(sensorIds, rules, config);
+        deploymentResult = await this.deployCanary(tenantId, sensorIds, rules, config);
         break;
 
       case 'scheduled':
-        deploymentResult = await this.deployScheduled(sensorIds, rules, config, tenantId);
+        deploymentResult = await this.deployScheduled(tenantId, sensorIds, rules, config);
         break;
 
       case 'rolling':
-        deploymentResult = await this.deployRolling(sensorIds, rules, config);
+        deploymentResult = await this.deployRolling(tenantId, sensorIds, rules, config);
         break;
 
       case 'blue_green':
-        deploymentResult = await this.deployBlueGreen(sensorIds, rules, config);
+        deploymentResult = await this.deployBlueGreen(tenantId, sensorIds, rules, config);
         break;
 
       default:
@@ -342,8 +391,9 @@ export class RuleDistributor {
 
   /**
    * Immediate deployment: Push to all sensors at once
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
-  private async deployImmediate(sensorIds: string[], rules: Rule[]): Promise<DeploymentResult> {
+  private async deployImmediate(tenantId: string, sensorIds: string[], rules: Rule[]): Promise<DeploymentResult> {
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not initialized');
     }
@@ -379,7 +429,7 @@ export class RuleDistributor {
     );
 
     // Send push_rules command to all sensors
-    const commandIds = await this.fleetCommander.sendCommandToMultiple(sensorIds, {
+    const commandIds = await this.fleetCommander.sendCommandToMultiple(tenantId, sensorIds, {
       type: 'push_rules',
       payload: {
         rules,
@@ -408,8 +458,10 @@ export class RuleDistributor {
 
   /**
    * Canary deployment: Roll out to 10% → 50% → 100% with delays
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async deployCanary(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
     config: RolloutConfig
@@ -439,7 +491,7 @@ export class RuleDistributor {
         'Deploying canary batch'
       );
 
-      const batchResult = await this.deployImmediate(batchSensorIds, rules);
+      const batchResult = await this.deployImmediate(tenantId, batchSensorIds, rules);
       allResults.push(...batchResult.results);
       deployedCount += batchSize;
 
@@ -463,19 +515,16 @@ export class RuleDistributor {
   /**
    * Scheduled deployment: Push at a specific time
    * Persists the scheduled deployment to the database for restart recovery
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async deployScheduled(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
-    config: RolloutConfig,
-    tenantId?: string
+    config: RolloutConfig
   ): Promise<DeploymentResult> {
     if (!config.scheduledTime) {
       throw new Error('Scheduled deployment requires scheduledTime');
-    }
-
-    if (!tenantId) {
-      throw new Error('Scheduled deployment requires tenantId for persistence');
     }
 
     const now = new Date();
@@ -483,7 +532,7 @@ export class RuleDistributor {
 
     if (scheduledTime <= now) {
       this.logger.warn('Scheduled time is in the past, deploying immediately');
-      return this.deployImmediate(sensorIds, rules);
+      return this.deployImmediate(tenantId, sensorIds, rules);
     }
 
     // Persist scheduled deployment to database for restart recovery
@@ -505,7 +554,7 @@ export class RuleDistributor {
     );
 
     // Schedule in-memory timer and track it for cancellation
-    this.scheduleDeploymentTimer(scheduledDeployment.id, sensorIds, rules, delayMs);
+    this.scheduleDeploymentTimer(tenantId, scheduledDeployment.id, sensorIds, rules, delayMs);
 
     // Return pending result with deployment ID
     const results: DeploymentResult['results'] = sensorIds.map((sensorId) => ({
@@ -528,13 +577,14 @@ export class RuleDistributor {
    * Schedule the in-memory timer for a deployment and track it
    */
   private scheduleDeploymentTimer(
+    tenantId: string,
     deploymentId: string,
     sensorIds: string[],
     rules: Rule[],
     delayMs: number
   ): void {
     const timer = setTimeout(() => {
-      void this.executeScheduledDeployment(deploymentId, sensorIds, rules);
+      void this.executeScheduledDeployment(tenantId, deploymentId, sensorIds, rules);
     }, delayMs);
 
     this.scheduledTimers.set(deploymentId, timer);
@@ -542,8 +592,10 @@ export class RuleDistributor {
 
   /**
    * Execute a scheduled deployment and update database status
+   * @param tenantId - The tenant that owns the deployment (required for FleetCommander)
    */
   private async executeScheduledDeployment(
+    tenantId: string,
     deploymentId: string,
     sensorIds: string[],
     rules: Rule[]
@@ -564,7 +616,7 @@ export class RuleDistributor {
       );
 
       // Execute the actual deployment
-      const result = await this.deployImmediate(sensorIds, rules);
+      const result = await this.deployImmediate(tenantId, sensorIds, rules);
 
       // Update with result
       await this.prisma.scheduledDeployment.update({
@@ -717,8 +769,8 @@ export class RuleDistributor {
           'Recovering expired scheduled deployment - executing now'
         );
 
-        // Execute immediately in background
-        void this.executeScheduledDeployment(deployment.id, deployment.sensorIds, rules);
+        // Execute immediately in background - tenantId is stored in the deployment record
+        void this.executeScheduledDeployment(deployment.tenantId, deployment.id, deployment.sensorIds, rules);
         expiredCount++;
       } else {
         // Reschedule for the future
@@ -727,7 +779,7 @@ export class RuleDistributor {
           'Rescheduling pending deployment after restart'
         );
 
-        this.scheduleDeploymentTimer(deployment.id, deployment.sensorIds, rules, delayMs);
+        this.scheduleDeploymentTimer(deployment.tenantId, deployment.id, deployment.sensorIds, rules, delayMs);
         rescheduledCount++;
       }
     }
@@ -747,8 +799,10 @@ export class RuleDistributor {
   /**
    * Rolling deployment: Deploy to sensors one batch at a time
    * with health verification between each deployment
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async deployRolling(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
     config: RolloutConfig
@@ -788,7 +842,7 @@ export class RuleDistributor {
       // Deploy to current batch
       for (const sensorId of batch) {
         try {
-          await this.deploySingleSensor(sensorId, rules);
+          await this.deploySingleSensor(tenantId, sensorId, rules);
           results.push({ sensorId, status: 'success' });
           deployedSensors.push(sensorId);
         } catch (error) {
@@ -832,7 +886,7 @@ export class RuleDistributor {
             'Rolling deployment aborted - initiating rollback'
           );
 
-          await this.rollbackDeployment(deployedSensors, rules);
+          await this.rollbackDeployment(tenantId, deployedSensors, rules);
 
           return {
             success: false,
@@ -884,8 +938,10 @@ export class RuleDistributor {
 
   /**
    * Deploy rules using blue/green strategy - stage to all sensors, then atomic switch
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async deployBlueGreen(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
     config: RolloutConfig
@@ -916,7 +972,7 @@ export class RuleDistributor {
 
     try {
       // Phase 1: Stage green deployment to all sensors
-      await this.stageGreenDeployment(sensorIds, rules, deploymentId);
+      await this.stageGreenDeployment(tenantId, sensorIds, rules, deploymentId);
 
       // Phase 2: Wait for all sensors to confirm staging
       const stagingResult = await this.waitForStagingComplete(
@@ -954,7 +1010,7 @@ export class RuleDistributor {
 
       // Phase 3: Execute atomic switch
       deploymentState.status = 'switching';
-      await this.executeBlueGreenSwitch(sensorIds, deploymentId, switchTimeout);
+      await this.executeBlueGreenSwitch(tenantId, sensorIds, deploymentId, switchTimeout);
 
       deploymentState.status = 'active';
       deploymentState.activatedAt = new Date();
@@ -996,7 +1052,7 @@ export class RuleDistributor {
       );
 
       // Attempt to abort the green deployment
-      await this.abortGreenDeployment(sensorIds, deploymentId);
+      await this.abortGreenDeployment(tenantId, sensorIds, deploymentId);
 
       return {
         success: false,
@@ -1015,8 +1071,10 @@ export class RuleDistributor {
 
   /**
    * Stage green deployment to all sensors (inactive until switch)
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async stageGreenDeployment(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
     deploymentId: string
@@ -1043,7 +1101,7 @@ export class RuleDistributor {
       });
 
       try {
-        await this.fleetCommander!.sendCommand(sensorId, {
+        await this.fleetCommander!.sendCommand(tenantId, sensorId, {
           type: 'push_rules',
           payload: {
             deploymentId,
@@ -1073,9 +1131,7 @@ export class RuleDistributor {
 
   /**
    * Wait for all sensors to confirm staging complete
-   * Note: In this implementation, we rely on in-memory tracking since Blue/Green
-   * deployments are short-lived operations. The sensor status is updated via
-   * command acknowledgments from FleetCommander.
+   * Monitors the in-memory state which is updated by FleetCommander events
    */
   private async waitForStagingComplete(
     sensorIds: string[],
@@ -1090,28 +1146,22 @@ export class RuleDistributor {
     }
 
     while (Date.now() - startTime < timeout) {
-      // Check staging status for all sensors from in-memory state
-      let allStaged = true;
+      let allCompleted = true; // Completed means either staged OR failed
 
       for (const sensorId of sensorIds) {
         const status = deployment.sensorStatus.get(sensorId);
 
         if (!status || status.stagingStatus === 'pending') {
-          // In a real implementation, this would check for command acknowledgments
-          // For now, we simulate by checking if the command was sent successfully
-          // The actual acknowledgment would come via FleetCommander callbacks
-          allStaged = false;
-        } else if (status.stagingStatus === 'failed') {
-          // Failed sensors don't block, but are tracked
-          continue;
+          allCompleted = false;
+          break; // Still waiting for at least one
         }
       }
 
-      if (allStaged) {
+      if (allCompleted) {
         break;
       }
 
-      await this.sleep(2000); // Poll every 2 seconds
+      await this.sleep(1000); // Poll every 1 second
     }
 
     return Array.from(deployment.sensorStatus.values());
@@ -1122,8 +1172,10 @@ export class RuleDistributor {
    * Note: In this implementation, we rely on in-memory tracking and assume
    * that once the broadcast command succeeds, the switch is complete.
    * In a production system, this would wait for acknowledgments from sensors.
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async executeBlueGreenSwitch(
+    tenantId: string,
     _sensorIds: string[],
     deploymentId: string,
     timeout: number
@@ -1140,8 +1192,8 @@ export class RuleDistributor {
       'Executing blue/green switch'
     );
 
-    // Broadcast atomic switch command to all sensors
-    await this.fleetCommander.broadcastCommand({
+    // Broadcast atomic switch command to all sensors belonging to this tenant
+    await this.fleetCommander.broadcastCommand(tenantId, {
       type: 'push_rules',
       payload: {
         deploymentId,
@@ -1150,22 +1202,22 @@ export class RuleDistributor {
     });
 
     // Wait for confirmation with timeout
-    // In this implementation, we simulate waiting for acknowledgments
     const startTime = Date.now();
-    const deployment = this.activeDeployments.get(deploymentId);
 
     while (Date.now() - startTime < timeout) {
       let allSwitched = true;
+      const deployment = this.activeDeployments.get(deploymentId);
 
-      // Check in-memory state for activation confirmations
-      // In a real implementation, this would be updated via FleetCommander callbacks
       if (deployment) {
         for (const status of deployment.sensorStatus.values()) {
-          if (status.activeStatus !== 'green') {
+          // Only check sensors that successfully staged
+          if (status.stagingStatus === 'staged' && status.activeStatus !== 'green') {
             allSwitched = false;
             break;
           }
         }
+      } else {
+         throw new Error('Deployment state lost during switch');
       }
 
       if (allSwitched) {
@@ -1180,8 +1232,10 @@ export class RuleDistributor {
 
   /**
    * Abort a failed green deployment
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
   private async abortGreenDeployment(
+    tenantId: string,
     _sensorIds: string[],
     deploymentId: string
   ): Promise<void> {
@@ -1197,7 +1251,7 @@ export class RuleDistributor {
     );
 
     try {
-      await this.fleetCommander.broadcastCommand({
+      await this.fleetCommander.broadcastCommand(tenantId, {
         type: 'push_rules',
         payload: {
           deploymentId,
@@ -1432,8 +1486,9 @@ export class RuleDistributor {
 
   /**
    * Rollback deployment to previous rules
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
-  private async rollbackDeployment(sensorIds: string[], currentRules: Rule[]): Promise<void> {
+  private async rollbackDeployment(tenantId: string, sensorIds: string[], currentRules: Rule[]): Promise<void> {
     this.logger.info(
       {
         sensorCount: sensorIds.length,
@@ -1447,7 +1502,7 @@ export class RuleDistributor {
 
     for (const sensorId of sensorIds) {
       try {
-        await this.deploySingleSensor(sensorId, previousRules);
+        await this.deploySingleSensor(tenantId, sensorId, previousRules);
         this.logger.debug({ sensorId }, 'Rollback successful');
       } catch (error) {
         this.logger.error(
@@ -1521,13 +1576,14 @@ export class RuleDistributor {
 
   /**
    * Deploy rules to a single sensor
+   * @param tenantId - The tenant making the request (required for FleetCommander)
    */
-  private async deploySingleSensor(sensorId: string, rules: Rule[]): Promise<void> {
+  private async deploySingleSensor(tenantId: string, sensorId: string, rules: Rule[]): Promise<void> {
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not configured');
     }
 
-    await this.fleetCommander.sendCommand(sensorId, {
+    await this.fleetCommander.sendCommand(tenantId, sensorId, {
       type: 'push_rules',
       payload: { rules },
     });
@@ -1744,7 +1800,7 @@ export class RuleDistributor {
       });
     }
 
-    const commandId = await this.fleetCommander.sendCommand(sensorId, {
+    const commandId = await this.fleetCommander.sendCommand(tenantId, sensorId, {
       type: 'push_rules',
       payload: {
         ruleIds: failedStates.map((s) => s.ruleId),

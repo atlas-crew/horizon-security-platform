@@ -6,7 +6,7 @@
 import { EventEmitter } from 'events';
 import type WebSocket from 'ws';
 
-export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics';
+export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics' | 'update';
 export type CommandStatus = 'pending' | 'sent' | 'success' | 'failed' | 'timeout';
 
 export interface Command {
@@ -135,6 +135,7 @@ export class CommandSender extends EventEmitter {
       collect_diagnostics: 120000,
       push_config: 30000,
       push_rules: 30000,
+      update: 300000, // 5 minutes for download/install
     };
     return timeouts[type];
   }

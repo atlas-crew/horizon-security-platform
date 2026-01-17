@@ -6,7 +6,7 @@
  */
 
 import { Router } from 'express';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { requireScope } from '../middleware/auth.js';
@@ -17,6 +17,8 @@ import {
 } from '../middleware/validation.js';
 import { getErrorMessage } from '../../utils/errors.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
+import { RolloutOrchestrator } from '../../services/fleet/rollout-orchestrator.js';
+import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 
 // ======================== Validation Schemas ========================
 
@@ -134,6 +136,7 @@ interface RolloutListItem {
 
 export interface FleetReleasesOptions {
   tunnelBroker?: TunnelBroker;
+  fleetCommander?: FleetCommander;
 }
 
 export function createFleetReleasesRoutes(
@@ -142,7 +145,8 @@ export function createFleetReleasesRoutes(
   options: FleetReleasesOptions = {}
 ): Router {
   const router = Router();
-  const { tunnelBroker } = options;
+  const { fleetCommander } = options;
+  const orchestrator = new RolloutOrchestrator(prisma, logger, fleetCommander);
 
   // ======================== Release Management ========================
 
@@ -450,7 +454,7 @@ export function createFleetReleasesRoutes(
         }
 
         // Build sensor query using proper Prisma types
-        const sensorWhere: Parameters<typeof prisma.sensor.findMany>[0]['where'] = {
+        const sensorWhere: Prisma.SensorWhereInput = {
           tenantId: auth.tenantId,
           connectionState: 'CONNECTED',
         };
@@ -513,14 +517,11 @@ export function createFleetReleasesRoutes(
           'Rollout created'
         );
 
-        // Start rollout execution asynchronously
-        executeRollout(rollout.id, release, sensors, {
+        // Start rollout execution asynchronously using the orchestrator
+        orchestrator.executeRollout(auth.tenantId, rollout.id, release, sensors, {
           strategy,
           batchSize,
           batchDelay,
-          tunnelBroker,
-          prisma,
-          logger,
         }).catch((error) => {
           logger.error({ error, rolloutId: rollout.id }, 'Rollout execution failed');
         });
@@ -784,240 +785,4 @@ export function createFleetReleasesRoutes(
   );
 
   return router;
-}
-
-// ======================== Rollout Execution ========================
-
-interface RolloutContext {
-  strategy: string;
-  batchSize: number;
-  batchDelay: number;
-  tunnelBroker?: TunnelBroker;
-  prisma: PrismaClient;
-  logger: Logger;
-}
-
-interface SensorInfo {
-  id: string;
-  name: string;
-  version: string | null;
-}
-
-interface ReleaseInfo {
-  id: string;
-  version: string;
-  binaryUrl: string;
-  sha256: string;
-  size: number;
-  changelog: string;
-}
-
-/**
- * Execute a rollout asynchronously
- * Handles batching, progress tracking, and error handling
- */
-async function executeRollout(
-  rolloutId: string,
-  release: ReleaseInfo,
-  sensors: SensorInfo[],
-  ctx: RolloutContext
-): Promise<void> {
-  const { strategy, batchSize, batchDelay, tunnelBroker, prisma, logger } = ctx;
-
-  // Mark rollout as in progress
-  await prisma.rollout.update({
-    where: { id: rolloutId },
-    data: {
-      status: 'in_progress',
-      startedAt: new Date(),
-    },
-  });
-
-  try {
-    // Determine batches based on strategy
-    const batches: SensorInfo[][] = [];
-
-    switch (strategy) {
-      case 'immediate':
-        // All sensors at once
-        batches.push(sensors);
-        break;
-
-      case 'canary':
-        // First batch is small (10%), rest is all remaining
-        const canarySize = Math.max(1, Math.floor(sensors.length * 0.1));
-        batches.push(sensors.slice(0, canarySize));
-        if (sensors.length > canarySize) {
-          batches.push(sensors.slice(canarySize));
-        }
-        break;
-
-      case 'rolling':
-        // Split into equal batches
-        for (let i = 0; i < sensors.length; i += batchSize) {
-          batches.push(sensors.slice(i, i + batchSize));
-        }
-        break;
-
-      default:
-        batches.push(sensors);
-    }
-
-    logger.info(
-      {
-        rolloutId,
-        strategy,
-        totalSensors: sensors.length,
-        batchCount: batches.length,
-      },
-      'Starting rollout execution'
-    );
-
-    // Process each batch
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batch = batches[batchIndex];
-
-      // Check if rollout was cancelled
-      const rollout = await prisma.rollout.findUnique({
-        where: { id: rolloutId },
-        select: { status: true },
-      });
-
-      if (rollout?.status === 'cancelled') {
-        logger.info({ rolloutId }, 'Rollout was cancelled, stopping');
-        return;
-      }
-
-      logger.info(
-        {
-          rolloutId,
-          batchIndex: batchIndex + 1,
-          batchSize: batch.length,
-        },
-        'Processing batch'
-      );
-
-      // Send update commands to each sensor in the batch
-      await Promise.all(
-        batch.map(async (sensor) => {
-          try {
-            // Update progress to downloading
-            await prisma.rolloutProgress.updateMany({
-              where: {
-                rolloutId,
-                sensorId: sensor.id,
-              },
-              data: {
-                status: 'downloading',
-              },
-            });
-
-            // Send update command via tunnel broker
-            if (tunnelBroker) {
-              const updateCommand = {
-                channel: 'update' as const,
-                type: 'download' as const,
-                requestId: `update-${rolloutId}-${sensor.id}`,
-                release: {
-                  version: release.version,
-                  changelog: release.changelog,
-                  binary_url: release.binaryUrl,
-                  sha256: release.sha256,
-                  size: release.size,
-                  released_at: new Date().toISOString(),
-                },
-              };
-
-              // sendToSensor uses sensorId to find the active tunnel/session
-              const sent = tunnelBroker.sendToSensor(sensor.id, updateCommand);
-              if (!sent) {
-                throw new Error('Sensor not connected');
-              }
-
-              logger.debug(
-                { sensorId: sensor.id, version: release.version },
-                'Sent update command to sensor'
-              );
-            } else {
-              // Simulate success for testing without tunnel broker
-              await prisma.rolloutProgress.updateMany({
-                where: {
-                  rolloutId,
-                  sensorId: sensor.id,
-                },
-                data: {
-                  status: 'activated',
-                },
-              });
-            }
-          } catch (error) {
-            logger.error(
-              { error, sensorId: sensor.id, rolloutId },
-              'Failed to send update to sensor'
-            );
-
-            // Mark as failed
-            await prisma.rolloutProgress.updateMany({
-              where: {
-                rolloutId,
-                sensorId: sensor.id,
-              },
-              data: {
-                status: 'failed',
-                error: getErrorMessage(error),
-              },
-            });
-          }
-        })
-      );
-
-      // Wait between batches (except for the last batch)
-      if (batchIndex < batches.length - 1 && batchDelay > 0) {
-        logger.info(
-          { rolloutId, delaySeconds: batchDelay },
-          'Waiting before next batch'
-        );
-        await new Promise((resolve) => setTimeout(resolve, batchDelay * 1000));
-      }
-    }
-
-    // Check final status
-    const finalProgress = await prisma.rolloutProgress.findMany({
-      where: { rolloutId },
-      select: { status: true },
-    });
-
-    const failedCount = finalProgress.filter((p: { status: string }) => p.status === 'failed').length;
-    const status = failedCount === finalProgress.length ? 'failed' : 'completed';
-
-    // Mark rollout as complete
-    await prisma.rollout.update({
-      where: { id: rolloutId },
-      data: {
-        status,
-        completedAt: new Date(),
-      },
-    });
-
-    logger.info(
-      {
-        rolloutId,
-        status,
-        totalSensors: sensors.length,
-        failedSensors: failedCount,
-      },
-      'Rollout execution completed'
-    );
-  } catch (error) {
-    logger.error({ error, rolloutId }, 'Rollout execution failed');
-
-    // Mark rollout as failed
-    await prisma.rollout.update({
-      where: { id: rolloutId },
-      data: {
-        status: 'failed',
-        completedAt: new Date(),
-      },
-    });
-  }
 }

@@ -88,8 +88,30 @@ export class FleetCommander extends EventEmitter {
   /**
    * Send a command to a single sensor
    * Returns the command ID for tracking
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorId - Target sensor ID (must belong to tenantId)
+   * @param command - The command to send
+   * @throws Error if the sensor does not belong to the tenant
    */
-  async sendCommand(sensorId: string, command: SensorCommand): Promise<string> {
+  async sendCommand(tenantId: string, sensorId: string, command: SensorCommand): Promise<string> {
+    // SECURITY: Validate tenant ownership of the sensor before sending command
+    const sensor = await this.prisma.sensor.findUnique({
+      where: { id: sensorId },
+      select: { tenantId: true },
+    });
+
+    if (!sensor) {
+      throw new Error(`Sensor not found: ${sensorId}`);
+    }
+
+    if (sensor.tenantId !== tenantId) {
+      this.logger.warn(
+        { tenantId, sensorId, sensorTenantId: sensor.tenantId },
+        'Tenant isolation violation: attempted to send command to sensor owned by different tenant'
+      );
+      throw new Error(`Sensor ${sensorId} does not belong to tenant ${tenantId}`);
+    }
+
     this.logger.info({ sensorId, commandType: command.type }, 'Sending command to sensor');
 
     const timeout = command.timeout ?? this.config.defaultTimeoutMs;
@@ -136,14 +158,18 @@ export class FleetCommander extends EventEmitter {
   /**
    * Send a command to multiple sensors
    * Returns array of command IDs
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorIds - Target sensor IDs (must all belong to tenantId)
+   * @param command - The command to send
+   * @throws Error if any sensor does not belong to the tenant
    */
-  async sendCommandToMultiple(sensorIds: string[], command: SensorCommand): Promise<string[]> {
+  async sendCommandToMultiple(tenantId: string, sensorIds: string[], command: SensorCommand): Promise<string[]> {
     this.logger.info({ sensorCount: sensorIds.length, commandType: command.type }, 'Sending command to multiple sensors');
 
     const commandIds: string[] = [];
 
     for (const sensorId of sensorIds) {
-      const commandId = await this.sendCommand(sensorId, command);
+      const commandId = await this.sendCommand(tenantId, sensorId, command);
       commandIds.push(commandId);
     }
 
@@ -151,18 +177,28 @@ export class FleetCommander extends EventEmitter {
   }
 
   /**
-   * Broadcast a command to all connected sensors
+   * Broadcast a command to all connected sensors belonging to a tenant
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param command - The command to broadcast
+   * @returns Array of command IDs for tracking
    */
-  async broadcastCommand(command: SensorCommand): Promise<string[]> {
+  async broadcastCommand(tenantId: string, command: SensorCommand): Promise<string[]> {
+    // SECURITY: Only broadcast to sensors belonging to the specified tenant
     const sensors = await this.prisma.sensor.findMany({
       where: {
+        tenantId,  // Filter by tenant to prevent cross-tenant command broadcast
         connectionState: 'CONNECTED',
       },
       select: { id: true },
     });
 
+    this.logger.info(
+      { tenantId, sensorCount: sensors.length, commandType: command.type },
+      'Broadcasting command to tenant sensors'
+    );
+
     const sensorIds = sensors.map((s) => s.id);
-    return this.sendCommandToMultiple(sensorIds, command);
+    return this.sendCommandToMultiple(tenantId, sensorIds, command);
   }
 
   // =============================================================================

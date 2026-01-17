@@ -369,6 +369,7 @@ export class PolicyTemplateService {
 
     // Deploy policy to sensors via push_config command
     const results: DeploymentResult = await this.deployPolicyToSensors(
+      tenantId,
       validSensorIds,
       template,
       rolloutConfig
@@ -408,8 +409,10 @@ export class PolicyTemplateService {
 
   /**
    * Deploy policy configuration to sensors
+   * @param tenantId - The tenant making the request (required for authorization)
    */
   private async deployPolicyToSensors(
+    tenantId: string,
     sensorIds: string[],
     template: PolicyTemplate,
     rolloutConfig: RolloutConfig
@@ -435,7 +438,7 @@ export class PolicyTemplateService {
     if (rolloutConfig.strategy === 'immediate') {
       for (const sensorId of sensorIds) {
         try {
-          const commandId = await this.fleetCommander.sendCommand(sensorId, {
+          const commandId = await this.fleetCommander.sendCommand(tenantId, sensorId, {
             type: 'push_config',
             payload: {
               policyTemplateId: template.id,
@@ -470,7 +473,7 @@ export class PolicyTemplateService {
 
       for (const sensorId of sensorIds) {
         try {
-          const commandId = await this.fleetCommander.sendCommand(sensorId, {
+          const commandId = await this.fleetCommander.sendCommand(tenantId, sensorId, {
             type: 'push_config',
             payload: {
               policyTemplateId: template.id,

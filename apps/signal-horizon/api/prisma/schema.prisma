@@ -31,6 +31,7 @@ model Tenant {
   campaigns         Campaign[]
   warRooms          WarRoom[]
   warRoomActivities WarRoomActivity[]
+  playbooks         Playbook[]
 
   // Beam relations
   beamEndpoints      Endpoint[]      @relation("TenantEndpoints")
@@ -426,6 +427,7 @@ model WarRoom {
   tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   activities    WarRoomActivity[]
   campaignLinks WarRoomCampaign[]
+  playbookRuns  PlaybookRun[]
 
   @@index([tenantId])
   @@index([status])
@@ -499,6 +501,50 @@ model WarRoomCampaign {
 
   @@unique([warRoomId, campaignId])
   @@map("war_room_campaigns")
+}
+
+// =============================================================================
+// War Room Playbooks
+// =============================================================================
+
+model Playbook {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  triggerType String   // MANUAL, SIGNAL_SEVERITY, SIGNAL_TYPE
+  triggerValue String? // e.g., "HIGH", "CREDENTIAL_STUFFING"
+  isActive    Boolean  @default(true)
+  steps       Json     // Array of PlaybookStep
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runs   PlaybookRun[]
+
+  @@index([tenantId])
+  @@index([triggerType])
+  @@map("playbooks")
+}
+
+model PlaybookRun {
+  id          String   @id @default(cuid())
+  playbookId  String
+  warRoomId   String
+  tenantId    String
+  status      String   // RUNNING, COMPLETED, FAILED
+  currentStep Int      @default(0)
+  stepResults Json?    // Array of step execution results
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  startedBy   String?  // User ID or "system"
+
+  playbook Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  warRoom  WarRoom  @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+
+  @@index([warRoomId])
+  @@index([playbookId])
+  @@map("playbook_runs")
 }
 
 // =============================================================================

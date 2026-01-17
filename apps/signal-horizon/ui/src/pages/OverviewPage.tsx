@@ -58,7 +58,7 @@ const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 
 export default function OverviewPage() {
   const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
-  const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading } = useAttackMap();
+  const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
 
@@ -143,7 +143,7 @@ export default function OverviewPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-outline h-10 px-4 text-xs">
+          <button className="btn-outline h-10 px-4 text-xs" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </button>
@@ -201,9 +201,17 @@ export default function OverviewPage() {
         {/* Live Attack Map */}
         <section className="xl:col-span-2 card" aria-labelledby="attack-map-heading">
           <div className="card-header flex items-center justify-between">
-            <h2 id="attack-map-heading" className="font-medium text-ink-primary">
-              Live Attack Map
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 id="attack-map-heading" className="font-medium text-ink-primary">
+                Live Attack Map
+              </h2>
+              {error && (
+                <span className="text-xs text-ac-orange flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Using cached data
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {mapFilters.map((filter) => (
                 <button

@@ -59,7 +59,7 @@ export function useAttackMap(windowHours = 24) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     if (isEnabled) {
       setData({ points: DEMO_POINTS, routes: DEMO_ROUTES });
       setIsLoading(false);
@@ -73,6 +73,7 @@ export function useAttackMap(windowHours = 24) {
           'Authorization': `Bearer ${API_KEY}`,
           'Accept': 'application/json',
         },
+        signal,
       });
 
       if (!response.ok) {
@@ -80,7 +81,7 @@ export function useAttackMap(windowHours = 24) {
       }
 
       const apiData = await response.json();
-      
+
       // Ensure data matches expected shape
       setData({
         points: apiData.points || [],
@@ -88,6 +89,10 @@ export function useAttackMap(windowHours = 24) {
       });
       setError(null);
     } catch (err) {
+      // Don't set error state for aborted requests
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching attack map:', err);
       setError(err as Error);
       // Fallback to demo data on error for better UX? Or just empty?
@@ -99,11 +104,15 @@ export function useAttackMap(windowHours = 24) {
   }, [isEnabled, windowHours]);
 
   useEffect(() => {
-    fetchData();
-    
+    const controller = new AbortController();
+    fetchData(controller.signal);
+
     // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => fetchData(controller.signal), 30000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   return { ...data, isLoading, error, refetch: fetchData };

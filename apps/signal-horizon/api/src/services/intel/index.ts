@@ -91,6 +91,33 @@ export interface FleetIntelSummary {
   topAttackTypes: Array<{ type: string; count: number; percentage: number }>;
 }
 
+/** Attack map point representing an aggregated geo-location */
+export interface AttackMapPoint {
+  id: number;
+  lat: number;
+  lon: number;
+  severity: string;
+  label: string;
+  count: number;
+  scope: 'local' | 'fleet';
+  category: string;
+}
+
+/** Attack map route connecting two points */
+export interface AttackMapRoute {
+  id: string;
+  from: number;
+  to: number;
+  severity: string;
+  category: string;
+}
+
+/** Attack map data with geo-points and connecting routes */
+export interface AttackMapData {
+  points: AttackMapPoint[];
+  routes: AttackMapRoute[];
+}
+
 // STIX 2.1 Types (simplified)
 interface STIXBundle {
   type: 'bundle';
@@ -582,16 +609,17 @@ export class IntelService {
 
   /**
    * Get attack map data (aggregated geo-points)
+   * Points are categorized as 'bot' or 'attack' based on signal types.
    */
   async getAttackMap(
     tenantId: string | null,
     windowHours = 1
-  ): Promise<{ points: any[]; routes: any[] }> {
+  ): Promise<AttackMapData> {
     const to = new Date();
     const from = new Date(to.getTime() - windowHours * 60 * 60 * 1000);
     const tenantFilter = tenantId ? { tenantId } : {};
 
-    // Get signals with geo metadata
+    // Get signals with geo metadata and signal type for categorization
     const signals = await this.prisma.signal.findMany({
       where: {
         ...tenantFilter,
@@ -601,23 +629,28 @@ export class IntelService {
       select: {
         sourceIp: true,
         severity: true,
+        signalType: true,
         metadata: true,
       },
       take: 5000, // Limit to prevent overload
     });
 
-    // Aggregate by location
+    // Bot-related signal types for category detection
+    const botSignalTypes = new Set(['BOT_SIGNATURE']);
+
+    // Aggregate by location, tracking signal types for category detection
     const locationMap = new Map<string, {
       lat: number;
       lon: number;
       label: string;
       count: number;
       severities: Record<string, number>;
+      signalTypes: Record<string, number>;
     }>();
 
     for (const signal of signals) {
       const meta = signal.metadata as { latitude?: number; longitude?: number; city?: string; countryCode?: string } | null;
-      
+
       if (meta?.latitude && meta?.longitude) {
         // Round lat/lon to group nearby points (approx 11km)
         const lat = Math.round(meta.latitude * 10) / 10;
@@ -628,6 +661,7 @@ export class IntelService {
         if (existing) {
           existing.count++;
           existing.severities[signal.severity] = (existing.severities[signal.severity] || 0) + 1;
+          existing.signalTypes[signal.signalType] = (existing.signalTypes[signal.signalType] || 0) + 1;
         } else {
           locationMap.set(key, {
             lat,
@@ -635,19 +669,32 @@ export class IntelService {
             label: meta.city ? `${meta.city}, ${meta.countryCode}` : meta.countryCode || 'Unknown',
             count: 1,
             severities: { [signal.severity]: 1 },
+            signalTypes: { [signal.signalType]: 1 },
           });
         }
       }
     }
 
     // Convert to points array
-    const points = Array.from(locationMap.entries()).map(([_key, data], index) => {
+    const points: AttackMapPoint[] = Array.from(locationMap.entries()).map(([_key, data], index) => {
       // Determine max severity for this point
       const severities = data.severities;
       let maxSeverity = 'LOW';
       if (severities.CRITICAL) maxSeverity = 'CRITICAL';
       else if (severities.HIGH) maxSeverity = 'HIGH';
       else if (severities.MEDIUM) maxSeverity = 'MEDIUM';
+
+      // Determine category based on signal types
+      // If majority of signals are bot-related, category is 'bot', otherwise 'attack'
+      let botCount = 0;
+      let totalCount = 0;
+      for (const [signalType, count] of Object.entries(data.signalTypes)) {
+        totalCount += count;
+        if (botSignalTypes.has(signalType)) {
+          botCount += count;
+        }
+      }
+      const category = botCount > totalCount / 2 ? 'bot' : 'attack';
 
       return {
         id: index,
@@ -657,23 +704,35 @@ export class IntelService {
         label: data.label,
         count: data.count,
         scope: tenantId ? 'local' : 'fleet',
-        category: 'attack', // Default, could be refined by signal type
+        category,
       };
     });
 
-    // Generate routes (simplified: linking high-volume sources to a central "target")
-    // In a real multi-region deployment, this would link source -> sensor region
-    // For now, we simulate routes from top sources to a "central" point (e.g. US East)
-    const routes = points
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
-      .map((point, index) => ({
-        id: `route-${index}`,
-        from: point.id,
-        to: -1, // Special ID for "Target" (center)
-        severity: point.severity,
-        category: 'attack',
-      }));
+    // Generate routes using hub-and-spoke pattern
+    // The highest-volume point acts as the hub, with other top sources connecting to it
+    const routes: AttackMapRoute[] = [];
+
+    if (points.length >= 2) {
+      // Sort by count to find highest-volume points
+      const sortedPoints = [...points].sort((a, b) => b.count - a.count);
+
+      // The hub is the highest-volume point
+      const hubPoint = sortedPoints[0];
+
+      // Connect next top sources to the hub (up to 5 routes)
+      const spokePoints = sortedPoints.slice(1, 6);
+
+      for (let i = 0; i < spokePoints.length; i++) {
+        const spokePoint = spokePoints[i];
+        routes.push({
+          id: `route-${i}`,
+          from: spokePoint.id,
+          to: hubPoint.id,
+          severity: spokePoint.severity,
+          category: spokePoint.category, // Use category from source point
+        });
+      }
+    }
 
     return { points, routes };
   }

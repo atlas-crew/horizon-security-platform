@@ -1,17 +1,19 @@
-
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { requireScope } from '../middleware/auth.js';
 import { validateBody, validateParams, IdParamSchema } from '../middleware/validation.js';
-import { PlaybookService } from '../../services/warroom/playbook-service.js';
+import { createPlaybookRateLimiters } from '../middleware/rate-limit.js';
+import { PlaybookService, PlaybookConcurrencyError, type UserInfo } from '../../services/warroom/playbook-service.js';
+import { SecurityAuditService } from '../../services/audit/security-audit.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { WarRoomService } from '../../services/warroom/index.js';
 
 export interface PlaybookRoutesOptions {
   fleetCommander?: FleetCommander;
   warRoomService?: WarRoomService;
+  securityAuditService?: SecurityAuditService;
 }
 
 // Allowed command types for playbook steps
@@ -91,6 +93,24 @@ class PlaybookError extends Error {
 }
 
 /**
+ * Extract user info from auth context.
+ * Throws if userId is missing (required for write operations).
+ */
+function extractUserInfo(auth: { userId?: string; userName?: string }, operation: string): UserInfo {
+  if (!auth.userId) {
+    throw new PlaybookError(
+      `User ID is required for ${operation}`,
+      'ACCESS_DENIED',
+      401
+    );
+  }
+  return {
+    userId: auth.userId,
+    userName: auth.userName ?? 'Unknown User',
+  };
+}
+
+/**
  * Map error to appropriate HTTP response
  */
 function handlePlaybookError(
@@ -108,9 +128,20 @@ function handlePlaybookError(
     };
   }
 
+  // Handle concurrency errors
+  if (error instanceof PlaybookConcurrencyError) {
+    return {
+      status: error.statusCode,
+      body: { error: error.message },
+    };
+  }
+
   // Check for common error patterns without exposing details
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
+    if (message.includes('user id is required')) {
+      return { status: 401, body: { error: 'Authentication required' } };
+    }
     if (message.includes('not found')) {
       return { status: 404, body: { error: 'Resource not found' } };
     }
@@ -132,7 +163,21 @@ export function createPlaybookRoutes(
   options: PlaybookRoutesOptions = {}
 ): Router {
   const router = Router();
-  const service = new PlaybookService(prisma, logger, options.fleetCommander, options.warRoomService);
+
+  // Initialize security audit service (create if not provided)
+  const auditService = options.securityAuditService ?? new SecurityAuditService(prisma, logger);
+
+  // Pass audit service to PlaybookService for step-level and command-level auditing
+  const service = new PlaybookService(
+    prisma,
+    logger,
+    options.fleetCommander,
+    options.warRoomService,
+    auditService
+  );
+
+  // Initialize tenant-scoped rate limiters
+  const rateLimiters = createPlaybookRateLimiters(logger);
 
   // List playbooks
   router.get(
@@ -170,8 +215,8 @@ export function createPlaybookRoutes(
         }
 
         if (playbook.tenantId !== auth.tenantId) {
-          // Log potential access violation
-          logger.warn({ playbookId: id, tenantId: auth.tenantId }, 'Unauthorized playbook access attempt');
+          // Log security audit for access violation
+          await auditService.logPlaybookAccessDenied(req, id, 'read');
           res.status(404).json({ error: 'Playbook not found' });
           return;
         }
@@ -188,6 +233,7 @@ export function createPlaybookRoutes(
   router.post(
     '/',
     requireScope('dashboard:write'),
+    rateLimiters.create,
     validateBody(CreatePlaybookSchema),
     async (req, res) => {
       try {
@@ -196,6 +242,10 @@ export function createPlaybookRoutes(
           tenantId: auth.tenantId,
           ...req.body
         });
+
+        // Audit log: playbook created
+        await auditService.logPlaybookCreated(req, playbook.id, playbook.name);
+
         res.status(201).json(playbook);
       } catch (error) {
         const { status, body } = handlePlaybookError(error, logger, 'create playbook');
@@ -226,7 +276,8 @@ export function createPlaybookRoutes(
         }
 
         if (existing.tenantId !== auth.tenantId) {
-          logger.warn({ playbookId: id, tenantId: auth.tenantId }, 'Unauthorized playbook update attempt');
+          // Audit log: access denied for update
+          await auditService.logPlaybookAccessDenied(req, id, 'update');
           res.status(404).json({ error: 'Playbook not found' });
           return;
         }
@@ -235,6 +286,9 @@ export function createPlaybookRoutes(
           where: { id },
           data: req.body,
         });
+
+        // Audit log: playbook updated
+        await auditService.logPlaybookUpdated(req, id, req.body);
 
         res.json(updated);
       } catch (error) {
@@ -265,7 +319,8 @@ export function createPlaybookRoutes(
         }
 
         if (existing.tenantId !== auth.tenantId) {
-          logger.warn({ playbookId: id, tenantId: auth.tenantId }, 'Unauthorized playbook delete attempt');
+          // Audit log: access denied for delete
+          await auditService.logPlaybookAccessDenied(req, id, 'delete');
           res.status(404).json({ error: 'Playbook not found' });
           return;
         }
@@ -275,6 +330,9 @@ export function createPlaybookRoutes(
           where: { id },
           data: { isActive: false },
         });
+
+        // Audit log: playbook deleted
+        await auditService.logPlaybookDeleted(req, id);
 
         res.status(204).send();
       } catch (error) {
@@ -288,6 +346,7 @@ export function createPlaybookRoutes(
   router.post(
     '/:id/run',
     requireScope('dashboard:write'),
+    rateLimiters.execute,
     validateParams(IdParamSchema),
     validateBody(RunPlaybookSchema),
     async (req, res) => {
@@ -296,7 +355,14 @@ export function createPlaybookRoutes(
         const { warRoomId } = req.body;
         const auth = req.auth!;
 
-        const run = await service.runPlaybook(id, warRoomId, auth.tenantId, auth.userId ?? 'unknown');
+        // Extract and validate user info
+        const user = extractUserInfo(auth, 'playbook execution');
+
+        const run = await service.runPlaybook(id, warRoomId, auth.tenantId, user);
+
+        // Audit log: playbook execution started
+        await auditService.logPlaybookExecutionStarted(req, run.id, id, warRoomId);
+
         res.status(201).json(run);
       } catch (error) {
         const { status, body } = handlePlaybookError(error, logger, 'run playbook');
@@ -330,7 +396,8 @@ export function createPlaybookRoutes(
         }
 
         if (run.tenantId !== auth.tenantId) {
-          logger.warn({ runId: id, tenantId: auth.tenantId }, 'Unauthorized run access attempt');
+          // Audit log: access denied for run read
+          await auditService.logPlaybookRunAccessDenied(req, id, 'read');
           res.status(404).json({ error: 'Playbook run not found' });
           return;
         }
@@ -353,47 +420,13 @@ export function createPlaybookRoutes(
         const { id } = req.params;
         const auth = req.auth!;
 
-        const run = await prisma.playbookRun.findUnique({
-          where: { id },
-        });
+        // Extract and validate user info
+        const user = extractUserInfo(auth, 'playbook cancellation');
 
-        if (!run) {
-          res.status(404).json({ error: 'Playbook run not found' });
-          return;
-        }
+        const updated = await service.cancelPlaybookRun(id, auth.tenantId, user);
 
-        if (run.tenantId !== auth.tenantId) {
-          logger.warn({ runId: id, tenantId: auth.tenantId }, 'Unauthorized run cancel attempt');
-          res.status(404).json({ error: 'Playbook run not found' });
-          return;
-        }
-
-        if (run.status !== 'RUNNING') {
-          res.status(409).json({ error: 'Only running playbooks can be cancelled' });
-          return;
-        }
-
-        const updated = await prisma.playbookRun.update({
-          where: { id },
-          data: {
-            status: 'CANCELLED',
-            completedAt: new Date(),
-          },
-        });
-
-        // Log cancellation activity
-        if (options.warRoomService) {
-          await options.warRoomService.addActivity({
-            warRoomId: run.warRoomId,
-            tenantId: auth.tenantId,
-            actorType: 'USER',
-            actorId: auth.userId ?? 'unknown',
-            actorName: 'User',
-            actionType: 'MESSAGE',
-            description: 'Playbook run cancelled',
-            metadata: { playbookRunId: id },
-          });
-        }
+        // Audit log: playbook run cancelled
+        await auditService.logPlaybookRunCancelled(req, id);
 
         res.json(updated);
       } catch (error) {
@@ -407,13 +440,17 @@ export function createPlaybookRoutes(
   router.post(
     '/runs/:id/step',
     requireScope('dashboard:write'),
+    rateLimiters.stepComplete,
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
         const { id } = req.params;
         const auth = req.auth!;
 
-        const result = await service.executeStep(id, auth.tenantId, auth.userId ?? 'unknown');
+        // Extract and validate user info
+        const user = extractUserInfo(auth, 'step execution');
+
+        const result = await service.executeStep(id, auth.tenantId, user);
         res.json(result);
       } catch (error) {
         const { status, body } = handlePlaybookError(error, logger, 'execute step');

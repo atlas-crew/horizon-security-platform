@@ -517,17 +517,23 @@ export function createFleetReleasesRoutes(
           'Rollout created'
         );
 
-        // Start rollout execution asynchronously using the orchestrator
-        orchestrator.executeRollout(auth.tenantId, rollout.id, release, sensors, {
-          strategy,
-          batchSize,
-          batchDelay,
-        }).catch((error) => {
-          logger.error({ error, rolloutId: rollout.id }, 'Rollout execution failed');
-        });
+        // Enqueue rollout for background execution
+        // This uses BullMQ to process the rollout in a worker, surviving server restarts
+        const { jobId } = await orchestrator.enqueueRollout(
+          auth.tenantId,
+          rollout.id,
+          release,
+          sensors,
+          {
+            strategy,
+            batchSize,
+            batchDelay,
+          }
+        );
 
         res.status(202).json({
           rolloutId: rollout.id,
+          jobId,
           releaseVersion: release.version,
           strategy,
           targetSensors: sensors.length,

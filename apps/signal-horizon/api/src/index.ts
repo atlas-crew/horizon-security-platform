@@ -31,6 +31,10 @@ import { RuleDistributor } from './services/fleet/rule-distributor.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
+// Job queue and workers
+import { createRolloutWorker, stopRolloutWorker, recoverStalledRollouts } from './jobs/index.js';
+import type { Worker } from 'bullmq';
+import type { RolloutJobData } from './jobs/queue.js';
 // Tunnel broker for remote access
 import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
 import { SynapseProxyService } from './services/synapse-proxy.js';
@@ -138,6 +142,7 @@ let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
 let warRoomService: WarRoomService;
 let tunnelWss: WebSocketServer;
+let rolloutWorker: Worker<RolloutJobData, void>;
 
 // ============================================================================
 // Tunnel Authentication Handler
@@ -440,6 +445,14 @@ async function start() {
   commandSender.start();
   logger.info('Protocol handlers started');
 
+  // Initialize job queue workers for background processing
+  // Check for stalled rollouts from previous server restarts
+  await recoverStalledRollouts(prisma, logger);
+
+  // Start the rollout worker (processes rollout jobs from the queue)
+  rolloutWorker = createRolloutWorker(prisma, logger, fleetCommander);
+  logger.info('Rollout worker started - background job processing enabled');
+
   // Wire up protocol handlers to sensor gateway for fleet operations
   sensorGateway.setProtocolHandlers(commandSender);
 
@@ -533,6 +546,12 @@ async function shutdown(signal: string) {
   if (sensorBridge) {
     await sensorBridge.stop();
     logger.info('Sensor bridge stopped');
+  }
+
+  // Stop job queue workers
+  if (rolloutWorker) {
+    await stopRolloutWorker(rolloutWorker, logger);
+    logger.info('Rollout worker stopped');
   }
   logger.info('Fleet services stopped');
 

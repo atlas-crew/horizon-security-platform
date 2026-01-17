@@ -1,8 +1,10 @@
 
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import type { Queue } from 'bullmq';
 import type { FleetCommander } from './fleet-commander.js';
 import { getErrorMessage } from '../../utils/errors.js';
+import { createQueue, QUEUE_NAMES, type RolloutJobData } from '../../jobs/queue.js';
 
 interface SensorInfo {
   id: string;
@@ -31,11 +33,132 @@ export class RolloutOrchestrator {
   private prisma: PrismaClient;
   private logger: Logger;
   private fleetCommander?: FleetCommander;
+  private rolloutQueue: Queue<RolloutJobData> | null = null;
 
   constructor(prisma: PrismaClient, logger: Logger, fleetCommander?: FleetCommander) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'rollout-orchestrator' });
     this.fleetCommander = fleetCommander;
+  }
+
+  /**
+   * Initialize the job queue for background rollout processing
+   * Call this during server startup to enable queue-based execution
+   */
+  initQueue(): Queue<RolloutJobData> {
+    if (!this.rolloutQueue) {
+      this.rolloutQueue = createQueue<RolloutJobData>(
+        QUEUE_NAMES.ROLLOUT,
+        this.logger
+      );
+    }
+    return this.rolloutQueue;
+  }
+
+  /**
+   * Get the rollout queue (creates if not exists)
+   */
+  getQueue(): Queue<RolloutJobData> {
+    return this.initQueue();
+  }
+
+  /**
+   * Close the queue connection gracefully
+   */
+  async closeQueue(): Promise<void> {
+    if (this.rolloutQueue) {
+      await this.rolloutQueue.close();
+      this.rolloutQueue = null;
+      this.logger.info('Rollout queue closed');
+    }
+  }
+
+  /**
+   * Enqueue a rollout for background execution
+   * This is the preferred method - it adds the job to a queue instead of executing inline
+   *
+   * @returns The job ID for tracking
+   */
+  async enqueueRollout(
+    tenantId: string,
+    rolloutId: string,
+    release: ReleaseInfo,
+    sensors: SensorInfo[],
+    options: {
+      strategy: string;
+      batchSize: number;
+      batchDelay: number;
+    }
+  ): Promise<{ jobId: string }> {
+    const queue = this.getQueue();
+
+    const job = await queue.add(
+      `rollout-${rolloutId}`,
+      {
+        tenantId,
+        rolloutId,
+        release: {
+          id: release.id,
+          version: release.version,
+          binaryUrl: release.binaryUrl,
+          sha256: release.sha256,
+          size: release.size,
+          changelog: release.changelog,
+        },
+        sensors: sensors.map((s) => ({
+          id: s.id,
+          name: s.name,
+          version: s.version,
+        })),
+        options,
+      },
+      {
+        jobId: rolloutId, // Use rolloutId as job ID for easy lookup
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 10000, // 10 seconds initial delay on retry
+        },
+      }
+    );
+
+    this.logger.info(
+      {
+        jobId: job.id,
+        rolloutId,
+        releaseVersion: release.version,
+        sensorCount: sensors.length,
+        strategy: options.strategy,
+      },
+      'Rollout job enqueued'
+    );
+
+    return { jobId: job.id! };
+  }
+
+  /**
+   * Get the status of a rollout job
+   */
+  async getJobStatus(rolloutId: string): Promise<{
+    state: string;
+    progress: number;
+    failedReason?: string;
+  } | null> {
+    const queue = this.getQueue();
+    const job = await queue.getJob(rolloutId);
+
+    if (!job) {
+      return null;
+    }
+
+    const state = await job.getState();
+    const progress = typeof job.progress === 'number' ? job.progress : 0;
+
+    return {
+      state,
+      progress,
+      failedReason: job.failedReason,
+    };
   }
 
   /**

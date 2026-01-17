@@ -524,6 +524,8 @@ model Playbook {
 
   @@index([tenantId])
   @@index([triggerType])
+  // Composite index for list queries filtered by tenant with active status
+  @@index([tenantId, isActive, updatedAt(sort: Desc)])
   @@map("playbooks")
 }
 
@@ -544,6 +546,10 @@ model PlaybookRun {
 
   @@index([warRoomId])
   @@index([playbookId])
+  // Composite index for list queries filtered by tenant with status
+  @@index([tenantId, status, startedAt(sort: Desc)])
+  // Composite index for concurrency checks (prevent duplicate runs)
+  @@index([playbookId, warRoomId, status])
   @@map("playbook_runs")
 }
 
@@ -567,6 +573,33 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// Security Audit Log - Dedicated model for compliance-focused playbook auditing
+// =============================================================================
+
+model SecurityAuditLog {
+  id           String   @id @default(uuid())
+  action       String   // PLAYBOOK_CREATED, PLAYBOOK_UPDATED, PLAYBOOK_DELETED, etc.
+  resourceType String   // playbook, playbook_run, sensor_command
+  resourceId   String
+  userId       String
+  tenantId     String
+  ipAddress    String?
+  userAgent    String?
+  result       String   // SUCCESS, FAILURE, DENIED
+  details      String?  // JSON stringified additional context
+  timestamp    DateTime @default(now())
+
+  // Optimized indexes for security audit queries
+  @@index([tenantId, timestamp(sort: Desc)])
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([action, timestamp(sort: Desc)])
+  // Composite indexes for common audit report patterns
+  @@index([tenantId, action, timestamp(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("security_audit_logs")
 }
 
 // =============================================================================

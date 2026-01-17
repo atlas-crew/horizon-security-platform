@@ -17,11 +17,18 @@
 //! - `AnomalySignal` - Individual anomaly signal with severity
 //! - `AnomalyResult` - Aggregated detection results for a request
 //!
-//! ### Schema Learning (Ported from libsynapse)
+//! ### Parameter Schema (local)
+//! - `ParameterSchema` - Expected parameters, content types, and payload sizes
+//!
+//! ### JSON Schema Learning (Ported from libsynapse)
 //! - `SchemaLearner` - Thread-safe JSON schema learning engine
 //! - `FieldSchema` - Per-field type and constraint tracking
-//! - `EndpointSchema` - Full schema for request/response bodies
+//! - `JsonEndpointSchema` - Full schema for request/response JSON bodies
 //! - `ValidationResult` - Schema violation detection
+//!
+//! **Note**: Schema learning only processes JSON object bodies. Array-root bodies
+//! (e.g., `[{...}, {...}]`) are silently skipped. APIs using arrays as the root
+//! element will not benefit from schema learning or validation.
 //!
 //! ### Storage
 //! - `ProfileStore` - Thread-safe storage with LRU eviction
@@ -52,6 +59,9 @@ pub mod profile_store;
 pub mod schema_learner;
 pub mod schema_types;
 
+// Template path interning for allocation reduction
+pub mod template_intern;
+
 // Core re-exports
 pub use distribution::{Distribution, PercentilesTracker};
 pub use endpoint_profile::EndpointProfile;
@@ -74,6 +84,9 @@ pub use schema_types::{
     SchemaViolation, ValidationResult, ViolationSeverity, ViolationType,
 };
 
+// Template interning re-exports
+pub use template_intern::{cache_stats as template_cache_stats, intern_template, normalize_and_intern};
+
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -88,12 +101,15 @@ pub struct Profiler {
     /// Endpoint profiles (template -> profile)
     profiles: Arc<RwLock<HashMap<String, EndpointProfile>>>,
     /// Learned schemas (template -> schema definition)
-    schemas: Arc<RwLock<HashMap<String, EndpointSchema>>>,
+    schemas: Arc<RwLock<HashMap<String, ParameterSchema>>>,
 }
 
-/// Learned schema for an endpoint.
+/// Learned parameter schema for an endpoint.
+///
+/// This tracks expected parameters, content types, and payload sizes for an endpoint.
+/// For JSON body schema learning (field types, constraints), see `JsonEndpointSchema`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct EndpointSchema {
+pub struct ParameterSchema {
     /// Path template
     pub template: String,
     /// Expected content types
@@ -112,7 +128,7 @@ pub struct EndpointSchema {
     pub last_updated_ms: u64,
 }
 
-impl EndpointSchema {
+impl ParameterSchema {
     /// Create a new schema from an endpoint profile.
     pub fn from_profile(profile: &EndpointProfile, param_threshold: f64) -> Self {
         let now_ms = std::time::SystemTime::now()
@@ -251,7 +267,7 @@ impl Profiler {
                 if schemas.len() < self.config.max_schemas {
                     let profiles = self.profiles.read();
                     if let Some(profile) = profiles.get(template) {
-                        let schema = EndpointSchema::from_profile(profile, 0.8);
+                        let schema = ParameterSchema::from_profile(profile, 0.8);
                         schemas.insert(template.to_string(), schema);
                     }
                 }
@@ -260,13 +276,13 @@ impl Profiler {
     }
 
     /// Get all learned schemas.
-    pub fn get_schemas(&self) -> Vec<EndpointSchema> {
+    pub fn get_schemas(&self) -> Vec<ParameterSchema> {
         let schemas = self.schemas.read();
         schemas.values().cloned().collect()
     }
 
     /// Get a specific schema by template.
-    pub fn get_schema(&self, template: &str) -> Option<EndpointSchema> {
+    pub fn get_schema(&self, template: &str) -> Option<ParameterSchema> {
         let schemas = self.schemas.read();
         schemas.get(template).cloned()
     }

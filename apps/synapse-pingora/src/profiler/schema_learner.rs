@@ -5,15 +5,24 @@
 //! - Builds schema maps per endpoint
 //! - Validates requests against learned schemas
 //!
+//! ## Limitations
+//!
+//! **Array-root bodies are not supported**: Only JSON object bodies are processed.
+//! Array-root bodies (e.g., `[{...}, {...}]`) are silently skipped. This is a known
+//! limitation for APIs that use arrays as the root element in request/response bodies.
+//! Such APIs will not benefit from schema learning or validation.
+//!
 //! ## Performance
 //! - Learn from request: ~5us typical
 //! - Validate request: ~3us typical
 //! - Thread-safe via DashMap
+//! - O(1) amortized LRU eviction via generation-tracked queue
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::profiler::patterns::detect_pattern;
@@ -26,30 +35,187 @@ use crate::profiler::schema_types::{
 // ============================================================================
 
 /// Configuration for the schema learner.
+///
+/// # Security Considerations
+///
+/// The tolerance values (`string_length_tolerance` and `number_value_tolerance`) directly
+/// impact the security posture of schema validation. These multipliers determine how much
+/// deviation from learned baselines is permitted before a request is flagged as anomalous.
+///
+/// ## Tolerance Trade-offs
+///
+/// - **Lower values (1.0-1.5)**: Stricter validation, higher security, but may cause
+///   false positives if legitimate traffic has natural variance.
+/// - **Higher values (2.0+)**: More permissive, fewer false positives, but allows
+///   attackers more room to inject oversized payloads or extreme values.
+///
+/// ## Recommendations
+///
+/// - Start with default tolerance (1.5) and monitor for false positives
+/// - For high-security APIs: consider 1.2-1.3
+/// - For APIs with high variance: consider 1.5-2.0
+/// - Never set below 1.0 (would reject valid baseline data)
+///
+/// # Example
+///
+/// ```
+/// use synapse_pingora::profiler::SchemaLearnerConfig;
+///
+/// // Stricter configuration for sensitive APIs
+/// let config = SchemaLearnerConfig {
+///     string_length_tolerance: 1.3,  // 30% buffer above learned max
+///     number_value_tolerance: 1.25,  // 25% buffer above learned max
+///     ..Default::default()
+/// };
+///
+/// // Validate config before use
+/// config.validate().expect("Invalid configuration");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaLearnerConfig {
-    /// Maximum number of endpoint schemas to track
+    /// Maximum number of endpoint schemas to track.
+    ///
+    /// When this limit is reached, the least recently used (LRU) schema is evicted.
     pub max_schemas: usize,
 
-    /// Minimum samples before validation is active
+    /// Minimum samples required before validation is active.
+    ///
+    /// Until an endpoint has been observed this many times, validation will not flag
+    /// anomalies. This prevents false positives during the initial learning phase.
     pub min_samples_for_validation: u32,
 
-    /// Maximum depth for nested object learning
+    /// Maximum depth for nested object learning.
+    ///
+    /// Prevents excessive memory usage from deeply nested JSON structures.
     pub max_nesting_depth: usize,
 
-    /// Maximum fields per schema (memory protection)
+    /// Maximum fields per schema (memory protection).
+    ///
+    /// Limits the number of fields tracked per endpoint to prevent memory exhaustion
+    /// from APIs with dynamic or unbounded field sets.
     pub max_fields_per_schema: usize,
 
-    /// String length tolerance multiplier for validation
-    /// (actual max allowed = learned_max * multiplier)
+    /// String length tolerance multiplier for validation.
+    ///
+    /// When validating string fields, the maximum allowed length is:
+    /// `learned_max_length * string_length_tolerance`
+    ///
+    /// # Security Impact
+    ///
+    /// - **Lower values (1.0-1.3)**: Catches buffer overflow attempts more aggressively
+    ///   but may flag legitimate variance as anomalous.
+    /// - **Higher values (1.5-2.0)**: More permissive, reducing false positives but
+    ///   allowing larger payloads that could exploit vulnerabilities.
+    ///
+    /// Default: 1.5 (50% buffer above learned maximum)
+    ///
+    /// # Constraints
+    ///
+    /// Must be >= 1.0. Values below 1.0 would reject strings that were seen in the
+    /// baseline training data, causing immediate false positives.
     pub string_length_tolerance: f64,
 
-    /// Number value tolerance multiplier for validation
-    /// (actual max allowed = learned_max * multiplier)
+    /// Number value tolerance multiplier for validation.
+    ///
+    /// When validating numeric fields:
+    /// - Maximum allowed: `learned_max * number_value_tolerance`
+    /// - Minimum allowed: `learned_min / number_value_tolerance`
+    ///
+    /// # Security Impact
+    ///
+    /// - **Lower values (1.0-1.3)**: Catches integer overflow attempts and extreme
+    ///   value injection more aggressively.
+    /// - **Higher values (1.5-2.0)**: More permissive for APIs with high numeric variance.
+    ///
+    /// Default: 1.5 (50% buffer on max values, 33% reduction on min values)
+    ///
+    /// # Constraints
+    ///
+    /// Must be >= 1.0. Values below 1.0 would reject values that were seen in the
+    /// baseline training data, causing immediate false positives.
     pub number_value_tolerance: f64,
 
-    /// Required field threshold (fields seen in > threshold% of requests)
+    /// Required field threshold (fields seen in > threshold% of requests).
+    ///
+    /// Fields that appear in more than this percentage of observed requests are
+    /// considered "required" and their absence will trigger a MissingField violation.
+    ///
+    /// Default: 0.9 (90% - fields must appear in 90% of samples to be required)
     pub required_field_threshold: f64,
+}
+
+/// Validation error for SchemaLearnerConfig.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigValidationError {
+    /// The field that failed validation
+    pub field: &'static str,
+    /// Description of the validation failure
+    pub message: String,
+}
+
+impl std::fmt::Display for ConfigValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid {}: {}", self.field, self.message)
+    }
+}
+
+impl std::error::Error for ConfigValidationError {}
+
+impl SchemaLearnerConfig {
+    /// Validates the configuration, ensuring all values are within acceptable ranges.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigValidationError` if:
+    /// - `string_length_tolerance` < 1.0
+    /// - `number_value_tolerance` < 1.0
+    /// - `required_field_threshold` is not in range [0.0, 1.0]
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use synapse_pingora::profiler::SchemaLearnerConfig;
+    ///
+    /// let config = SchemaLearnerConfig {
+    ///     string_length_tolerance: 0.5, // Invalid!
+    ///     ..Default::default()
+    /// };
+    ///
+    /// assert!(config.validate().is_err());
+    /// ```
+    pub fn validate(&self) -> Result<(), ConfigValidationError> {
+        if self.string_length_tolerance < 1.0 {
+            return Err(ConfigValidationError {
+                field: "string_length_tolerance",
+                message: format!(
+                    "must be >= 1.0 to avoid rejecting baseline data (got {})",
+                    self.string_length_tolerance
+                ),
+            });
+        }
+
+        if self.number_value_tolerance < 1.0 {
+            return Err(ConfigValidationError {
+                field: "number_value_tolerance",
+                message: format!(
+                    "must be >= 1.0 to avoid rejecting baseline data (got {})",
+                    self.number_value_tolerance
+                ),
+            });
+        }
+
+        if !(0.0..=1.0).contains(&self.required_field_threshold) {
+            return Err(ConfigValidationError {
+                field: "required_field_threshold",
+                message: format!(
+                    "must be between 0.0 and 1.0 (got {})",
+                    self.required_field_threshold
+                ),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for SchemaLearnerConfig {
@@ -59,10 +225,109 @@ impl Default for SchemaLearnerConfig {
             min_samples_for_validation: 10,
             max_nesting_depth: 10,
             max_fields_per_schema: 100,
-            string_length_tolerance: 2.0,
-            number_value_tolerance: 2.0,
+            string_length_tolerance: 1.5,
+            number_value_tolerance: 1.5,
             required_field_threshold: 0.9,
         }
+    }
+}
+
+// ============================================================================
+// LRU Tracker (O(1) amortized eviction)
+// ============================================================================
+
+/// Entry in the LRU queue with generation tracking.
+#[derive(Debug, Clone)]
+struct LruEntry {
+    /// The template key
+    key: String,
+    /// Generation number for this entry
+    generation: u64,
+}
+
+/// Thread-safe LRU tracker using a generation-based queue.
+///
+/// Uses a `VecDeque` as a FIFO queue with generation tracking to achieve
+/// amortized O(1) eviction. When a key is accessed, a new entry with an
+/// incremented generation is pushed to the back. During eviction, stale
+/// entries (where generation doesn't match) are skipped.
+///
+/// ## Complexity
+/// - `touch()`: O(1) - push to back of queue
+/// - `evict_oldest()`: O(1) amortized - pop from front, skip stale entries
+///
+/// ## Memory
+/// The queue may temporarily hold stale entries, but these are cleaned up
+/// during eviction. The `generations` HashMap always has at most `max_schemas`
+/// entries.
+struct LruTracker {
+    /// FIFO queue of (key, generation) pairs
+    queue: VecDeque<LruEntry>,
+    /// Current generation for each key
+    generations: HashMap<String, u64>,
+    /// Counter for assigning unique generations
+    next_generation: u64,
+}
+
+impl LruTracker {
+    /// Create a new LRU tracker with initial capacity.
+    fn new(capacity: usize) -> Self {
+        Self {
+            queue: VecDeque::with_capacity(capacity),
+            generations: HashMap::with_capacity(capacity),
+            next_generation: 0,
+        }
+    }
+
+    /// Touch a key, marking it as recently used.
+    /// Returns true if this is a new key, false if it already existed.
+    fn touch(&mut self, key: &str) -> bool {
+        let generation = self.next_generation;
+        self.next_generation = self.next_generation.wrapping_add(1);
+
+        let is_new = !self.generations.contains_key(key);
+        self.generations.insert(key.to_string(), generation);
+        self.queue.push_back(LruEntry {
+            key: key.to_string(),
+            generation,
+        });
+
+        is_new
+    }
+
+    /// Remove a key from tracking (used when schema is evicted).
+    fn remove(&mut self, key: &str) {
+        self.generations.remove(key);
+        // Note: stale entries in queue will be skipped during eviction
+    }
+
+    /// Evict the oldest key that is still valid.
+    /// Returns the key to evict, or None if empty.
+    fn evict_oldest(&mut self) -> Option<String> {
+        while let Some(entry) = self.queue.pop_front() {
+            // Check if this entry is still valid (generation matches)
+            if let Some(&current_gen) = self.generations.get(&entry.key) {
+                if current_gen == entry.generation {
+                    // This is the current entry for this key - evict it
+                    self.generations.remove(&entry.key);
+                    return Some(entry.key);
+                }
+            }
+            // Entry is stale (key was updated or removed), continue to next
+        }
+        None
+    }
+
+    /// Get number of tracked keys.
+    fn len(&self) -> usize {
+        self.generations.len()
+    }
+
+    /// Clear all entries (used during import).
+    fn clear(&mut self) {
+        self.queue.clear();
+        self.generations.clear();
+        self.next_generation = 0;
     }
 }
 
@@ -73,10 +338,13 @@ impl Default for SchemaLearnerConfig {
 /// Thread-safe schema learner for API endpoints.
 ///
 /// Uses DashMap for lock-free concurrent access to endpoint schemas.
-/// Implements LRU eviction when max_schemas is exceeded.
+/// Implements O(1) amortized LRU eviction when max_schemas is exceeded.
 pub struct SchemaLearner {
     /// Endpoint schemas indexed by template path
     schemas: DashMap<String, EndpointSchema>,
+
+    /// LRU tracker for O(1) eviction (protected by Mutex for thread safety)
+    lru: Mutex<LruTracker>,
 
     /// Configuration
     config: SchemaLearnerConfig,
@@ -98,6 +366,7 @@ impl SchemaLearner {
     pub fn with_config(config: SchemaLearnerConfig) -> Self {
         Self {
             schemas: DashMap::with_capacity(config.max_schemas),
+            lru: Mutex::new(LruTracker::new(config.max_schemas)),
             config,
         }
     }
@@ -133,16 +402,34 @@ impl SchemaLearner {
     ///
     /// Updates the endpoint schema with field types and constraints learned
     /// from the JSON body.
+    ///
+    /// # Note
+    ///
+    /// Only JSON object bodies are processed. Array-root bodies (e.g., `[{...}]`)
+    /// are silently skipped. This is a known limitation for APIs that use arrays
+    /// as the root element in request/response bodies.
     pub fn learn_from_request(&self, template: &str, request_body: &serde_json::Value) {
         self.learn_internal(template, request_body, SchemaTarget::Request);
     }
 
     /// Learn schema from a response body.
+    ///
+    /// # Note
+    ///
+    /// Only JSON object bodies are processed. Array-root bodies (e.g., `[{...}]`)
+    /// are silently skipped. This is a known limitation for APIs that use arrays
+    /// as the root element in request/response bodies.
     pub fn learn_from_response(&self, template: &str, response_body: &serde_json::Value) {
         self.learn_internal(template, response_body, SchemaTarget::Response);
     }
 
     /// Learn from both request and response.
+    ///
+    /// # Note
+    ///
+    /// Only JSON object bodies are processed. Array-root bodies (e.g., `[{...}]`)
+    /// are silently skipped. This is a known limitation for APIs that use arrays
+    /// as the root element in request/response bodies.
     pub fn learn_from_pair(
         &self,
         template: &str,
@@ -194,30 +481,34 @@ impl SchemaLearner {
 
     /// Ensure a schema exists for the template.
     fn ensure_schema(&self, template: &str, now: u64) {
+        // Fast path: schema already exists, just touch in LRU
         if self.schemas.contains_key(template) {
+            // Touch the key in LRU to mark as recently used
+            let mut lru = self.lru.lock();
+            lru.touch(template);
             return;
         }
 
-        // LRU eviction if at capacity
-        if self.schemas.len() >= self.config.max_schemas {
-            self.evict_oldest();
+        // Slow path: need to insert new schema
+        let mut lru = self.lru.lock();
+
+        // Double-check after acquiring lock (another thread may have inserted)
+        if self.schemas.contains_key(template) {
+            lru.touch(template);
+            return;
         }
 
+        // LRU eviction if at capacity (O(1) amortized)
+        if self.schemas.len() >= self.config.max_schemas {
+            if let Some(evict_key) = lru.evict_oldest() {
+                self.schemas.remove(&evict_key);
+            }
+        }
+
+        // Insert new schema and track in LRU
+        lru.touch(template);
         self.schemas
             .insert(template.to_string(), EndpointSchema::new(template.to_string(), now));
-    }
-
-    /// Evict the oldest schema (by last_updated_ms).
-    fn evict_oldest(&self) {
-        let oldest = self
-            .schemas
-            .iter()
-            .min_by_key(|entry| entry.value().last_updated_ms)
-            .map(|entry| entry.key().clone());
-
-        if let Some(key) = oldest {
-            self.schemas.remove(&key);
-        }
     }
 
     /// Update schema fields from JSON value.
@@ -574,8 +865,17 @@ impl SchemaLearner {
 
     /// Import schemas from persistence.
     pub fn import(&self, schemas: Vec<EndpointSchema>) {
+        // Clear both schemas and LRU tracker
         self.schemas.clear();
-        for schema in schemas {
+        let mut lru = self.lru.lock();
+        lru.clear();
+
+        // Re-insert all schemas, sorted by last_updated_ms to preserve LRU order
+        let mut sorted_schemas = schemas;
+        sorted_schemas.sort_by_key(|s| s.last_updated_ms);
+
+        for schema in sorted_schemas {
+            lru.touch(&schema.template);
             self.schemas.insert(schema.template.clone(), schema);
         }
     }
@@ -583,6 +883,7 @@ impl SchemaLearner {
     /// Clear all schemas.
     pub fn clear(&self) {
         self.schemas.clear();
+        self.lru.lock().clear();
     }
 }
 

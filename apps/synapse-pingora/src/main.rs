@@ -1934,7 +1934,9 @@ impl ProxyHttp for SynapseProxy {
                     // e.g., /api/users/123/posts/456 -> /api/users/{id}/posts/{id}
                     let template_path = normalize_path_to_template(uri);
 
-                    // Schema learning: train the learner with this request
+                    // Schema learning: train the learner with this request.
+                    // Note: Array-root bodies (e.g., `[{...}]`) are silently skipped;
+                    // only JSON objects are processed.
                     SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
 
                     // Schema validation: check for anomalies against learned baseline
@@ -2332,7 +2334,9 @@ impl ProxyHttp for SynapseProxy {
                         .map(normalize_path_to_template)
                         .unwrap_or_default();
 
-                    // Schema learning: train the learner with this response
+                    // Schema learning: train the learner with this response.
+                    // Note: Array-root bodies (e.g., `[{...}]`) are silently skipped;
+                    // only JSON objects are processed.
                     SCHEMA_LEARNER.learn_from_response(&template_path, &json_body);
 
                     // Schema validation: check for anomalies in backend responses

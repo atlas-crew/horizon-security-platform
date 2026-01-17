@@ -159,7 +159,7 @@ pub use shadow::{
 
 // Re-export profiler types
 pub use profiler::{
-    Profiler, EndpointProfile, EndpointSchema,
+    Profiler, EndpointProfile, ParameterSchema,
     Distribution, PercentilesTracker, RateTracker,
     AnomalyResult, AnomalySignal, AnomalySignalType,
     // Schema learning types (ported from libsynapse)

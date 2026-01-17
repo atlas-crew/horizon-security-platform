@@ -29,6 +29,7 @@ import {
   AlertFeedSkeleton,
   TableSkeleton,
 } from '../components/LoadingStates';
+import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
 
 const severityColors = {
   LOW: 'text-ac-blue bg-ac-blue/10 border-ac-blue/30',
@@ -53,47 +54,12 @@ const fallbackFingerprints = [
   { label: 'headless-chrome', value: 901 },
 ];
 
-type AttackSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-type AttackPoint = {
-  id: number;
-  lat: number;
-  lon: number;
-  severity: AttackSeverity;
-  label: string;
-  count: number;
-  scope: 'fleet' | 'local';
-  category: 'bot' | 'attack';
-};
-
-type AttackRoute = {
-  id: string;
-  from: number;
-  to: number;
-  severity: AttackSeverity;
-  category: 'bot' | 'attack';
-};
-
-const mapPoints: AttackPoint[] = [
-  { id: 1, lat: 39, lon: -77, severity: 'CRITICAL', label: 'US East', count: 1280, scope: 'fleet', category: 'attack' },
-  { id: 2, lat: -15, lon: -60, severity: 'HIGH', label: 'LATAM', count: 860, scope: 'local', category: 'bot' },
-  { id: 3, lat: 50, lon: 5, severity: 'MEDIUM', label: 'Western EU', count: 640, scope: 'fleet', category: 'attack' },
-  { id: 4, lat: 30, lon: 35, severity: 'LOW', label: 'MENA', count: 420, scope: 'local', category: 'bot' },
-  { id: 5, lat: 13, lon: 100, severity: 'HIGH', label: 'SEA', count: 980, scope: 'fleet', category: 'attack' },
-  { id: 6, lat: 35, lon: 135, severity: 'CRITICAL', label: 'APAC Core', count: 1560, scope: 'fleet', category: 'attack' },
-];
-
-const mapRoutes: AttackRoute[] = [
-  { id: 'na-eu', from: 1, to: 3, severity: 'HIGH', category: 'attack' },
-  { id: 'na-apac', from: 1, to: 6, severity: 'CRITICAL', category: 'attack' },
-  { id: 'latam-eu', from: 2, to: 3, severity: 'MEDIUM', category: 'bot' },
-  { id: 'eu-sea', from: 3, to: 5, severity: 'HIGH', category: 'attack' },
-  { id: 'mena-sea', from: 4, to: 5, severity: 'LOW', category: 'bot' },
-];
-
 const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 
 export default function OverviewPage() {
-  const { campaigns, threats, alerts, stats, isLoading } = useHorizonStore();
+  const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
+  const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading } = useAttackMap();
+  const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
 
   const filteredMapPoints = useMemo(() => {
@@ -106,7 +72,7 @@ export default function OverviewPage() {
     }
 
     return mapPoints;
-  }, [activeFilter]);
+  }, [activeFilter, mapPoints]);
 
   const filteredMapRoutes = useMemo(() => {
     const visiblePoints = new Set(filteredMapPoints.map((point) => point.id));
@@ -122,7 +88,7 @@ export default function OverviewPage() {
       }
       return true;
     });
-  }, [activeFilter, filteredMapPoints]);
+  }, [activeFilter, filteredMapPoints, mapRoutes]);
 
   const topAttackers = useMemo(() => {
     if (threats.length === 0) return fallbackAttackers;

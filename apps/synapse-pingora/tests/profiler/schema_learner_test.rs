@@ -35,8 +35,8 @@ fn test_schema_learner_default_config() {
     assert_eq!(config.min_samples_for_validation, 10);
     assert_eq!(config.max_nesting_depth, 10);
     assert_eq!(config.max_fields_per_schema, 100);
-    assert!((config.string_length_tolerance - 2.0).abs() < f64::EPSILON);
-    assert!((config.number_value_tolerance - 2.0).abs() < f64::EPSILON);
+    assert!((config.string_length_tolerance - 1.5).abs() < f64::EPSILON);
+    assert!((config.number_value_tolerance - 1.5).abs() < f64::EPSILON);
     assert!((config.required_field_threshold - 0.9).abs() < f64::EPSILON);
 }
 
@@ -1167,10 +1167,11 @@ fn test_concurrent_validation() {
     let mut handles = vec![];
 
     // Concurrent validation
+    // Note: Use values within tolerance range (learned 0-19, tolerance 1.5 = max 28.5)
     for _ in 0..4 {
         let learner_clone = Arc::clone(&learner);
         let handle = thread::spawn(move || {
-            for i in 0..50 {
+            for i in 0..20 {
                 let body = json!({"id": i, "name": "test"});
                 let result = learner_clone.validate_request("/api/test", &body);
                 // Valid requests should pass

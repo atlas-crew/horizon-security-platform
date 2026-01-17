@@ -11,7 +11,7 @@
 //! - Large values / overflow scenarios
 //! - Insufficient samples for percentiles
 
-use synapse_pingora::profiler::distribution::{Distribution, PercentilesTracker};
+use synapse_pingora::profiler::{Distribution, PercentilesTracker};
 
 // ============================================================================
 // PercentilesTracker Tests

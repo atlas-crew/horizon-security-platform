@@ -521,8 +521,8 @@ impl SchemaLearner {
         prefix: &str,
         depth: usize,
     ) {
-        // Guard against deep nesting
-        if depth > self.config.max_nesting_depth {
+        // Guard against deep nesting (depth is 0-indexed, so >= ensures max_nesting_depth levels)
+        if depth >= self.config.max_nesting_depth {
             return;
         }
 
@@ -545,12 +545,12 @@ impl SchemaLearner {
                 SchemaTarget::Response => &mut schema_guard.response_schema,
             };
 
-            // Memory protection
-            if schema_map.len() >= self.config.max_fields_per_schema {
-                return;
-            }
-
             for (key, val) in obj {
+                // Memory protection: check before adding each field
+                if schema_map.len() >= self.config.max_fields_per_schema {
+                    break;
+                }
+
                 let field_name = if prefix.is_empty() {
                     key.clone()
                 } else {

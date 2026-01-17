@@ -14,11 +14,10 @@
 use std::sync::Arc;
 use std::thread;
 
-use synapse_pingora::profiler::distribution::Distribution;
-use synapse_pingora::profiler::endpoint_profile::EndpointProfile;
-use synapse_pingora::profiler::profile_store::{ProfileStore, ProfileStoreConfig};
-use synapse_pingora::profiler::rate_tracker::RateTracker;
-use synapse_pingora::profiler::signals::{AnomalyResult, AnomalySignalType};
+use synapse_pingora::profiler::{
+    AnomalyResult, AnomalySignalType, Distribution, EndpointProfile, ProfileStore,
+    ProfileStoreConfig, RateTracker,
+};
 
 // ============================================================================
 // End-to-End Profiling Workflow
@@ -442,7 +441,7 @@ mod scenarios {
         let mut result = AnomalyResult::new();
         let unexpected: Vec<_> = attack_params
             .iter()
-            .filter(|p| !profile.expected_params.contains_key(*p))
+            .filter(|&p| profile.expected_params.get::<str>(p).is_none())
             .collect();
 
         if !unexpected.is_empty() {

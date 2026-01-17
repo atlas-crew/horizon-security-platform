@@ -12,7 +12,7 @@
 //! - Parameter bounds (MAX_PARAMS)
 //! - LRU eviction of least frequent parameters
 
-use synapse_pingora::profiler::endpoint_profile::EndpointProfile;
+use synapse_pingora::profiler::EndpointProfile;
 
 // ============================================================================
 // Construction and Basic Operations

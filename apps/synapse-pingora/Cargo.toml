@@ -120,7 +120,8 @@ opt-level = 3
 # Note: panic = "abort" removed for criterion compatibility
 
 [profile.dev]
-panic = "abort"
+# Note: panic = "abort" removed for test compatibility
+# Tests require panic = "unwind" to catch and report failures
 
-[profile.test]
-panic = "abort"
+# [profile.test]
+# Inherits from dev, which uses default panic = "unwind"

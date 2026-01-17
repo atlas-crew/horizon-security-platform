@@ -11,7 +11,7 @@
 //! - Window boundary conditions
 //! - Zero baseline for burst detection
 
-use synapse_pingora::profiler::rate_tracker::RateTracker;
+use synapse_pingora::profiler::RateTracker;
 
 // ============================================================================
 // Basic Operations

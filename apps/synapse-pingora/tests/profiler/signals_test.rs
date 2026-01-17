@@ -5,7 +5,7 @@
 //! - AnomalySignal: new, with_default_severity
 //! - AnomalyResult: none, new, add, add_signal, has_anomalies, signal_count, normalize, max_severity, signal_types, merge
 
-use synapse_pingora::profiler::signals::{AnomalyResult, AnomalySignal, AnomalySignalType};
+use synapse_pingora::profiler::{AnomalyResult, AnomalySignal, AnomalySignalType};
 
 // ============================================================================
 // AnomalySignalType Tests

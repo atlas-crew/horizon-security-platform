@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synapse SOC Overview</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+      :root {
+        color-scheme: dark;
+        --bg: #081218;
+        --bg-accent: #0f2430;
+        --surface: rgba(12, 24, 32, 0.8);
+        --surface-strong: rgba(16, 32, 42, 0.92);
+        --border: rgba(122, 168, 196, 0.25);
+        --text: #e4f1f7;
+        --muted: #9fb3be;
+        --accent: #3ac4b1;
+        --accent-strong: #68d6c6;
+        --danger: #ff6b6b;
+        --warning: #f2b45d;
+        --ok: #7bd389;
+        --shadow: 0 24px 60px rgba(6, 14, 20, 0.5);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+        background: radial-gradient(1200px 800px at 10% -20%, #173242 0%, var(--bg) 45%),
+          radial-gradient(900px 700px at 95% 0%, #112c3a 0%, transparent 60%),
+          var(--bg);
+        color: var(--text);
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+
+      .title {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .title span {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.32em;
+        color: var(--muted);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 32px;
+        font-weight: 600;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border: 1px solid var(--border);
+        color: var(--text);
+        text-decoration: none;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        font-size: 11px;
+        background: rgba(8, 18, 24, 0.7);
+        transition: all 0.2s ease;
+      }
+
+      .btn:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 20px;
+        box-shadow: var(--shadow);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .card-title {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--muted);
+      }
+
+      .actors {
+        display: grid;
+        gap: 12px;
+      }
+
+      .actor {
+        border: 1px solid rgba(122, 168, 196, 0.2);
+        padding: 12px 14px;
+        display: grid;
+        gap: 6px;
+        background: var(--surface-strong);
+      }
+
+      .actor-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .actor-id {
+        font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-strong);
+      }
+
+      .pill {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+      }
+
+      .pill.blocked {
+        color: var(--danger);
+        border-color: rgba(255, 107, 107, 0.4);
+      }
+
+      .pill.active {
+        color: var(--ok);
+        border-color: rgba(123, 211, 137, 0.4);
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .block {
+        padding: 10px 12px;
+        border: 1px solid rgba(122, 168, 196, 0.18);
+        background: rgba(12, 24, 32, 0.9);
+      }
+
+      .block .path {
+        font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-strong);
+      }
+
+      .lookup {
+        margin-top: 24px;
+      }
+
+      form {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        background: rgba(8, 18, 24, 0.8);
+        color: var(--text);
+        font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .result {
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid rgba(122, 168, 196, 0.2);
+        background: var(--surface-strong);
+        display: none;
+      }
+
+      .result.active {
+        display: block;
+      }
+
+      .result .label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .result .value {
+        font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+        margin-top: 6px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .error {
+        color: var(--danger);
+        font-size: 13px;
+      }
+
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        form {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="title">
+          <span>Synapse Sensor</span>
+          <h1>SOC Session Surface</h1>
+          <div class="subtitle">Top risk actors, recent blocks, and quick IP lookups.</div>
+        </div>
+        <a id="horizonLink" class="btn" href="#" target="_blank" rel="noreferrer">View in Signal Horizon</a>
+      </header>
+
+      <div class="grid">
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Top Actors</div>
+            <div class="meta" id="actorStats">Loading...</div>
+          </div>
+          <div class="actors" id="actors"></div>
+          <div class="empty" id="actorsEmpty" style="display:none;">No actor activity yet.</div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Recent Blocks</div>
+            <div class="meta" id="blockStats">Last 20</div>
+          </div>
+          <div class="list" id="blocks"></div>
+          <div class="empty" id="blocksEmpty" style="display:none;">No blocks recorded yet.</div>
+        </section>
+      </div>
+
+      <section class="card lookup">
+        <div class="card-header">
+          <div class="card-title">Quick IP Lookup</div>
+          <div class="meta">Resolve IP to actor summary</div>
+        </div>
+        <form id="lookupForm">
+          <input id="ipInput" type="text" placeholder="203.0.113.10" />
+          <button class="btn" type="submit">Lookup</button>
+        </form>
+        <div class="result" id="lookupResult"></div>
+        <div class="error" id="lookupError" style="display:none;"></div>
+      </section>
+    </div>
+
+    <script>
+      const horizonBase = "{{SIGNAL_HORIZON_URL}}".replace(/\/$/, "");
+      const horizonLink = document.getElementById('horizonLink');
+      horizonLink.href = horizonBase || '#';
+
+      const actorsContainer = document.getElementById('actors');
+      const actorsEmpty = document.getElementById('actorsEmpty');
+      const actorStats = document.getElementById('actorStats');
+      const blocksContainer = document.getElementById('blocks');
+      const blocksEmpty = document.getElementById('blocksEmpty');
+      const lookupForm = document.getElementById('lookupForm');
+      const ipInput = document.getElementById('ipInput');
+      const lookupResult = document.getElementById('lookupResult');
+      const lookupError = document.getElementById('lookupError');
+
+      const toTime = (ts) => {
+        if (!ts) return 'n/a';
+        const date = new Date(ts);
+        if (Number.isNaN(date.getTime())) return 'n/a';
+        return date.toLocaleString();
+      };
+
+      const fetchJson = async (url) => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      };
+
+      const renderActors = (data) => {
+        const actors = data?.actors || [];
+        actorsContainer.innerHTML = '';
+        if (actors.length === 0) {
+          actorsEmpty.style.display = 'block';
+          actorStats.textContent = 'No actors';
+          return;
+        }
+        actorsEmpty.style.display = 'none';
+        actorStats.textContent = `${actors.length} tracked`;
+        actors.forEach((actor) => {
+          const card = document.createElement('div');
+          card.className = 'actor';
+          const statusClass = actor.isBlocked ? 'blocked' : 'active';
+          const statusLabel = actor.isBlocked ? 'Blocked' : 'Active';
+          const horizonUrl = horizonBase
+            ? `${horizonBase}/actors/${actor.actorId}`
+            : '#';
+
+          card.innerHTML = `
+            <div class="actor-header">
+              <div class="actor-id">${actor.actorId}</div>
+              <div class="pill ${statusClass}">${statusLabel}</div>
+            </div>
+            <div class="meta">Risk score: ${Math.round(actor.riskScore)} · Last seen: ${toTime(actor.lastSeen)}</div>
+            <div class="meta">IPs: ${actor.ips.length} · Fingerprints: ${actor.fingerprints.length}</div>
+            <div class="actions">
+              <a class="btn" href="${horizonUrl}" target="_blank" rel="noreferrer">View in Horizon</a>
+            </div>
+          `;
+          actorsContainer.appendChild(card);
+        });
+      };
+
+      const renderBlocks = (data) => {
+        const blocks = data?.data || data || [];
+        blocksContainer.innerHTML = '';
+        if (blocks.length === 0) {
+          blocksEmpty.style.display = 'block';
+          return;
+        }
+        blocksEmpty.style.display = 'none';
+        blocks.slice(0, 20).forEach((block) => {
+          const entry = document.createElement('div');
+          entry.className = 'block';
+          entry.innerHTML = `
+            <div class="meta">${toTime(block.timestamp)} · ${block.client_ip || block.clientIp}</div>
+            <div class="path">${block.method} ${block.path}</div>
+            <div class="meta">Risk ${block.risk_score || block.riskScore} · ${block.block_reason || block.blockReason}</div>
+          `;
+          blocksContainer.appendChild(entry);
+        });
+      };
+
+      const loadData = async () => {
+        try {
+          const actors = await fetchJson('/_sensor/actors?limit=10&min_risk=1');
+          renderActors(actors);
+        } catch (err) {
+          actorStats.textContent = 'Failed to load actors';
+          actorsEmpty.style.display = 'block';
+        }
+
+        try {
+          const blocks = await fetchJson('/_sensor/blocks?limit=20');
+          renderBlocks(blocks);
+        } catch (err) {
+          blocksEmpty.style.display = 'block';
+        }
+      };
+
+      lookupForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const ip = ipInput.value.trim();
+        lookupResult.classList.remove('active');
+        lookupError.style.display = 'none';
+        if (!ip) return;
+
+        try {
+          const data = await fetchJson(`/_sensor/actors?ip=${encodeURIComponent(ip)}`);
+          const actor = (data.actors || [])[0];
+          if (!actor) {
+            lookupResult.classList.remove('active');
+            lookupError.textContent = 'No actor found for that IP.';
+            lookupError.style.display = 'block';
+            return;
+          }
+          const horizonUrl = horizonBase
+            ? `${horizonBase}/actors/${actor.actorId}`
+            : '#';
+          lookupResult.innerHTML = `
+            <div class="label">Actor</div>
+            <div class="value">${actor.actorId}</div>
+            <div class="meta">Risk ${Math.round(actor.riskScore)} · Last seen ${toTime(actor.lastSeen)}</div>
+            <div class="meta">Blocked: ${actor.isBlocked ? 'Yes' : 'No'}</div>
+            <div class="actions">
+              <a class="btn" href="${horizonUrl}" target="_blank" rel="noreferrer">View in Horizon</a>
+            </div>
+          `;
+          lookupResult.classList.add('active');
+        } catch (err) {
+          lookupError.textContent = 'Lookup failed. Check the IP format and try again.';
+          lookupError.style.display = 'block';
+        }
+      });
+
+      loadData();
+    </script>
+  </body>
+</html>

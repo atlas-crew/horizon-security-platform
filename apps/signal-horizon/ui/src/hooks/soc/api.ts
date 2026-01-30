@@ -1,0 +1,93 @@
+import { apiFetch } from '../../lib/api';
+import type {
+  SocActorDetailResponse,
+  SocActorListResponse,
+  SocActorTimelineResponse,
+  SocCampaignActorsResponse,
+  SocCampaignDetailResponse,
+  SocCampaignListResponse,
+  SocSessionDetailResponse,
+  SocSessionListResponse,
+} from '../../types/soc';
+
+export interface ActorQueryParams {
+  ip?: string;
+  fingerprint?: string;
+  minRisk?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SessionQueryParams {
+  actorId?: string;
+  suspicious?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CampaignQueryParams {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === '') return;
+    query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+export async function fetchActors(sensorId: string, params: ActorQueryParams = {}) {
+  const query = buildQuery({
+    ip: params.ip,
+    fingerprint: params.fingerprint,
+    min_risk: params.minRisk,
+    limit: params.limit,
+    offset: params.offset,
+  });
+  return apiFetch<SocActorListResponse>(`/synapse/${sensorId}/actors${query}`);
+}
+
+export async function fetchActorDetail(sensorId: string, actorId: string) {
+  return apiFetch<SocActorDetailResponse>(`/synapse/${sensorId}/actors/${actorId}`);
+}
+
+export async function fetchActorTimeline(sensorId: string, actorId: string, limit: number = 100) {
+  const query = buildQuery({ limit });
+  return apiFetch<SocActorTimelineResponse>(`/synapse/${sensorId}/actors/${actorId}/timeline${query}`);
+}
+
+export async function fetchSessions(sensorId: string, params: SessionQueryParams = {}) {
+  const query = buildQuery({
+    actor_id: params.actorId,
+    suspicious: params.suspicious,
+    limit: params.limit,
+    offset: params.offset,
+  });
+  return apiFetch<SocSessionListResponse>(`/synapse/${sensorId}/sessions${query}`);
+}
+
+export async function fetchSessionDetail(sensorId: string, sessionId: string) {
+  return apiFetch<SocSessionDetailResponse>(`/synapse/${sensorId}/sessions/${sessionId}`);
+}
+
+export async function fetchCampaigns(sensorId: string, params: CampaignQueryParams = {}) {
+  const query = buildQuery({
+    status: params.status,
+    limit: params.limit,
+    offset: params.offset,
+  });
+  return apiFetch<SocCampaignListResponse>(`/synapse/${sensorId}/campaigns${query}`);
+}
+
+export async function fetchCampaignDetail(sensorId: string, campaignId: string) {
+  return apiFetch<SocCampaignDetailResponse>(`/synapse/${sensorId}/campaigns/${campaignId}`);
+}
+
+export async function fetchCampaignActors(sensorId: string, campaignId: string) {
+  return apiFetch<SocCampaignActorsResponse>(`/synapse/${sensorId}/campaigns/${campaignId}/actors`);
+}

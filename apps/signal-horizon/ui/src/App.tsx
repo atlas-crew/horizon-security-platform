@@ -30,7 +30,12 @@ import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { DemoModeControls } from './components/beam/DemoModeControls';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import OverviewPage from './pages/OverviewPage';
-import CampaignDetailPage from './pages/CampaignDetailPage';
+import CampaignsPage from './pages/soc/CampaignsPage';
+import CampaignDetailPage from './pages/soc/CampaignDetailPage';
+import ActorsPage from './pages/soc/ActorsPage';
+import ActorDetailPage from './pages/soc/ActorDetailPage';
+import SessionsPage from './pages/soc/SessionsPage';
+import SessionDetailPage from './pages/soc/SessionDetailPage';
 import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
@@ -42,7 +47,9 @@ import { useHorizonStore } from './stores/horizonStore';
 
 const primaryNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Threat Overview' },
-  { path: '/campaigns', icon: Target, label: 'Active Campaigns' },
+  { path: '/campaigns', icon: Target, label: 'Campaigns' },
+  { path: '/actors', icon: UserPlus, label: 'Actors' },
+  { path: '/sessions', icon: Activity, label: 'Sessions' },
   { path: '/hunting', icon: Search, label: 'Threat Hunting' },
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
@@ -317,8 +324,12 @@ function App() {
             <Suspense fallback={<LoadingSpinner message="Loading page..." size="lg" />}>
               <Routes>
                 <Route path="/" element={<SignalHorizonPageWrapper><OverviewPage /></SignalHorizonPageWrapper>} />
-                <Route path="/campaigns" element={<SignalHorizonPageWrapper><CampaignDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/campaigns" element={<SignalHorizonPageWrapper><CampaignsPage /></SignalHorizonPageWrapper>} />
                 <Route path="/campaigns/:id" element={<SignalHorizonPageWrapper><CampaignDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/actors" element={<SignalHorizonPageWrapper><ActorsPage /></SignalHorizonPageWrapper>} />
+                <Route path="/actors/:id" element={<SignalHorizonPageWrapper><ActorDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/sessions" element={<SignalHorizonPageWrapper><SessionsPage /></SignalHorizonPageWrapper>} />
+                <Route path="/sessions/:id" element={<SignalHorizonPageWrapper><SessionDetailPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />

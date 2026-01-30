@@ -112,6 +112,8 @@ static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> = Lazy::new(|| {
     RwLock::new(VecDeque::with_capacity(60))
 });
 
+static SOC_DASHBOARD_TEMPLATE: &str = include_str!("../assets/soc_dashboard.html");
+
 /// Record a metrics sample (called periodically)
 fn record_metrics_sample() {
     let mut sys = System::new_all();
@@ -170,7 +172,7 @@ use axum::{
     extract::{Path, Query, Request, State},
     http::{header, Method, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -332,6 +334,7 @@ pub async fn start_admin_server(
         .route("/sites/{hostname}/shadow", get(get_site_shadow_handler))
         // Dry-run WAF evaluation endpoint (Phase 2: Lab View)
         .route("/_sensor/evaluate", post(sensor_evaluate_handler))
+        .route("/dashboard", get(sensor_dashboard_handler))
         .route("/", get(root_handler));
 
     let app = Router::new()
@@ -364,6 +367,14 @@ async fn root_handler() -> impl IntoResponse {
             { "method": "GET", "path": "/waf/stats", "description": "WAF statistics" }
         ]
     }))
+}
+
+/// GET /dashboard - Minimal SOC dashboard for synapse standalone mode
+async fn sensor_dashboard_handler() -> impl IntoResponse {
+    let horizon_url = std::env::var("SIGNAL_HORIZON_URL")
+        .unwrap_or_else(|_| "https://signal-horizon.local".to_string());
+    let html = SOC_DASHBOARD_TEMPLATE.replace("{{SIGNAL_HORIZON_URL}}", &horizon_url);
+    Html(html)
 }
 
 /// GET /health - Health check endpoint

@@ -47,6 +47,7 @@ export interface SignalResult {
   severity: Severity;
   confidence: number;
   eventCount: number;
+  metadata?: any;
 }
 
 export interface CampaignTimelineEvent {
@@ -537,7 +538,8 @@ export class HuntService {
         anon_fingerprint,
         severity,
         confidence,
-        event_count
+        event_count,
+        metadata
       FROM signal_events
       WHERE ${whereClause}
       ORDER BY timestamp DESC
@@ -565,10 +567,20 @@ export class HuntService {
       severity: signal.severity as Severity,
       confidence: signal.confidence,
       eventCount: signal.eventCount,
+      metadata: signal.metadata,
     };
   }
 
   private mapClickHouseToResult(row: ClickHouseSignalRow): SignalResult {
+    let parsedMetadata = {};
+    try {
+      if (row.metadata) {
+        parsedMetadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+
     return {
       id: row.id,
       timestamp: new Date(row.timestamp),
@@ -580,6 +592,7 @@ export class HuntService {
       severity: row.severity as Severity,
       confidence: row.confidence,
       eventCount: row.event_count,
+      metadata: parsedMetadata,
     };
   }
 
@@ -614,6 +627,7 @@ interface ClickHouseSignalRow {
   severity: string;
   confidence: number;
   event_count: number;
+  metadata?: string | Record<string, unknown> | null;
 }
 
 interface ClickHouseCampaignRow {

@@ -61,6 +61,10 @@ const SessionFilterSchema = PaginationSchema.extend({
   ),
 });
 
+const CampaignFilterSchema = PaginationSchema.extend({
+  status: z.string().optional(),
+});
+
 const AddBlockSchema = z.object({
   type: z.enum(['IP', 'FINGERPRINT', 'CIDR', 'USER_AGENT']),
   value: z.string().min(1),
@@ -143,6 +147,48 @@ export function createSynapseRoutes(
         retryable: false,
       });
     }
+  }
+
+  function normalizeConfidence(value?: number | null): number {
+    if (!value) return 0;
+    return value > 1 ? Math.min(1, value / 100) : value;
+  }
+
+  function normalizeStatus(value?: string | null): 'ACTIVE' | 'DETECTED' | 'DORMANT' | 'RESOLVED' {
+    switch ((value || '').toLowerCase()) {
+      case 'active':
+        return 'ACTIVE';
+      case 'resolved':
+        return 'RESOLVED';
+      case 'dormant':
+        return 'DORMANT';
+      case 'detected':
+      default:
+        return 'DETECTED';
+    }
+  }
+
+  function normalizeSeverity(score?: number | null): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+    const risk = score ?? 0;
+    if (risk >= 85) return 'CRITICAL';
+    if (risk >= 70) return 'HIGH';
+    if (risk >= 50) return 'MEDIUM';
+    return 'LOW';
+  }
+
+  function parseTimestamp(value?: string | null): number {
+    if (!value) return Date.now();
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
+
+  function formatCampaignName(id: string, attackTypes?: string[] | null): string {
+    const primary = attackTypes?.[0];
+    if (!primary) return `Campaign ${id}`;
+    const title = primary
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return `${title} Campaign`;
   }
 
   // ==========================================================================
@@ -581,6 +627,134 @@ export function createSynapseRoutes(
         res.json(result);
       } catch (error) {
         handleError(res, error, 'listSessions');
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Campaigns Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/campaigns
+   * List campaigns
+   */
+  router.get(
+    '/:sensorId/campaigns',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = CampaignFilterSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const result = await synapseProxy.listCampaigns(sensorId, tenantId, {
+          status: parsed.data.status,
+          limit: parsed.data.limit,
+          offset: parsed.data.offset,
+        });
+
+        const campaigns = (result.data || []).map((campaign) => ({
+          campaignId: campaign.id,
+          name: formatCampaignName(campaign.id, campaign.attackTypes),
+          status: normalizeStatus(campaign.status),
+          severity: normalizeSeverity(campaign.riskScore),
+          confidence: normalizeConfidence(campaign.confidence),
+          actorCount: campaign.actorCount ?? 0,
+          firstSeen: parseTimestamp(campaign.firstSeen),
+          lastSeen: parseTimestamp(campaign.lastActivity),
+          summary: campaign.attackTypes?.length
+            ? `Attack types: ${campaign.attackTypes.join(', ')}`
+            : null,
+          correlationTypes: campaign.attackTypes ?? [],
+        }));
+
+        const filtered = parsed.data.status
+          ? campaigns.filter((c) => c.status === normalizeStatus(parsed.data.status))
+          : campaigns;
+
+        const offset = parsed.data.offset ?? 0;
+        const limit = parsed.data.limit ?? filtered.length;
+
+        res.json({ campaigns: filtered.slice(offset, offset + limit) });
+      } catch (error) {
+        handleError(res, error, 'listCampaigns');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/campaigns/:campaignId
+   * Get campaign detail
+   */
+  router.get(
+    '/:sensorId/campaigns/:campaignId',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, campaignId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.getCampaign(sensorId, tenantId, campaignId);
+        const campaign = result.data;
+
+        res.json({
+          campaign: {
+            campaignId: campaign.id,
+            name: formatCampaignName(campaign.id, campaign.attackTypes),
+            status: normalizeStatus(campaign.status),
+            severity: normalizeSeverity(campaign.riskScore),
+            confidence: normalizeConfidence(campaign.confidence),
+            actorCount: campaign.actorCount ?? 0,
+            firstSeen: parseTimestamp(campaign.firstSeen),
+            lastSeen: parseTimestamp(campaign.lastActivity),
+            summary: campaign.attackTypes?.length
+              ? `Attack types: ${campaign.attackTypes.join(', ')}`
+              : null,
+            correlationTypes: campaign.attackTypes ?? [],
+          },
+          signals: campaign.correlationReasons?.map((reason) => ({
+            type: reason.type,
+            confidence: normalizeConfidence(reason.confidence),
+            reason: reason.description ?? null,
+          })) ?? [],
+        });
+      } catch (error) {
+        handleError(res, error, 'getCampaign');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/campaigns/:campaignId/actors
+   * Get campaign actors
+   */
+  router.get(
+    '/:sensorId/campaigns/:campaignId/actors',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, campaignId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.listCampaignActors(sensorId, tenantId, campaignId);
+        const actors = (result.actors || []).map((actor) => ({
+          actorId: actor.ip,
+          riskScore: actor.risk ?? 0,
+          lastSeen: parseTimestamp(actor.lastActivity ?? null),
+          ips: [actor.ip],
+        }));
+        res.json({ campaignId, actors });
+      } catch (error) {
+        handleError(res, error, 'listCampaignActors');
       }
     }
   );

@@ -200,10 +200,12 @@ export class SecurityAuditService {
 
       // Try to write to SecurityAuditLog if the table exists (post-migration)
       try {
-        // @ts-expect-error - securityAuditLog may not exist until migration is run
-        if (this.prisma.securityAuditLog) {
-          // @ts-expect-error - securityAuditLog may not exist until migration is run
-          await this.prisma.securityAuditLog.create({
+        const securityAuditLog = (this.prisma as unknown as {
+          securityAuditLog?: { create: (args: unknown) => Promise<unknown> };
+        }).securityAuditLog;
+
+        if (securityAuditLog) {
+          await securityAuditLog.create({
             data: {
               action: input.action,
               resourceType,

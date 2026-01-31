@@ -155,6 +155,61 @@ export interface ActorTimelineResponse {
   events: ActorTimelineEvent[];
 }
 
+export interface CampaignSummaryRaw {
+  id: string;
+  status: string;
+  actorCount: number;
+  confidence: number;
+  attackTypes: string[];
+  firstSeen: string;
+  lastActivity: string;
+  totalRequests: number;
+  blockedRequests: number;
+  rulesTriggered: number;
+  riskScore: number;
+}
+
+export interface CampaignsRawResponse {
+  data: CampaignSummaryRaw[];
+}
+
+export interface CampaignCorrelationReasonRaw {
+  type: string;
+  confidence: number;
+  description?: string | null;
+}
+
+export interface CampaignDetailRaw {
+  id: string;
+  status: string;
+  actorCount: number;
+  confidence: number;
+  attackTypes: string[];
+  firstSeen: string;
+  lastActivity: string;
+  totalRequests: number;
+  blockedRequests: number;
+  rulesTriggered: number;
+  riskScore: number;
+  correlationReasons?: CampaignCorrelationReasonRaw[];
+  resolvedAt?: string;
+  resolvedReason?: string;
+}
+
+export interface CampaignDetailRawResponse {
+  data: CampaignDetailRaw;
+}
+
+export interface CampaignActorRaw {
+  ip: string;
+  risk?: number;
+  lastActivity?: string;
+}
+
+export interface CampaignActorsRawResponse {
+  actors: CampaignActorRaw[];
+}
+
 export interface HijackAlert {
   sessionId: string;
   alertType: string;
@@ -253,6 +308,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/rules',
   '/_sensor/actors',
   '/_sensor/sessions',
+  '/_sensor/campaigns',
   '/_sensor/evaluate',
   '/_sensor/profiling',
   '/_sensor/payload',
@@ -859,6 +915,67 @@ export class SynapseProxyService extends EventEmitter {
   }
 
   /**
+   * List threat campaigns
+   */
+  async listCampaigns(
+    sensorId: string,
+    tenantId: string,
+    options?: { status?: string; limit?: number; offset?: number }
+  ): Promise<CampaignsRawResponse> {
+    const cacheKey = `campaigns:${sensorId}:${JSON.stringify(options ?? {})}`;
+    const cached = this.getFromCache<CampaignsRawResponse>(cacheKey);
+    if (cached) return cached;
+
+    const query = new URLSearchParams();
+    if (options?.status) query.set('status', options.status);
+    if (options?.limit) query.set('limit', String(options.limit));
+    if (options?.offset) query.set('offset', String(options.offset));
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await this.proxyRequest<CampaignsRawResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/campaigns${suffix}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get campaign detail
+   */
+  async getCampaign(
+    sensorId: string,
+    tenantId: string,
+    campaignId: string
+  ): Promise<CampaignDetailRawResponse> {
+    return this.proxyRequest<CampaignDetailRawResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/campaigns/${campaignId}`,
+      'GET'
+    );
+  }
+
+  /**
+   * List campaign actors
+   */
+  async listCampaignActors(
+    sensorId: string,
+    tenantId: string,
+    campaignId: string
+  ): Promise<CampaignActorsRawResponse> {
+    return this.proxyRequest<CampaignActorsRawResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/campaigns/${campaignId}/actors`,
+      'GET'
+    );
+  }
+
+  /**
    * Get session detail by ID
    */
   async getSession(
@@ -967,7 +1084,7 @@ export class SynapseProxyService extends EventEmitter {
    */
   clearSensorCache(sensorId: string): void {
     const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions'];
+    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions', 'campaigns'];
     for (const prefix of prefixes) {
       this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }

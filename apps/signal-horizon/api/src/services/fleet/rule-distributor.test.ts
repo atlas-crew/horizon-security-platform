@@ -602,7 +602,7 @@ describe('RuleDistributor', () => {
       // Verify staging command was sent with activate: false
       expect(mockFleetCommander.sendCommand).toHaveBeenCalled();
       const stagingCall = vi.mocked(mockFleetCommander.sendCommand).mock.calls[0];
-      expect(stagingCall[1].payload).toHaveProperty('activate', false);
+      expect(stagingCall[2].payload).toHaveProperty('activate', false);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({ deploymentId: expect.any(String) }),
@@ -681,7 +681,7 @@ describe('RuleDistributor', () => {
       // Verify broadcast command was called for switch
       expect(mockFleetCommander.broadcastCommand).toHaveBeenCalled();
       const broadcastCall = vi.mocked(mockFleetCommander.broadcastCommand).mock.calls[0];
-      expect(broadcastCall[0].payload).toHaveProperty('activate', true);
+      expect(broadcastCall[1].payload).toHaveProperty('activate', true);
     }, 15000);
 
     it('should rollback if staging fails', async () => {
@@ -1188,7 +1188,7 @@ describe('RuleDistributor', () => {
       await vi.advanceTimersByTimeAsync(100);
       await resultPromise;
 
-      const sentPayload = vi.mocked(mockFleetCommander.sendCommandToMultiple).mock.calls[0][1]
+      const sentPayload = vi.mocked(mockFleetCommander.sendCommandToMultiple).mock.calls[0][2]
         .payload as { hash: string };
       expect(sentPayload.hash).toBeDefined();
       expect(sentPayload.hash.length).toBe(64); // SHA-256 hex string

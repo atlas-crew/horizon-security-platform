@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useEffect, Suspense, useMemo, useState } from 'react';
 import {
   LayoutDashboard,
@@ -20,6 +20,8 @@ import {
   AlertTriangle,
   Bell,
   UserPlus,
+  Globe,
+  HelpCircle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -30,6 +32,7 @@ import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { DemoModeControls } from './components/beam/DemoModeControls';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import OverviewPage from './pages/OverviewPage';
+import LiveMapPage from './pages/soc/LiveMapPage';
 import CampaignsPage from './pages/soc/CampaignsPage';
 import CampaignDetailPage from './pages/soc/CampaignDetailPage';
 import ActorsPage from './pages/soc/ActorsPage';
@@ -41,6 +44,8 @@ import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
+import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
+import { SupportPage } from './pages/SupportPage';
 import { fleetRoutes } from './routes/fleet.routes';
 import { beamRoutes } from './routes/beam.routes';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -48,6 +53,7 @@ import { useHorizonStore } from './stores/horizonStore';
 
 const primaryNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Threat Overview' },
+  { path: '/live-map', icon: Globe, label: 'Live Threat Map' },
   { path: '/campaigns', icon: Target, label: 'Campaigns' },
   { path: '/actors', icon: UserPlus, label: 'Actors' },
   { path: '/sessions', icon: Activity, label: 'Sessions' },
@@ -56,10 +62,12 @@ const primaryNavItems = [
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/warroom', icon: Users, label: 'War Room' },
+  { path: '/support', icon: HelpCircle, label: 'Support & Docs' },
 ];
 
 const fleetNavItems = [
   { path: '/fleet', icon: Server, label: 'Fleet Overview' },
+  { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
@@ -326,6 +334,7 @@ function App() {
             <Suspense fallback={<LoadingSpinner message="Loading page..." size="lg" />}>
               <Routes>
                 <Route path="/" element={<SignalHorizonPageWrapper><OverviewPage /></SignalHorizonPageWrapper>} />
+                <Route path="/live-map" element={<SignalHorizonPageWrapper><LiveMapPage /></SignalHorizonPageWrapper>} />
                 <Route path="/campaigns" element={<SignalHorizonPageWrapper><CampaignsPage /></SignalHorizonPageWrapper>} />
                 <Route path="/campaigns/:id" element={<SignalHorizonPageWrapper><CampaignDetailPage /></SignalHorizonPageWrapper>} />
                 <Route path="/actors" element={<SignalHorizonPageWrapper><ActorsPage /></SignalHorizonPageWrapper>} />
@@ -338,12 +347,20 @@ function App() {
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
+                <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
+                <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
+                <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
+                <Route path="/support" element={<SupportPage />} />
+                
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}
                 {beamRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}
+                
+                {/* Fallback - MUST be last */}
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>
           </ErrorBoundary>

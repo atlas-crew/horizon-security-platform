@@ -1,9 +1,13 @@
 /**
  * Error handling utilities for sanitized error responses
+ *
+ * Security: Handles Prisma, Zod, and generic errors safely to prevent
+ * database schema and internal structure disclosure (WS5-004, PEN-005).
  */
 import type { Response } from 'express';
 import type { Logger } from 'pino';
 import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 
 /**
  * Structured error response format
@@ -53,6 +57,52 @@ export function sanitizeError(error: unknown): ErrorResponse {
       code: ErrorCodes.VALIDATION_ERROR,
       message: 'Validation failed',
       details: isDevelopment ? error.flatten() : undefined,
+    };
+  }
+
+  // Handle Prisma errors - never expose schema details or query structure
+  // PEN-005: Prisma errors contain sensitive database schema information
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    // Map Prisma error codes to user-friendly messages
+    const prismaErrorMap: Record<string, { code: string; message: string; status: number }> = {
+      'P2002': { code: ErrorCodes.CONFLICT, message: 'Resource already exists', status: 409 },
+      'P2025': { code: ErrorCodes.NOT_FOUND, message: 'Resource not found', status: 404 },
+      'P2003': { code: ErrorCodes.VALIDATION_ERROR, message: 'Invalid reference', status: 400 },
+      'P2014': { code: ErrorCodes.VALIDATION_ERROR, message: 'Invalid relationship', status: 400 },
+    };
+
+    const mapped = prismaErrorMap[error.code];
+    if (mapped) {
+      return {
+        code: mapped.code,
+        message: mapped.message,
+        // Only include error code (not target/meta) in development
+        details: isDevelopment ? { prismaCode: error.code } : undefined,
+      };
+    }
+
+    // Unknown Prisma code - return generic database error
+    return {
+      code: ErrorCodes.DATABASE_ERROR,
+      message: 'A database error occurred',
+      details: isDevelopment ? { prismaCode: error.code } : undefined,
+    };
+  }
+
+  // Handle Prisma validation errors (malformed queries)
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    // Never expose the validation message as it contains schema info
+    return {
+      code: ErrorCodes.VALIDATION_ERROR,
+      message: 'Invalid request',
+    };
+  }
+
+  // Handle Prisma initialization errors
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return {
+      code: ErrorCodes.DATABASE_ERROR,
+      message: 'Database connection error',
     };
   }
 

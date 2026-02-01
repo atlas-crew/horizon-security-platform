@@ -1,71 +1,43 @@
 /**
  * Request Validation Middleware
  * Zod-based validation for request params, query, and body
+ *
+ * Security: Uses sanitized error responses (WS5-004)
+ * In production, only generic messages are returned to prevent schema disclosure.
  */
 
-import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import type { RequestHandler } from 'express';
+import { createValidationMiddleware } from '../../lib/zod-sanitizer.js';
 
 /**
  * Validate route parameters
+ * Uses sanitized error responses - only generic messages in production
  */
-export function validateParams<T extends z.ZodSchema>(schema: T) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req.params);
-    if (!result.success) {
-      res.status(400).json({
-        error: 'Invalid parameters',
-        details: result.error.errors.map((e) => ({
-          path: e.path.join('.'),
-          message: e.message,
-        })),
-      });
-      return;
-    }
-    next();
-  };
+export function validateParams<T extends z.ZodSchema>(schema: T): RequestHandler {
+  return createValidationMiddleware(schema, 'params', {
+    genericMessage: 'Invalid parameters',
+  });
 }
 
 /**
  * Validate query parameters
+ * Uses sanitized error responses - only generic messages in production
  */
-export function validateQuery<T extends z.ZodSchema>(schema: T) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req.query);
-    if (!result.success) {
-      res.status(400).json({
-        error: 'Invalid query parameters',
-        details: result.error.errors.map((e) => ({
-          path: e.path.join('.'),
-          message: e.message,
-        })),
-      });
-      return;
-    }
-    next();
-  };
+export function validateQuery<T extends z.ZodSchema>(schema: T): RequestHandler {
+  return createValidationMiddleware(schema, 'query', {
+    genericMessage: 'Invalid query parameters',
+  });
 }
 
 /**
  * Validate request body
+ * Uses sanitized error responses - only generic messages in production
  */
-export function validateBody<T extends z.ZodSchema>(schema: T) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req.body);
-    if (!result.success) {
-      res.status(400).json({
-        error: 'Invalid request body',
-        details: result.error.errors.map((e) => ({
-          path: e.path.join('.'),
-          message: e.message,
-        })),
-      });
-      return;
-    }
-    // Replace body with validated/transformed data
-    req.body = result.data;
-    next();
-  };
+export function validateBody<T extends z.ZodSchema>(schema: T): RequestHandler {
+  return createValidationMiddleware(schema, 'body', {
+    genericMessage: 'Invalid request body',
+  });
 }
 
 // Common validation schemas

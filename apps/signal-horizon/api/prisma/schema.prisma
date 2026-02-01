@@ -741,6 +741,10 @@ model SensorPingoraConfig {
   allowList       String[]
   denyList        String[]
 
+  // Full Configuration Management
+  fullConfig      Json?    // Complete config structure matching Pingora Config struct
+  version         Int      @default(1)
+
   updatedAt       DateTime @updatedAt
 
   @@map("sensor_pingora_configs")

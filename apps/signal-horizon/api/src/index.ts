@@ -42,10 +42,24 @@ import { initSynapseDirectAdapter } from './services/synapse-direct.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'node:crypto';
+// Security middleware
+import { jsonDepthLimit } from './middleware/json-depth.js';
 
-// Initialize logger
+// Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
   level: config.logging.level,
+  redact: {
+    paths: [
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'req.headers["x-api-key"]',
+      'req.headers["x-auth-token"]',
+      'req.headers["x-admin-key"]',
+      // Also redact in response context
+      'res.headers["set-cookie"]',
+    ],
+    censor: '[REDACTED]',
+  },
   transport: config.isDev
     ? { target: 'pino-pretty', options: { colorize: true } }
     : undefined,
@@ -67,6 +81,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
+// JSON depth limiting to prevent stack overflow attacks (WS4-003)
+app.use(jsonDepthLimit(20));
 app.use(pinoHttp({ logger }));
 
 // Health check

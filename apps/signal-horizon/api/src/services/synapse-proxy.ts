@@ -976,6 +976,22 @@ export class SynapseProxyService extends EventEmitter {
   }
 
   /**
+   * Get campaign correlation graph
+   */
+  async getCampaignGraph(
+    sensorId: string,
+    tenantId: string,
+    campaignId: string
+  ): Promise<any> {
+    return this.proxyRequest<any>(
+      sensorId,
+      tenantId,
+      `/_sensor/campaigns/${campaignId}/graph`,
+      'GET'
+    );
+  }
+
+  /**
    * Get session detail by ID
    */
   async getSession(

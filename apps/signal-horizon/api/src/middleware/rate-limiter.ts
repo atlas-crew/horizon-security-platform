@@ -168,14 +168,14 @@ function isTrustedProxy(
   if (trustProxy === true) {
     return true;
   }
-  if (!trustProxy || trustProxy === false) {
+  if (trustProxy === false || trustProxy === undefined) {
     return false;
   }
   if (!socketIp) {
     return false;
   }
 
-  // Check against trusted proxy list
+  // Check against trusted proxy list (trustProxy is string[] at this point)
   return trustProxy.some((trusted) => ipMatchesCIDR(socketIp, trusted));
 }
 

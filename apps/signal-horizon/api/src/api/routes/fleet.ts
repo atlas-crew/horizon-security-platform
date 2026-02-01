@@ -7,7 +7,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { requireScope } from '../middleware/auth.js';
+import { requireScope, requireRole } from '../middleware/auth.js';
 import {
   validateParams,
   validateQuery,
@@ -19,6 +19,8 @@ import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
+import { SensorConfigService } from '../../services/sensorConfigService.js';
+import { SensorConfigController } from '../../controllers/sensorConfigController.js';
 
 // ======================== Validation Schemas ========================
 
@@ -118,26 +120,6 @@ const CommandIdParamSchema = z.object({
   commandId: z.string(),
 });
 
-const UpdatePingoraConfigBodySchema = z.object({
-  waf: z.object({
-    enabled: z.boolean(),
-    threshold: z.number().min(0).max(1),
-    rule_overrides: z.record(z.object({
-      enabled: z.boolean(),
-      action: z.enum(['block', 'log', 'allow'])
-    })).optional(),
-  }).optional(),
-  rateLimit: z.object({
-    enabled: z.boolean(),
-    requests_per_second: z.number().int().min(1),
-    burst: z.number().int().min(1),
-  }).optional(),
-  accessControl: z.object({
-    allow: z.string().array(),
-    deny: z.string().array(),
-  }).optional(),
-});
-
 const PingoraActionBodySchema = z.object({
   action: z.enum(['test', 'reload', 'restart']),
 });
@@ -157,6 +139,16 @@ export function createFleetRoutes(
   const router = Router();
   const { fleetAggregator, configManager, fleetCommander, ruleDistributor } =
     options;
+
+  // Initialize Sensor Config Controller
+  // We assume fleetCommander is available for sensor config operations
+  // If not, the controller will fail gracefully or we can guard routes
+  const sensorConfigService = fleetCommander 
+    ? new SensorConfigService(prisma, logger, fleetCommander) 
+    : null;
+  const sensorConfigController = sensorConfigService 
+    ? new SensorConfigController(sensorConfigService) 
+    : null;
 
   // ======================== Fleet Metrics ========================
 
@@ -818,6 +810,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/actions/restart',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
@@ -860,6 +853,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/diagnostics/run',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
@@ -910,53 +904,10 @@ const SensorLogsQuerySchema = z.object({
     requireScope('fleet:read'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
-      try {
-        const { sensorId } = req.params;
-
-        let config = await prisma.sensorPingoraConfig.findUnique({
-          where: { sensorId },
-        });
-
-        // Create default if not exists
-        if (!config) {
-          config = await prisma.sensorPingoraConfig.create({
-            data: {
-              sensorId,
-              wafEnabled: true,
-              wafThreshold: 0.5,
-              rateLimitEnabled: true,
-              rps: 100,
-              burst: 50,
-              allowList: [],
-              denyList: [],
-            },
-          });
-        }
-
-        res.json({
-          waf: {
-            enabled: config.wafEnabled,
-            threshold: config.wafThreshold,
-            rule_overrides: config.wafOverrides || {},
-          },
-          rateLimit: {
-            enabled: config.rateLimitEnabled,
-            requests_per_second: config.rps,
-            burst: config.burst,
-          },
-          accessControl: {
-            allow: config.allowList,
-            deny: config.denyList,
-          },
-          updatedAt: config.updatedAt,
-        });
-      } catch (error) {
-        logger.error({ error }, 'Failed to get Pingora config');
-        res.status(500).json({
-          error: 'Failed to get Pingora config',
-          message: getErrorMessage(error),
-        });
+      if (!sensorConfigController) {
+        return res.status(503).json({ error: 'Sensor config service not available' });
       }
+      return sensorConfigController.getConfig(req, res);
     }
   );
 
@@ -967,60 +918,13 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/config/pingora',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateParams(SensorIdParamSchema),
-    validateBody(UpdatePingoraConfigBodySchema),
     async (req, res) => {
-      try {
-        const { sensorId } = req.params;
-        const body = req.body as z.infer<typeof UpdatePingoraConfigBodySchema>;
-        const auth = req.auth!;
-
-        // 1. Persist to DB
-        const updateData: any = {};
-        if (body.waf) {
-          updateData.wafEnabled = body.waf.enabled;
-          updateData.wafThreshold = body.waf.threshold;
-          updateData.wafOverrides = body.waf.rule_overrides;
-        }
-        if (body.rateLimit) {
-          updateData.rateLimitEnabled = body.rateLimit.enabled;
-          updateData.rps = body.rateLimit.requests_per_second;
-          updateData.burst = body.rateLimit.burst;
-        }
-        if (body.accessControl) {
-          updateData.allowList = body.accessControl.allow;
-          updateData.denyList = body.accessControl.deny;
-        }
-
-        const config = await prisma.sensorPingoraConfig.upsert({
-          where: { sensorId },
-          create: { sensorId, ...updateData },
-          update: updateData,
-        });
-
-        // 2. Dispatch command to sensor
-        if (fleetCommander) {
-          await fleetCommander.sendCommand(auth.tenantId, sensorId, {
-            type: 'push_config',
-            payload: {
-              component: 'pingora',
-              config: {
-                waf: body.waf,
-                rateLimit: body.rateLimit,
-                accessControl: body.accessControl,
-              },
-            },
-          });
-        }
-
-        res.json({ message: 'Configuration update initiated', config });
-      } catch (error) {
-        logger.error({ error }, 'Failed to update Pingora config');
-        res.status(500).json({
-          error: 'Failed to update Pingora config',
-          message: getErrorMessage(error),
-        });
+      if (!sensorConfigController) {
+        return res.status(503).json({ error: 'Sensor config service not available' });
       }
+      return sensorConfigController.updateConfig(req, res);
     }
   );
 
@@ -1031,6 +935,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/actions/pingora',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateParams(SensorIdParamSchema),
     validateBody(PingoraActionBodySchema),
     async (req, res) => {
@@ -1157,6 +1062,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/config/templates',
     requireScope('config:write'),
+    requireRole('operator'),
     validateBody(CreateConfigTemplateBodySchema),
     async (req, res) => {
       try {
@@ -1238,6 +1144,7 @@ const SensorLogsQuerySchema = z.object({
   router.put(
     '/config/templates/:id',
     requireScope('config:write'),
+    requireRole('operator'),
     validateParams(IdParamSchema),
     validateBody(UpdateConfigTemplateBodySchema),
     async (req, res) => {
@@ -1279,6 +1186,7 @@ const SensorLogsQuerySchema = z.object({
   router.delete(
     '/config/templates/:id',
     requireScope('config:write'),
+    requireRole('admin'),
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
@@ -1309,6 +1217,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/config/push',
     requireScope('config:write'),
+    requireRole('operator'),
     validateBody(PushConfigBodySchema),
     async (req, res) => {
       try {
@@ -1410,6 +1319,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/commands',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateBody(SendCommandBodySchema),
     async (req, res) => {
       try {
@@ -1489,6 +1399,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/commands/:commandId/cancel',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateParams(CommandIdParamSchema),
     async (req, res) => {
       try {
@@ -1592,6 +1503,7 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/rules/push',
     requireScope('fleet:write'),
+    requireRole('operator'),
     validateBody(PushRulesBodySchema),
     async (req, res) => {
       try {

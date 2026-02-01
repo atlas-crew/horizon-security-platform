@@ -123,3 +123,81 @@ export function requireScope(...requiredScopes: string[]) {
     next();
   };
 }
+
+/**
+ * Role definitions with scope mappings (WS2-009)
+ *
+ * Role hierarchy: viewer < operator < admin
+ * Each role includes all permissions of lower roles.
+ */
+export type Role = 'viewer' | 'operator' | 'admin';
+
+const ROLE_HIERARCHY: Record<Role, number> = {
+  viewer: 0,
+  operator: 1,
+  admin: 2,
+};
+
+/**
+ * Map scopes to effective role
+ * Admin: fleet:admin or *:admin scope
+ * Operator: fleet:write, config:write, command:execute
+ * Viewer: any valid authentication (default)
+ */
+function deriveRole(scopes: string[]): Role {
+  // Check for admin
+  if (scopes.some((s) => s === 'fleet:admin' || s.endsWith(':admin'))) {
+    return 'admin';
+  }
+
+  // Check for operator
+  const operatorScopes = ['fleet:write', 'config:write', 'command:execute', 'rules:write'];
+  if (scopes.some((s) => operatorScopes.includes(s))) {
+    return 'operator';
+  }
+
+  // Default to viewer
+  return 'viewer';
+}
+
+/**
+ * Require a minimum role level for a route (WS2-009)
+ *
+ * Role hierarchy:
+ * - viewer: Can read data
+ * - operator: Can modify operational settings (config, commands)
+ * - admin: Full access including security-sensitive operations
+ *
+ * @example
+ * router.get('/sensors', requireRole('viewer'), listSensors);
+ * router.post('/commands', requireRole('operator'), sendCommand);
+ * router.delete('/templates/:id', requireRole('admin'), deleteTemplate);
+ */
+export function requireRole(minRole: Role) {
+  return function roleMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): void {
+    if (!req.auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const userRole = deriveRole(req.auth.scopes);
+    const userLevel = ROLE_HIERARCHY[userRole];
+    const requiredLevel = ROLE_HIERARCHY[minRole];
+
+    if (userLevel < requiredLevel) {
+      res.status(403).json({
+        error: `Requires ${minRole} role`,
+        code: 'INSUFFICIENT_ROLE',
+        currentRole: userRole,
+        requiredRole: minRole,
+      });
+      return;
+    }
+
+    next();
+  };
+}

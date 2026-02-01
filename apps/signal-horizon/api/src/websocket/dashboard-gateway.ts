@@ -19,6 +19,7 @@ import {
   validateDashboardMessage,
   type ValidatedDashboardMessage,
 } from '../schemas/signal.js';
+import { WebSocketRateLimiter } from '../lib/ws-rate-limiter.js';
 
 interface DashboardConnection {
   id: string;
@@ -29,6 +30,8 @@ interface DashboardConnection {
   connectedAt: number;
   lastPong: number;
   subscriptions: Set<string>; // e.g., 'campaigns', 'threats', 'blocklist'
+  /** API key ID for periodic revalidation (WS2-002) */
+  apiKeyId: string | null;
 }
 
 interface DashboardGatewayConfig {
@@ -42,14 +45,21 @@ interface DashboardGatewayConfig {
 
 const AUTH_TIMEOUT_MS = 10000;
 
+/** Interval for token revalidation (WS2-002) */
+const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 export class DashboardGateway {
   private wss: WebSocketServer | null = null;
   private connections: Map<string, DashboardConnection> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  /** Interval for checking token validity (WS2-002) */
+  private revalidateInterval: NodeJS.Timeout | null = null;
   private prisma: PrismaClient;
   private logger: Logger;
   private config: DashboardGatewayConfig;
   private sequenceId = 0;
+  /** Rate limiter for message flooding protection (WS-SEC-001) */
+  private rateLimiter: WebSocketRateLimiter;
 
   constructor(
     prisma: PrismaClient,
@@ -59,6 +69,13 @@ export class DashboardGateway {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'dashboard' });
     this.config = config;
+
+    // Initialize rate limiter: 50 msg/s with burst of 75 (dashboard sends less than sensors)
+    this.rateLimiter = new WebSocketRateLimiter({
+      maxMessagesPerSecond: 50,
+      burstLimit: 75,
+      disconnectOnExceed: true,
+    });
 
     this.wss = new WebSocketServer({
       noServer: true,
@@ -77,6 +94,7 @@ export class DashboardGateway {
     });
 
     this.startHeartbeat();
+    this.startTokenRevalidation(); // WS2-002: Periodic token validation
     this.logger.info({ path: this.config.path }, 'Dashboard gateway started');
   }
 
@@ -95,6 +113,11 @@ export class DashboardGateway {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+
+    if (this.revalidateInterval) {
+      clearInterval(this.revalidateInterval);
+      this.revalidateInterval = null;
     }
 
     for (const conn of this.connections.values()) {
@@ -126,6 +149,7 @@ export class DashboardGateway {
       connectedAt: Date.now(),
       lastPong: Date.now(),
       subscriptions: new Set(), // Empty until authenticated
+      apiKeyId: null, // Set after authentication for revalidation
     };
 
     this.connections.set(connectionId, conn);
@@ -149,6 +173,27 @@ export class DashboardGateway {
     }, AUTH_TIMEOUT_MS);
 
     ws.on('message', async (data) => {
+      // Rate limit check (WS-SEC-001: DoS protection)
+      const rateLimitResult = this.rateLimiter.checkLimit(connectionId);
+      if (!rateLimitResult.allowed) {
+        this.logger.warn(
+          { connectionId, remaining: rateLimitResult.remaining },
+          'Dashboard rate limit exceeded'
+        );
+        if (rateLimitResult.shouldDisconnect) {
+          ws.close(4029, 'Rate limit exceeded');
+          this.connections.delete(connectionId);
+          this.rateLimiter.removeConnection(connectionId);
+          return;
+        }
+        this.send(conn, {
+          type: 'error',
+          error: 'Rate limit exceeded, slow down',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
       try {
         const parsed = JSON.parse(data.toString());
         const validation = validateDashboardMessage(parsed);
@@ -176,6 +221,7 @@ export class DashboardGateway {
     ws.on('close', () => {
       clearTimeout(authTimeout);
       this.connections.delete(connectionId);
+      this.rateLimiter.removeConnection(connectionId); // Clean up rate limiter state
       this.logger.info({ connectionId }, 'Dashboard disconnected');
     });
 
@@ -277,6 +323,7 @@ export class DashboardGateway {
       conn.isAuthenticated = true;
       conn.tenantId = apiKeyRecord.tenantId;
       conn.isFleetAdmin = apiKeyRecord.scopes.includes('fleet:admin');
+      conn.apiKeyId = apiKeyRecord.id; // Store for revalidation (WS2-002)
 
       // Set default subscriptions after auth
       conn.subscriptions = new Set(['campaigns', 'threats', 'blocklist']);
@@ -408,6 +455,59 @@ export class DashboardGateway {
         }
       }
     }, this.config.heartbeatIntervalMs);
+  }
+
+  /**
+   * Periodic token revalidation (WS2-002)
+   * Checks if API keys have been revoked or expired since authentication.
+   * Disconnects clients with invalid tokens within 5 minutes.
+   */
+  private startTokenRevalidation(): void {
+    this.revalidateInterval = setInterval(async () => {
+      const authenticatedConns = Array.from(this.connections.entries())
+        .filter(([, conn]) => conn.isAuthenticated && conn.apiKeyId);
+
+      if (authenticatedConns.length === 0) return;
+
+      // Batch fetch API key status for all authenticated connections
+      const apiKeyIds = authenticatedConns.map(([, conn]) => conn.apiKeyId!);
+
+      try {
+        const validKeys = await this.prisma.apiKey.findMany({
+          where: {
+            id: { in: apiKeyIds },
+            isRevoked: false,
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } },
+            ],
+          },
+          select: { id: true },
+        });
+
+        const validKeyIds = new Set(validKeys.map((k) => k.id));
+
+        // Disconnect connections with invalid tokens
+        for (const [id, conn] of authenticatedConns) {
+          if (!conn.apiKeyId || !validKeyIds.has(conn.apiKeyId)) {
+            this.logger.warn(
+              { connectionId: id, apiKeyId: conn.apiKeyId },
+              'Disconnecting client with revoked/expired token'
+            );
+            this.send(conn, {
+              type: 'auth-revoked',
+              error: 'API key has been revoked or expired',
+              timestamp: Date.now(),
+            });
+            conn.ws.close(4001, 'Token revoked');
+            this.connections.delete(id);
+            this.rateLimiter.removeConnection(id);
+          }
+        }
+      } catch (error) {
+        this.logger.error({ error }, 'Token revalidation failed');
+      }
+    }, TOKEN_REVALIDATE_INTERVAL_MS);
   }
 
   private send(conn: DashboardConnection, message: Record<string, unknown>): void {

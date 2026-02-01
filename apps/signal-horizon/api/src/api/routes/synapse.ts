@@ -760,6 +760,26 @@ export function createSynapseRoutes(
   );
 
   /**
+   * GET /synapse/:sensorId/campaigns/:campaignId/graph
+   * Get campaign correlation graph
+   */
+  router.get(
+    '/:sensorId/campaigns/:campaignId/graph',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, campaignId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.getCampaignGraph(sensorId, tenantId, campaignId);
+        res.json(result);
+      } catch (error) {
+        handleError(res, error, 'getCampaignGraph');
+      }
+    }
+  );
+
+  /**
    * GET /synapse/:sensorId/sessions/:sessionId
    * Get session detail
    */

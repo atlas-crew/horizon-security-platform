@@ -257,7 +257,7 @@ mod store_basic {
 
         {
             let mut profile = store.get_or_create("/api/users");
-            profile.update(100, &["name"], None, 1000);
+            profile.update(100, &[("name", "John")], None, 1000);
         }
 
         {
@@ -710,7 +710,12 @@ mod concurrent {
 
     #[test]
     fn test_concurrent_get_or_create() {
-        let store = Arc::new(ProfileStore::default());
+        // Disable segment detection to keep paths as-is for unique counting
+        let config = ProfileStoreConfig {
+            enable_segment_detection: false,
+            ..Default::default()
+        };
+        let store = Arc::new(ProfileStore::new(config));
         let mut handles = vec![];
 
         for i in 0..10 {

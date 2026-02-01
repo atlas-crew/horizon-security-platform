@@ -56,6 +56,13 @@ fn test_manager() -> CampaignManager {
         // Network proximity detector (weight: 15)
         network_min_ips: 2,
         network_check_subnet: true,
+        // Graph correlation detector (weight: 20)
+        graph_min_component_size: 3,
+        graph_max_depth: 3,
+        graph_edge_ttl: Duration::from_secs(3600),
+        // Automated Response
+        auto_mitigation_enabled: false,
+        auto_mitigation_threshold: 0.90,
     };
     CampaignManager::with_config(config)
 }

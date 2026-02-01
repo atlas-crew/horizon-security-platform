@@ -19,6 +19,7 @@
 //! @see https://github.com/FoxIO-LLC/ja4
 
 mod ja4;
+mod integrity;
 
 pub use ja4::{
     // Types
@@ -44,4 +45,9 @@ pub use ja4::{
     // Analysis
     analyze_ja4,
     analyze_ja4h,
+};
+
+pub use integrity::{
+    analyze_integrity,
+    IntegrityAnalysis,
 };

@@ -43,6 +43,7 @@ pub enum EventType {
     ConfigReload,
     ServiceHealth,
     SensorReport,
+    CampaignReport,
 }
 
 /// Telemetry event payload.
@@ -88,6 +89,14 @@ pub enum TelemetryEvent {
         signal: ExternalSignalContext,
         request: ExternalRequestContext,
     },
+    CampaignReport {
+        campaign_id: String,
+        confidence: f64,
+        attack_types: Vec<String>,
+        actor_count: usize,
+        correlation_reasons: Vec<String>,
+        timestamp_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,6 +130,7 @@ impl TelemetryEvent {
             Self::ConfigReload { .. } => EventType::ConfigReload,
             Self::ServiceHealth { .. } => EventType::ServiceHealth,
             Self::SensorReport { .. } => EventType::SensorReport,
+            Self::CampaignReport { .. } => EventType::CampaignReport,
         }
     }
 }

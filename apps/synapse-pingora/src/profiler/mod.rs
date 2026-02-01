@@ -62,9 +62,12 @@ pub mod schema_types;
 // Template path interning for allocation reduction
 pub mod template_intern;
 
+#[cfg(test)]
+mod value_analysis_tests;
+
 // Core re-exports
 pub use distribution::{Distribution, PercentilesTracker};
-pub use endpoint_profile::EndpointProfile;
+pub use endpoint_profile::{EndpointProfile, ParamStats, redact_value, is_likely_pii};
 pub use rate_tracker::RateTracker;
 pub use signals::{AnomalyResult, AnomalySignal, AnomalySignalType};
 
@@ -118,6 +121,8 @@ pub struct ParameterSchema {
     pub required_params: Vec<String>,
     /// Optional parameters
     pub optional_params: Vec<String>,
+    /// Parameter statistics (value analysis)
+    pub param_stats: HashMap<String, ParamStats>,
     /// Minimum payload size
     pub min_payload_size: usize,
     /// Maximum payload size
@@ -147,7 +152,12 @@ impl ParameterSchema {
         // Separate required (>80% frequency) vs optional params
         let mut required_params = Vec::new();
         let mut optional_params = Vec::new();
-        for (param, _) in &profile.expected_params {
+        let mut param_stats = HashMap::new();
+
+        for (param, stats) in &profile.expected_params {
+            // Clone stats for schema
+            param_stats.insert(param.clone(), stats.clone());
+
             if profile.param_frequency(param) >= param_threshold {
                 required_params.push(param.clone());
             } else {
@@ -160,6 +170,7 @@ impl ParameterSchema {
             expected_content_types,
             required_params,
             optional_params,
+            param_stats,
             min_payload_size: profile.payload_size.min() as usize,
             max_payload_size: profile.payload_size.max() as usize,
             sample_count: profile.sample_count,
@@ -208,11 +219,14 @@ impl Profiler {
     }
 
     /// Update an endpoint profile with request data.
+    ///
+    /// Respects the `freeze_after_samples` setting to prevent model poisoning.
+    /// If a profile has reached the freeze threshold, updates are silently ignored.
     pub fn update_profile(
         &self,
         template: &str,
         payload_size: usize,
-        params: &[&str],
+        params: &[(&str, &str)],
         content_type: Option<&str>,
     ) {
         if !self.config.enabled {
@@ -227,11 +241,49 @@ impl Profiler {
         let mut profiles = self.profiles.write();
 
         if let Some(profile) = profiles.get_mut(template) {
+            // Check if profile is frozen (anti-poisoning measure)
+            if self.config.freeze_after_samples > 0
+                && profile.sample_count >= self.config.freeze_after_samples
+            {
+                return; // Profile frozen, reject updates
+            }
             profile.update(payload_size, params, content_type, now_ms);
         } else if profiles.len() < self.config.max_profiles {
             let mut profile = EndpointProfile::new(template.to_string(), now_ms);
             profile.update(payload_size, params, content_type, now_ms);
             profiles.insert(template.to_string(), profile);
+        }
+    }
+
+    /// Update an endpoint profile with response data.
+    ///
+    /// Respects the `freeze_after_samples` setting to prevent model poisoning.
+    pub fn update_response_profile(
+        &self,
+        template: &str,
+        response_size: usize,
+        status_code: u16,
+        content_type: Option<&str>,
+    ) {
+        if !self.config.enabled {
+            return;
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        let mut profiles = self.profiles.write();
+
+        if let Some(profile) = profiles.get_mut(template) {
+            // Check if profile is frozen (anti-poisoning measure)
+            if self.config.freeze_after_samples > 0
+                && profile.sample_count >= self.config.freeze_after_samples
+            {
+                return; // Profile frozen, reject updates
+            }
+            profile.update_response(response_size, status_code, content_type, now_ms);
         }
     }
 
@@ -303,11 +355,13 @@ impl Profiler {
     }
 
     /// Analyze a request against the learned profile.
+    ///
+    /// Uses configurable thresholds for anomaly detection and optional PII redaction.
     pub fn analyze_request(
         &self,
         template: &str,
         payload_size: usize,
-        params: &[&str],
+        params: &[(&str, &str)],
         content_type: Option<&str>,
     ) -> AnomalyResult {
         if !self.config.enabled {
@@ -322,15 +376,15 @@ impl Profiler {
 
         let mut result = AnomalyResult::new();
 
-        // Check payload size anomaly
+        // Check payload size anomaly using configurable threshold
         let z_score = profile.payload_size.z_score(payload_size as f64);
-        if z_score > 3.0 {
+        if z_score > self.config.payload_z_threshold {
             result.add(
                 AnomalySignalType::PayloadSizeHigh,
                 (z_score.min(10.0) as u8).max(1),
                 format!("Payload size {} is {:.1} std devs above mean", payload_size, z_score),
             );
-        } else if z_score < -3.0 {
+        } else if z_score < -self.config.payload_z_threshold {
             result.add(
                 AnomalySignalType::PayloadSizeLow,
                 2,
@@ -338,14 +392,58 @@ impl Profiler {
             );
         }
 
-        // Check for unexpected parameters
-        for &param in params {
+        // Check for unexpected parameters and value anomalies
+        for &(param, value) in params {
             if profile.param_frequency(param) < 0.01 {
+                // Redact value if PII protection is enabled
+                let display_value = if self.config.redact_pii && is_likely_pii(value) {
+                    redact_value(value)
+                } else {
+                    value.to_string()
+                };
                 result.add(
                     AnomalySignalType::UnexpectedParam,
                     3,
-                    format!("Unexpected parameter: {}", param),
+                    format!("Unexpected parameter: {} (value: {})", param, display_value),
                 );
+            } else if let Some(stats) = profile.expected_params.get(param) {
+                // Value length analysis using configurable threshold
+                let len_z = stats.length_dist.z_score(value.len() as f64);
+                if len_z > self.config.param_z_threshold {
+                    // Redact value if PII protection is enabled
+                    let display_value = if self.config.redact_pii && is_likely_pii(value) {
+                        redact_value(value)
+                    } else if self.config.redact_pii && value.len() > 20 {
+                        // Redact long values that might contain sensitive data
+                        redact_value(value)
+                    } else {
+                        value.to_string()
+                    };
+                    result.add(
+                        AnomalySignalType::ParamValueAnomaly,
+                        (len_z.min(10.0) as u8).max(1),
+                        format!(
+                            "Parameter {} length {} is anomalous (z={:.1}, value: {})",
+                            param, value.len(), len_z, display_value
+                        ),
+                    );
+                }
+
+                // Type check (if numeric is dominant)
+                // FIX: Prevent division by zero when stats.count is 0
+                if stats.count > 0 {
+                    let numeric_ratio = *stats.type_counts.get("numeric").unwrap_or(&0) as f64
+                        / stats.count as f64;
+                    if numeric_ratio > self.config.type_ratio_threshold {
+                        if value.parse::<f64>().is_err() {
+                            result.add(
+                                AnomalySignalType::ParamValueAnomaly,
+                                5,
+                                format!("Parameter {} expected numeric, got string", param),
+                            );
+                        }
+                    }
+                }
             }
         }
 
@@ -365,6 +463,82 @@ impl Profiler {
         result.normalize();
         result
     }
+
+    /// Analyze a response against the learned profile.
+    ///
+    /// Uses configurable thresholds for response size anomaly detection.
+    pub fn analyze_response(
+        &self,
+        template: &str,
+        response_size: usize,
+        status_code: u16,
+        content_type: Option<&str>,
+    ) -> AnomalyResult {
+        if !self.config.enabled {
+            return AnomalyResult::none();
+        }
+
+        let profiles = self.profiles.read();
+        let profile = match profiles.get(template) {
+            Some(p) if p.is_mature(self.config.min_samples_for_validation) => p,
+            _ => return AnomalyResult::none(),
+        };
+
+        let mut result = AnomalyResult::new();
+
+        // Check response size anomaly (potential data leak) using configurable threshold
+        let size_z = profile.response_size.z_score(response_size as f64);
+        if size_z > self.config.response_z_threshold {
+            result.add(
+                AnomalySignalType::PayloadSizeHigh, // Re-using PayloadSizeHigh for response too
+                (size_z.min(10.0) as u8).max(1),
+                format!("Response size {} is {:.1} std devs above mean (possible leak)", response_size, size_z),
+            );
+        }
+
+        // Check status code anomaly (error spike)
+        if status_code >= 500 {
+            let error_rate = profile.error_rate();
+            if error_rate < 0.05 { // Normally stable endpoint
+                result.add(
+                    AnomalySignalType::AbnormalErrorRate,
+                    5,
+                    format!("Unexpected 5xx error (usual rate: {:.1}%)", error_rate * 100.0),
+                );
+            }
+        }
+
+        // Check content type mismatch
+        if let Some(ct) = content_type {
+            if let Some(dominant) = profile.dominant_response_content_type() {
+                if ct != dominant && !profile.response_content_types.contains_key(ct) {
+                    result.add(
+                        AnomalySignalType::ContentTypeMismatch,
+                        3,
+                        format!("Response Content-Type {} not seen before (expected {})", ct, dominant),
+                    );
+                }
+            }
+        }
+
+        result.normalize();
+        result
+    }
+
+    /// Check if a profile is frozen (no longer accepts updates).
+    ///
+    /// Frozen baselines help prevent model poisoning attacks where attackers
+    /// gradually shift the baseline to make malicious patterns appear normal.
+    pub fn is_profile_frozen(&self, template: &str) -> bool {
+        if self.config.freeze_after_samples == 0 {
+            return false; // Freezing disabled
+        }
+        let profiles = self.profiles.read();
+        profiles
+            .get(template)
+            .map(|p| p.sample_count >= self.config.freeze_after_samples)
+            .unwrap_or(false)
+    }
 }
 
 #[cfg(test)]
@@ -377,6 +551,7 @@ mod tests {
             max_profiles: 100,
             max_schemas: 50,
             min_samples_for_validation: 10,
+            ..Default::default()
         }
     }
 
@@ -392,7 +567,7 @@ mod tests {
     fn test_profiler_update_and_get_profile() {
         let profiler = Profiler::new(default_config());
 
-        profiler.update_profile("/api/users", 100, &["name", "email"], Some("application/json"));
+        profiler.update_profile("/api/users", 100, &[("name", "alice"), ("email", "a@example.com")], Some("application/json"));
 
         assert_eq!(profiler.profile_count(), 1);
 
@@ -439,7 +614,7 @@ mod tests {
 
         // Add samples
         for i in 0..10 {
-            profiler.update_profile("/api/users", 100 + i, &["name"], Some("application/json"));
+            profiler.update_profile("/api/users", 100 + i, &[("name", "alice")], Some("application/json"));
         }
 
         profiler.learn_schema("/api/users");

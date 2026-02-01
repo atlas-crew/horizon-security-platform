@@ -28,9 +28,119 @@ const MAX_CONTENT_TYPES: usize = 20;
 /// Maximum number of parameters to track per endpoint.
 const MAX_PARAMS: usize = 50;
 
+/// Maximum number of type categories per parameter (prevents memory exhaustion).
+/// Type categories include: "numeric", "string", "email", "uuid"
+const DEFAULT_MAX_TYPE_COUNTS: usize = 10;
+
 // ============================================================================
 // EndpointProfile - Per-endpoint baseline
 // ============================================================================
+
+/// Detailed statistics for a parameter value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParamStats {
+    /// Frequency count
+    pub count: u32,
+
+    /// String length distribution
+    pub length_dist: Distribution,
+
+    /// Numeric value distribution (if applicable)
+    pub numeric_dist: Distribution,
+
+    /// Type counts
+    pub type_counts: HashMap<String, u32>,
+}
+
+impl ParamStats {
+    pub fn new() -> Self {
+        Self {
+            count: 0,
+            length_dist: Distribution::new(),
+            numeric_dist: Distribution::new(),
+            type_counts: HashMap::with_capacity(4), // Pre-allocate for common types
+        }
+    }
+
+    /// Update statistics with a new value.
+    ///
+    /// Type categories are bounded to prevent memory exhaustion attacks where
+    /// an attacker sends many values designed to create unique type categories.
+    pub fn update(&mut self, value: &str) {
+        self.update_with_limit(value, DEFAULT_MAX_TYPE_COUNTS);
+    }
+
+    /// Update with configurable type count limit.
+    pub fn update_with_limit(&mut self, value: &str, max_type_counts: usize) {
+        self.count += 1;
+        self.length_dist.update(value.len() as f64);
+
+        // Helper to safely increment type count with bounds checking
+        let mut increment_type = |type_name: &str| {
+            // Only add if already tracked OR under limit
+            if self.type_counts.contains_key(type_name) || self.type_counts.len() < max_type_counts {
+                *self.type_counts.entry(type_name.to_string()).or_insert(0) += 1;
+            }
+        };
+
+        // Try to parse as number
+        if let Ok(num) = value.parse::<f64>() {
+            self.numeric_dist.update(num);
+            increment_type("numeric");
+        } else {
+            increment_type("string");
+        }
+
+        // Detect specific types (PII patterns)
+        if value.contains('@') && value.contains('.') {
+            increment_type("email");
+        }
+        if value.len() == 36 && value.chars().filter(|&c| c == '-').count() == 4 {
+            increment_type("uuid");
+        }
+    }
+}
+
+// ============================================================================
+// PII Redaction Helpers
+// ============================================================================
+
+/// Redact potentially sensitive parameter values for logging/display.
+///
+/// Masks middle portion of values to prevent PII leakage while preserving
+/// enough information for debugging.
+pub fn redact_value(value: &str) -> String {
+    let len = value.len();
+    if len <= 4 {
+        // Too short to meaningfully redact
+        return "*".repeat(len);
+    }
+
+    // Show first 2 and last 2 characters, mask the rest
+    let visible_chars = 2;
+    let start: String = value.chars().take(visible_chars).collect();
+    let end: String = value.chars().skip(len - visible_chars).collect();
+    let mask_len = len.saturating_sub(visible_chars * 2);
+
+    format!("{}{}{}",start,"*".repeat(mask_len.max(1)),end)
+}
+
+/// Check if a value appears to contain PII.
+pub fn is_likely_pii(value: &str) -> bool {
+    // Email pattern
+    if value.contains('@') && value.contains('.') {
+        return true;
+    }
+    // UUID pattern
+    if value.len() == 36 && value.chars().filter(|&c| c == '-').count() == 4 {
+        return true;
+    }
+    // Long alphanumeric (tokens, API keys)
+    if value.len() > 20 && value.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return true;
+    }
+    false
+}
 
 /// Statistical profile for a single API endpoint.
 ///
@@ -43,12 +153,18 @@ pub struct EndpointProfile {
     /// Payload size distribution (bytes)
     pub payload_size: Distribution,
 
-    /// Expected query parameters (name -> frequency count)
+    /// Response size distribution (bytes)
+    pub response_size: Distribution,
+
+    /// Expected query parameters (name -> stats)
     /// Capped at MAX_PARAMS parameters
-    pub expected_params: HashMap<String, u32>,
+    pub expected_params: HashMap<String, ParamStats>,
 
     /// Expected content types (type -> frequency count)
     pub content_types: HashMap<String, u32>,
+
+    /// Expected response content types (type -> frequency count)
+    pub response_content_types: HashMap<String, u32>,
 
     /// HTTP status codes (code -> count)
     pub status_codes: HashMap<u16, u32>,
@@ -76,8 +192,10 @@ impl EndpointProfile {
         Self {
             template,
             payload_size: Distribution::new(),
+            response_size: Distribution::new(),
             expected_params: HashMap::with_capacity(16),
             content_types: HashMap::with_capacity(4),
+            response_content_types: HashMap::with_capacity(4),
             status_codes: HashMap::with_capacity(8),
             request_rate: RateTracker::new(),
             endpoint_risk: 0.0,
@@ -89,12 +207,11 @@ impl EndpointProfile {
 
     /// Update profile with request data.
     ///
-    /// Uses `&[&str]` to avoid allocation overhead on the hot path.
-    /// Only clones param keys when inserting new entries into the HashMap.
+    /// Uses `&[(&str, &str)]` to pass param name and value.
     pub fn update(
         &mut self,
         payload_size: usize,
-        params: &[&str],
+        params: &[(&str, &str)], // Changed from &[&str] to include values
         content_type: Option<&str>,
         now_ms: u64,
     ) {
@@ -104,12 +221,14 @@ impl EndpointProfile {
         // Update request rate
         self.request_rate.record(now_ms);
 
-        // Update parameter frequencies (only clone on insert)
-        for &param in params {
-            if let Some(count) = self.expected_params.get_mut(param) {
-                *count += 1;
+        // Update parameter statistics
+        for &(param_name, param_value) in params {
+            if let Some(stats) = self.expected_params.get_mut(param_name) {
+                stats.update(param_value);
             } else if self.expected_params.len() < MAX_PARAMS {
-                self.expected_params.insert(param.to_string(), 1);
+                let mut stats = ParamStats::new();
+                stats.update(param_value);
+                self.expected_params.insert(param_name.to_string(), stats);
             }
         }
 
@@ -131,6 +250,26 @@ impl EndpointProfile {
         self.last_updated_ms = now_ms;
     }
 
+    /// Update profile with response data.
+    pub fn update_response(
+        &mut self,
+        response_size: usize,
+        status_code: u16,
+        content_type: Option<&str>,
+        now_ms: u64,
+    ) {
+        self.response_size.update(response_size as f64);
+        self.record_status(status_code);
+
+        if let Some(ct) = content_type {
+            if self.response_content_types.len() < MAX_CONTENT_TYPES || self.response_content_types.contains_key(ct) {
+                *self.response_content_types.entry(ct.to_string()).or_insert(0) += 1;
+            }
+        }
+
+        self.last_updated_ms = now_ms;
+    }
+
     /// Record response status code.
     pub fn record_status(&mut self, status_code: u16) {
         *self.status_codes.entry(status_code).or_insert(0) += 1;
@@ -144,6 +283,14 @@ impl EndpointProfile {
             .map(|(ct, _)| ct.as_str())
     }
 
+    /// Get the dominant response content type.
+    pub fn dominant_response_content_type(&self) -> Option<&str> {
+        self.response_content_types
+            .iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(ct, _)| ct.as_str())
+    }
+
     /// Get parameter frequency (0.0-1.0).
     pub fn param_frequency(&self, param: &str) -> f64 {
         if self.sample_count == 0 {
@@ -151,7 +298,7 @@ impl EndpointProfile {
         }
         self.expected_params
             .get(param)
-            .map(|&count| count as f64 / self.sample_count as f64)
+            .map(|stats| stats.count as f64 / self.sample_count as f64)
             .unwrap_or(0.0)
     }
 
@@ -195,19 +342,19 @@ impl EndpointProfile {
     }
 
     /// Evict least frequent entries from a HashMap.
-    fn evict_least_frequent(map: &mut HashMap<String, u32>, target_size: usize) {
+    fn evict_least_frequent(map: &mut HashMap<String, ParamStats>, target_size: usize) {
         if map.len() <= target_size {
             return;
         }
 
         // Find minimum frequency to keep
-        let mut frequencies: Vec<u32> = map.values().copied().collect();
+        let mut frequencies: Vec<u32> = map.values().map(|s| s.count).collect();
         frequencies.sort_unstable();
         let to_remove = map.len() - target_size;
         let min_keep = frequencies.get(to_remove).copied().unwrap_or(0);
 
         // Remove entries below threshold
-        map.retain(|_, &mut count| count >= min_keep);
+        map.retain(|_, stats| stats.count >= min_keep);
     }
 
     /// Check if profile has enough samples for anomaly detection.
@@ -247,7 +394,7 @@ mod tests {
     fn test_endpoint_profile_update() {
         let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
 
-        profile.update(100, &["name", "email"], Some("application/json"), 2000);
+        profile.update(100, &[("name", "alice"), ("email", "a@example.com")], Some("application/json"), 2000);
 
         assert_eq!(profile.sample_count, 1);
         assert_eq!(profile.last_updated_ms, 2000);
@@ -263,9 +410,9 @@ mod tests {
         // Update with "name" in all requests, "email" in half
         for i in 0..10 {
             let params = if i % 2 == 0 {
-                vec!["name", "email"]
+                vec![("name", "val"), ("email", "val")]
             } else {
-                vec!["name"]
+                vec![("name", "val")]
             };
             profile.update(100, &params, None, 1000 + i * 100);
         }
@@ -282,11 +429,11 @@ mod tests {
         // "name" in 9/10 requests, "optional" in 2/10
         for i in 0..10 {
             let params = if i == 0 {
-                vec!["optional"]
+                vec![("optional", "val")]
             } else if i < 3 {
-                vec!["name", "optional"]
+                vec![("name", "val"), ("optional", "val")]
             } else {
-                vec!["name"]
+                vec![("name", "val")]
             };
             profile.update(100, &params, None, 1000 + i * 100);
         }
@@ -388,11 +535,16 @@ mod tests {
 
     #[test]
     fn test_evict_least_frequent() {
-        let mut map: HashMap<String, u32> = HashMap::new();
-        map.insert("a".to_string(), 10);
-        map.insert("b".to_string(), 5);
-        map.insert("c".to_string(), 1);
-        map.insert("d".to_string(), 8);
+        let mut map: HashMap<String, ParamStats> = HashMap::new();
+        let mut s1 = ParamStats::new(); s1.count = 10;
+        let mut s2 = ParamStats::new(); s2.count = 5;
+        let mut s3 = ParamStats::new(); s3.count = 1;
+        let mut s4 = ParamStats::new(); s4.count = 8;
+
+        map.insert("a".to_string(), s1);
+        map.insert("b".to_string(), s2);
+        map.insert("c".to_string(), s3);
+        map.insert("d".to_string(), s4);
 
         EndpointProfile::evict_least_frequent(&mut map, 2);
 
@@ -401,16 +553,107 @@ mod tests {
         assert!(map.contains_key("a"));
     }
 
-    #[test]
-    fn test_endpoint_profile_param_cap() {
-        let mut profile = EndpointProfile::new("/api/test".to_string(), 1000);
+    // ========================================================================
+    // ParamStats Type Count Bounds Tests
+    // ========================================================================
 
-        // Add more than MAX_PARAMS parameters
-        for i in 0..(MAX_PARAMS + 10) {
-            profile.update(100, &[&format!("param_{}", i)], None, 1000 + i as u64);
+    #[test]
+    fn test_param_stats_type_count_limit() {
+        let mut stats = ParamStats::new();
+
+        // Update with values that would create multiple type categories
+        for _ in 0..100 {
+            stats.update("12345"); // numeric
+            stats.update("hello"); // string
+            stats.update("test@example.com"); // email
+            stats.update("123e4567-e89b-12d3-a456-426614174000"); // uuid
         }
 
-        // Should not exceed MAX_PARAMS
-        assert!(profile.expected_params.len() <= MAX_PARAMS);
+        // Standard types: numeric, string, email, uuid = 4 types
+        // Should not exceed DEFAULT_MAX_TYPE_COUNTS (10)
+        assert!(stats.type_counts.len() <= DEFAULT_MAX_TYPE_COUNTS);
+    }
+
+    #[test]
+    fn test_param_stats_custom_type_limit() {
+        let mut stats = ParamStats::new();
+
+        // Use custom limit of 2
+        for _ in 0..10 {
+            stats.update_with_limit("12345", 2); // numeric
+            stats.update_with_limit("hello", 2); // string
+            stats.update_with_limit("test@example.com", 2); // would add email, but limit is 2
+        }
+
+        // Should have at most 2 type categories
+        assert!(stats.type_counts.len() <= 2);
+    }
+
+    // ========================================================================
+    // PII Redaction Helper Tests
+    // ========================================================================
+
+    #[test]
+    fn test_redact_value() {
+        // Test email redaction
+        let email = "user@example.com";
+        let redacted = redact_value(email);
+        assert!(redacted.starts_with("us"));
+        assert!(redacted.ends_with("om"));
+        assert!(redacted.len() == email.len());
+
+        // Test short value
+        let short = "ab";
+        let redacted_short = redact_value(short);
+        assert_eq!(redacted_short, "**");
+
+        // Test medium value
+        let medium = "hello";
+        let redacted_medium = redact_value(medium);
+        assert!(redacted_medium.starts_with("he"));
+        assert!(redacted_medium.ends_with("lo"));
+    }
+
+    #[test]
+    fn test_is_likely_pii() {
+        // Email patterns
+        assert!(is_likely_pii("user@example.com"));
+        assert!(is_likely_pii("admin@company.org"));
+        assert!(!is_likely_pii("not-email-format"));
+
+        // UUID patterns
+        assert!(is_likely_pii("123e4567-e89b-12d3-a456-426614174000"));
+        assert!(!is_likely_pii("not-a-uuid"));
+
+        // Long alphanumeric (API keys, tokens)
+        assert!(is_likely_pii("abcdefghijklmnopqrstuvwxyz12345"));
+        assert!(!is_likely_pii("short"));
+    }
+
+    #[test]
+    fn test_endpoint_profile_response_update() {
+        let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
+
+        profile.update_response(5000, 200, Some("application/json"), 2000);
+
+        assert_eq!(profile.last_updated_ms, 2000);
+        assert!((profile.response_size.mean() - 5000.0).abs() < 0.01);
+        assert!((profile.status_frequency(200) - 1.0).abs() < 0.01);
+        assert_eq!(profile.dominant_response_content_type(), Some("application/json"));
+    }
+
+    #[test]
+    fn test_endpoint_profile_response_content_type_bounds() {
+        let mut profile = EndpointProfile::new("/api/test".to_string(), 1000);
+
+        // Add MAX_CONTENT_TYPES unique content types
+        for i in 0..MAX_CONTENT_TYPES {
+            profile.update_response(100, 200, Some(&format!("application/type-{}", i)), 1000 + i as u64);
+        }
+        assert_eq!(profile.response_content_types.len(), MAX_CONTENT_TYPES);
+
+        // Try to add more
+        profile.update_response(100, 200, Some("application/extra"), 2000);
+        assert_eq!(profile.response_content_types.len(), MAX_CONTENT_TYPES);
     }
 }

@@ -390,7 +390,7 @@ mod tests {
 
         {
             let mut profile = store.get_or_create("/api/users");
-            profile.update(100, &["name"], Some("application/json"), now_ms());
+            profile.update(100, &[("name", "John")], Some("application/json"), now_ms());
         }
 
         assert_eq!(store.len(), 1);

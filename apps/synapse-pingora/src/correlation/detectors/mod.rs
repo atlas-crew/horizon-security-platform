@@ -62,6 +62,7 @@ pub mod auth_token;
 pub mod behavioral_similarity;
 pub mod timing_correlation;
 pub mod network_proximity;
+pub mod graph;
 
 pub use common::TimeWindowedIndex;
 pub use shared_fingerprint::SharedFingerprintDetector;
@@ -71,3 +72,4 @@ pub use auth_token::{AuthTokenDetector, AuthTokenConfig, TokenFingerprint};
 pub use behavioral_similarity::{BehavioralSimilarityDetector, BehavioralConfig, BehaviorPattern};
 pub use timing_correlation::{TimingCorrelationDetector, TimingConfig};
 pub use network_proximity::{NetworkProximityDetector, NetworkProximityConfig};
+pub use graph::{GraphDetector, GraphConfig};

@@ -45,6 +45,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures::future::join_all;
+use parking_lot::RwLock as ParkingLotRwLock;
 use tokio::sync::RwLock;
 use tokio::time::interval;
 
@@ -52,6 +53,9 @@ use crate::correlation::{
     Campaign, CampaignStatus, CampaignStore, CampaignStoreStats, CampaignUpdate,
     FingerprintGroup, FingerprintIndex, IndexStats,
 };
+use crate::access::AccessListManager;
+use crate::telemetry::{TelemetryClient, TelemetryEvent};
+
 use crate::correlation::detectors::{
     Detector, DetectorError, DetectorResult,
     // Fingerprint detectors
@@ -62,7 +66,90 @@ use crate::correlation::detectors::{
     BehavioralSimilarityDetector, BehavioralConfig,
     TimingCorrelationDetector, TimingConfig,
     NetworkProximityDetector, NetworkProximityConfig,
+    GraphDetector, GraphConfig,
 };
+
+// ============================================================================
+// Mitigation Rate Limiter (Security: Prevent mass-ban DoS)
+// ============================================================================
+
+/// Rate limiter for auto-mitigation to prevent mass-banning attacks.
+///
+/// Limits the number of IPs that can be banned per time window.
+/// If an attacker generates many apparent campaigns, this prevents
+/// legitimate users from being incorrectly blocked en masse.
+#[derive(Debug)]
+pub struct MitigationRateLimiter {
+    /// Number of bans in current window.
+    bans_in_window: AtomicU64,
+    /// Window start time.
+    window_start: std::sync::Mutex<Instant>,
+    /// Maximum bans allowed per window.
+    max_bans_per_window: u64,
+    /// Window duration.
+    window_duration: Duration,
+    /// Maximum IPs to ban per campaign.
+    max_ips_per_campaign: usize,
+}
+
+impl MitigationRateLimiter {
+    /// Creates a new rate limiter.
+    pub fn new(max_bans_per_window: u64, window_duration: Duration, max_ips_per_campaign: usize) -> Self {
+        Self {
+            bans_in_window: AtomicU64::new(0),
+            window_start: std::sync::Mutex::new(Instant::now()),
+            max_bans_per_window,
+            window_duration,
+            max_ips_per_campaign,
+        }
+    }
+
+    /// Attempts to acquire a ban permit.
+    ///
+    /// Returns Ok(()) if the ban is allowed, Err with reason if rate limited.
+    pub fn try_ban(&self) -> Result<(), String> {
+        self.maybe_reset_window();
+
+        let current = self.bans_in_window.fetch_add(1, Ordering::SeqCst);
+        if current >= self.max_bans_per_window {
+            self.bans_in_window.fetch_sub(1, Ordering::SeqCst);
+            return Err(format!(
+                "Rate limit exceeded: {} bans in {:?} window",
+                self.max_bans_per_window, self.window_duration
+            ));
+        }
+        Ok(())
+    }
+
+    /// Resets the window if it has expired.
+    fn maybe_reset_window(&self) {
+        let mut start = self.window_start.lock().unwrap();
+        if start.elapsed() >= self.window_duration {
+            *start = Instant::now();
+            self.bans_in_window.store(0, Ordering::SeqCst);
+        }
+    }
+
+    /// Returns the maximum IPs that can be banned per campaign.
+    pub fn max_ips_per_campaign(&self) -> usize {
+        self.max_ips_per_campaign
+    }
+
+    /// Returns current ban count in window.
+    pub fn current_count(&self) -> u64 {
+        self.bans_in_window.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MitigationRateLimiter {
+    fn default() -> Self {
+        Self::new(
+            50,                          // Max 50 bans per window
+            Duration::from_secs(60),     // 1 minute window
+            10,                          // Max 10 IPs per campaign
+        )
+    }
+}
 
 // ============================================================================
 // Configuration
@@ -193,6 +280,39 @@ pub struct ManagerConfig {
     ///
     /// Default: true
     pub network_check_subnet: bool,
+
+    // ========================================================================
+    // Graph Correlation Detector Configuration (weight: 20)
+    // ========================================================================
+
+    /// Minimum connected component size.
+    ///
+    /// Default: 3
+    pub graph_min_component_size: usize,
+
+    /// Maximum traversal depth.
+    ///
+    /// Default: 3
+    pub graph_max_depth: usize,
+
+    /// Edge TTL.
+    ///
+    /// Default: 3600 seconds
+    pub graph_edge_ttl: Duration,
+
+    // ========================================================================
+    // Automated Response Configuration
+    // ========================================================================
+
+    /// Enable automated mitigation (blocking) of high-confidence campaigns.
+    ///
+    /// Default: false
+    pub auto_mitigation_enabled: bool,
+
+    /// Confidence threshold for automated mitigation (0.0 - 1.0).
+    ///
+    /// Default: 0.90
+    pub auto_mitigation_threshold: f64,
 }
 
 impl Default for ManagerConfig {
@@ -223,6 +343,13 @@ impl Default for ManagerConfig {
             // Network proximity detector (weight: 15)
             network_min_ips: 3,
             network_check_subnet: true,
+            // Graph correlation detector (weight: 20)
+            graph_min_component_size: 3,
+            graph_max_depth: 3,
+            graph_edge_ttl: Duration::from_secs(3600),
+            // Automated Response
+            auto_mitigation_enabled: false,
+            auto_mitigation_threshold: 0.90,
         }
     }
 }
@@ -275,6 +402,18 @@ impl ManagerConfig {
         self
     }
 
+    /// Builder method to enable/disable automated mitigation.
+    pub fn with_auto_mitigation(mut self, enabled: bool) -> Self {
+        self.auto_mitigation_enabled = enabled;
+        self
+    }
+
+    /// Builder method to set automated mitigation threshold.
+    pub fn with_auto_mitigation_threshold(mut self, threshold: f64) -> Self {
+        self.auto_mitigation_threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
+
     /// Validate the configuration.
     ///
     /// Returns an error message if configuration is invalid.
@@ -290,6 +429,17 @@ impl ManagerConfig {
         }
         if self.scan_interval.is_zero() {
             return Err("scan_interval must be positive".to_string());
+        }
+        // Security: Auto-mitigation threshold must be high to prevent false positives
+        if self.auto_mitigation_enabled && self.auto_mitigation_threshold < 0.7 {
+            return Err(
+                "auto_mitigation_threshold must be >= 0.7 when auto_mitigation is enabled to prevent false positives"
+                    .to_string(),
+            );
+        }
+        // Security: Graph bounds must be reasonable
+        if self.graph_min_component_size < 2 {
+            return Err("graph_min_component_size must be at least 2".to_string());
         }
         Ok(())
     }
@@ -405,6 +555,12 @@ pub struct CampaignManager {
     /// Campaign state storage.
     store: Arc<CampaignStore>,
 
+    /// Access List Manager for automated mitigation (optional).
+    access_list_manager: Option<Arc<ParkingLotRwLock<AccessListManager>>>,
+
+    /// Telemetry client for cross-tenant correlation (optional).
+    telemetry_client: Option<Arc<TelemetryClient>>,
+
     // ========================================================================
     // All 7 Detectors (ordered by weight)
     // ========================================================================
@@ -430,6 +586,9 @@ pub struct CampaignManager {
     /// Network proximity detector (weight: 15 - lowest signal).
     network_detector: NetworkProximityDetector,
 
+    /// Graph correlation detector (weight: 20).
+    graph_detector: GraphDetector,
+
     /// Internal statistics (atomic counters for thread safety).
     stats_fingerprints_registered: AtomicU64,
     stats_detections_run: AtomicU64,
@@ -447,6 +606,12 @@ pub struct CampaignManager {
     /// Cache for fingerprint groups (100ms TTL).
     /// Reduces repeated expensive scans during detection cycles.
     group_cache: RwLock<Option<GroupCache>>,
+
+    /// Rate limiter for auto-mitigation to prevent mass-banning.
+    mitigation_rate_limiter: MitigationRateLimiter,
+
+    /// Track mitigated campaigns to prevent re-mitigation.
+    mitigated_campaigns: dashmap::DashSet<String>,
 }
 
 impl CampaignManager {
@@ -522,10 +687,21 @@ impl CampaignManager {
         };
         let network_detector = NetworkProximityDetector::new(network_config);
 
+        // 8. Graph Correlation Detector (weight: 20)
+        let graph_config = GraphConfig {
+            min_component_size: config.graph_min_component_size,
+            max_traversal_depth: config.graph_max_depth,
+            edge_ttl: config.graph_edge_ttl,
+            ..Default::default()
+        };
+        let graph_detector = GraphDetector::new(graph_config);
+
         Self {
             config,
             index: Arc::new(FingerprintIndex::new()),
             store: Arc::new(CampaignStore::new()),
+            access_list_manager: None,
+            telemetry_client: None,
             // All 7 detectors
             attack_sequence_detector,
             auth_token_detector,
@@ -534,6 +710,7 @@ impl CampaignManager {
             behavioral_detector,
             timing_detector,
             network_detector,
+            graph_detector,
             // Statistics
             stats_fingerprints_registered: AtomicU64::new(0),
             stats_detections_run: AtomicU64::new(0),
@@ -543,7 +720,20 @@ impl CampaignManager {
             shutdown: AtomicBool::new(false),
             // Cache for fingerprint groups (starts empty)
             group_cache: RwLock::new(None),
+            // Mitigation rate limiter and tracking
+            mitigation_rate_limiter: MitigationRateLimiter::default(),
+            mitigated_campaigns: dashmap::DashSet::new(),
         }
+    }
+
+    /// Set the AccessListManager for automated mitigation.
+    pub fn set_access_list_manager(&mut self, manager: Arc<ParkingLotRwLock<AccessListManager>>) {
+        self.access_list_manager = Some(manager);
+    }
+
+    /// Set the TelemetryClient for cross-tenant correlation.
+    pub fn set_telemetry_client(&mut self, client: Arc<TelemetryClient>) {
+        self.telemetry_client = Some(client);
     }
 
     /// Register a JA4 fingerprint for an IP address.
@@ -774,10 +964,14 @@ impl CampaignManager {
         // Record for behavioral/timing/network
         self.record_request(ip, method, path);
 
+        let ip_id = GraphDetector::ip_id(&ip.to_string());
+
         // Record JA4 fingerprint
         if let Some(fp) = ja4 {
             if !fp.is_empty() {
                 self.register_ja4(ip, fp.to_string());
+                // Graph correlation: Link IP to Fingerprint
+                self.record_relation(&ip_id, &GraphDetector::fp_id(fp));
             }
         }
 
@@ -785,8 +979,24 @@ impl CampaignManager {
         if let Some(token) = jwt {
             if !token.is_empty() {
                 self.record_token(ip, token);
+                // Graph correlation: Link IP to Token (use hash or prefix for ID)
+                // Using first 16 chars of token as ID to avoid sensitive data in graph keys
+                let token_id = if token.len() > 16 { &token[..16] } else { token };
+                self.record_relation(&ip_id, &GraphDetector::token_id(token_id));
             }
         }
+    }
+
+    /// Record a relationship for graph correlation.
+    ///
+    /// Records a connection between two entities (e.g., IP and Fingerprint)
+    /// to build the correlation graph.
+    ///
+    /// # Arguments
+    /// * `entity_a` - First entity ID (e.g., "ip:1.2.3.4")
+    /// * `entity_b` - Second entity ID (e.g., "fp:abc12345")
+    pub fn record_relation(&self, entity_a: &str, entity_b: &str) {
+        self.graph_detector.record_relation(entity_a, entity_b);
     }
 
     // ========================================================================
@@ -846,6 +1056,7 @@ impl CampaignManager {
             (&self.behavioral_detector as &dyn Detector, "behavioral"),
             (&self.timing_detector as &dyn Detector, "timing"),
             (&self.network_detector as &dyn Detector, "network"),
+            (&self.graph_detector as &dyn Detector, "graph"),
         ];
 
         // Run all detectors in parallel using join_all
@@ -873,7 +1084,7 @@ impl CampaignManager {
                 Ok(updates) => {
                     let update_count = updates.len();
                     for update in updates {
-                        self.process_campaign_update(update);
+                        self.process_campaign_update(update).await;
                         total_updates += 1;
                     }
                     // Collect per-detector stats
@@ -953,7 +1164,7 @@ impl CampaignManager {
     /// 1. Find existing campaign for any of those IPs
     /// 2. If found, update the existing campaign
     /// 3. If not found, create a new campaign
-    fn process_campaign_update(&self, update: CampaignUpdate) {
+    async fn process_campaign_update(&self, update: CampaignUpdate) {
         // Extract IPs from correlation reason if present
         let ips: Vec<String> = update
             .add_correlation_reason
@@ -968,6 +1179,10 @@ impl CampaignManager {
         // Check if any IP is already in a campaign
         let existing_campaign_id = ips.iter().find_map(|ip| self.store.get_campaign_for_ip(ip));
 
+        // Use a variable to track if we need to check for mitigation
+        let mut check_mitigation = false;
+        let mut target_campaign_id = String::new();
+
         match existing_campaign_id {
             Some(campaign_id) => {
                 // Update existing campaign
@@ -977,6 +1192,9 @@ impl CampaignManager {
                 for ip in &ips {
                     let _ = self.store.add_actor_to_campaign(&campaign_id, ip);
                 }
+                
+                check_mitigation = true;
+                target_campaign_id = campaign_id;
             }
             None => {
                 // Create new campaign
@@ -992,7 +1210,7 @@ impl CampaignManager {
                     retry_count += 1;
                 }
 
-                let mut campaign = Campaign::new(campaign_id, ips, confidence);
+                let mut campaign = Campaign::new(campaign_id.clone(), ips, confidence);
 
                 // Apply update fields to new campaign
                 if let Some(status) = update.status {
@@ -1011,7 +1229,160 @@ impl CampaignManager {
                 // Store the campaign
                 if self.store.create_campaign(campaign).is_ok() {
                     self.stats_campaigns_created.fetch_add(1, Ordering::Relaxed);
+                    check_mitigation = true;
+                    target_campaign_id = campaign_id;
                 }
+            }
+        }
+
+        // Check for automated mitigation if enabled
+        if check_mitigation {
+            if let Some(campaign) = self.store.get_campaign(&target_campaign_id) {
+                // Auto-mitigation (Block)
+                if self.config.auto_mitigation_enabled 
+                   && campaign.confidence >= self.config.auto_mitigation_threshold 
+                   && campaign.status != CampaignStatus::Resolved 
+                {
+                    self.mitigate_campaign(&campaign).await;
+                }
+
+                // Cross-Tenant Reporting (Fleet Intelligence)
+                // Report high-confidence campaigns (>= 0.8) to Signal Horizon
+                if campaign.confidence >= 0.8 {
+                    self.report_campaign(&campaign);
+                }
+            }
+        }
+    }
+
+    /// Report a high-confidence campaign to Signal Horizon telemetry.
+    fn report_campaign(&self, campaign: &Campaign) {
+        if let Some(ref client) = self.telemetry_client {
+            // Only report if client is enabled
+            if !client.is_enabled() {
+                return;
+            }
+
+            let event = TelemetryEvent::CampaignReport {
+                campaign_id: campaign.id.clone(),
+                confidence: campaign.confidence,
+                attack_types: campaign.attack_types.iter().map(|at| format!("{:?}", at)).collect(),
+                actor_count: campaign.actor_count,
+                correlation_reasons: campaign.correlation_reasons.iter().map(|r| r.description.clone()).collect(),
+                timestamp_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            };
+
+            // Fire and forget - runs in background
+            let client = Arc::clone(client);
+            tokio::spawn(async move {
+                if let Err(e) = client.report(event).await {
+                    tracing::debug!("Failed to report campaign telemetry: {}", e);
+                }
+            });
+        }
+    }
+
+    /// Apply automated mitigation to a high-confidence campaign.
+    ///
+    /// Adds campaign actors to the deny list via AccessListManager.
+    /// Implements rate limiting and batch blocking for safety.
+    async fn mitigate_campaign(&self, campaign: &Campaign) {
+        // Check if already mitigated
+        if self.mitigated_campaigns.contains(&campaign.id) {
+            tracing::debug!(campaign_id = %campaign.id, "Campaign already mitigated, skipping");
+            return;
+        }
+
+        let access_list = match &self.access_list_manager {
+            Some(al) => al,
+            None => {
+                tracing::debug!("No AccessListManager configured, skipping mitigation");
+                return;
+            }
+        };
+
+        // Collect IPs to block (limit per campaign)
+        let max_ips = self.mitigation_rate_limiter.max_ips_per_campaign();
+        let ips_to_block: Vec<IpAddr> = campaign
+            .actors
+            .iter()
+            .filter_map(|ip_str| ip_str.parse::<IpAddr>().ok())
+            .take(max_ips)
+            .collect();
+
+        if ips_to_block.is_empty() {
+            tracing::debug!(campaign_id = %campaign.id, "No valid IPs to block");
+            return;
+        }
+
+        // Rate limit check - acquire permits for all IPs
+        let mut blocked_count = 0;
+        let mut rate_limited = false;
+
+        for ip in &ips_to_block {
+            if let Err(reason) = self.mitigation_rate_limiter.try_ban() {
+                tracing::warn!(
+                    campaign_id = %campaign.id,
+                    reason = %reason,
+                    blocked = blocked_count,
+                    remaining = ips_to_block.len() - blocked_count,
+                    "Mitigation rate limited"
+                );
+                rate_limited = true;
+                break;
+            }
+
+            // Add deny rule
+            let comment = format!("Campaign {} (confidence: {:.2})", campaign.id, campaign.confidence);
+            {
+                let mut al = access_list.write();
+                if let Err(e) = al.add_deny_ip(ip, Some(&comment)) {
+                    tracing::error!(ip = %ip, error = %e, "Failed to add deny rule");
+                    continue;
+                }
+            }
+            blocked_count += 1;
+        }
+
+        // Log audit event
+        let attack_types: Vec<String> = campaign.attack_types.iter().map(|at| format!("{:?}", at)).collect();
+        tracing::info!(
+            campaign_id = %campaign.id,
+            confidence = campaign.confidence,
+            total_actors = campaign.actors.len(),
+            blocked = blocked_count,
+            rate_limited = rate_limited,
+            attack_types = ?attack_types,
+            "Auto-mitigation applied"
+        );
+
+        // Mark as mitigated
+        self.mitigated_campaigns.insert(campaign.id.clone());
+
+        // Report mitigation event to telemetry
+        if let Some(ref client) = self.telemetry_client {
+            if client.is_enabled() {
+                let event = TelemetryEvent::CampaignReport {
+                    campaign_id: format!("mitigation:{}", campaign.id),
+                    confidence: campaign.confidence,
+                    attack_types,
+                    actor_count: blocked_count,
+                    correlation_reasons: vec![format!("Auto-mitigation applied: {} IPs blocked", blocked_count)],
+                    timestamp_ms: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                };
+
+                let client = Arc::clone(client);
+                tokio::spawn(async move {
+                    if let Err(e) = client.report(event).await {
+                        tracing::debug!("Failed to report mitigation telemetry: {}", e);
+                    }
+                });
             }
         }
     }
@@ -1035,6 +1406,7 @@ impl CampaignManager {
             || self.behavioral_detector.should_trigger(ip, &self.index)
             || self.timing_detector.should_trigger(ip, &self.index)
             || self.network_detector.should_trigger(ip, &self.index)
+            || self.graph_detector.should_trigger(ip, &self.index)
     }
 
     /// Get all active campaigns for API response.
@@ -1106,6 +1478,38 @@ impl CampaignManager {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Get the correlation graph for a campaign.
+    pub fn get_campaign_graph(&self, campaign_id: &str) -> serde_json::Value {
+        let ips = self.get_campaign_actors(campaign_id);
+        let ips_str: Vec<String> = ips.into_iter().map(|ip| ip.to_string()).collect();
+
+        self.graph_detector.get_cytoscape_data(&ips_str)
+    }
+
+    /// Get the correlation graph for a campaign with pagination and identifier hashing.
+    /// P1 fix: Supports pagination to prevent memory exhaustion and hashes identifiers
+    /// to prevent information disclosure.
+    pub fn get_campaign_graph_paginated(
+        &self,
+        campaign_id: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+        hash_identifiers: bool,
+    ) -> crate::correlation::detectors::graph::PaginatedGraph {
+        use crate::correlation::detectors::graph::GraphExportOptions;
+
+        let ips = self.get_campaign_actors(campaign_id);
+        let ips_str: Vec<String> = ips.into_iter().map(|ip| ip.to_string()).collect();
+
+        let options = GraphExportOptions {
+            limit,
+            offset,
+            hash_identifiers,
+        };
+
+        self.graph_detector.get_cytoscape_data_paginated(&ips_str, options)
     }
 
     /// Get current statistics.
@@ -1349,6 +1753,30 @@ mod tests {
             ..Default::default()
         };
         assert!(config.validate().is_err());
+
+        // Auto-mitigation with threshold too low (security risk)
+        let config = ManagerConfig {
+            auto_mitigation_enabled: true,
+            auto_mitigation_threshold: 0.5, // Below 0.7 minimum
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        // Auto-mitigation with valid threshold
+        let config = ManagerConfig {
+            auto_mitigation_enabled: true,
+            auto_mitigation_threshold: 0.9,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+
+        // Auto-mitigation disabled ignores threshold
+        let config = ManagerConfig {
+            auto_mitigation_enabled: false,
+            auto_mitigation_threshold: 0.5, // Would be invalid if enabled
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
     }
 
     #[test]

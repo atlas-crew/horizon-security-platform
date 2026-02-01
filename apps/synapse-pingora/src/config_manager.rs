@@ -603,6 +603,109 @@ impl ConfigManager {
         Ok(result)
     }
 
+    /// Retrieves the full runtime configuration.
+    pub fn get_full_config(&self) -> ConfigFile {
+        let config = self.config.read();
+        config.clone()
+    }
+
+    /// Updates the full configuration (hot reload).
+    ///
+    /// This replaces the entire configuration state and triggers a rebuild
+    /// of all dependent components (VHost, WAF, RateLimit, AccessList).
+    pub fn update_full_config(&self, new_config: ConfigFile) -> Result<MutationResult, ConfigManagerError> {
+        let mut result = MutationResult::new();
+
+        // Validate the new configuration
+        // TODO: Add comprehensive validation logic here
+        if new_config.sites.is_empty() {
+             // It's allowed to have no sites, but worth a warning
+             result.add_warning("Configuration has no sites defined");
+        }
+
+        // Apply changes atomically
+        {
+            // 1. Update ConfigFile wrapper
+            let mut config = self.config.write();
+            *config = new_config.clone();
+
+            // 2. Update Sites list (convert SiteYamlConfig -> SiteConfig)
+            let mut sites = self.sites.write();
+            *sites = new_config.sites.iter().map(|s| crate::vhost::SiteConfig::from(s.clone())).collect();
+
+            // 3. Update SiteWafManager
+            // We need to clear existing sites and re-add from new config
+            // Since SiteWafManager doesn't expose clear(), we iterate and overwrite
+            // Ideally SiteWafManager should have a reload/reset method.
+            // For now, we just ensure all new sites are added/updated.
+            // Old sites not in new config will remain in memory but unused by VHost matcher.
+            let mut waf = self.waf.write();
+            for site in &new_config.sites {
+                if let Some(ref waf_yaml) = site.waf {
+                    if let Some(threshold) = waf_yaml.threshold {
+                        let waf_config = crate::site_waf::SiteWafConfig {
+                            enabled: waf_yaml.enabled,
+                            threshold,
+                            rule_overrides: HashMap::new(), // Lost overrides unless we preserve them?
+                            custom_block_page: None,
+                            default_action: crate::site_waf::WafAction::Block,
+                        };
+                        waf.add_site(&site.hostname, waf_config);
+                    }
+                }
+            }
+
+            // 4. Update RateLimitManager
+            // Similar limitation: additive updates only
+            // TODO: Refactor managers to support full state replacement
+            let mut rate_limiter = self.rate_limiter.write();
+            // Assuming config has rate limit settings? ConfigFile doesn't explicitly store RL per site
+            // except via the API-driven updates. This is a mismatch in the current architecture.
+            // The ConfigFile struct tracks `sites`, and `SiteConfig` doesn't strictly have RL fields
+            // other than what we added in memory?
+            // Actually, `SiteConfig` in `vhost.rs` DOES NOT have rate limit fields.
+            // They are managed separately.
+            // This means `update_full_config` mainly updates sites/upstreams/tls/waf-threshold.
+            // It might lose RL/AccessList state if not persisted in ConfigFile.
+            
+            // 5. Update AccessListManager
+            let mut access_lists = self.access_lists.write();
+            for site in &new_config.sites {
+                if let Some(ac) = &site.access_control {
+                    let mut list = crate::access::AccessList::allow_all();
+                    for cidr in &ac.allow {
+                        let _ = list.allow(cidr);
+                    }
+                    for cidr in &ac.deny {
+                        let _ = list.deny(cidr);
+                    }
+                    access_lists.add_site(&site.hostname, list);
+                }
+            }
+
+            info!("Full configuration updated with {} sites", sites.len());
+        }
+        
+        result = result.with_applied();
+
+        // Rebuild VhostMatcher
+        self.rebuild_vhost()?;
+        result = result.with_rebuild();
+
+        // Persist
+        if self.config_path.is_some() {
+            match self.persist_config() {
+                Ok(()) => result = result.with_persisted(),
+                Err(e) => {
+                    result.add_warning(format!("failed to persist config: {}", e));
+                    warn!(error = %e, "failed to persist config after update_full_config");
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Partial Update Operations
     // ─────────────────────────────────────────────────────────────────────────

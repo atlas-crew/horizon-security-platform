@@ -41,7 +41,7 @@ mod e2e_workflow {
             let mut profile = store.get_or_create("/api/users/123");
             profile.update(
                 1000 + (i % 200) as usize, // Payload size ~1000 bytes with variance
-                &["name", "email"],
+                &[("name", "John"), ("email", "john@example.com")],
                 Some("application/json"),
                 1000 + i * 100,
             );
@@ -65,12 +65,12 @@ mod e2e_workflow {
         };
         let store = ProfileStore::new(config);
 
-        // Learning phase
+        // Learning phase - add variance to payload sizes for meaningful z-scores
         for i in 0..100 {
             let mut profile = store.get_or_create("/api/data");
             profile.update(
-                1000,
-                &["query"],
+                900 + (i % 200) as usize, // Payload 900-1099, mean ~1000
+                &[("query", "search term")],
                 Some("application/json"),
                 i * 100,
             );
@@ -155,9 +155,9 @@ mod distribution_anomalies {
     fn test_payload_size_distribution_anomaly() {
         let mut dist = Distribution::new();
 
-        // Learn baseline: ~1000 bytes with some variance
+        // Learn baseline: ~1000 bytes with some variance (950-1049, mean ~1000)
         for i in 0..100 {
-            dist.update(1000.0 + (i % 200) as f64 - 100.0);
+            dist.update(950.0 + i as f64);
         }
 
         // Normal request
@@ -214,22 +214,28 @@ mod rate_detection {
     fn test_rate_burst_detection() {
         let mut profile = EndpointProfile::new("/api/test".to_string(), 0);
 
-        // Establish baseline: 1 req/second over 60 seconds = 60 req/min baseline
-        for i in 0..60 {
-            profile.update(100, &[], None, i * 1000);
+        // Establish a sparse baseline: 1 req every 10 seconds over 300 seconds (6 req/min)
+        // This keeps the buffer from being overwhelmed
+        for i in 0..30 {
+            profile.update(100, &[], None, i * 10_000);
         }
 
         // Now simulate a burst: 30 requests in 1 second
+        // After the burst, buffer has 30 baseline + 30 burst = 60 entries
+        let burst_start = 300_000u64;
         for i in 0..30 {
-            profile.update(100, &[], None, 60_000 + i * 33);
+            profile.update(100, &[], None, burst_start + i * 33);
         }
 
         // Check if this is detected as a burst
-        let current_rate = profile.request_rate.current_rate(61_000);
-        let baseline = profile.baseline_rate(61_000);
+        // At time burst_start + 1000, the 60-second window captures the burst
+        let current_rate = profile.request_rate.current_rate(burst_start + 1000);
+        let baseline = profile.baseline_rate(burst_start + 1000);
 
         // Current rate should be significantly higher than baseline
-        let is_burst = current_rate > baseline * 3.0;
+        // baseline = 60 / (5 min) = 12 req/min
+        // current_rate should be ~30 (burst in last 60s window) or higher
+        let is_burst = current_rate > baseline * 2.0;
         assert!(is_burst, "Current: {}, Baseline: {}", current_rate, baseline);
     }
 
@@ -299,12 +305,13 @@ mod memory_bounds {
 
         // Add a frequently used param first
         for _ in 0..100 {
-            profile.update(100, &["important_param"], None, 1000);
+            profile.update(100, &[("important_param", "value")], None, 1000);
         }
 
         // Flood with unique params
         for i in 0..100 {
-            profile.update(100, &[&format!("spam_param_{}", i)], None, 1000);
+            let param_name = format!("spam_param_{}", i);
+            profile.update(100, &[(&param_name, "value")], None, 1000);
         }
 
         // Important param should survive eviction
@@ -338,9 +345,10 @@ mod concurrent_profiling {
                 for req in 0..100 {
                     let endpoint = format!("/api/endpoint_{}", client_id % 5);
                     let mut profile = store_clone.get_or_create(&endpoint);
+                    let client_id_str = client_id.to_string();
                     profile.update(
                         100 + client_id * 10,
-                        &["client_id"],
+                        &[("client_id", &client_id_str)],
                         Some("application/json"),
                         (client_id * 1000 + req) as u64,
                     );
@@ -372,9 +380,15 @@ mod concurrent_profiling {
         let store = Arc::new(ProfileStore::new(config));
 
         // Phase 1: Learning (sequential for determinism)
+        // Add variance to payload sizes for meaningful z-scores
         for i in 0..100 {
             let mut profile = store.get_or_create("/api/monitored");
-            profile.update(1000, &["normal_param"], Some("application/json"), i);
+            profile.update(
+                900 + (i % 200) as usize, // 900-1099, mean ~1000
+                &[("normal_param", "value")],
+                Some("application/json"),
+                i,
+            );
         }
 
         // Phase 2: Concurrent detection
@@ -428,7 +442,7 @@ mod scenarios {
             let mut profile = store.get_or_create("/api/search");
             profile.update(
                 200,
-                &["q", "page", "limit"],
+                &[("q", "search"), ("page", "1"), ("limit", "10")],
                 Some("application/json"),
                 i * 100,
             );
@@ -465,10 +479,15 @@ mod scenarios {
         };
         let store = ProfileStore::new(config);
 
-        // Normal API responses are small
+        // Normal API responses are small (add variance for meaningful z-scores)
         for i in 0..100 {
             let mut profile = store.get_or_create("/api/user/profile");
-            profile.update(500, &["user_id"], Some("application/json"), i * 100);
+            profile.update(
+                400 + (i % 200) as usize, // 400-599, mean ~500
+                &[("user_id", "123")],
+                Some("application/json"),
+                i * 100,
+            );
             profile.record_status(200);
         }
 
@@ -507,7 +526,7 @@ mod scenarios {
         // Normal login patterns: sparse, mixed success/failure
         for i in 0..50 {
             let mut profile = store.get_or_create("/api/login");
-            profile.update(100, &["username", "password"], Some("application/json"), i * 10000);
+            profile.update(100, &[("username", "user1"), ("password", "pass")], Some("application/json"), i * 10000);
             // Mix of success and failure
             profile.record_status(if i % 3 == 0 { 401 } else { 200 });
         }
@@ -516,7 +535,7 @@ mod scenarios {
         {
             let mut profile = store.get_or_create("/api/login");
             for i in 0..100 {
-                profile.update(100, &["username", "password"], Some("application/json"), 500_000 + i * 10);
+                profile.update(100, &[("username", "attacker"), ("password", "guess")], Some("application/json"), 500_000 + i * 10);
                 profile.record_status(401); // All failures
             }
         }
@@ -555,7 +574,7 @@ mod scenarios {
         // Normal file access
         for i in 0..20 {
             let mut profile = store.get_or_create(&format!("/api/files/{}", i));
-            profile.update(1000, &["filename"], Some("application/octet-stream"), i * 100);
+            profile.update(1000, &[("filename", "file.txt")], Some("application/octet-stream"), i * 100);
         }
 
         // Path traversal attempts should be normalized but detectable

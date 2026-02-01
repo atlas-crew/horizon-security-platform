@@ -308,6 +308,77 @@ impl AccessListManager {
     pub fn site_count(&self) -> usize {
         self.lists.len()
     }
+
+    /// Dynamically adds a deny rule for an IP address to the global list.
+    ///
+    /// Used by CampaignManager for automated mitigation of high-confidence campaigns.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address to deny
+    /// * `comment` - Reason for the denial (e.g., campaign ID)
+    ///
+    /// # Returns
+    /// Ok(()) on success, or an error if the IP is invalid.
+    pub fn add_deny_ip(&mut self, ip: &IpAddr, comment: Option<&str>) -> Result<(), AccessError> {
+        let cidr = match ip {
+            IpAddr::V4(_) => format!("{}/32", ip),
+            IpAddr::V6(_) => format!("{}/128", ip),
+        };
+
+        let mut rule = AccessRule::deny(&cidr)?;
+        if let Some(c) = comment {
+            rule = rule.with_comment(c);
+        }
+
+        self.global.add_rule(rule);
+        tracing::info!(ip = %ip, comment = ?comment, "Added dynamic deny rule");
+        Ok(())
+    }
+
+    /// Removes all deny rules for a specific IP from the global list.
+    ///
+    /// Used for mitigation rollback when campaign confidence drops.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address to unblock
+    ///
+    /// # Returns
+    /// The number of rules removed.
+    pub fn remove_deny_ip(&mut self, ip: &IpAddr) -> usize {
+        let ip_str = ip.to_string();
+
+        let before_count = self.global.rules.len();
+        self.global.rules.retain(|rule| {
+            // Match rules by network IP and deny action
+            let network_str = match rule.cidr.network {
+                IpAddr::V4(v4) => v4.to_string(),
+                IpAddr::V6(v6) => v6.to_string(),
+            };
+            !(network_str == ip_str && matches!(rule.action, AccessAction::Deny))
+        });
+        let removed = before_count - self.global.rules.len();
+
+        if removed > 0 {
+            tracing::info!(ip = %ip, removed = removed, "Removed dynamic deny rules");
+        }
+
+        removed
+    }
+
+    /// Returns a list of all configured site hostnames.
+    pub fn list_sites(&self) -> Vec<String> {
+        self.lists.keys().cloned().collect()
+    }
+
+    /// Returns the global access list for inspection/modification.
+    pub fn global_list(&self) -> &AccessList {
+        &self.global
+    }
+
+    /// Returns a mutable reference to the global access list.
+    pub fn global_list_mut(&mut self) -> &mut AccessList {
+        &mut self.global
+    }
 }
 
 /// Errors that can occur during access control operations.

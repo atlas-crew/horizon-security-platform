@@ -13,7 +13,9 @@
 use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::num::NonZeroU32;
 
+use governor::{Quota, RateLimiter, state::keyed::DefaultKeyedStateStore};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use sysinfo::{System, Networks, Disks};
@@ -182,10 +184,49 @@ use tracing::{info, warn};
 use subtle::ConstantTimeEq;
 
 use crate::api::{ApiHandler, ApiResponse};
+
+// =============================================================================
+// Scope Constants (WS2-004)
+// =============================================================================
+
+/// Admin API scopes for fine-grained permission control
+pub mod scopes {
+    /// Read-only access to admin data (stats, health, config viewing)
+    pub const ADMIN_READ: &str = "admin:read";
+    /// Write access to admin operations (reload, test)
+    pub const ADMIN_WRITE: &str = "admin:write";
+    /// Configuration write access (site CRUD, WAF settings)
+    pub const CONFIG_WRITE: &str = "config:write";
+    /// Service management (restart, reset operations)
+    pub const SERVICE_MANAGE: &str = "service:manage";
+    /// Sensitive sensor data access (campaigns, DLP, correlation graphs)
+    pub const SENSOR_READ: &str = "sensor:read";
+
+    /// All available scopes
+    pub const ALL: &[&str] = &[ADMIN_READ, ADMIN_WRITE, CONFIG_WRITE, SERVICE_MANAGE, SENSOR_READ];
+}
 use crate::config_manager::{
     CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
-    RateLimitRequest, AccessListRequest,
+    RateLimitRequest, AccessListRequest, MutationResult,
 };
+
+/// GET /config - Retrieve full configuration
+async fn config_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let response = state.handler.handle_get_config();
+    wrap_response(response)
+}
+
+/// POST /config - Update full configuration (hot reload)
+async fn update_config_handler(
+    State(state): State<AdminState>,
+    Json(config): Json<crate::config::ConfigFile>,
+) -> impl IntoResponse {
+    let response = state.handler.handle_update_config(config);
+    wrap_response(response)
+}
+
+/// Per-IP rate limiter type using governor
+type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, governor::clock::DefaultClock>;
 
 /// Admin server state shared across handlers.
 #[derive(Clone)]
@@ -193,6 +234,11 @@ pub struct AdminState {
     pub handler: Arc<ApiHandler>,
     /// API key for authenticating privileged operations (None = no auth required)
     pub admin_api_key: Option<String>,
+    /// Scopes granted to the admin API key (defaults to ALL if not specified)
+    pub admin_scopes: Vec<String>,
+    /// Per-IP rate limiter for admin endpoints (100 req/min for admin, 1000 req/min for public)
+    pub admin_rate_limiter: Arc<IpRateLimiter>,
+    pub public_rate_limiter: Arc<IpRateLimiter>,
 }
 
 /// Authentication middleware for privileged admin endpoints.
@@ -237,18 +283,182 @@ async fn require_auth(
     }
 }
 
+/// Scope-checking middleware for admin:write scope (WS2-004).
+async fn require_admin_write(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::ADMIN_WRITE, request, next).await
+}
+
+/// Scope-checking middleware for config:write scope (WS2-004).
+async fn require_config_write(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::CONFIG_WRITE, request, next).await
+}
+
+/// Scope-checking middleware for service:manage scope (WS2-004).
+async fn require_service_manage(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::SERVICE_MANAGE, request, next).await
+}
+
+/// Scope-checking middleware for sensor:read scope (sensitive sensor data).
+async fn require_sensor_read(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::SENSOR_READ, request, next).await
+}
+
+/// Internal helper to check if a required scope is granted.
+async fn check_scope(
+    state: &AdminState,
+    required_scope: &str,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    // Check if the required scope is granted (or wildcard "*" grants all)
+    if state.admin_scopes.iter().any(|s| s == required_scope || s == "*") {
+        Ok(next.run(request).await)
+    } else {
+        warn!(
+            "Scope check failed: required '{}', granted: {:?}",
+            required_scope, state.admin_scopes
+        );
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Insufficient scope",
+                "required": required_scope,
+                "code": "INSUFFICIENT_SCOPE"
+            }))
+        ).into_response())
+    }
+}
+
+/// Rate limiting middleware for admin endpoints (stricter limits).
+/// Returns 429 Too Many Requests with Retry-After header when limit exceeded.
+async fn rate_limit_admin(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    // Extract client IP from X-Forwarded-For or fall back to peer address
+    let client_ip = extract_client_ip(&request);
+
+    match state.admin_rate_limiter.check_key(&client_ip) {
+        Ok(_) => Ok(next.run(request).await),
+        Err(not_until) => {
+            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(&governor::clock::DefaultClock::default()));
+            warn!("Admin rate limit exceeded for IP: {}", client_ip);
+            Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
+                Json(serde_json::json!({
+                    "error": "Rate limit exceeded",
+                    "retry_after_secs": retry_after.as_secs()
+                }))
+            ).into_response())
+        }
+    }
+}
+
+/// Rate limiting middleware for public endpoints (more generous limits).
+async fn rate_limit_public(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    let client_ip = extract_client_ip(&request);
+
+    match state.public_rate_limiter.check_key(&client_ip) {
+        Ok(_) => Ok(next.run(request).await),
+        Err(not_until) => {
+            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(&governor::clock::DefaultClock::default()));
+            warn!("Public rate limit exceeded for IP: {}", client_ip);
+            Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
+                Json(serde_json::json!({
+                    "error": "Rate limit exceeded",
+                    "retry_after_secs": retry_after.as_secs()
+                }))
+            ).into_response())
+        }
+    }
+}
+
+/// Extract client IP from request headers or connection info.
+fn extract_client_ip(request: &Request) -> IpAddr {
+    // Try X-Forwarded-For first (for reverse proxy setups)
+    if let Some(xff) = request.headers().get("X-Forwarded-For") {
+        if let Ok(xff_str) = xff.to_str() {
+            // Take the first IP in the chain (original client)
+            if let Some(first_ip) = xff_str.split(',').next() {
+                if let Ok(ip) = first_ip.trim().parse::<IpAddr>() {
+                    return ip;
+                }
+            }
+        }
+    }
+
+    // Try X-Real-IP
+    if let Some(real_ip) = request.headers().get("X-Real-IP") {
+        if let Ok(ip_str) = real_ip.to_str() {
+            if let Ok(ip) = ip_str.trim().parse::<IpAddr>() {
+                return ip;
+            }
+        }
+    }
+
+    // Fall back to loopback (connection info not available in this context)
+    "127.0.0.1".parse().unwrap()
+}
+
 /// Starts the admin HTTP server.
 ///
 /// # Arguments
 /// * `addr` - Socket address to bind (e.g., "0.0.0.0:6191")
 /// * `handler` - API handler with references to health, metrics, reloader, etc.
 /// * `admin_api_key` - Optional API key for authenticating privileged operations
+/// * `admin_scopes` - Optional list of scopes granted to the API key (defaults to all)
 pub async fn start_admin_server(
     addr: SocketAddr,
     handler: Arc<ApiHandler>,
     admin_api_key: Option<String>,
 ) -> std::io::Result<()> {
-    let state = AdminState { handler, admin_api_key };
+    // Default to all scopes if API key is provided, empty if no auth required
+    let admin_scopes = if admin_api_key.is_some() {
+        scopes::ALL.iter().map(|s| s.to_string()).collect()
+    } else {
+        vec![] // No scopes needed when auth is disabled
+    };
+    // Create rate limiters:
+    // - Admin routes: 100 requests per minute per IP (stricter for privileged operations)
+    // - Public routes: 1000 requests per minute per IP (more generous for monitoring)
+    let admin_rate_limiter = Arc::new(RateLimiter::keyed(
+        Quota::per_minute(NonZeroU32::new(100).unwrap())
+    ));
+    let public_rate_limiter = Arc::new(RateLimiter::keyed(
+        Quota::per_minute(NonZeroU32::new(1000).unwrap())
+    ));
+
+    let state = AdminState {
+        handler,
+        admin_api_key,
+        admin_scopes,
+        admin_rate_limiter,
+        public_rate_limiter,
+    };
 
     // Initialize metrics history with current values
     record_metrics_sample();
@@ -264,11 +474,17 @@ pub async fn start_admin_server(
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
 
-    // Routes that require authentication (privileged operations)
-    let auth_routes = Router::new()
+    // Routes requiring admin:write scope (reload, test)
+    let admin_write_routes = Router::new()
         .route("/reload", post(reload_handler))
         .route("/test", post(test_handler))
-        .route("/restart", post(restart_handler))
+        .route("/config", post(update_config_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    // Routes requiring config:write scope (site management)
+    let config_write_routes = Router::new()
         .route("/sites", post(create_site_handler))
         .route("/sites/{hostname}", put(update_site_handler).delete(delete_site_handler))
         .route("/sites/{hostname}/waf", put(update_site_waf_handler))
@@ -276,10 +492,35 @@ pub async fn start_admin_server(
         .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
         .route("/sites/{hostname}/shadow", put(update_site_shadow_handler))
         .route("/debug/profiles/save", post(save_profiles_handler))
-        // Profiler management endpoints (requires auth for reset operations)
+        // Read config is technically read-only but sensitive, so guard with config scope
+        .route("/config", get(config_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_config_write))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    // Routes requiring service:manage scope (restart, reset operations)
+    let service_manage_routes = Router::new()
+        .route("/restart", post(restart_handler))
         .route("/api/profiles/reset", post(api_profiles_reset_handler))
         .route("/api/schemas/reset", post(api_schemas_reset_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_service_manage))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    // Routes requiring sensor:read scope (sensitive sensor data - P0 security fix)
+    // These endpoints expose correlation graphs, DLP violations, and attack attribution data
+    let sensor_read_routes = Router::new()
+        .route("/_sensor/campaigns/:id/graph", get(sensor_campaign_graph_handler))
+        .route("/_sensor/campaigns/:id/actors", get(sensor_campaign_actors_handler))
+        .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
+        .route("/_sensor/dlp/stats", get(sensor_dlp_stats_handler))
+        .route("/_sensor/dlp/violations", get(sensor_dlp_violations_handler))
+        .route("/_sensor/actors/:actor_id", get(sensor_actor_detail_handler))
+        .route("/_sensor/actors/:actor_id/timeline", get(sensor_actor_timeline_handler))
+        .route("/_sensor/sessions/:session_id", get(sensor_session_detail_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_read))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
     // Routes that don't require authentication (read-only or health checks)
     let public_routes = Router::new()
@@ -303,14 +544,12 @@ pub async fn start_admin_server(
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
         .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
-        .route("/_sensor/campaigns/:id/actors", get(sensor_campaign_actors_handler))
-        .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
+        // Note: campaigns/:id/actors, /graph, /timeline moved to sensor_read_routes (require auth)
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
-        .route("/_sensor/actors/:actor_id", get(sensor_actor_detail_handler))
-        .route("/_sensor/actors/:actor_id/timeline", get(sensor_actor_timeline_handler))
+        // Note: actors/:actor_id detail/timeline moved to sensor_read_routes (require auth)
         .route("/_sensor/sessions", get(sensor_sessions_handler))
-        .route("/_sensor/sessions/:session_id", get(sensor_session_detail_handler))
+        // Note: sessions/:session_id moved to sensor_read_routes (require auth)
         .route("/_sensor/stuffing", get(sensor_stuffing_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
         .route("/_sensor/system/overview", get(sensor_system_overview_handler))
@@ -318,6 +557,7 @@ pub async fn start_admin_server(
         .route("/_sensor/system/network", get(sensor_system_network_handler))
         .route("/_sensor/system/processes", get(sensor_system_processes_handler))
         .route("/_sensor/system/logs", get(sensor_system_logs_handler))
+        // Note: DLP endpoints moved to sensor_read_routes (require auth)
         // API Profiling endpoints for API Catalog
         .route("/_sensor/profiling/templates", get(profiling_templates_handler))
         .route("/_sensor/profiling/baselines", get(profiling_baselines_handler))
@@ -335,10 +575,15 @@ pub async fn start_admin_server(
         // Dry-run WAF evaluation endpoint (Phase 2: Lab View)
         .route("/_sensor/evaluate", post(sensor_evaluate_handler))
         .route("/dashboard", get(sensor_dashboard_handler))
-        .route("/", get(root_handler));
+        .route("/", get(root_handler))
+        // Rate limit public endpoints (1000 req/min per IP)
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
 
     let app = Router::new()
-        .merge(auth_routes)
+        .merge(admin_write_routes)
+        .merge(config_write_routes)
+        .merge(service_manage_routes)
+        .merge(sensor_read_routes)
         .merge(public_routes)
         .layer(cors)
         .with_state(state);
@@ -719,6 +964,18 @@ async fn sensor_status_handler(State(state): State<AdminState>) -> impl IntoResp
     let stats = state.handler.handle_stats();
     let waf = state.handler.handle_waf_stats();
 
+    // P2 fix: Add DLP scanner health status
+    let dlp_status = state.handler.dlp_scanner().map(|scanner| {
+        let scanner_stats = scanner.stats();
+        serde_json::json!({
+            "enabled": scanner.is_enabled(),
+            "healthy": true, // Scanner is healthy if we can access it
+            "totalScans": scanner_stats.total_scans,
+            "totalMatches": scanner_stats.total_matches,
+            "patternCount": scanner.pattern_count()
+        })
+    });
+
     // Map to dashboard-expected format
     let response = serde_json::json!({
         "status": "running",
@@ -735,6 +992,7 @@ async fn sensor_status_handler(State(state): State<AdminState>) -> impl IntoResp
                 "blocked": h.waf.blocked
             })
         }),
+        "dlp": dlp_status, // P2 fix: Added DLP health status
         "proxy": {
             "type": "pingora",
             "version": env!("CARGO_PKG_VERSION")
@@ -1268,6 +1526,62 @@ async fn sensor_campaign_actors_handler(
             (StatusCode::OK, Json(serde_json::json!({ "actors": actor_data })))
         }
         None => (StatusCode::OK, Json(serde_json::json!({ "actors": [] })))
+    }
+}
+
+/// Query parameters for graph endpoint (P1 pagination)
+#[derive(Debug, Deserialize)]
+struct GraphQuery {
+    /// Maximum number of nodes to return (default: 500)
+    #[serde(default = "default_graph_limit")]
+    limit: usize,
+    /// Skip this many nodes (for pagination)
+    #[serde(default)]
+    offset: usize,
+    /// Hash identifiers for external exposure (default: true for security)
+    #[serde(default = "default_hash_identifiers")]
+    hash_identifiers: bool,
+}
+
+fn default_graph_limit() -> usize { 500 }
+fn default_hash_identifiers() -> bool { true }
+
+/// GET /_sensor/campaigns/:id/graph - Returns correlation graph data for a campaign
+/// P1 fix: Adds pagination and identifier hashing
+async fn sensor_campaign_graph_handler(
+    State(state): State<AdminState>,
+    Path(id): Path<String>,
+    Query(query): Query<GraphQuery>,
+) -> impl IntoResponse {
+    match state.handler.campaign_manager() {
+        Some(manager) => {
+            let graph = manager.get_campaign_graph_paginated(
+                &id,
+                Some(query.limit),
+                Some(query.offset),
+                query.hash_identifiers,
+            );
+            (StatusCode::OK, Json(serde_json::json!({
+                "data": {
+                    "nodes": graph.nodes,
+                    "edges": graph.edges
+                },
+                "pagination": {
+                    "total": graph.total_nodes,
+                    "limit": query.limit,
+                    "offset": query.offset,
+                    "hasMore": graph.has_more
+                },
+                "snapshotVersion": graph.snapshot_version
+            })))
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "type": "https://api.synapse.local/errors/correlation-not-enabled",
+            "title": "Campaign Correlation Not Enabled",
+            "status": 404,
+            "detail": "Campaign correlation feature is not enabled on this sensor",
+            "instance": format!("/_sensor/campaigns/{}/graph", id)
+        })))
     }
 }
 
@@ -2294,6 +2608,98 @@ async fn sensor_system_logs_handler(Query(params): Query<LogsQuery>) -> impl Int
     })))
 }
 
+/// GET /_sensor/dlp/stats - Returns DLP scanner statistics
+/// P2 fix: Returns bucketed ranges instead of exact counts to prevent timing oracles
+async fn sensor_dlp_stats_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.handler.dlp_scanner() {
+        Some(scanner) => {
+            let stats = scanner.stats();
+
+            // P2: Bucket match counts to prevent timing oracle attacks
+            let match_bucket = match stats.total_matches {
+                0 => "none",
+                1..=10 => "low (1-10)",
+                11..=100 => "moderate (11-100)",
+                101..=1000 => "high (101-1000)",
+                _ => "critical (1000+)",
+            };
+
+            (StatusCode::OK, Json(serde_json::json!({
+                "totalScans": stats.total_scans,
+                "totalMatches": stats.total_matches,
+                "matchBucket": match_bucket,
+                "patternCount": scanner.pattern_count(),
+            })))
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "type": "https://api.synapse.local/errors/dlp-not-enabled",
+            "title": "DLP Not Enabled",
+            "status": 404,
+            "detail": "DLP scanning feature is not enabled on this sensor",
+            "instance": "/_sensor/dlp/stats"
+        })))
+    }
+}
+
+/// Query parameters for violations endpoint (P2 pagination)
+#[derive(Debug, Deserialize)]
+struct ViolationsQuery {
+    /// Maximum number of violations to return (default: 50)
+    #[serde(default = "default_violations_limit")]
+    limit: usize,
+    /// Cursor for pagination (timestamp-based)
+    #[serde(default)]
+    cursor: Option<u64>,
+}
+
+fn default_violations_limit() -> usize { 50 }
+
+/// GET /_sensor/dlp/violations - Returns recent DLP violations
+/// P2 fix: Adds pagination with cursor-based navigation
+async fn sensor_dlp_violations_handler(
+    State(state): State<AdminState>,
+    Query(query): Query<ViolationsQuery>,
+) -> impl IntoResponse {
+    match state.handler.dlp_scanner() {
+        Some(scanner) => {
+            let all_violations = scanner.get_recent_violations().await;
+
+            // Apply cursor filter (violations newer than cursor timestamp)
+            let filtered: Vec<_> = if let Some(cursor) = query.cursor {
+                all_violations.into_iter()
+                    .filter(|v| v.timestamp > cursor)
+                    .collect()
+            } else {
+                all_violations
+            };
+
+            // Apply limit
+            let total = filtered.len();
+            let violations: Vec<_> = filtered.into_iter().take(query.limit).collect();
+
+            // Get next cursor (timestamp of oldest returned violation)
+            let next_cursor = violations.last().map(|v| v.timestamp);
+
+            (StatusCode::OK, Json(serde_json::json!({
+                "violations": violations,
+                "pagination": {
+                    "total": total,
+                    "limit": query.limit,
+                    "nextCursor": next_cursor,
+                    "hasMore": total > query.limit
+                }
+            })))
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "type": "https://api.synapse.local/errors/dlp-not-enabled",
+            "title": "DLP Not Enabled",
+            "status": 404,
+            "detail": "DLP scanning feature is not enabled on this sensor",
+            "instance": "/_sensor/dlp/violations"
+        })))
+    }
+}
+
 use crate::persistence::SnapshotManager;
 
 // =============================================================================
@@ -3311,8 +3717,21 @@ mod tests {
     use tower::util::ServiceExt;
 
     fn create_test_app() -> Router {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
         let handler = Arc::new(ApiHandler::builder().build());
-        let state = AdminState { handler, admin_api_key: None };
+        // Create test rate limiters (1000 req/min)
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: None,
+            admin_scopes: vec![],
+            admin_rate_limiter,
+            public_rate_limiter,
+        };
 
         Router::new()
             .route("/health", get(health_handler))

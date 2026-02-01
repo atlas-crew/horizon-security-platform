@@ -235,6 +235,48 @@ pub struct ProfilerConfig {
     /// Minimum samples required before validating against profile
     #[serde(default = "default_min_samples")]
     pub min_samples_for_validation: u32,
+
+    // ========================================================================
+    // Anomaly Detection Thresholds
+    // ========================================================================
+
+    /// Z-score threshold for payload size anomaly detection (default: 3.0)
+    #[serde(default = "default_payload_z_threshold")]
+    pub payload_z_threshold: f64,
+
+    /// Z-score threshold for parameter value anomaly detection (default: 4.0)
+    #[serde(default = "default_param_z_threshold")]
+    pub param_z_threshold: f64,
+
+    /// Z-score threshold for response size anomaly detection (default: 4.0)
+    #[serde(default = "default_response_z_threshold")]
+    pub response_z_threshold: f64,
+
+    /// Minimum standard deviation for z-score calculation (avoids div/0) (default: 0.01)
+    #[serde(default = "default_min_stddev")]
+    pub min_stddev: f64,
+
+    /// Ratio threshold for type-based anomaly detection (default: 0.9)
+    /// If >90% of values are numeric, flag non-numeric as anomaly
+    #[serde(default = "default_type_ratio_threshold")]
+    pub type_ratio_threshold: f64,
+
+    // ========================================================================
+    // Security Controls
+    // ========================================================================
+
+    /// Maximum number of type categories per parameter (prevents memory exhaustion)
+    #[serde(default = "default_max_type_counts")]
+    pub max_type_counts: usize,
+
+    /// Redact PII values in anomaly descriptions (default: true)
+    #[serde(default = "default_true")]
+    pub redact_pii: bool,
+
+    /// Freeze baseline after this many samples (prevents model poisoning)
+    /// Set to 0 to disable (continuous learning). Default: 0 (disabled)
+    #[serde(default)]
+    pub freeze_after_samples: u32,
 }
 
 fn default_max_profiles() -> usize {
@@ -249,6 +291,30 @@ fn default_min_samples() -> u32 {
     100
 }
 
+fn default_payload_z_threshold() -> f64 {
+    3.0
+}
+
+fn default_param_z_threshold() -> f64 {
+    4.0
+}
+
+fn default_response_z_threshold() -> f64 {
+    4.0
+}
+
+fn default_min_stddev() -> f64 {
+    0.01
+}
+
+fn default_type_ratio_threshold() -> f64 {
+    0.9
+}
+
+fn default_max_type_counts() -> usize {
+    10
+}
+
 impl Default for ProfilerConfig {
     fn default() -> Self {
         Self {
@@ -256,6 +322,14 @@ impl Default for ProfilerConfig {
             max_profiles: default_max_profiles(),
             max_schemas: default_max_schemas(),
             min_samples_for_validation: default_min_samples(),
+            payload_z_threshold: default_payload_z_threshold(),
+            param_z_threshold: default_param_z_threshold(),
+            response_z_threshold: default_response_z_threshold(),
+            min_stddev: default_min_stddev(),
+            type_ratio_threshold: default_type_ratio_threshold(),
+            max_type_counts: default_max_type_counts(),
+            redact_pii: true,
+            freeze_after_samples: 0,
         }
     }
 }
@@ -413,12 +487,27 @@ impl ConfigLoader {
                 Self::validate_tls(tls)?;
             }
 
-            // Validate WAF threshold
+            // Validate WAF configuration
             if let Some(waf) = &site.waf {
+                // Warn if WAF is explicitly disabled (SYNAPSE-SEC-011)
+                if !waf.enabled {
+                    warn!(
+                        site = %site.hostname,
+                        "WAF protection DISABLED for site - backend may be exposed to attacks"
+                    );
+                }
+                // Validate threshold (must be 1-100, 0 effectively disables protection)
                 if let Some(threshold) = waf.threshold {
+                    if threshold == 0 {
+                        return Err(ConfigError::ValidationError(format!(
+                            "site '{}' has WAF threshold of 0, which effectively disables protection. \
+                             Use waf.enabled: false to explicitly disable, or set threshold between 1-100",
+                            site.hostname
+                        )));
+                    }
                     if threshold > 100 {
                         return Err(ConfigError::ValidationError(format!(
-                            "site '{}' has invalid WAF threshold {} (must be 0-100)",
+                            "site '{}' has invalid WAF threshold {} (must be 1-100)",
                             site.hostname, threshold
                         )));
                     }
@@ -436,10 +525,23 @@ impl ConfigLoader {
             }
         }
 
-        // Validate global settings
+        // Warn if global WAF is disabled (SYNAPSE-SEC-011)
+        if !config.server.waf_enabled {
+            warn!(
+                "Global WAF protection DISABLED - all sites may be exposed to attacks unless individually configured"
+            );
+        }
+
+        // Validate global WAF threshold (must be 1-100, 0 effectively disables protection)
+        if config.server.waf_threshold == 0 {
+            return Err(ConfigError::ValidationError(
+                "global WAF threshold of 0 effectively disables protection. \
+                 Use waf_enabled: false to explicitly disable, or set threshold between 1-100".to_string()
+            ));
+        }
         if config.server.waf_threshold > 100 {
             return Err(ConfigError::ValidationError(format!(
-                "global WAF threshold {} is invalid (must be 0-100)",
+                "global WAF threshold {} is invalid (must be 1-100)",
                 config.server.waf_threshold
             )));
         }

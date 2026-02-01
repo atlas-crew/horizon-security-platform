@@ -57,6 +57,23 @@ impl Default for SiteConfig {
     }
 }
 
+impl From<crate::config::SiteYamlConfig> for SiteConfig {
+    fn from(yaml: crate::config::SiteYamlConfig) -> Self {
+        Self {
+            hostname: yaml.hostname,
+            upstreams: yaml.upstreams.iter().map(|u| format!("{}:{}", u.host, u.port)).collect(),
+            tls_enabled: yaml.tls.is_some(),
+            tls_cert: yaml.tls.as_ref().map(|t| t.cert_path.clone()),
+            tls_key: yaml.tls.as_ref().map(|t| t.key_path.clone()),
+            waf_threshold: yaml.waf.as_ref().and_then(|w| w.threshold),
+            waf_enabled: yaml.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
+            access_control: yaml.access_control,
+            headers: yaml.headers,
+            shadow_mirror: None,
+        }
+    }
+}
+
 /// Compiled wildcard pattern for hostname matching.
 #[derive(Debug)]
 struct WildcardPattern {

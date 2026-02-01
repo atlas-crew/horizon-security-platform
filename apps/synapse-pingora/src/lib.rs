@@ -78,6 +78,12 @@ pub mod shadow;
 // Phase 8: API Profiler (Behavioral Learning)
 pub mod profiler;
 
+// Phase 9: Risk-Server Port (Payload, Crawler, Trends, Horizon)
+pub mod crawler;
+pub mod horizon;
+pub mod payload;
+pub mod trends;
+
 // Dashboard support
 pub mod block_log;
 
@@ -176,6 +182,40 @@ pub use profiler::{
 
 // Re-export profiler config
 pub use config::ProfilerConfig;
+
+// Re-export crawler detection types
+pub use crawler::{
+    CrawlerDetector, CrawlerConfig, CrawlerDetection, CrawlerVerificationResult,
+    CrawlerStats, CrawlerStatsSnapshot, VerificationMethod, DnsFailurePolicy,
+    CrawlerDefinition, BadBotSignature, BadBotSeverity,
+};
+
+// Re-export Signal Horizon integration types
+pub use horizon::{
+    HorizonManager, HorizonConfig, HorizonStats, HorizonStatsSnapshot,
+    HorizonClient, HorizonError, ClientStats,
+    ThreatSignal, SignalType, Severity, ConnectionState,
+    BlocklistCache, BlocklistEntry, BlocklistUpdate, BlockType,
+};
+
+// Re-export payload profiling types
+pub use payload::{
+    PayloadManager, PayloadConfig, PayloadSummary, EndpointSortBy,
+    EndpointPayloadStats, EndpointPayloadStatsSnapshot, PayloadWindow, SizeStats,
+    EntityBandwidth, BandwidthBucket,
+    PayloadAnomaly, PayloadAnomalyType, PayloadAnomalySeverity, PayloadAnomalyMetadata,
+};
+
+// Re-export trends/signal tracking types
+pub use trends::{
+    TrendsManager, TrendsConfig, TrendsManagerStats, TrendsStats,
+    AnomalyDetector, AnomalyDetectorConfig,
+    SignalExtractor, TimeStore, TimeStoreStats, SignalBucket,
+    CorrelationEngine, Correlation, CorrelationMetadata, CorrelationType,
+    Signal, SignalCategory, SignalMetadata, SignalTrend,
+    Anomaly, AnomalyType, AnomalySeverity, AnomalyMetadata, AnomalyQueryOptions,
+    TrendQueryOptions, TrendsSummary, TrendHistogramBucket, BucketSummary, CategorySummary,
+};
 
 // ============================================================================
 // Integration Tests: ActorManager + SessionManager Integration

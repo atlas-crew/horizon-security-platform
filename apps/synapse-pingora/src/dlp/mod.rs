@@ -11,6 +11,9 @@
 //! - SSN and IBAN format validation
 //! - Compiled regex patterns with lazy_static
 //! - Thread-safe concurrent scanning
+//! - Streaming scanner for large payloads
+//! - Configurable redaction modes (mask, hash, full)
+//! - Custom keyword detection
 //!
 //! ## Feature Flags
 //! - `ENABLE_PINGORA_DLP=true`: Enable Pingora DLP scanning
@@ -23,24 +26,40 @@
 //! @see apps/risk-server/src/profiler/sensitive-data.ts (TypeScript reference)
 
 mod scanner;
+mod stream;
 
+// Streaming scanner
+pub use stream::{StreamingError, StreamingScanner};
+
+// Configuration
 pub use scanner::{
-    // Configuration
     DlpConfig,
-    // Pattern types
-    SensitiveDataType,
+    DlpConfigError,
+    RedactionConfigBuilder,
+    RedactionMode,
+};
+
+// Pattern types
+pub use scanner::{
     PatternSeverity,
-    // Match result
+    SensitiveDataType,
+};
+
+// Match and scan results
+pub use scanner::{
     DlpMatch,
-    // Scan result
-    ScanResult,
-    // Statistics
     DlpStats,
-    // Scanner
-    DlpScanner,
-    // Validators
+    DlpViolation,
+    ScanResult,
+};
+
+// Scanner
+pub use scanner::DlpScanner;
+
+// Validators (for testing and custom validation)
+pub use scanner::{
     validate_credit_card,
-    validate_ssn,
-    validate_phone,
     validate_iban,
+    validate_phone,
+    validate_ssn,
 };

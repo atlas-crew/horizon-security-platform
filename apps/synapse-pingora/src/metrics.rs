@@ -22,10 +22,62 @@ pub struct MetricsRegistry {
     shadow_metrics: ShadowMetrics,
     /// Profiling metrics (Phase 2)
     profiling_metrics: ProfilingMetrics,
+    /// DLP metrics (P1 observability fix)
+    dlp_metrics: DlpMetrics,
     /// Backend health metrics
     backend_metrics: Arc<RwLock<HashMap<String, BackendMetrics>>>,
     /// Registry start time for uptime calculation
     start_time: Option<Instant>,
+}
+
+/// DLP (Data Loss Prevention) metrics for observability (P1 fix).
+#[derive(Debug, Default)]
+pub struct DlpMetrics {
+    /// Total DLP scans performed
+    pub scans_total: AtomicU64,
+    /// Total DLP matches found
+    pub matches_total: AtomicU64,
+    /// Matches by pattern type (e.g., "credit_card", "ssn")
+    pub matches_by_type: Arc<RwLock<HashMap<String, u64>>>,
+    /// Matches by severity ("low", "medium", "high", "critical")
+    pub matches_by_severity: Arc<RwLock<HashMap<String, u64>>>,
+    /// Violations dropped due to buffer overflow
+    pub violations_dropped: AtomicU64,
+    /// Graph export durations in microseconds (for histogram)
+    pub graph_export_durations: Arc<RwLock<Vec<u64>>>,
+}
+
+impl DlpMetrics {
+    /// Record a DLP scan
+    pub fn record_scan(&self) {
+        self.scans_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a DLP match
+    pub fn record_match(&self, pattern_type: &str, severity: &str) {
+        self.matches_total.fetch_add(1, Ordering::Relaxed);
+
+        let mut by_type = self.matches_by_type.write();
+        *by_type.entry(pattern_type.to_string()).or_insert(0) += 1;
+
+        let mut by_severity = self.matches_by_severity.write();
+        *by_severity.entry(severity.to_string()).or_insert(0) += 1;
+    }
+
+    /// Record a dropped violation
+    pub fn record_violation_dropped(&self) {
+        self.violations_dropped.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record graph export duration
+    pub fn record_graph_export_duration(&self, duration_us: u64) {
+        let mut durations = self.graph_export_durations.write();
+        // Keep last 100 samples for histogram
+        if durations.len() >= 100 {
+            durations.remove(0);
+        }
+        durations.push(duration_us);
+    }
 }
 
 /// Per-endpoint statistics for API profiling.
@@ -883,6 +935,48 @@ impl MetricsRegistry {
             self.shadow_metrics.avg_delivery_us()
         ));
 
+        // DLP metrics (P1 observability fix)
+        output.push_str("# HELP synapse_dlp_scans_total Total DLP scans performed\n");
+        output.push_str("# TYPE synapse_dlp_scans_total counter\n");
+        output.push_str(&format!(
+            "synapse_dlp_scans_total {}\n",
+            self.dlp_metrics.scans_total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_dlp_matches_total Total DLP matches found\n");
+        output.push_str("# TYPE synapse_dlp_matches_total counter\n");
+        output.push_str(&format!(
+            "synapse_dlp_matches_total {}\n",
+            self.dlp_metrics.matches_total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_dlp_matches_by_type DLP matches by pattern type\n");
+        output.push_str("# TYPE synapse_dlp_matches_by_type counter\n");
+        let matches_by_type = self.dlp_metrics.matches_by_type.read();
+        for (pattern_type, count) in matches_by_type.iter() {
+            output.push_str(&format!(
+                "synapse_dlp_matches_by_type{{type=\"{}\"}} {}\n",
+                pattern_type, count
+            ));
+        }
+
+        output.push_str("# HELP synapse_dlp_matches_by_severity DLP matches by severity\n");
+        output.push_str("# TYPE synapse_dlp_matches_by_severity counter\n");
+        let matches_by_severity = self.dlp_metrics.matches_by_severity.read();
+        for (severity, count) in matches_by_severity.iter() {
+            output.push_str(&format!(
+                "synapse_dlp_matches_by_severity{{severity=\"{}\"}} {}\n",
+                severity, count
+            ));
+        }
+
+        output.push_str("# HELP synapse_dlp_violations_dropped Violations dropped due to buffer overflow\n");
+        output.push_str("# TYPE synapse_dlp_violations_dropped counter\n");
+        output.push_str(&format!(
+            "synapse_dlp_violations_dropped {}\n",
+            self.dlp_metrics.violations_dropped.load(Ordering::Relaxed)
+        ));
+
         // Uptime
         output.push_str("# HELP synapse_uptime_seconds Service uptime in seconds\n");
         output.push_str("# TYPE synapse_uptime_seconds gauge\n");
@@ -935,8 +1029,21 @@ impl MetricsRegistry {
         self.shadow_metrics.bytes_sent.store(0, Ordering::Relaxed);
         self.shadow_metrics.delivery_time_us.store(0, Ordering::Relaxed);
 
+        // Reset DLP metrics (P1 fix)
+        self.dlp_metrics.scans_total.store(0, Ordering::Relaxed);
+        self.dlp_metrics.matches_total.store(0, Ordering::Relaxed);
+        self.dlp_metrics.matches_by_type.write().clear();
+        self.dlp_metrics.matches_by_severity.write().clear();
+        self.dlp_metrics.violations_dropped.store(0, Ordering::Relaxed);
+        self.dlp_metrics.graph_export_durations.write().clear();
+
         // Reset backend metrics
         self.backend_metrics.write().clear();
+    }
+
+    /// Get DLP metrics for recording (P1 fix).
+    pub fn dlp_metrics(&self) -> &DlpMetrics {
+        &self.dlp_metrics
     }
 }
 

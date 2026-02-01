@@ -27,6 +27,11 @@ use crate::entity::{EntityManager, EntitySnapshot};
 use crate::correlation::CampaignManager;
 use crate::actor::{ActorManager, ActorState, ActorStatsSnapshot};
 use crate::session::{SessionManager, SessionState, SessionStatsSnapshot};
+use crate::payload::{PayloadManager, EndpointSortBy};
+use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions};
+use crate::crawler::CrawlerDetector;
+use crate::horizon::HorizonClient;
+use crate::dlp::DlpScanner;
 use synapse::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Verdict};
 
 /// API response wrapper.
@@ -90,12 +95,27 @@ pub struct ApiHandler {
     session_manager: Option<Arc<SessionManager>>,
     /// Synapse detection engine for dry-run evaluation (Phase 2)
     synapse_engine: Option<Arc<RwLock<Synapse>>>,
+    /// Payload profiling manager (Phase 6)
+    payload_manager: Option<Arc<PayloadManager>>,
+    /// Trends/anomaly detection manager (Phase 6)
+    trends_manager: Option<Arc<TrendsManager>>,
+    /// Crawler/bot detection (Phase 6)
+    crawler_detector: Option<Arc<CrawlerDetector>>,
+    /// DLP scanner for sensitive data detection (Phase 4)
+    dlp_scanner: Option<Arc<DlpScanner>>,
+    /// Signal Horizon client (Phase 6)
+    horizon_client: Option<Arc<HorizonClient>>,
 }
 
 impl ApiHandler {
     /// Creates a new API handler builder.
     pub fn builder() -> ApiHandlerBuilder {
         ApiHandlerBuilder::default()
+    }
+
+    /// Returns the DLP scanner (if configured).
+    pub fn dlp_scanner(&self) -> Option<Arc<DlpScanner>> {
+        self.dlp_scanner.as_ref().map(Arc::clone)
     }
 
     /// Handles GET /health request.
@@ -281,6 +301,25 @@ impl ApiHandler {
         }
     }
 
+    /// Handles GET /config request - retrieves full configuration.
+    pub fn handle_get_config(&self) -> ApiResponse<crate::config::ConfigFile> {
+        match &self.config_manager {
+            Some(manager) => ApiResponse::ok(manager.get_full_config()),
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles POST /config request - updates full configuration.
+    pub fn handle_update_config(&self, config: crate::config::ConfigFile) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.update_full_config(config) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
     /// Validates the API authentication token using constant-time comparison.
     ///
     /// Uses `subtle::ConstantTimeEq` to prevent timing attacks that could
@@ -428,6 +467,282 @@ impl ApiHandler {
             None => Vec::new(),
         }
     }
+
+    // =========================================================================
+    // Payload Profiling Endpoints
+    // =========================================================================
+
+    /// Handles GET /_sensor/payload/stats - returns payload profiling summary.
+    pub fn handle_payload_stats(&self) -> ApiResponse<PayloadSummaryResponse> {
+        match &self.payload_manager {
+            Some(manager) => ApiResponse::ok(PayloadSummaryResponse::from(manager.get_summary())),
+            None => ApiResponse::err("Payload manager not available"),
+        }
+    }
+
+    /// Handles GET /_sensor/payload/endpoints - returns top endpoints by traffic.
+    pub fn handle_payload_endpoints(&self, limit: usize) -> ApiResponse<Vec<EndpointPayloadSummary>> {
+        match &self.payload_manager {
+            Some(manager) => {
+                let endpoints = manager.list_top_endpoints(limit, EndpointSortBy::RequestCount);
+                let summaries: Vec<EndpointPayloadSummary> = endpoints
+                    .into_iter()
+                    .map(|stats| EndpointPayloadSummary {
+                        template: stats.template,
+                        request_count: stats.request_count,
+                        avg_request_size: stats.request.avg_bytes(),
+                        avg_response_size: stats.response.avg_bytes(),
+                    })
+                    .collect();
+                ApiResponse::ok(summaries)
+            }
+            None => ApiResponse::err("Payload manager not available"),
+        }
+    }
+
+    /// Handles GET /_sensor/payload/anomalies - returns recent payload anomalies.
+    pub fn handle_payload_anomalies(&self, limit: usize) -> ApiResponse<Vec<PayloadAnomalyResponse>> {
+        match &self.payload_manager {
+            Some(manager) => {
+                let anomalies = manager.get_anomalies(limit);
+                let responses: Vec<PayloadAnomalyResponse> = anomalies
+                    .into_iter()
+                    .map(|a| PayloadAnomalyResponse {
+                        anomaly_type: format!("{:?}", a.anomaly_type),
+                        severity: format!("{:?}", a.severity),
+                        risk_applied: a.risk_applied,
+                        template: a.template,
+                        entity_id: a.entity_id,
+                        detected_at_ms: a.detected_at,
+                        description: a.description,
+                    })
+                    .collect();
+                ApiResponse::ok(responses)
+            }
+            None => ApiResponse::err("Payload manager not available"),
+        }
+    }
+
+    // =========================================================================
+    // Trends/Anomaly Detection Endpoints
+    // =========================================================================
+
+    /// Handles GET /_sensor/trends/summary - returns trends summary.
+    pub fn handle_trends_summary(&self) -> ApiResponse<TrendsSummaryResponse> {
+        match &self.trends_manager {
+            Some(manager) => {
+                let summary = manager.get_summary(TrendQueryOptions::default());
+                ApiResponse::ok(TrendsSummaryResponse {
+                    total_signals: summary.total_signals,
+                    category_count: summary.by_category.len(),
+                    top_signal_types: summary.top_signal_types.iter()
+                        .map(|t| format!("{:?}", t.signal_type))
+                        .collect(),
+                })
+            }
+            None => ApiResponse::err("Trends manager not available"),
+        }
+    }
+
+    /// Handles GET /_sensor/trends/anomalies - returns detected anomalies.
+    pub fn handle_trends_anomalies(&self, limit: usize) -> ApiResponse<Vec<TrendsAnomalyResponse>> {
+        match &self.trends_manager {
+            Some(manager) => {
+                let mut opts = AnomalyQueryOptions::default();
+                opts.limit = Some(limit);
+                let anomalies = manager.get_anomalies(opts);
+                let responses: Vec<TrendsAnomalyResponse> = anomalies
+                    .into_iter()
+                    .map(|a| TrendsAnomalyResponse {
+                        anomaly_type: format!("{:?}", a.anomaly_type),
+                        severity: format!("{:?}", a.severity),
+                        entities: a.entities,
+                        description: a.description,
+                        detected_at_ms: a.detected_at,
+                    })
+                    .collect();
+                ApiResponse::ok(responses)
+            }
+            None => ApiResponse::err("Trends manager not available"),
+        }
+    }
+
+    // =========================================================================
+    // Crawler/Bot Detection Endpoints
+    // =========================================================================
+
+    /// Handles GET /_sensor/crawler/stats - returns crawler detection stats.
+    pub fn handle_crawler_stats(&self) -> ApiResponse<CrawlerStatsResponse> {
+        match &self.crawler_detector {
+            Some(detector) => {
+                let stats = detector.stats();
+                let total = stats.cache_hits + stats.cache_misses;
+                let cache_hit_rate = if total > 0 {
+                    stats.cache_hits as f64 / total as f64
+                } else {
+                    0.0
+                };
+                ApiResponse::ok(CrawlerStatsResponse {
+                    total_verifications: stats.total_verifications,
+                    verified_crawlers: stats.verified_crawlers,
+                    unverified_crawlers: stats.unverified_crawlers,
+                    bad_bots: stats.bad_bots,
+                    cache_hit_rate,
+                })
+            }
+            None => ApiResponse::err("Crawler detector not available"),
+        }
+    }
+
+    // =========================================================================
+    // Signal Horizon Endpoints
+    // =========================================================================
+
+    /// Handles GET /_sensor/horizon/stats - returns Signal Horizon connection stats.
+    pub fn handle_horizon_stats(&self) -> ApiResponse<HorizonStatsResponse> {
+        match &self.horizon_client {
+            Some(client) => {
+                let stats = client.stats();
+                ApiResponse::ok(HorizonStatsResponse {
+                    signals_sent: stats.signals_sent,
+                    signals_acked: stats.signals_acked,
+                    batches_sent: stats.batches_sent,
+                    heartbeats_sent: stats.heartbeats_sent,
+                    heartbeat_failures: stats.heartbeat_failures,
+                    reconnect_attempts: stats.reconnect_attempts,
+                    blocklist_size: client.blocklist_size(),
+                })
+            }
+            None => ApiResponse::err("Horizon client not available"),
+        }
+    }
+
+    /// Handles GET /_sensor/horizon/blocklist - returns blocklist entries.
+    pub fn handle_horizon_blocklist(&self, limit: usize) -> ApiResponse<Vec<BlocklistEntryResponse>> {
+        match &self.horizon_client {
+            Some(client) => {
+                let blocklist = client.blocklist();
+                let mut entries: Vec<BlocklistEntryResponse> = blocklist.all_ips()
+                    .into_iter()
+                    .chain(blocklist.all_fingerprints().into_iter())
+                    .take(limit)
+                    .map(|e| BlocklistEntryResponse {
+                        entry_type: format!("{:?}", e.block_type),
+                        value: e.indicator,
+                        reason: e.reason.unwrap_or_default(),
+                        source: e.source,
+                        expires_at: e.expires_at,
+                    })
+                    .collect();
+                entries.truncate(limit);
+                ApiResponse::ok(entries)
+            }
+            None => ApiResponse::err("Horizon client not available"),
+        }
+    }
+}
+
+// =============================================================================
+// Response Types for New Endpoints
+// =============================================================================
+
+/// Payload profiling summary response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadSummaryResponse {
+    pub total_endpoints: usize,
+    pub total_entities: usize,
+    pub total_requests: u64,
+    pub total_request_bytes: u64,
+    pub total_response_bytes: u64,
+    pub avg_request_size: f64,
+    pub avg_response_size: f64,
+    pub active_anomalies: usize,
+}
+
+impl From<crate::payload::PayloadSummary> for PayloadSummaryResponse {
+    fn from(s: crate::payload::PayloadSummary) -> Self {
+        Self {
+            total_endpoints: s.total_endpoints,
+            total_entities: s.total_entities,
+            total_requests: s.total_requests,
+            total_request_bytes: s.total_request_bytes,
+            total_response_bytes: s.total_response_bytes,
+            avg_request_size: s.avg_request_size,
+            avg_response_size: s.avg_response_size,
+            active_anomalies: s.active_anomalies,
+        }
+    }
+}
+
+/// Per-endpoint payload summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointPayloadSummary {
+    pub template: String,
+    pub request_count: u64,
+    pub avg_request_size: f64,
+    pub avg_response_size: f64,
+}
+
+/// Payload anomaly response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadAnomalyResponse {
+    pub anomaly_type: String,
+    pub severity: String,
+    pub risk_applied: Option<f64>,
+    pub template: String,
+    pub entity_id: String,
+    pub detected_at_ms: i64,
+    pub description: String,
+}
+
+/// Trends summary response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrendsSummaryResponse {
+    pub total_signals: usize,
+    pub category_count: usize,
+    pub top_signal_types: Vec<String>,
+}
+
+/// Trends anomaly response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrendsAnomalyResponse {
+    pub anomaly_type: String,
+    pub severity: String,
+    pub entities: Vec<String>,
+    pub description: String,
+    pub detected_at_ms: i64,
+}
+
+/// Crawler detection stats response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrawlerStatsResponse {
+    pub total_verifications: u64,
+    pub verified_crawlers: u64,
+    pub unverified_crawlers: u64,
+    pub bad_bots: u64,
+    pub cache_hit_rate: f64,
+}
+
+/// Signal Horizon stats response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HorizonStatsResponse {
+    pub signals_sent: u64,
+    pub signals_acked: u64,
+    pub batches_sent: u64,
+    pub heartbeats_sent: u64,
+    pub heartbeat_failures: u64,
+    pub reconnect_attempts: u32,
+    pub blocklist_size: usize,
+}
+
+/// Blocklist entry response from Signal Horizon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlocklistEntryResponse {
+    pub entry_type: String,
+    pub value: String,
+    pub reason: String,
+    pub source: String,
+    pub expires_at: Option<String>,
 }
 
 /// Builder for ApiHandler.
@@ -446,6 +761,11 @@ pub struct ApiHandlerBuilder {
     actor_manager: Option<Arc<ActorManager>>,
     session_manager: Option<Arc<SessionManager>>,
     synapse_engine: Option<Arc<RwLock<Synapse>>>,
+    payload_manager: Option<Arc<PayloadManager>>,
+    trends_manager: Option<Arc<TrendsManager>>,
+    crawler_detector: Option<Arc<CrawlerDetector>>,
+    dlp_scanner: Option<Arc<DlpScanner>>,
+    horizon_client: Option<Arc<HorizonClient>>,
 }
 
 impl ApiHandlerBuilder {
@@ -527,6 +847,36 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the payload profiling manager.
+    pub fn payload_manager(mut self, manager: Arc<PayloadManager>) -> Self {
+        self.payload_manager = Some(manager);
+        self
+    }
+
+    /// Sets the trends/anomaly detection manager.
+    pub fn trends_manager(mut self, manager: Arc<TrendsManager>) -> Self {
+        self.trends_manager = Some(manager);
+        self
+    }
+
+    /// Sets the crawler/bot detector.
+    pub fn crawler_detector(mut self, detector: Arc<CrawlerDetector>) -> Self {
+        self.crawler_detector = Some(detector);
+        self
+    }
+
+    /// Sets the DLP scanner.
+    pub fn dlp_scanner(mut self, scanner: Arc<DlpScanner>) -> Self {
+        self.dlp_scanner = Some(scanner);
+        self
+    }
+
+    /// Sets the Signal Horizon client.
+    pub fn horizon_client(mut self, client: Arc<HorizonClient>) -> Self {
+        self.horizon_client = Some(client);
+        self
+    }
+
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
         ApiHandler {
@@ -547,6 +897,11 @@ impl ApiHandlerBuilder {
             actor_manager: self.actor_manager,
             session_manager: self.session_manager,
             synapse_engine: self.synapse_engine,
+            payload_manager: self.payload_manager,
+            trends_manager: self.trends_manager,
+            crawler_detector: self.crawler_detector,
+            dlp_scanner: self.dlp_scanner,
+            horizon_client: self.horizon_client,
         }
     }
 }

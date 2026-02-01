@@ -10,15 +10,18 @@
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use lazy_static::lazy_static;
 use regex::{Regex, RegexSet};
-use serde::Deserialize;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use sha2::{Sha256, Digest};
 
 /// Sensitive data type categories
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SensitiveDataType {
     CreditCard,
     Ssn,
@@ -32,6 +35,7 @@ pub enum SensitiveDataType {
     PrivateKey,
     Jwt,
     MedicalRecord,
+    Custom,
 }
 
 impl SensitiveDataType {
@@ -49,12 +53,14 @@ impl SensitiveDataType {
             Self::PrivateKey => "private_key",
             Self::Jwt => "jwt",
             Self::MedicalRecord => "medical_record",
+            Self::Custom => "custom",
         }
     }
 }
 
 /// Pattern severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum PatternSeverity {
     Low,
     Medium,
@@ -80,8 +86,13 @@ pub struct DlpMatch {
     pub data_type: SensitiveDataType,
     pub severity: PatternSeverity,
     pub masked_value: String,
+    /// Start position in the scanned content (local to scan call)
     pub start: usize,
+    /// End position in the scanned content (local to scan call)
     pub end: usize,
+    /// Absolute offset in the original stream (set by StreamingScanner)
+    /// None for non-streaming scans
+    pub stream_offset: Option<usize>,
 }
 
 /// Result of a DLP scan
@@ -123,6 +134,136 @@ pub struct DlpStats {
     pub matches_by_severity: HashMap<PatternSeverity, u64>,
 }
 
+/// A recorded DLP violation for audit/monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DlpViolation {
+    pub timestamp: u64,
+    pub pattern_name: String,
+    pub data_type: String,
+    pub severity: String,
+    pub masked_value: String,
+    pub client_ip: Option<String>,
+    pub path: String,
+}
+
+/// Redaction mode for sensitive data
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RedactionMode {
+    /// Mask all characters (e.g., "**********")
+    Full,
+    /// Show partial characters (e.g., "****-1234") - Default
+    Partial,
+    /// Replace with hash (e.g., "sha256:...")
+    Hash,
+    /// No redaction (dangerous, debug only)
+    None,
+}
+
+impl Default for RedactionMode {
+    fn default() -> Self {
+        Self::Partial
+    }
+}
+
+/// Error type for DLP configuration validation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DlpConfigError {
+    /// Hash mode requires a salt to be configured
+    HashModeRequiresSalt,
+    /// Custom keyword is empty
+    EmptyCustomKeyword,
+    /// Custom keyword exceeds maximum length (1024 chars)
+    CustomKeywordTooLong(usize),
+    /// Too many custom keywords (max 1000)
+    TooManyCustomKeywords(usize),
+}
+
+impl std::fmt::Display for DlpConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HashModeRequiresSalt => {
+                write!(f, "RedactionMode::Hash requires hash_salt to be configured")
+            }
+            Self::EmptyCustomKeyword => write!(f, "custom_keywords contains empty string"),
+            Self::CustomKeywordTooLong(len) => {
+                write!(f, "custom keyword exceeds max length 1024: {} chars", len)
+            }
+            Self::TooManyCustomKeywords(count) => {
+                write!(f, "too many custom keywords (max 1000): {}", count)
+            }
+        }
+    }
+}
+
+impl std::error::Error for DlpConfigError {}
+
+/// Builder for RedactionConfig with common presets
+#[derive(Debug, Clone, Default)]
+pub struct RedactionConfigBuilder {
+    default_mode: RedactionMode,
+    per_type: HashMap<SensitiveDataType, RedactionMode>,
+    hash_salt: Option<String>,
+}
+
+impl RedactionConfigBuilder {
+    /// Create a new builder with default partial redaction
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Preset: Mask all data types with full redaction
+    pub fn mask_all() -> Self {
+        Self {
+            default_mode: RedactionMode::Full,
+            per_type: HashMap::new(),
+            hash_salt: None,
+        }
+    }
+
+    /// Preset: Hash PII (SSN, medical records), mask credentials
+    pub fn hash_pii_mask_credentials(salt: String) -> Self {
+        let mut per_type = HashMap::new();
+        per_type.insert(SensitiveDataType::Ssn, RedactionMode::Hash);
+        per_type.insert(SensitiveDataType::MedicalRecord, RedactionMode::Hash);
+        per_type.insert(SensitiveDataType::CreditCard, RedactionMode::Hash);
+        per_type.insert(SensitiveDataType::Iban, RedactionMode::Hash);
+        // Credentials use partial for debugging
+        per_type.insert(SensitiveDataType::Password, RedactionMode::Full);
+        per_type.insert(SensitiveDataType::ApiKey, RedactionMode::Partial);
+        per_type.insert(SensitiveDataType::AwsKey, RedactionMode::Partial);
+        Self {
+            default_mode: RedactionMode::Partial,
+            per_type,
+            hash_salt: Some(salt),
+        }
+    }
+
+    /// Set the default redaction mode for types not explicitly configured
+    pub fn with_default(mut self, mode: RedactionMode) -> Self {
+        self.default_mode = mode;
+        self
+    }
+
+    /// Set redaction mode for a specific data type
+    pub fn with_type(mut self, data_type: SensitiveDataType, mode: RedactionMode) -> Self {
+        self.per_type.insert(data_type, mode);
+        self
+    }
+
+    /// Set the hash salt (required if any type uses RedactionMode::Hash)
+    pub fn with_salt(mut self, salt: String) -> Self {
+        self.hash_salt = Some(salt);
+        self
+    }
+
+    /// Build the redaction configuration
+    pub fn build(self) -> (HashMap<SensitiveDataType, RedactionMode>, Option<String>) {
+        (self.per_type, self.hash_salt)
+    }
+}
+
 /// DLP configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct DlpConfig {
@@ -141,6 +282,14 @@ pub struct DlpConfig {
     /// Only scans critical patterns: credit cards, SSN, AWS keys, API keys, passwords, private keys, JWT, IBAN, medical records.
     /// Reduces scan time by ~30-40% for typical payloads.
     pub fast_mode: bool,
+    /// List of custom keywords to detect (e.g., project codenames)
+    pub custom_keywords: Option<Vec<String>>,
+    /// Redaction settings per data type
+    #[serde(default)]
+    pub redaction: HashMap<SensitiveDataType, RedactionMode>,
+    /// Salt for hash-based redaction (REQUIRED if any type uses RedactionMode::Hash)
+    /// Should be a cryptographically random string, at least 32 bytes
+    pub hash_salt: Option<String>,
 }
 
 impl Default for DlpConfig {
@@ -152,7 +301,58 @@ impl Default for DlpConfig {
             scan_text_only: true,
             max_body_inspection_bytes: 8 * 1024, // 8KB inspection cap for performance
             fast_mode: false, // Disabled by default for comprehensive scanning
+            custom_keywords: None,
+            redaction: HashMap::new(),
+            hash_salt: None,
         }
+    }
+}
+
+impl DlpConfig {
+    /// Validate the configuration
+    /// Returns error if:
+    /// - Any data type uses Hash mode but no salt is configured
+    /// - Custom keywords contain empty strings or exceed length limits
+    pub fn validate(&self) -> Result<(), DlpConfigError> {
+        // Check if hash mode is used without salt
+        let uses_hash = self.redaction.values().any(|m| *m == RedactionMode::Hash);
+        if uses_hash && self.hash_salt.is_none() {
+            return Err(DlpConfigError::HashModeRequiresSalt);
+        }
+
+        // Validate custom keywords
+        if let Some(keywords) = &self.custom_keywords {
+            if keywords.len() > 1000 {
+                return Err(DlpConfigError::TooManyCustomKeywords(keywords.len()));
+            }
+            for kw in keywords {
+                if kw.is_empty() {
+                    return Err(DlpConfigError::EmptyCustomKeyword);
+                }
+                if kw.len() > 1024 {
+                    return Err(DlpConfigError::CustomKeywordTooLong(kw.len()));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the maximum pattern length for overlap calculation
+    /// Returns the longest pattern that could span chunk boundaries
+    pub fn max_pattern_length(&self) -> usize {
+        // Longest built-in patterns:
+        // - Private key headers: ~60 chars
+        // - JWT tokens: can be very long (1000+)
+        // - IBAN: 34 chars
+        // - Custom keywords: up to 1024 chars
+        let builtin_max = 100; // Conservative estimate for most patterns
+        let custom_max = self
+            .custom_keywords
+            .as_ref()
+            .map(|kws| kws.iter().map(|k| k.len()).max().unwrap_or(0))
+            .unwrap_or(0);
+        builtin_max.max(custom_max)
     }
 }
 
@@ -432,56 +632,82 @@ pub fn validate_iban(iban: &str) -> bool {
 // ============================================================================
 
 lazy_static! {
-    // Credit Cards
-    static ref RE_VISA: Regex = Regex::new(r"\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
-    static ref RE_MASTERCARD: Regex = Regex::new(r"\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
-    static ref RE_AMEX: Regex = Regex::new(r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b").unwrap();
-    static ref RE_DISCOVER: Regex = Regex::new(r"\b6(?:011|5\d{2})[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
+    // Credit Cards - handle mixed separators (spaces, dashes, or none)
+    // Pattern allows any combination: "1234 5678-9012 3456" or "1234-5678 9012-3456"
+    static ref RE_VISA: Regex = Regex::new(r"\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
+        .expect("RE_VISA is a valid regex pattern");
+    static ref RE_MASTERCARD: Regex = Regex::new(r"\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
+        .expect("RE_MASTERCARD is a valid regex pattern");
+    static ref RE_AMEX: Regex = Regex::new(r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b")
+        .expect("RE_AMEX is a valid regex pattern");
+    static ref RE_DISCOVER: Regex = Regex::new(r"\b6(?:011|5\d{2})[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
+        .expect("RE_DISCOVER is a valid regex pattern");
 
     // SSN
-    static ref RE_SSN_FORMATTED: Regex = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap();
+    static ref RE_SSN_FORMATTED: Regex = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b")
+        .expect("RE_SSN_FORMATTED is a valid regex pattern");
     // Note: Using \b instead of lookaround (not supported by Rust regex)
     // The SSN validator filters out false positives anyway
-    static ref RE_SSN_UNFORMATTED: Regex = Regex::new(r"\b\d{9}\b").unwrap();
+    static ref RE_SSN_UNFORMATTED: Regex = Regex::new(r"\b\d{9}\b")
+        .expect("RE_SSN_UNFORMATTED is a valid regex pattern");
 
     // Email - length limits prevent ReDoS via catastrophic backtracking
-    static ref RE_EMAIL: Regex = Regex::new(r"\b[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,253}\.[a-zA-Z]{2,10}\b").unwrap();
+    static ref RE_EMAIL: Regex = Regex::new(r"\b[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,253}\.[a-zA-Z]{2,10}\b")
+        .expect("RE_EMAIL is a valid regex pattern");
 
     // Phone
-    static ref RE_US_PHONE: Regex = Regex::new(r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b").unwrap();
-    static ref RE_INTL_PHONE: Regex = Regex::new(r"\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}").unwrap();
+    static ref RE_US_PHONE: Regex = Regex::new(r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b")
+        .expect("RE_US_PHONE is a valid regex pattern");
+    static ref RE_INTL_PHONE: Regex = Regex::new(r"\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}")
+        .expect("RE_INTL_PHONE is a valid regex pattern");
 
     // AWS
-    static ref RE_AWS_ACCESS_KEY: Regex = Regex::new(r"\b(AKIA[0-9A-Z]{16})\b").unwrap();
-    static ref RE_AWS_SECRET_KEY: Regex = Regex::new(r"\b([a-zA-Z0-9+/]{40})\b").unwrap();
-    static ref RE_AWS_SESSION_TOKEN: Regex = Regex::new(r#"(?i)aws.{0,10}session.{0,10}token.{0,5}['"]?([A-Za-z0-9/+=]{100,})"#).unwrap();
+    static ref RE_AWS_ACCESS_KEY: Regex = Regex::new(r"\b(AKIA[0-9A-Z]{16})\b")
+        .expect("RE_AWS_ACCESS_KEY is a valid regex pattern");
+    static ref RE_AWS_SECRET_KEY: Regex = Regex::new(r"\b([a-zA-Z0-9+/]{40})\b")
+        .expect("RE_AWS_SECRET_KEY is a valid regex pattern");
+    static ref RE_AWS_SESSION_TOKEN: Regex = Regex::new(r#"(?i)aws.{0,10}session.{0,10}token.{0,5}['"]?([A-Za-z0-9/+=]{100,})"#)
+        .expect("RE_AWS_SESSION_TOKEN is a valid regex pattern");
 
     // API Keys
-    static ref RE_GENERIC_API_KEY: Regex = Regex::new(r"(?i)\b(?:api[_-]?key|apikey)[\s]*[=:]\s*['\x22]?([a-zA-Z0-9_-]{20,})['\x22]?").unwrap();
-    static ref RE_GITHUB_TOKEN: Regex = Regex::new(r"\b(gh[ps]_[a-zA-Z0-9]{36,})\b").unwrap();
-    static ref RE_GITHUB_FINE_GRAINED_PAT: Regex = Regex::new(r"\b(github_pat_[a-zA-Z0-9_]{22,})\b").unwrap();
-    static ref RE_STRIPE_KEY: Regex = Regex::new(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})\b").unwrap();
-    static ref RE_GOOGLE_API_KEY: Regex = Regex::new(r"AIza[a-zA-Z0-9_-]{35}").unwrap();
+    static ref RE_GENERIC_API_KEY: Regex = Regex::new(r"(?i)\b(?:api[_-]?key|apikey)[\s]*[=:]\s*['\x22]?([a-zA-Z0-9_-]{20,})['\x22]?")
+        .expect("RE_GENERIC_API_KEY is a valid regex pattern");
+    static ref RE_GITHUB_TOKEN: Regex = Regex::new(r"\b(gh[ps]_[a-zA-Z0-9]{36,})\b")
+        .expect("RE_GITHUB_TOKEN is a valid regex pattern");
+    static ref RE_GITHUB_FINE_GRAINED_PAT: Regex = Regex::new(r"\b(github_pat_[a-zA-Z0-9_]{22,})\b")
+        .expect("RE_GITHUB_FINE_GRAINED_PAT is a valid regex pattern");
+    static ref RE_STRIPE_KEY: Regex = Regex::new(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})\b")
+        .expect("RE_STRIPE_KEY is a valid regex pattern");
+    static ref RE_GOOGLE_API_KEY: Regex = Regex::new(r"AIza[a-zA-Z0-9_-]{35}")
+        .expect("RE_GOOGLE_API_KEY is a valid regex pattern");
 
     // Passwords
-    static ref RE_PASSWORD_URL: Regex = Regex::new(r"(?i)\b(?:password|passwd|pwd)=([^\s&]+)").unwrap();
-    static ref RE_PASSWORD_JSON: Regex = Regex::new(r#"(?i)"(?:password|passwd|pwd)"\s*:\s*"([^"]+)""#).unwrap();
+    static ref RE_PASSWORD_URL: Regex = Regex::new(r"(?i)\b(?:password|passwd|pwd)=([^\s&]+)")
+        .expect("RE_PASSWORD_URL is a valid regex pattern");
+    static ref RE_PASSWORD_JSON: Regex = Regex::new(r#"(?i)"(?:password|passwd|pwd)"\s*:\s*"([^"]+)""#)
+        .expect("RE_PASSWORD_JSON is a valid regex pattern");
 
     // IBAN
-    static ref RE_IBAN: Regex = Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b").unwrap();
+    static ref RE_IBAN: Regex = Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")
+        .expect("RE_IBAN is a valid regex pattern");
 
     // IP Address
-    static ref RE_IPV4: Regex = Regex::new(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b").unwrap();
+    static ref RE_IPV4: Regex = Regex::new(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b")
+        .expect("RE_IPV4 is a valid regex pattern");
 
     // Private Keys
-    static ref RE_RSA_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----").unwrap();
-    static ref RE_EC_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN EC PRIVATE KEY-----[\s\S]*?-----END EC PRIVATE KEY-----").unwrap();
+    static ref RE_RSA_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----")
+        .expect("RE_RSA_PRIVATE_KEY is a valid regex pattern");
+    static ref RE_EC_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN EC PRIVATE KEY-----[\s\S]*?-----END EC PRIVATE KEY-----")
+        .expect("RE_EC_PRIVATE_KEY is a valid regex pattern");
 
     // JWT - minimum segment lengths reduce false positives on base64 data
-    static ref RE_JWT: Regex = Regex::new(r"\b(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{20,})\b").unwrap();
+    static ref RE_JWT: Regex = Regex::new(r"\b(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{20,})\b")
+        .expect("RE_JWT is a valid regex pattern");
 
     // Medical Record
-    static ref RE_MEDICAL_RECORD: Regex = Regex::new(r"(?i)\b(?:MRN|medical[_\s-]?record[_\s-]?(?:number|#|num))[\s:]*([A-Z0-9]{6,})").unwrap();
+    static ref RE_MEDICAL_RECORD: Regex = Regex::new(r"(?i)\b(?:MRN|medical[_\s-]?record[_\s-]?(?:number|#|num))[\s:]*([A-Z0-9]{6,})")
+        .expect("RE_MEDICAL_RECORD is a valid regex pattern");
 
     /// All patterns for scanning
     static ref PATTERNS: Vec<Pattern> = vec![
@@ -593,15 +819,6 @@ lazy_static! {
         ("@", 6),
     ];
 
-    /// Aho-Corasick automaton for fast prefix detection
-    static ref AC_AUTOMATON: AhoCorasick = {
-        let patterns: Vec<&str> = AC_PREFIXES.iter().map(|(p, _)| *p).collect();
-        AhoCorasickBuilder::new()
-            .match_kind(MatchKind::LeftmostFirst)
-            .build(&patterns)
-            .expect("Failed to build Aho-Corasick automaton")
-    };
-
     /// Pre-computed bitmask of pattern indices covered by Aho-Corasick prefiltering.
     /// Each bit position corresponds to a PATTERNS index. If bit N is set, pattern N
     /// has a literal prefix in AC_PREFIXES and can be skipped if AC finds no matches.
@@ -691,6 +908,13 @@ pub struct DlpScanner {
     config: DlpConfig,
     total_scans: AtomicU64,
     total_matches: AtomicU64,
+    automaton: AhoCorasick,
+    // Map automaton pattern ID to (is_custom, original_index)
+    // If is_custom is false, original_index refers to PATTERNS index
+    // If is_custom is true, original_index refers to custom_keywords index
+    pattern_map: Vec<(bool, usize)>,
+    /// Recent violations buffer (limited to last 100)
+    recent_violations: Arc<RwLock<VecDeque<DlpViolation>>>,
 }
 
 impl Default for DlpScanner {
@@ -702,19 +926,59 @@ impl Default for DlpScanner {
 impl DlpScanner {
     /// Create a new DLP scanner with the given configuration.
     ///
-    /// This validates all regex patterns at construction time to fail fast
-    /// if any pattern is invalid. Panics if pattern compilation fails.
+    /// # Panics
+    /// Panics if configuration validation fails (e.g., Hash mode without salt).
+    /// Use `try_new` for fallible construction.
     pub fn new(config: DlpConfig) -> Self {
-        // Force lazy_static initialization to validate all patterns at construction time.
-        // This ensures we fail fast rather than on first scan if a pattern is invalid.
-        let pattern_count = PATTERNS.len();
-        log::debug!("DLP scanner initialized with {} patterns", pattern_count);
+        Self::try_new(config).expect("DLP config validation failed")
+    }
 
-        Self {
+    /// Create a new DLP scanner with validation.
+    /// Returns error if configuration is invalid.
+    pub fn try_new(config: DlpConfig) -> Result<Self, DlpConfigError> {
+        // Validate configuration
+        config.validate()?;
+
+        // Force lazy_static initialization to validate all patterns at construction time.
+        let pattern_count = PATTERNS.len();
+        
+        // Build combined patterns list for Aho-Corasick
+        // 1. Standard prefixes
+        let mut patterns = Vec::new();
+        let mut pattern_map = Vec::new();
+
+        for (prefix, idx) in AC_PREFIXES.iter() {
+            patterns.push(prefix.to_string());
+            pattern_map.push((false, *idx));
+        }
+
+        // 2. Custom keywords
+        if let Some(keywords) = &config.custom_keywords {
+            for (i, keyword) in keywords.iter().enumerate() {
+                patterns.push(keyword.clone());
+                pattern_map.push((true, i));
+            }
+        }
+
+        let automaton = AhoCorasickBuilder::new()
+            .match_kind(MatchKind::LeftmostFirst)
+            .build(&patterns)
+            .expect("Failed to build Aho-Corasick automaton");
+
+        log::debug!(
+            "DLP scanner initialized with {} standard patterns and {} custom keywords",
+            pattern_count,
+            config.custom_keywords.as_ref().map(|k| k.len()).unwrap_or(0)
+        );
+
+        Ok(Self {
             config,
             total_scans: AtomicU64::new(0),
             total_matches: AtomicU64::new(0),
-        }
+            automaton,
+            pattern_map,
+            recent_violations: Arc::new(RwLock::new(VecDeque::with_capacity(100))),
+        })
     }
 
     /// Check if scanner is enabled
@@ -722,9 +986,46 @@ impl DlpScanner {
         self.config.enabled
     }
 
+    /// Record violations from a scan result
+    pub fn record_violations(&self, result: &ScanResult, client_ip: Option<&str>, path: &str) {
+        if !result.has_matches {
+            return;
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        let mut violations = self.recent_violations.blocking_write();
+        
+        for m in &result.matches {
+            if violations.len() >= 100 {
+                violations.pop_front();
+            }
+            
+            violations.push_back(DlpViolation {
+                timestamp: now,
+                pattern_name: m.pattern_name.to_string(),
+                data_type: m.data_type.as_str().to_string(),
+                severity: m.severity.as_str().to_string(),
+                masked_value: m.masked_value.clone(),
+                client_ip: client_ip.map(|s| s.to_string()),
+                path: path.to_string(),
+            });
+        }
+    }
+
+    /// Get recent violations
+    pub async fn get_recent_violations(&self) -> Vec<DlpViolation> {
+        let violations = self.recent_violations.read().await;
+        violations.iter().cloned().rev().collect()
+    }
+
     /// Scan content for sensitive data with optimizations:
     /// - Inspection depth cap (truncation for large payloads)
     /// - Aho-Corasick prefiltering for patterns with literal prefixes
+    #[must_use = "scan results contain sensitive data findings that should be processed"]
     pub fn scan(&self, content: &str) -> ScanResult {
         if !self.config.enabled {
             return ScanResult::default();
@@ -766,11 +1067,27 @@ impl DlpScanner {
         // This is O(n) single-pass vs O(n * patterns) for sequential regex
         // Using u32 bitset instead of HashSet to eliminate heap allocation (25 patterns fit in 32 bits)
         let mut ac_candidates: u32 = 0;
-        for ac_match in AC_AUTOMATON.find_iter(scan_content) {
-            let prefix_idx = ac_match.pattern().as_usize();
-            if prefix_idx < AC_PREFIXES.len() {
-                let pattern_idx = AC_PREFIXES[prefix_idx].1;
-                ac_candidates |= 1 << pattern_idx;
+        for ac_match in self.automaton.find_iter(scan_content) {
+            let pattern_id = ac_match.pattern().as_usize();
+            if let Some((is_custom, idx)) = self.pattern_map.get(pattern_id) {
+                if *is_custom {
+                    // Direct match for custom keyword
+                    if matches.len() < self.config.max_matches {
+                        let _keyword = &self.config.custom_keywords.as_ref().unwrap()[*idx];
+                        matches.push(DlpMatch {
+                            pattern_name: "Custom Keyword",
+                            data_type: SensitiveDataType::Custom,
+                            severity: PatternSeverity::High,
+                            masked_value: "***".to_string(), // Simple mask for custom keywords
+                            start: ac_match.start(),
+                            end: ac_match.end(),
+                            stream_offset: None,
+                        });
+                    }
+                } else {
+                    // Candidate for standard pattern
+                    ac_candidates |= 1 << idx;
+                }
             }
         }
 
@@ -840,6 +1157,7 @@ impl DlpScanner {
                     masked_value: masked,
                     start: m.start(),
                     end: m.end(),
+                    stream_offset: None,
                 });
             }
         }
@@ -864,6 +1182,7 @@ impl DlpScanner {
     }
 
     /// Scan bytes as UTF-8 text
+    #[must_use = "scan results contain sensitive data findings that should be processed"]
     pub fn scan_bytes(&self, data: &[u8]) -> ScanResult {
         match std::str::from_utf8(data) {
             Ok(content) => self.scan(content),
@@ -910,6 +1229,22 @@ impl DlpScanner {
 
     /// Mask a sensitive value for logging
     fn mask_value(&self, value: &str, data_type: SensitiveDataType) -> String {
+        let mode = self.config.redaction.get(&data_type).copied().unwrap_or_default();
+
+        match mode {
+            RedactionMode::None => return value.to_string(),
+            RedactionMode::Hash => {
+                // Use configured salt (validated at construction time if Hash mode is used)
+                let salt = self.config.hash_salt.as_deref().unwrap_or("");
+                let mut hasher = Sha256::new();
+                hasher.update(salt.as_bytes());
+                hasher.update(value.as_bytes());
+                return format!("sha256:{:x}", hasher.finalize());
+            }
+            RedactionMode::Full => return "*".repeat(value.len().min(20)),
+            RedactionMode::Partial => {} // Fall through to partial masking logic
+        }
+
         match data_type {
             SensitiveDataType::CreditCard => {
                 let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -966,11 +1301,13 @@ impl DlpScanner {
                 let parts: Vec<&str> = value.split('.').collect();
                 if parts.len() == 4 {
                     format!("{}.***.***.{}", parts[0], parts[3])
-                } else {
+                }
+                else {
                     "***.***.***.***".to_string()
                 }
             }
             SensitiveDataType::MedicalRecord => "MRN: ********".to_string(),
+            SensitiveDataType::Custom => "***".to_string(),
         }
     }
 
@@ -1323,6 +1660,52 @@ mod tests {
         assert!(stats.total_matches >= 1);
     }
 
+    #[test]
+    fn test_custom_keywords() {
+        let config = DlpConfig {
+            enabled: true,
+            custom_keywords: Some(vec!["ProjectX".to_string(), "InternalID-123".to_string()]),
+            ..Default::default()
+        };
+        let scanner = DlpScanner::new(config);
+        
+        let result = scanner.scan("Confidential: ProjectX launch date is soon.");
+        assert!(result.has_matches);
+        assert_eq!(result.match_count, 1);
+        assert_eq!(result.matches[0].data_type, SensitiveDataType::Custom);
+        
+        let result2 = scanner.scan("User ID: InternalID-123");
+        assert!(result2.has_matches);
+        assert_eq!(result2.matches[0].data_type, SensitiveDataType::Custom);
+    }
+
+    #[test]
+    fn test_redaction_modes() {
+        let mut redaction = HashMap::new();
+        redaction.insert(SensitiveDataType::CreditCard, RedactionMode::Full);
+        redaction.insert(SensitiveDataType::Email, RedactionMode::Hash);
+
+        let config = DlpConfig {
+            enabled: true,
+            redaction,
+            hash_salt: Some("test-salt-for-hashing".to_string()), // Required for Hash mode
+            ..Default::default()
+        };
+        let scanner = DlpScanner::new(config);
+        
+        let result = scanner.scan("Card: 4532015112830366, Email: test@example.com");
+        
+        // Full redaction for card
+        let card = result.matches.iter().find(|m| m.data_type == SensitiveDataType::CreditCard).unwrap();
+        assert!(card.masked_value.chars().all(|c| c == '*'));
+        assert!(!card.masked_value.contains("0366")); // No partial reveal
+        
+        // Hash redaction for email
+        let email = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Email).unwrap();
+        assert!(email.masked_value.starts_with("sha256:"));
+        assert!(!email.masked_value.contains("test@example.com"));
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     // Performance Tests
     // ────────────────────────────────────────────────────────────────────────
@@ -1337,6 +1720,7 @@ mod tests {
             scan_text_only: true,
             max_body_inspection_bytes: 200 * 1024, // 200KB cap for this test
             fast_mode: false,
+            ..Default::default()
         };
         let scanner = DlpScanner::new(config);
 

@@ -50,6 +50,13 @@ pub enum AnomalySignalType {
     HeaderEntropyAnomaly,
     /// Header value length is outside expected range
     HeaderLengthAnomaly,
+
+    // ========================================================================
+    // Error Rate Anomaly Signals
+    // ========================================================================
+
+    /// Abnormal error rate detected (5xx errors on usually-stable endpoint)
+    AbnormalErrorRate,
 }
 
 impl AnomalySignalType {
@@ -70,6 +77,8 @@ impl AnomalySignalType {
             Self::HeaderValueAnomaly => "header_value_anomaly",
             Self::HeaderEntropyAnomaly => "header_entropy_anomaly",
             Self::HeaderLengthAnomaly => "header_length_anomaly",
+            // Error rate anomaly signals
+            Self::AbnormalErrorRate => "abnormal_error_rate",
         }
     }
 
@@ -96,6 +105,8 @@ impl AnomalySignalType {
             Self::HeaderValueAnomaly => 5,        // Was: risk 15 -> severity 5
             Self::HeaderEntropyAnomaly => 6,      // Was: risk 20 -> severity 6
             Self::HeaderLengthAnomaly => 4,       // Was: risk 10 -> severity 4
+            // Error rate anomaly severity
+            Self::AbnormalErrorRate => 5,         // Medium severity for error rate anomaly
         }
     }
 
@@ -121,6 +132,8 @@ impl AnomalySignalType {
             Self::HeaderValueAnomaly => 15,
             Self::HeaderEntropyAnomaly => 20,
             Self::HeaderLengthAnomaly => 10,
+            // Error rate anomaly risk
+            Self::AbnormalErrorRate => 15,        // Medium-high risk for error rate anomaly
         }
     }
 }

@@ -136,13 +136,12 @@ impl ShadowMirrorClient {
 
     /// Selects a URL index using simple hash-based distribution.
     fn select_url_index(&self, request_id: &str, url_count: usize) -> usize {
-        // Simple hash from first 8 bytes of request ID
-        let hash: u64 = request_id
-            .bytes()
-            .take(8)
-            .enumerate()
-            .map(|(i, b)| (b as u64) << (i * 8))
-            .sum();
+        // Use a simple FNV-1a hash for better distribution
+        let mut hash: u64 = 14695981039346656037; // FNV offset basis
+        for byte in request_id.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(1099511628211); // FNV prime
+        }
 
         (hash as usize) % url_count
     }

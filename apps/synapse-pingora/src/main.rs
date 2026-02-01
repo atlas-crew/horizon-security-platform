@@ -53,7 +53,7 @@ use synapse_pingora::metrics::MetricsRegistry;
 
 // Phase 3: Fingerprinting (Feature Migration from risk-server)
 use synapse_pingora::fingerprint::{
-    ClientFingerprint, HttpHeaders, extract_client_fingerprint, analyze_ja4,
+    ClientFingerprint, HttpHeaders, extract_client_fingerprint, analyze_ja4, analyze_integrity,
 };
 
 // Phase 6: Security hardening (Validation)
@@ -94,6 +94,18 @@ use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::RwLock;
 use sha2::{Sha256, Digest};
 
+// Phase 9: Crawler Detection
+use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig, VerificationMethod};
+
+// Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
+use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
+
+// Phase 9: Payload Profiling (bandwidth tracking and anomaly detection)
+use synapse_pingora::payload::{PayloadManager, PayloadConfig};
+
+// Phase 9: Trends (signal tracking and anomaly detection)
+use synapse_pingora::trends::{TrendsManager, TrendsConfig};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -119,6 +131,14 @@ pub struct Config {
     pub tarpit: TarpitConfig,
     #[serde(default)]
     pub dlp: DlpConfig,
+    #[serde(default)]
+    pub crawler: CrawlerConfig,
+    #[serde(default)]
+    pub horizon: HorizonConfig,
+    #[serde(default)]
+    pub payload: PayloadConfig,
+    #[serde(default)]
+    pub trends: TrendsConfig,
 }
 
 impl Default for Config {
@@ -133,6 +153,10 @@ impl Default for Config {
             telemetry: TelemetryConfig::default(),
             tarpit: TarpitConfig::default(),
             dlp: DlpConfig::default(),
+            crawler: CrawlerConfig::default(),
+            horizon: HorizonConfig::default(),
+            payload: PayloadConfig::default(),
+            trends: TrendsConfig::default(),
         }
     }
 }
@@ -897,10 +921,20 @@ pub struct SynapseProxy {
     session_manager: Arc<SessionManager>,
     /// Phase 7: Shadow mirror manager for honeypot delivery
     shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
+    /// Phase 9: Crawler detector for bot verification
+    crawler_detector: Arc<CrawlerDetector>,
+    /// Phase 9: Signal Horizon manager for fleet-wide threat intelligence
+    horizon_manager: Option<Arc<HorizonManager>>,
+    /// Phase 9: Payload profiling manager for bandwidth tracking
+    payload_manager: Arc<PayloadManager>,
+    /// Phase 9: Trends manager for signal tracking and anomaly detection
+    trends_manager: Arc<TrendsManager>,
 }
 
 impl SynapseProxy {
-    pub fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
+    pub async fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
+        let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+
         Self::with_health(
             backends,
             rps_limit,
@@ -911,11 +945,13 @@ impl SynapseProxy {
             Vec::new(),
             tls_manager,
             TarpitConfig::default(),
-            DlpConfig::default(),
+            Arc::new(DlpScanner::new(DlpConfig::default())),
             Arc::new(EntityManager::new(EntityConfig::default())),
             Arc::new(BlockLog::default()),
             Arc::new(ActorManager::new(ActorConfig::default())),
             Arc::new(SessionManager::new(SessionConfig::default())),
+            Arc::new(crawler_detector),
+            None, // No horizon_manager for simple constructor
         )
     }
 
@@ -929,11 +965,13 @@ impl SynapseProxy {
         trusted_proxies: Vec<CidrRange>,
         tls_manager: Arc<TlsManager>,
         tarpit_config: TarpitConfig,
-        dlp_config: DlpConfig,
+        dlp_scanner: Arc<DlpScanner>,
         entity_manager: Arc<EntityManager>,
         block_log: Arc<BlockLog>,
         actor_manager: Arc<ActorManager>,
         session_manager: Arc<SessionManager>,
+        crawler_detector: Arc<CrawlerDetector>,
+        horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
         Self {
             backends,
@@ -942,7 +980,7 @@ impl SynapseProxy {
             per_ip_rps_limit,
             entity_manager,
             tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
-            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
+            dlp_scanner,
             health_checker,
             metrics_registry,
             telemetry_client,
@@ -958,10 +996,16 @@ impl SynapseProxy {
             actor_manager,
             session_manager,
             shadow_mirror_manager: None,
+            crawler_detector,
+            horizon_manager,
+            payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
+            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
         }
     }
 
-    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
+    pub async fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
+        let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+        
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
@@ -985,6 +1029,10 @@ impl SynapseProxy {
             actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
             shadow_mirror_manager: None,
+            crawler_detector: Arc::new(crawler_detector),
+            horizon_manager: None,
+            payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
+            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
         }
     }
 
@@ -1004,11 +1052,13 @@ impl SynapseProxy {
         trusted_proxies: Vec<CidrRange>,
         tls_manager: Arc<TlsManager>,
         tarpit_config: TarpitConfig,
-        dlp_config: DlpConfig,
+        dlp_scanner: Arc<DlpScanner>,
         entity_manager: Arc<EntityManager>,
         block_log: Arc<BlockLog>,
         actor_manager: Arc<ActorManager>,
         session_manager: Arc<SessionManager>,
+        crawler_detector: Arc<CrawlerDetector>,
+        horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
         Self {
             backends: default_backends,
@@ -1017,7 +1067,7 @@ impl SynapseProxy {
             per_ip_rps_limit,
             entity_manager,
             tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
-            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
+            dlp_scanner,
             health_checker,
             metrics_registry,
             telemetry_client,
@@ -1033,6 +1083,10 @@ impl SynapseProxy {
             actor_manager,
             session_manager,
             shadow_mirror_manager: None,
+            crawler_detector,
+            horizon_manager,
+            payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
+            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
         }
     }
 
@@ -1314,6 +1368,22 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
+        // ===== Phase 9: Signal Horizon Blocklist Check =====
+        // Check if IP or fingerprint is on the fleet-wide blocklist
+        if let Some(ref horizon) = self.horizon_manager {
+            if horizon.is_ip_blocked(client_ip) {
+                warn!("Horizon blocklist: {} is blocked fleet-wide", client_ip);
+
+                let resp = ResponseHeader::build(403, None)?;
+                session.write_response_header(Box::new(resp), true).await?;
+                session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\"}")), true).await?;
+
+                self.metrics_registry.record_blocked();
+                return Ok(true);
+            }
+        }
+        // ===== End Signal Horizon Blocklist Check =====
+
         // ===== Phase 6: TLS Validation =====
         // Detect domain fronting, outdated TLS versions, or weak cipher suites
         // Note: SNI vs Host validation is performed via JA4 fingerprint analysis
@@ -1448,6 +1518,55 @@ impl ProxyHttp for SynapseProxy {
 
         ctx.fingerprint = Some(fingerprint.clone());
 
+        // Phase 9: Crawler Verification
+        // Verify user-agent against known crawler signatures and DNS
+        if self.crawler_detector.is_enabled() {
+            if let Some(user_agent) = headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("user-agent")).map(|(_, v)| v) {
+                if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                    let crawler_result = self.crawler_detector.verify(user_agent, ip_addr).await;
+                    
+                    // Handle bad bots (immediate block)
+                    if crawler_result.bad_bot_match.is_some() && self.crawler_detector.should_block_bad_bots() {
+                        let bot_name = crawler_result.bad_bot_match.as_deref().unwrap_or("unknown");
+                        warn!("Blocking bad bot: {} from {}", bot_name, client_ip);
+                        
+                        self.block_log.record(BlockEvent::new(
+                            client_ip.to_string(),
+                            method.to_string(),
+                            uri.clone(),
+                            100, // Max risk
+                            vec![], // No rule ID for bot block
+                            format!("bad_bot:{}", bot_name),
+                            ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+                        ));
+
+                        let resp = ResponseHeader::build(403, None)?;
+                        session.write_response_header(Box::new(resp), true).await?;
+                        // Security: Generic error message to prevent information disclosure
+                        session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\"}")), true).await?;
+                        self.metrics_registry.record_blocked();
+                        return Ok(true);
+                    }
+
+                    // Handle suspicious crawlers (failed verification)
+                    if crawler_result.suspicious {
+                        warn!("Suspicious crawler from {}: {:?}", client_ip, crawler_result.suspicion_reasons);
+                        // Apply risk penalty
+                        if self.entity_manager.is_enabled() {
+                            self.entity_manager.apply_external_risk(
+                                client_ip,
+                                40.0, // Significant risk penalty
+                                &format!("suspicious_crawler: {:?}", crawler_result.suspicion_reasons)
+                            );
+                        }
+                    } else if crawler_result.verified {
+                        // Whitelist verified legitimate crawlers (optional: skip WAF?)
+                        debug!("Verified crawler: {:?} from {}", crawler_result.crawler_name, client_ip);
+                    }
+                }
+            }
+        }
+
         // Cache headers for late body inspection
         ctx.headers = headers.clone();
 
@@ -1548,6 +1667,22 @@ impl ProxyHttp for SynapseProxy {
                     }
                 }
             }
+
+            // 3. Analyze Header Integrity (Client Hints / User-Agent consistency)
+            let integrity = analyze_integrity(&http_headers);
+            if integrity.suspicion_score > 0 {
+                warn!(
+                    "Header Integrity Violation from {}: score={}, issues={:?}",
+                    client_ip, integrity.suspicion_score, integrity.inconsistencies
+                );
+                
+                ctx.entity_risk += integrity.suspicion_score as f64;
+                self.entity_manager.apply_external_risk(
+                    client_ip,
+                    integrity.suspicion_score as f64,
+                    &format!("integrity_violation: {:?}", integrity.inconsistencies),
+                );
+            }
         }
 
         // ===== Phase 5: Actor State Management =====
@@ -1598,7 +1733,8 @@ impl ProxyHttp for SynapseProxy {
                 session.write_response_header(Box::new(resp), true).await?;
                 session
                     .write_response_body(
-                        Some(Bytes::from("{\"error\": \"blocked\", \"reason\": \"actor_blocked\"}")),
+                        // Security: Generic error to prevent info disclosure
+                        Some(Bytes::from("{\"error\": \"access_denied\"}")),
                         true,
                     )
                     .await?;
@@ -1677,6 +1813,37 @@ impl ProxyHttp for SynapseProxy {
         }
         // ===== End Session State Management =====
 
+        // ===== Phase 9: Trends Signal Recording =====
+        // Record request signals for anomaly detection (fingerprint changes, velocity, etc.)
+        {
+            let user_agent = headers.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
+                .map(|(_, v)| v.as_str());
+            let authorization = headers.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+                .map(|(_, v)| v.as_str());
+            let session_id = headers.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("cookie"))
+                .and_then(|(_, v)| {
+                    v.split(';')
+                        .map(|s| s.trim())
+                        .find(|c| c.to_lowercase().starts_with("session"))
+                        .map(|c| c.to_string())
+                });
+
+            let _signals = self.trends_manager.record_request(
+                client_ip,
+                session_id.as_deref(),
+                user_agent,
+                authorization,
+                Some(client_ip),
+                ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.as_str())),
+                ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.as_str()),
+                None, // last_request_time - not tracked yet
+            );
+        }
+        // ===== End Trends Signal Recording =====
+
         // Phase 3: Tarpitting - apply progressive delays to suspicious actors
         // Apply tarpit if: (1) there were matched rules, OR (2) entity has high risk
         let should_tarpit = !result.matched_rules.is_empty() || ctx.entity_risk >= 50.0;
@@ -1731,18 +1898,48 @@ impl ProxyHttp for SynapseProxy {
                 ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
             ));
 
+            // Report threat to Signal Horizon for fleet-wide intelligence
+            if let Some(ref horizon) = self.horizon_manager {
+                let severity = if result.risk_score >= 80 {
+                    Severity::Critical
+                } else if result.risk_score >= 60 {
+                    Severity::High
+                } else if result.risk_score >= 40 {
+                    Severity::Medium
+                } else {
+                    Severity::Low
+                };
+
+                let mut signal = ThreatSignal::new(SignalType::IpThreat, severity)
+                    .with_source_ip(client_ip)
+                    .with_confidence(result.risk_score as f64 / 100.0);
+
+                // Add fingerprint if available
+                if let Some(ref fp) = ctx.fingerprint {
+                    if let Some(ref ja4) = fp.ja4 {
+                        signal = signal.with_fingerprint(&ja4.raw);
+                    }
+                }
+
+                // Add rule IDs as metadata
+                let rule_ids: Vec<String> = result.matched_rules.iter().map(|r| format!("rule_{}", r)).collect();
+                if !rule_ids.is_empty() {
+                    signal = signal.with_metadata(serde_json::json!({ "rule_ids": rule_ids }));
+                }
+
+                horizon.report_signal(signal);
+            }
+
             // Store result for logging hook
             ctx.detection = Some(result);
 
             // Send 403 response
+            // Security: Generic error - specific reason logged internally only
             let resp = ResponseHeader::build(403, None)?;
             session.write_response_header(Box::new(resp), true).await?;
             session
                 .write_response_body(
-                    Some(Bytes::from(format!(
-                        "{{\"error\": \"blocked\", \"reason\": \"{}\"}}",
-                        block_reason
-                    ))),
+                    Some(Bytes::from("{\"error\": \"access_denied\"}")),
                     true,
                 )
                 .await?;
@@ -1903,11 +2100,12 @@ impl ProxyHttp for SynapseProxy {
                     ctx.detection = Some(result);
 
                     // Send 403 response
+                    // Security: Generic error to prevent info disclosure
                     let resp = ResponseHeader::build(403, None)?;
                     _session.write_response_header(Box::new(resp), true).await?;
                     _session
                         .write_response_body(
-                            Some(Bytes::from("{\"error\": \"blocked\", \"reason\": \"Body Payload\"}")),
+                            Some(Bytes::from("{\"error\": \"access_denied\"}")),
                             true,
                         )
                         .await?;
@@ -2294,6 +2492,11 @@ impl ProxyHttp for SynapseProxy {
                 ctx.dlp_match_count = scan_result.match_count;
                 ctx.dlp_types = types.join(",");
 
+                // Record violations for dashboard
+                let client_ip = ctx.client_ip.as_deref();
+                let path = ctx.request_path.as_deref().unwrap_or("/");
+                self.dlp_scanner.record_violations(&scan_result, client_ip, path);
+
                 warn!(
                     "DLP: {} matches found in response ({} bytes, {}μs) - types: {}",
                     scan_result.match_count,
@@ -2501,6 +2704,59 @@ impl ProxyHttp for SynapseProxy {
             fp_hash,
             dlp_info
         );
+
+        // ===== Phase 9: Payload Profiling =====
+        // Record request/response payload sizes for bandwidth tracking and anomaly detection
+        let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+        let template = ctx.request_path.as_deref().unwrap_or(path);
+        let request_bytes = ctx.body_bytes_seen as u64;
+        let response_bytes = ctx.response_body_buffer.len() as u64;
+
+        self.payload_manager.record_request(
+            template,
+            client_ip,
+            request_bytes,
+            response_bytes,
+        );
+        // ===== End Payload Profiling =====
+    }
+}
+
+use synapse_pingora::horizon::MetricsProvider;
+
+struct HorizonMetricsProvider {
+    metrics: Arc<MetricsRegistry>,
+    health: Arc<HealthChecker>,
+}
+
+impl MetricsProvider for HorizonMetricsProvider {
+    fn cpu_usage(&self) -> f64 {
+        // Pingora metrics registry doesn't track CPU/Mem directly yet
+        // We could add sysinfo here or rely on the registry if it supports it
+        0.0 
+    }
+    fn memory_usage(&self) -> f64 {
+        0.0
+    }
+    fn disk_usage(&self) -> f64 {
+        0.0
+    }
+    fn requests_last_minute(&self) -> u64 {
+        // TODO: Implement windowed counter in MetricsRegistry
+        0
+    }
+    fn avg_latency_ms(&self) -> f64 {
+        // TODO: Implement latency tracking
+        0.0
+    }
+    fn config_hash(&self) -> String {
+        "todo".to_string()
+    }
+    fn rules_hash(&self) -> String {
+        "todo".to_string()
+    }
+    fn active_connections(&self) -> Option<u32> {
+        None
     }
 }
 
@@ -2759,10 +3015,19 @@ fn main() {
         telemetry_client.start_background_flush();
     }
 
+    // Create shared CampaignManager for threat correlation (mutable for initialization)
+    let mut campaign_manager_raw = CampaignManager::new();
+    
+    // Inject TelemetryClient for cross-tenant correlation
+    campaign_manager_raw.set_telemetry_client(Arc::clone(&telemetry_client));
+
     // Create multi-site managers if available
     let config_manager: Option<Arc<ConfigManager>> = if let Some((ref config_file, ref sites)) = multisite_config {
         let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
             create_multisite_managers(config_file, sites);
+
+        // Inject AccessListManager into CampaignManager for automated mitigation
+        campaign_manager_raw.set_access_list_manager(Arc::clone(&access_list_mgr));
 
         // Create shared sites vector for ConfigManager
         let sites_arc = Arc::new(RwLock::new(sites.clone()));
@@ -2790,6 +3055,9 @@ fn main() {
         None
     };
 
+    // Wrap CampaignManager in Arc for shared use
+    let campaign_manager = Arc::new(campaign_manager_raw);
+
     // ========== Phase 7: Persistence - Load existing WAF state ==========
     use synapse_pingora::persistence::{PersistenceConfig, SnapshotManager, WafSnapshot};
 
@@ -2812,9 +3080,6 @@ fn main() {
 
     // Create shared BlockLog for both admin API and proxy
     let shared_block_log = Arc::new(BlockLog::default());
-
-    // Create shared CampaignManager for threat correlation
-    let campaign_manager = Arc::new(CampaignManager::new());
 
     // Restore campaigns from snapshot if available
     if let Some(ref snapshot) = loaded_snapshot {
@@ -2841,6 +3106,26 @@ fn main() {
     let shared_session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
     info!("SessionManager initialized with default config");
 
+    // Phase 9: Create shared CrawlerDetector for bot detection and verification
+    let shared_crawler_detector = {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime for crawler init");
+        Arc::new(rt.block_on(async {
+            CrawlerDetector::new(CrawlerConfig::default())
+                .await
+                .expect("Failed to create CrawlerDetector")
+        }))
+    };
+    info!("CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
+        synapse_pingora::crawler::KNOWN_CRAWLERS.len(),
+        synapse_pingora::crawler::BAD_BOT_SIGNATURES.len());
+
+    // Phase 4: Create shared DlpScanner for both admin API and proxy
+    let shared_dlp_scanner = Arc::new(DlpScanner::new(config.dlp.clone()));
+    info!("DlpScanner initialized with {} patterns", shared_dlp_scanner.pattern_count());
+
     // Build the API handler with ConfigManager if available
     let api_handler = Arc::new({
         let mut builder = ApiHandler::builder()
@@ -2851,6 +3136,7 @@ fn main() {
             .campaign_manager(Arc::clone(&campaign_manager))
             .actor_manager(Arc::clone(&shared_actor_manager))
             .session_manager(Arc::clone(&shared_session_manager))
+            .dlp_scanner(Arc::clone(&shared_dlp_scanner)) // New: pass dlp scanner
             .synapse_engine(Arc::clone(&SYNAPSE)); // For dry-run WAF evaluation
 
         if let Some(ref cm) = config_manager {
@@ -2966,11 +3252,13 @@ fn main() {
             trusted_proxies.clone(),
             Arc::clone(&tls_manager),
             config.tarpit.clone(),
-            config.dlp.clone(),
+            Arc::clone(&shared_dlp_scanner),
             Arc::clone(&shared_entity_manager),
             Arc::clone(&shared_block_log),
             Arc::clone(&shared_actor_manager),
             Arc::clone(&shared_session_manager),
+            Arc::clone(&shared_crawler_detector),
+            None, // HorizonManager not yet initialized in main
         )
     } else {
         SynapseProxy::with_health(
@@ -2983,11 +3271,13 @@ fn main() {
             trusted_proxies,
             Arc::clone(&tls_manager),
             config.tarpit.clone(),
-            config.dlp.clone(),
+            Arc::clone(&shared_dlp_scanner),
             Arc::clone(&shared_entity_manager),
             Arc::clone(&shared_block_log),
             Arc::clone(&shared_actor_manager),
             Arc::clone(&shared_session_manager),
+            Arc::clone(&shared_crawler_detector),
+            None, // HorizonManager not yet initialized in main
         )
     };
 
@@ -3375,6 +3665,15 @@ tls:
         let block_log = Arc::new(BlockLog::default());
         let actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
         let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+        let crawler_detector = Arc::new(rt.block_on(async {
+            CrawlerDetector::new(CrawlerConfig::default())
+                .await
+                .expect("Failed to create CrawlerDetector")
+        }));
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
@@ -3385,11 +3684,13 @@ tls:
             Vec::new(), // No trusted proxies for test
             Arc::clone(&tls_manager),
             TarpitConfig::default(),
-            DlpConfig::default(),
+            Arc::new(DlpScanner::new(DlpConfig::default())),
             entity_manager,
             block_log,
             actor_manager,
             session_manager,
+            crawler_detector,
+            None, // No horizon_manager for test
         );
 
         // Verify health status is accessible through proxy

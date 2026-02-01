@@ -13,7 +13,6 @@ import {
   WifiOff,
   Clock,
   TrendingUp,
-  PlayCircle,
   Globe,
   Lock,
   Route,
@@ -70,8 +69,19 @@ const connectivityTests: ConnectivityTest[] = [
   { id: 'traceroute', name: 'Traceroute', description: 'Map network path to endpoints', icon: Route },
 ];
 
+interface TestResult {
+  testType: string;
+  status: 'passed' | 'failed' | 'error';
+  target: string;
+  latencyMs: number | null;
+  details: Record<string, unknown>;
+  error?: string;
+  timestamp: string;
+}
+
 export function ConnectivityPage(): React.ReactElement {
   const [runningTest, setRunningTest] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Map<string, TestResult>>(new Map());
 
   // Fetch connectivity stats
   const { data: statsData } = useQuery({
@@ -142,7 +152,21 @@ export function ConnectivityPage(): React.ReactElement {
   const handleRunTest = async (testId: string) => {
     setRunningTest(testId);
     try {
-      await testMutation.mutateAsync(testId);
+      const response = await testMutation.mutateAsync(testId);
+      if (response.result) {
+        setTestResults(prev => new Map(prev).set(testId, response.result));
+      }
+    } catch (error) {
+      // Store error result
+      setTestResults(prev => new Map(prev).set(testId, {
+        testType: testId,
+        status: 'error',
+        target: 'N/A',
+        latencyMs: null,
+        details: {},
+        error: error instanceof Error ? error.message : 'Test failed',
+        timestamp: new Date().toISOString(),
+      }));
     } finally {
       setRunningTest(null);
     }
@@ -239,32 +263,118 @@ export function ConnectivityPage(): React.ReactElement {
 
       {/* Connectivity Tests */}
       <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-ink-primary mb-4">Connectivity Tests</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <h2 className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {connectivityTests.map((test) => {
             const Icon = test.icon;
             const isRunning = runningTest === test.id;
+            const result = testResults.get(test.id);
             return (
-              <button
+              <div
                 key={test.id}
-                onClick={() => handleRunTest(test.id)}
-                disabled={isRunning}
-                className="bg-surface-subtle border border-border-subtle rounded-lg p-4 text-left hover:bg-surface-card transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-surface-subtle border border-border-subtle rounded-lg p-4"
               >
-                <div className="flex items-start gap-3">
-                  <Icon className="w-5 h-5 text-ink-muted mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="font-medium text-ink-primary mb-1">{test.name}</h3>
-                    <p className="text-sm text-ink-secondary">{test.description}</p>
-                    {isRunning && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <PlayCircle className="w-4 h-4 text-accent-primary animate-pulse" />
-                        <span className="text-xs text-accent-primary">Running...</span>
-                      </div>
-                    )}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1">
+                    <Icon className="w-5 h-5 text-ink-muted mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-ink-primary mb-1">{test.name}</h3>
+                      <p className="text-sm text-ink-secondary">{test.description}</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => handleRunTest(test.id)}
+                    disabled={isRunning || runningTest !== null}
+                    className="px-3 py-1.5 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-sm font-medium rounded border border-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isRunning ? 'Running...' : 'Run Test'}
+                  </button>
                 </div>
-              </button>
+
+                {/* Test Result Display */}
+                {result && (
+                  <div className={`mt-4 p-3 rounded border ${
+                    result.status === 'passed'
+                      ? 'bg-status-success/10 border-status-success/20'
+                      : result.status === 'failed'
+                      ? 'bg-status-error/10 border-status-error/20'
+                      : 'bg-status-warning/10 border-status-warning/20'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {result.status === 'passed' ? (
+                          <CheckCircle className="w-4 h-4 text-status-success" />
+                        ) : result.status === 'failed' ? (
+                          <XCircle className="w-4 h-4 text-status-error" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-status-warning" />
+                        )}
+                        <span className={`text-sm font-medium capitalize ${
+                          result.status === 'passed' ? 'text-status-success' :
+                          result.status === 'failed' ? 'text-status-error' : 'text-status-warning'
+                        }`}>
+                          {result.status}
+                        </span>
+                      </div>
+                      {result.latencyMs !== null && (
+                        <span className="text-sm text-ink-secondary">
+                          {result.latencyMs.toFixed(1)}ms
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-ink-secondary space-y-1">
+                      <div>Target: <span className="text-ink-primary font-mono">{result.target}</span></div>
+                      {result.error && (
+                        <div className="text-status-error">Error: {result.error}</div>
+                      )}
+                      {/* Show relevant details based on test type */}
+                      {result.testType === 'ping' && result.details && (
+                        <div className="mt-2 space-y-0.5">
+                          <div>Packet Loss: <span className="text-ink-primary">{String(result.details.packetLoss)}</span></div>
+                          <div>Avg RTT: <span className="text-ink-primary">{String(result.details.avgRoundTrip)}</span></div>
+                          {result.details.ttl != null && <div>TTL: <span className="text-ink-primary">{String(result.details.ttl)}</span></div>}
+                        </div>
+                      )}
+                      {result.testType === 'dns' && result.details && (
+                        <div className="mt-2 space-y-0.5">
+                          <div>Resolved: <span className="text-ink-primary font-mono">{(result.details.resolvedAddresses as string[])?.join(', ')}</span></div>
+                          <div>Records: <span className="text-ink-primary">{String(result.details.recordCount)}</span></div>
+                        </div>
+                      )}
+                      {result.testType === 'tls' && result.details && (
+                        <div className="mt-2 space-y-0.5">
+                          <div>Protocol: <span className="text-ink-primary">{String(result.details.protocol)}</span></div>
+                          <div>Cipher: <span className="text-ink-primary">{String(result.details.cipher)}</span></div>
+                          {result.details.certificate != null && (
+                            <div>Subject: <span className="text-ink-primary">{String((result.details.certificate as Record<string, unknown>).subject)}</span></div>
+                          )}
+                        </div>
+                      )}
+                      {result.testType === 'traceroute' && result.details && (
+                        <div className="mt-2 space-y-0.5">
+                          <div>Hops: <span className="text-ink-primary">{String(result.details.hopCount)}</span></div>
+                          <div>Reached Target: <span className="text-ink-primary">{result.details.reachedTarget ? 'Yes' : 'No'}</span></div>
+                          {Array.isArray(result.details.hops) && result.details.hops.length > 0 && (
+                            <div className="mt-2 font-mono text-[10px] max-h-24 overflow-y-auto bg-surface-base/50 rounded p-2">
+                              {(result.details.hops as Array<{ hop: number; host: string; ip: string | null; latency: string }>).slice(0, 8).map((hop, i) => (
+                                <div key={i} className="text-ink-muted">
+                                  {String(hop.hop)}. {hop.ip || hop.host} ({hop.latency})
+                                </div>
+                              ))}
+                              {(result.details.hops as Array<unknown>).length > 8 && (
+                                <div className="text-ink-muted">... and {String((result.details.hops as Array<unknown>).length - 8)} more</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-ink-muted mt-2">
+                      {new Date(result.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

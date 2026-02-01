@@ -269,4 +269,12 @@ export const rateLimiters: Record<string, RequestHandler> = {
     message: 'Aggregation rate limit exceeded. These queries are resource-intensive.',
     trustProxy: getTrustedProxies(),
   }),
+
+  /** Connectivity tests: 10 requests per minute (expensive network operations) */
+  connectivityTest: createRateLimiter({
+    maxRequests: 10,
+    windowMs: 60 * 1000,
+    message: 'Connectivity test rate limit exceeded. These operations are resource-intensive.',
+    trustProxy: getTrustedProxies(),
+  }),
 };

@@ -5,7 +5,7 @@
  * including cloud endpoint status and diagnostic tests.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Activity,
@@ -81,7 +81,17 @@ interface TestResult {
 
 export function ConnectivityPage(): React.ReactElement {
   const [runningTest, setRunningTest] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Map<string, TestResult>>(new Map());
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Fetch connectivity stats
   const { data: statsData } = useQuery({
@@ -136,41 +146,59 @@ export function ConnectivityPage(): React.ReactElement {
     refetchInterval: 15000,
   });
 
-  // Run connectivity test mutation
+  // Run connectivity test mutation with AbortController support
   const testMutation = useMutation({
-    mutationFn: async (testId: string) => {
+    mutationFn: async ({ testId, signal }: { testId: string; signal: AbortSignal }) => {
       const response = await fetch(`${API_BASE}/management/connectivity/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ testType: testId }),
+        signal,
       });
       if (!response.ok) throw new Error('Test failed');
       return response.json();
     },
   });
 
-  const handleRunTest = async (testId: string) => {
+  const handleRunTest = useCallback(async (testId: string) => {
+    // Abort any previous test
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setRunningTest(testId);
     try {
-      const response = await testMutation.mutateAsync(testId);
+      const response = await testMutation.mutateAsync({ testId, signal: controller.signal });
       if (response.result) {
-        setTestResults(prev => new Map(prev).set(testId, response.result));
+        setTestResults(prev => ({ ...prev, [testId]: response.result }));
       }
     } catch (error) {
+      // Don't update state if aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       // Store error result
-      setTestResults(prev => new Map(prev).set(testId, {
-        testType: testId,
-        status: 'error',
-        target: 'N/A',
-        latencyMs: null,
-        details: {},
-        error: error instanceof Error ? error.message : 'Test failed',
-        timestamp: new Date().toISOString(),
+      setTestResults(prev => ({
+        ...prev,
+        [testId]: {
+          testType: testId,
+          status: 'error',
+          target: 'N/A',
+          latencyMs: null,
+          details: {},
+          error: error instanceof Error ? error.message : 'Test failed',
+          timestamp: new Date().toISOString(),
+        },
       }));
     } finally {
-      setRunningTest(null);
+      if (!controller.signal.aborted) {
+        setRunningTest(null);
+      }
     }
-  };
+  }, [testMutation]);
 
   // Generate mock chart data
   const latencyTrendData = useMemo(() => {
@@ -262,29 +290,44 @@ export function ConnectivityPage(): React.ReactElement {
       </div>
 
       {/* Connectivity Tests */}
-      <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <section
+        aria-labelledby="diagnostic-tests-heading"
+        className="bg-surface-card border border-border-subtle rounded-lg p-6"
+      >
+        <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
+        {/* Live region for screen reader announcements */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">
+          {runningTest && `Running ${runningTest} test...`}
+          {Object.values(testResults).length > 0 && !runningTest && (
+            `Last test: ${Object.values(testResults)[Object.values(testResults).length - 1]?.testType} ${Object.values(testResults)[Object.values(testResults).length - 1]?.status}`
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" role="list" aria-label="Available network tests">
           {connectivityTests.map((test) => {
             const Icon = test.icon;
             const isRunning = runningTest === test.id;
-            const result = testResults.get(test.id);
+            const result = testResults[test.id];
+            const testStatusId = `test-status-${test.id}`;
             return (
-              <div
+              <article
                 key={test.id}
+                role="listitem"
+                aria-labelledby={`test-name-${test.id}`}
                 className="bg-surface-subtle border border-border-subtle rounded-lg p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1">
-                    <Icon className="w-5 h-5 text-ink-muted mt-0.5" />
+                    <Icon className="w-5 h-5 text-ink-muted mt-0.5" aria-hidden="true" />
                     <div className="flex-1">
-                      <h3 className="font-medium text-ink-primary mb-1">{test.name}</h3>
+                      <h3 id={`test-name-${test.id}`} className="font-medium text-ink-primary mb-1">{test.name}</h3>
                       <p className="text-sm text-ink-secondary">{test.description}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => handleRunTest(test.id)}
                     disabled={isRunning || runningTest !== null}
+                    aria-describedby={result ? testStatusId : undefined}
+                    aria-busy={isRunning}
                     className="px-3 py-1.5 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-sm font-medium rounded border border-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isRunning ? 'Running...' : 'Run Test'}
@@ -293,7 +336,11 @@ export function ConnectivityPage(): React.ReactElement {
 
                 {/* Test Result Display */}
                 {result && (
-                  <div className={`mt-4 p-3 rounded border ${
+                  <div
+                    id={testStatusId}
+                    role="status"
+                    aria-label={`${test.name} result: ${result.status}`}
+                    className={`mt-4 p-3 rounded border ${
                     result.status === 'passed'
                       ? 'bg-status-success/10 border-status-success/20'
                       : result.status === 'failed'
@@ -374,11 +421,11 @@ export function ConnectivityPage(): React.ReactElement {
                     </div>
                   </div>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* Sensor Connectivity Table */}
       <div className="bg-surface-card border border-border-subtle rounded-lg overflow-hidden">

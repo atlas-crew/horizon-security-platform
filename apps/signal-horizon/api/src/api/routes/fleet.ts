@@ -118,6 +118,30 @@ const CommandIdParamSchema = z.object({
   commandId: z.string(),
 });
 
+const UpdatePingoraConfigBodySchema = z.object({
+  waf: z.object({
+    enabled: z.boolean(),
+    threshold: z.number().min(0).max(1),
+    rule_overrides: z.record(z.object({
+      enabled: z.boolean(),
+      action: z.enum(['block', 'log', 'allow'])
+    })).optional(),
+  }).optional(),
+  rateLimit: z.object({
+    enabled: z.boolean(),
+    requests_per_second: z.number().int().min(1),
+    burst: z.number().int().min(1),
+  }).optional(),
+  accessControl: z.object({
+    allow: z.string().array(),
+    deny: z.string().array(),
+  }).optional(),
+});
+
+const PingoraActionBodySchema = z.object({
+  action: z.enum(['test', 'reload', 'restart']),
+});
+
 // ======================== Route Handler ========================
 
 export function createFleetRoutes(
@@ -871,6 +895,165 @@ const SensorLogsQuerySchema = z.object({
         logger.error({ error }, 'Failed to run diagnostics');
         res.status(500).json({
           error: 'Failed to run diagnostics',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/fleet/sensors/:sensorId/config/pingora
+   * Get Pingora configuration for a sensor
+   */
+  router.get(
+    '/sensors/:sensorId/config/pingora',
+    requireScope('fleet:read'),
+    validateParams(SensorIdParamSchema),
+    async (req, res) => {
+      try {
+        const { sensorId } = req.params;
+
+        let config = await prisma.sensorPingoraConfig.findUnique({
+          where: { sensorId },
+        });
+
+        // Create default if not exists
+        if (!config) {
+          config = await prisma.sensorPingoraConfig.create({
+            data: {
+              sensorId,
+              wafEnabled: true,
+              wafThreshold: 0.5,
+              rateLimitEnabled: true,
+              rps: 100,
+              burst: 50,
+              allowList: [],
+              denyList: [],
+            },
+          });
+        }
+
+        res.json({
+          waf: {
+            enabled: config.wafEnabled,
+            threshold: config.wafThreshold,
+            rule_overrides: config.wafOverrides || {},
+          },
+          rateLimit: {
+            enabled: config.rateLimitEnabled,
+            requests_per_second: config.rps,
+            burst: config.burst,
+          },
+          accessControl: {
+            allow: config.allowList,
+            deny: config.denyList,
+          },
+          updatedAt: config.updatedAt,
+        });
+      } catch (error) {
+        logger.error({ error }, 'Failed to get Pingora config');
+        res.status(500).json({
+          error: 'Failed to get Pingora config',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/fleet/sensors/:sensorId/config/pingora
+   * Update Pingora configuration and push to sensor
+   */
+  router.post(
+    '/sensors/:sensorId/config/pingora',
+    requireScope('fleet:write'),
+    validateParams(SensorIdParamSchema),
+    validateBody(UpdatePingoraConfigBodySchema),
+    async (req, res) => {
+      try {
+        const { sensorId } = req.params;
+        const body = req.body as z.infer<typeof UpdatePingoraConfigBodySchema>;
+        const auth = req.auth!;
+
+        // 1. Persist to DB
+        const updateData: any = {};
+        if (body.waf) {
+          updateData.wafEnabled = body.waf.enabled;
+          updateData.wafThreshold = body.waf.threshold;
+          updateData.wafOverrides = body.waf.rule_overrides;
+        }
+        if (body.rateLimit) {
+          updateData.rateLimitEnabled = body.rateLimit.enabled;
+          updateData.rps = body.rateLimit.requests_per_second;
+          updateData.burst = body.rateLimit.burst;
+        }
+        if (body.accessControl) {
+          updateData.allowList = body.accessControl.allow;
+          updateData.denyList = body.accessControl.deny;
+        }
+
+        const config = await prisma.sensorPingoraConfig.upsert({
+          where: { sensorId },
+          create: { sensorId, ...updateData },
+          update: updateData,
+        });
+
+        // 2. Dispatch command to sensor
+        if (fleetCommander) {
+          await fleetCommander.sendCommand(auth.tenantId, sensorId, {
+            type: 'push_config',
+            payload: {
+              component: 'pingora',
+              config: {
+                waf: body.waf,
+                rateLimit: body.rateLimit,
+                accessControl: body.accessControl,
+              },
+            },
+          });
+        }
+
+        res.json({ message: 'Configuration update initiated', config });
+      } catch (error) {
+        logger.error({ error }, 'Failed to update Pingora config');
+        res.status(500).json({
+          error: 'Failed to update Pingora config',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/fleet/sensors/:sensorId/actions/pingora
+   * Trigger Pingora service actions (test, reload, restart)
+   */
+  router.post(
+    '/sensors/:sensorId/actions/pingora',
+    requireScope('fleet:write'),
+    validateParams(SensorIdParamSchema),
+    validateBody(PingoraActionBodySchema),
+    async (req, res) => {
+      try {
+        const { sensorId } = req.params;
+        const { action } = req.body as z.infer<typeof PingoraActionBodySchema>;
+        const auth = req.auth!;
+
+        if (fleetCommander) {
+          await fleetCommander.sendCommand(auth.tenantId, sensorId, {
+            type: action === 'restart' ? 'restart' : 'push_config',
+            payload: {
+              component: 'pingora',
+              action, // 'test' or 'reload'
+            },
+          });
+        }
+
+        res.json({ message: `Pingora ${action} command sent`, sensorId });
+      } catch (error) {
+        logger.error({ error }, 'Failed to trigger Pingora action');
+        res.status(500).json({
+          error: 'Failed to trigger Pingora action',
           message: getErrorMessage(error),
         });
       }

@@ -39,14 +39,15 @@
     --ac-card-dark: #0A1A3A;
 
     /* =========================================
-       CHARCOAL SCALE (for dark mode)
+       NAVY SCALE (for dark mode - design system)
+       War room aesthetic: Navy dominant, not charcoal
        ========================================= */
-    --ac-charcoal-darkest: #121212;
-    --ac-charcoal-darker: #1a1a1a;
-    --ac-charcoal-dark: #242424;
-    --ac-charcoal: #2d2d2d;
-    --ac-charcoal-light: #3a3a3a;
-    --ac-charcoal-lighter: #4a4a4a;
+    --ac-navy-darkest: #00102E;
+    --ac-navy-darker: #001544;
+    --ac-navy-dark: #001E62;
+    --ac-navy-medium: #0A2A6E;
+    --ac-navy-light: #1A3A7E;
+    --ac-navy-lighter: #2A4A8E;
 
     /* =========================================
        TINTS & SHADES
@@ -98,41 +99,84 @@
 
     --shadow-color: rgba(0, 30, 98, 0.1);
     --shadow-color-strong: rgba(0, 30, 98, 0.2);
+
+    /* Depth effects */
+    --glow-magenta: rgba(214, 37, 152, 0.4);
+    --glow-blue: rgba(0, 87, 183, 0.4);
+    --card-highlight: rgba(255, 255, 255, 0.08);
+    --card-shadow: rgba(0, 30, 98, 0.15);
+    --inset-shadow: inset 0 1px 2px rgba(0, 30, 98, 0.1);
   }
 
   .dark {
     color-scheme: dark;
 
-    /* Charcoal-based dark mode */
-    --surface-base: var(--ac-charcoal-darker);
-    --surface-subtle: var(--ac-charcoal-dark);
-    --surface-card: var(--ac-charcoal);
-    --surface-inset: var(--ac-charcoal-darkest);
-    --surface-overlay: var(--ac-charcoal-dark);
-    --surface-hero: var(--ac-charcoal-dark);
+    /* Navy-based dark mode (Signal Horizon Design System)
+       War room aesthetic: Navy dominant, Magenta accents */
+    --surface-base: var(--ac-navy-darker);
+    --surface-subtle: var(--ac-navy-dark);
+    --surface-card: var(--ac-navy-medium);
+    --surface-inset: var(--ac-navy-darkest);
+    --surface-overlay: var(--ac-navy-dark);
+    --surface-hero: var(--ac-navy-dark);
 
-    --text-primary: #F0F4F8;
-    --text-secondary: #C0C0C0;
-    --text-muted: #808080;
-    --text-inverse: #FFFFFF;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0C4DE;
+    --text-muted: #7B8FA8;
+    --text-inverse: #001E62;
 
-    --link: #529EEC;
-    --link-hover: #7CBAFF;
+    --link: #70BAF7;
+    --link-hover: #0057B7;
 
-    --border-subtle: var(--ac-charcoal-light);
-    --border-strong: var(--ac-charcoal-lighter);
-    --border-inset: var(--ac-charcoal);
+    --border-subtle: var(--ac-navy-light);
+    --border-strong: var(--ac-navy-lighter);
+    --border-inset: var(--ac-navy-medium);
 
-    --accent: #529EEC;
-    --accent-hover: #7CBAFF;
-    --focus-ring: #7CBAFF;
+    --accent: #0057B7;
+    --accent-hover: #70BAF7;
+    --focus-ring: #D62598;
 
-    --shadow-color: rgba(0, 0, 0, 0.45);
-    --shadow-color-strong: rgba(0, 0, 0, 0.65);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --shadow-color-strong: rgba(0, 0, 0, 0.7);
+
+    /* Depth effects - dark mode */
+    --glow-magenta: rgba(214, 37, 152, 0.5);
+    --glow-blue: rgba(0, 87, 183, 0.5);
+    --card-highlight: rgba(255, 255, 255, 0.08);
+    --card-shadow: rgba(0, 0, 0, 0.5);
+    --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+
+    /* Gradient surfaces for depth */
+    --gradient-card: linear-gradient(165deg, rgba(26, 58, 126, 0.95) 0%, rgba(10, 42, 110, 0.98) 50%, rgba(0, 30, 98, 1) 100%);
+    --gradient-card-hover: linear-gradient(165deg, rgba(42, 74, 142, 0.95) 0%, rgba(26, 58, 126, 0.98) 50%, rgba(10, 42, 110, 1) 100%);
+    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.08) 0%, transparent 100%);
+    --gradient-inset: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, transparent 30%);
+    --gradient-hero: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    --border-glow: 0 0 0 1px rgba(0, 87, 183, 0.3);
   }
 
   body {
     @apply bg-surface-base text-ink-primary font-sans antialiased;
+  }
+
+  /* War room atmosphere - tactical command center */
+  .dark body,
+  .dark .app-shell {
+    background:
+      /* Tactical grid */
+      linear-gradient(rgba(0, 87, 183, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 87, 183, 0.02) 1px, transparent 1px),
+      /* Focal point highlights */
+      radial-gradient(ellipse at 30% 20%, rgba(0, 87, 183, 0.1) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(214, 37, 152, 0.06) 0%, transparent 40%),
+      /* Base gradient */
+      linear-gradient(180deg, #001544 0%, #00102E 100%);
+    background-size:
+      40px 40px,
+      40px 40px,
+      100% 100%,
+      100% 100%,
+      100% 100%;
   }
 
   a {
@@ -170,55 +214,120 @@
     @apply bg-surface-base text-ink-primary;
   }
 
-  /* Card styles */
+  /* Card styles with gradient depth */
   .card {
-    @apply bg-surface-card border border-border-subtle shadow-card;
+    @apply shadow-card;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  /* Dark mode cards get gradient treatment */
+  .dark .card {
+    background: var(--gradient-card);
+    border: 1px solid rgba(0, 87, 183, 0.25);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.4),
+      0 1px 3px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  /* Glass panel - semi-transparent with blur */
+  .card-glass {
+    @apply backdrop-blur-md;
+    background: rgba(10, 42, 110, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.12);
+    border-left-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .card-glass {
+    background: linear-gradient(165deg, rgba(0, 30, 98, 0.85) 0%, rgba(0, 21, 68, 0.9) 100%);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   .card-header {
-    @apply px-4 py-3 border-b border-border-subtle text-ink-primary;
+    @apply px-4 py-3 border-b text-ink-primary;
+    border-color: rgba(0, 87, 183, 0.2);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
   }
 
   .card-body {
     @apply p-4;
+    position: relative;
   }
 
-  /* Button styles */
+  /* Button styles (Signal Horizon Design System)
+     Primary: Magenta, Secondary: Atlas Crew Blue outline, Height: 40px */
   .btn {
-    @apply inline-flex items-center justify-center font-medium text-sm tracking-[0.02em] transition-colors focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 focus:ring-offset-surface-base disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center font-semibold text-sm tracking-[0.02em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-magenta focus:ring-offset-2 focus:ring-offset-surface-base disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn h-14 px-8 bg-accent text-ink-inverse hover:bg-accent-hover;
+    @apply btn h-10 px-6 bg-ac-magenta text-white hover:bg-ac-magenta/90;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 16px var(--glow-magenta);
   }
 
   .btn-outline {
-    @apply btn h-12 px-6 border-2 border-ink-primary text-ink-primary hover:bg-surface-subtle;
+    @apply btn h-10 px-6 border-2 border-ac-blue text-ac-blue hover:bg-ac-blue/10 bg-transparent;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-outline:hover {
+    box-shadow: 0 0 12px var(--glow-blue);
   }
 
   .btn-secondary {
-    @apply btn h-10 px-5 bg-ac-navy text-ink-inverse hover:bg-ac-blue-darker;
+    @apply btn h-10 px-5 border-2 border-ac-blue text-ac-blue hover:bg-ac-blue/10 bg-transparent;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-secondary:hover {
+    box-shadow: 0 0 12px var(--glow-blue);
   }
 
   .btn-ghost {
-    @apply btn h-10 px-4 text-link hover:text-link-hover;
+    @apply btn h-10 px-4 text-ac-blue hover:text-ac-blue/80;
   }
 
-  /* Severity badges */
+  .btn-tertiary {
+    @apply btn h-10 px-4 text-ac-blue hover:text-ac-blue/80;
+  }
+
+  /* Severity badges (Signal Horizon Design System)
+     Critical=Magenta, Warning=Orange, Success=Green, Info=Blue outline */
   .severity-low {
-    @apply bg-ac-blue/10 text-ac-blue border border-ac-blue/30;
+    @apply bg-ac-green text-white border border-ac-green;
   }
 
   .severity-medium {
-    @apply bg-ac-orange/10 text-ac-orange border border-ac-orange/30;
+    @apply bg-ac-orange text-white border border-ac-orange;
   }
 
   .severity-high {
-    @apply bg-ac-orange/20 text-ac-orange border border-ac-orange/40;
+    @apply bg-ac-orange text-white border border-ac-orange;
   }
 
   .severity-critical {
-    @apply bg-ac-red/15 text-ac-red border border-ac-red/40;
+    @apply bg-ac-magenta text-white border border-ac-magenta;
+  }
+
+  .severity-info {
+    @apply bg-transparent text-ac-blue border border-ac-navy;
   }
 
   /* Status indicators */
@@ -234,34 +343,70 @@
     @apply bg-ac-orange animate-pulse;
   }
 
-  /* Stat cards */
+  /* Stat cards (Signal Horizon Design System)
+     Large numbers in Rubik Light (300), eyebrow labels */
   .stat-card {
     @apply card p-4;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .dark .stat-card {
+    background: linear-gradient(165deg, rgba(26, 58, 126, 0.9) 0%, rgba(10, 42, 110, 0.95) 100%);
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+  }
+
+  .dark .stat-card:hover {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(0, 87, 183, 0.3);
   }
 
   .stat-value {
     @apply text-3xl font-light text-ink-primary;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .stat-value-primary {
+    @apply text-3xl font-light text-ac-magenta;
+    text-shadow: 0 0 20px rgba(214, 37, 152, 0.4);
+  }
+
+  .stat-value-secondary {
+    @apply text-3xl font-light text-ac-blue;
+    text-shadow: 0 0 20px rgba(0, 87, 183, 0.4);
   }
 
   .stat-label {
-    @apply text-sm text-ink-secondary mt-1;
+    @apply text-xs font-bold uppercase tracking-[0.1em] text-ink-muted mt-1;
   }
 
-  /* Data table */
+  /* Data table (Signal Horizon Design System)
+     Navy headers, dense rows (36-40px), subtle hover */
   .data-table {
     @apply w-full text-sm text-ink-secondary;
   }
 
   .data-table th {
-    @apply text-left text-xs font-semibold tracking-[0.08em] uppercase px-4 py-3 border-b border-border-subtle;
+    @apply text-left text-xs font-semibold tracking-[0.08em] uppercase px-4 py-2 text-white border-b;
+    background: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    border-color: rgba(0, 87, 183, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   .data-table td {
-    @apply px-4 py-3 border-b border-border-subtle;
+    @apply px-4 py-2 border-b;
+    border-color: rgba(0, 87, 183, 0.15);
+  }
+
+  .data-table tbody tr {
+    @apply h-9; /* 36px dense rows */
   }
 
   .data-table tbody tr:hover {
-    @apply bg-surface-subtle;
+    @apply bg-ac-navy/10;
   }
 
   /* =========================================
@@ -303,25 +448,30 @@
     @apply bg-ctrlx-info;
   }
 
-  /* CtrlX Table - Light themed data table */
+  /* CtrlX Table (Signal Horizon Design System)
+     Navy headers, white text, dense rows, subtle hover */
   .ctrlx-table {
     @apply w-full text-sm;
   }
 
   .ctrlx-table thead {
-    @apply bg-gray-50;
+    @apply bg-ac-navy;
   }
 
   .ctrlx-table th {
-    @apply text-left text-xs font-semibold text-navy-600 tracking-wide uppercase px-4 py-3 border-b border-gray-200;
+    @apply text-left text-xs font-semibold text-white tracking-wide uppercase px-4 py-2 border-b border-ac-navy;
   }
 
   .ctrlx-table td {
-    @apply px-4 py-3 border-b border-gray-100 text-navy-800;
+    @apply px-4 py-2 border-b border-border-subtle text-ink-primary;
+  }
+
+  .ctrlx-table tbody tr {
+    @apply h-9; /* 36px dense rows */
   }
 
   .ctrlx-table tbody tr:hover {
-    @apply bg-gray-50;
+    @apply bg-ac-navy/10;
   }
 
   /* Method Badges */
@@ -349,46 +499,46 @@
     @apply method-badge bg-method-delete/10 text-method-delete border border-method-delete/30;
   }
 
-  /* Risk Badges */
+  /* Risk Badges (Signal Horizon Design System - solid backgrounds) */
   .risk-badge {
     @apply inline-flex items-center px-2 py-0.5 text-xs font-semibold uppercase;
   }
 
   .risk-badge-low {
-    @apply risk-badge bg-risk-low/10 text-risk-low border border-risk-low/30;
+    @apply risk-badge bg-ac-green text-white border border-ac-green;
   }
 
   .risk-badge-medium {
-    @apply risk-badge bg-risk-medium/10 text-risk-medium border border-risk-medium/30;
+    @apply risk-badge bg-ac-orange text-white border border-ac-orange;
   }
 
   .risk-badge-high {
-    @apply risk-badge bg-risk-high/10 text-risk-high border border-risk-high/30;
+    @apply risk-badge bg-ac-orange text-white border border-ac-orange;
   }
 
   .risk-badge-critical {
-    @apply risk-badge bg-risk-critical/10 text-risk-critical border border-risk-critical/30;
+    @apply risk-badge bg-ac-magenta text-white border border-ac-magenta;
   }
 
-  /* Status Badges */
+  /* Status Badges (Signal Horizon Design System) */
   .status-badge {
     @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium;
   }
 
   .status-badge-online {
-    @apply status-badge bg-ctrlx-success/10 text-ctrlx-success;
+    @apply status-badge bg-ac-green text-white;
   }
 
   .status-badge-offline {
-    @apply status-badge bg-gray-100 text-gray-500;
+    @apply status-badge bg-ac-navy/20 text-ac-navy;
   }
 
   .status-badge-warning {
-    @apply status-badge bg-ctrlx-warning/10 text-ctrlx-warning;
+    @apply status-badge bg-ac-orange text-white;
   }
 
   .status-badge-blocked {
-    @apply status-badge bg-ctrlx-danger/10 text-ctrlx-danger;
+    @apply status-badge bg-ac-magenta text-white;
   }
 
   /* Tag Badges */
@@ -422,34 +572,65 @@
     @apply bg-white text-navy-900 shadow-sm;
   }
 
-  /* CtrlX Page Header */
+  /* CtrlX Page Header (Signal Horizon Design System)
+     Headlines are Light (300), not bold */
   .ctrlx-page-header {
     @apply flex items-center justify-between mb-6;
   }
 
   .ctrlx-page-title {
-    @apply text-2xl font-semibold text-navy-900;
+    @apply text-2xl font-light text-ink-primary;
+  }
+
+  .ctrlx-page-subtitle {
+    @apply text-xl font-light text-ink-primary;
   }
 
   .ctrlx-page-actions {
     @apply flex items-center gap-3;
   }
 
-  /* CtrlX Button variants */
+  /* Typography scale (Signal Horizon Design System) */
+  .heading-h1 {
+    @apply text-5xl font-light text-ink-primary; /* 48px */
+  }
+
+  .heading-h2 {
+    @apply text-3xl font-light text-ink-primary; /* 32px */
+  }
+
+  .heading-h3 {
+    @apply text-2xl font-light text-ink-primary; /* 28px */
+  }
+
+  .eyebrow {
+    @apply text-sm font-bold uppercase tracking-[0.1em] text-ink-muted;
+  }
+
+  /* CtrlX Button variants (Signal Horizon Design System) */
   .ctrlx-btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ac-magenta;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .ctrlx-btn-primary {
-    @apply ctrlx-btn bg-ctrlx-primary text-white hover:bg-navy-800 focus:ring-ctrlx-primary;
+    @apply ctrlx-btn bg-ac-magenta text-white hover:bg-ac-magenta/90;
+  }
+
+  .ctrlx-btn-primary:hover {
+    box-shadow: 0 0 16px var(--glow-magenta);
   }
 
   .ctrlx-btn-secondary {
-    @apply ctrlx-btn bg-white border border-gray-300 text-navy-700 hover:bg-gray-50 focus:ring-gray-300;
+    @apply ctrlx-btn bg-transparent border-2 border-ac-blue text-ac-blue hover:bg-ac-blue/10;
+  }
+
+  .ctrlx-btn-secondary:hover {
+    box-shadow: 0 0 12px var(--glow-blue);
   }
 
   .ctrlx-btn-ghost {
-    @apply ctrlx-btn text-navy-600 hover:bg-gray-100;
+    @apply ctrlx-btn text-ac-blue hover:bg-ac-blue/10;
   }
 
   /* CtrlX Filter Pills */
@@ -477,21 +658,417 @@
   .ctrlx-search-icon {
     @apply absolute left-3 top-1/2 -translate-y-1/2 text-gray-400;
   }
+
+  /* Input fields with inner shadow for depth */
+  .input-inset,
+  .dark input,
+  .dark select,
+  .dark textarea {
+    box-shadow: var(--inset-shadow);
+    @apply bg-surface-inset border-border-subtle;
+  }
+
+  .dark input:focus,
+  .dark select:focus,
+  .dark textarea:focus {
+    box-shadow: var(--inset-shadow), 0 0 0 2px var(--glow-blue);
+  }
 }
 
 @layer utilities {
-  /* Glow effects */
+  /* =========================================
+     TACTICAL ATMOSPHERE - War Room Effects
+     ========================================= */
+
+  /* Radar sweep - the signature animation */
+  .radar-sweep {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .radar-sweep::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 87, 183, 0.03) 50%,
+      rgba(0, 87, 183, 0.08) 70%,
+      transparent 100%
+    );
+    animation: radar-scan 8s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes radar-scan {
+    0% { left: -50%; }
+    100% { left: 100%; }
+  }
+
+  /* Tactical grid overlay */
+  .tactical-grid {
+    background-image:
+      linear-gradient(rgba(0, 87, 183, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 87, 183, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Pulsing grid accent - for critical areas */
+  .grid-pulse {
+    animation: grid-breathe 4s ease-in-out infinite;
+  }
+
+  @keyframes grid-breathe {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Data stream effect - vertical scan lines */
+  .data-stream {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .data-stream::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    right: 0;
+    height: 30%;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(214, 37, 152, 0.02) 40%,
+      rgba(214, 37, 152, 0.05) 50%,
+      rgba(214, 37, 152, 0.02) 60%,
+      transparent 100%
+    );
+    animation: data-flow 6s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes data-flow {
+    0% { top: -30%; }
+    100% { top: 100%; }
+  }
+
+  /* Threat pulse - for critical indicators */
+  .threat-pulse {
+    animation: threat-beacon 2s ease-in-out infinite;
+  }
+
+  @keyframes threat-beacon {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(214, 37, 152, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(214, 37, 152, 0);
+    }
+  }
+
+  /* Status blink - for live indicators */
+  .status-blink {
+    animation: status-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Scanline texture - CRT monitor effect */
+  .scanlines {
+    position: relative;
+  }
+
+  .scanlines::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  /* Terminal cursor blink */
+  .cursor-blink::after {
+    content: '▌';
+    animation: blink 1s step-end infinite;
+    color: var(--ac-magenta);
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Staggered fade-in for lists */
+  .stagger-fade > * {
+    opacity: 0;
+    animation: fade-up 0.4s ease-out forwards;
+  }
+
+  .stagger-fade > *:nth-child(1) { animation-delay: 0.05s; }
+  .stagger-fade > *:nth-child(2) { animation-delay: 0.1s; }
+  .stagger-fade > *:nth-child(3) { animation-delay: 0.15s; }
+  .stagger-fade > *:nth-child(4) { animation-delay: 0.2s; }
+  .stagger-fade > *:nth-child(5) { animation-delay: 0.25s; }
+  .stagger-fade > *:nth-child(6) { animation-delay: 0.3s; }
+  .stagger-fade > *:nth-child(7) { animation-delay: 0.35s; }
+  .stagger-fade > *:nth-child(8) { animation-delay: 0.4s; }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Hover lift - tactical response */
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-color-strong);
+  }
+
+  /* Border glow animation for active states */
+  .border-glow {
+    position: relative;
+  }
+
+  .border-glow::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 87, 183, 0.5),
+      rgba(214, 37, 152, 0.5),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: border-sweep 3s linear infinite;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .border-glow:hover::after,
+  .border-glow:focus::after {
+    opacity: 1;
+  }
+
+  @keyframes border-sweep {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* =========================================
+     SURFACE GRADIENTS & DEPTH
+     ========================================= */
+
+  /* Gradient surface - subtle top-down lighting */
+  .surface-gradient {
+    background: linear-gradient(180deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      transparent 50%,
+      rgba(0, 0, 0, 0.1) 100%);
+  }
+
+  /* Inset panel - recessed appearance */
+  .surface-inset {
+    background: linear-gradient(180deg,
+      rgba(0, 0, 0, 0.15) 0%,
+      rgba(0, 0, 0, 0.05) 20%,
+      transparent 100%);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Raised panel - elevated appearance */
+  .surface-raised {
+    background: linear-gradient(165deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.02) 50%,
+      transparent 100%);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Hero gradient - for headers and hero sections */
+  .surface-hero-gradient {
+    background: linear-gradient(180deg,
+      rgba(0, 30, 98, 1) 0%,
+      rgba(0, 21, 68, 1) 100%);
+  }
+
+  /* Sidebar gradient */
+  .surface-sidebar {
+    background: linear-gradient(180deg,
+      rgba(0, 21, 68, 0.98) 0%,
+      rgba(0, 16, 46, 1) 100%);
+  }
+
+  /* Frosted glass effect */
+  .surface-frosted {
+    backdrop-filter: blur(12px);
+    background: linear-gradient(165deg,
+      rgba(0, 30, 98, 0.7) 0%,
+      rgba(0, 21, 68, 0.8) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Ambient glow behind elements */
+  .ambient-glow {
+    position: relative;
+  }
+
+  .ambient-glow::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(0, 87, 183, 0.15) 0%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Magenta ambient glow */
+  .ambient-glow-magenta::before {
+    background: radial-gradient(
+      ellipse at center,
+      rgba(214, 37, 152, 0.12) 0%,
+      transparent 70%
+    );
+  }
+
+  /* Depth shadow layers */
+  .depth-1 {
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .depth-2 {
+    box-shadow:
+      0 4px 6px rgba(0, 0, 0, 0.25),
+      0 2px 4px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .depth-3 {
+    box-shadow:
+      0 10px 20px rgba(0, 0, 0, 0.3),
+      0 4px 8px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .depth-4 {
+    box-shadow:
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 8px 16px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Edge highlight - top edge lighting */
+  .edge-highlight {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Inner border glow */
+  .inner-glow-blue {
+    box-shadow: inset 0 0 20px rgba(0, 87, 183, 0.15);
+  }
+
+  .inner-glow-magenta {
+    box-shadow: inset 0 0 20px rgba(214, 37, 152, 0.12);
+  }
+
+  /* =========================================
+     DEPTH & GLOW EFFECTS
+     ========================================= */
+
+  /* Subtle glow on interactive elements */
   .glow-horizon {
-    box-shadow: 0 0 18px rgba(0, 87, 183, 0.35);
+    box-shadow: 0 0 20px var(--glow-blue);
+  }
+
+  .glow-magenta {
+    box-shadow: 0 0 20px var(--glow-magenta);
   }
 
   .glow-threat-critical {
-    box-shadow: 0 0 18px rgba(239, 51, 64, 0.35);
+    box-shadow: 0 0 18px rgba(214, 37, 152, 0.5);
   }
 
-  /* Gradient text */
+  /* Hover glow for buttons/interactive */
+  .hover\:glow-blue:hover {
+    box-shadow: 0 0 16px var(--glow-blue);
+  }
+
+  .hover\:glow-magenta:hover {
+    box-shadow: 0 0 16px var(--glow-magenta);
+  }
+
+  /* Focus glow */
+  .focus\:glow-magenta:focus {
+    box-shadow: 0 0 0 2px var(--surface-base), 0 0 16px var(--glow-magenta);
+  }
+
+  .focus\:glow-blue:focus {
+    box-shadow: 0 0 0 2px var(--surface-base), 0 0 16px var(--glow-blue);
+  }
+
+  /* Noise/grain texture overlay - very subtle */
+  .texture-noise {
+    position: relative;
+  }
+
+  .texture-noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+
+  /* Gradient text - NO gradient fills in charts */
   .gradient-text {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-ac-sky-blue to-ac-blue;
+  }
+
+  /* Subtle background gradients */
+  .bg-gradient-navy {
+    background: linear-gradient(180deg, #001E62 0%, #00102E 100%);
+  }
+
+  .bg-gradient-radial-navy {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(0, 87, 183, 0.12) 0%, transparent 60%),
+      linear-gradient(180deg, #001544 0%, #00102E 100%);
   }
 
   /* Animation delays */

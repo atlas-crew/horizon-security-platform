@@ -11,6 +11,7 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
+use subtle::ConstantTimeEq;
 
 use crate::health::{HealthChecker, HealthResponse};
 use crate::metrics::MetricsRegistry;
@@ -280,11 +281,20 @@ impl ApiHandler {
         }
     }
 
-    /// Validates the API authentication token.
+    /// Validates the API authentication token using constant-time comparison.
+    ///
+    /// Uses `subtle::ConstantTimeEq` to prevent timing attacks that could
+    /// allow attackers to guess valid tokens character-by-character.
     pub fn validate_auth(&self, token: Option<&str>) -> bool {
         match (&self.auth_token, token) {
             (None, _) => true, // No auth required
-            (Some(expected), Some(provided)) => expected == provided,
+            (Some(expected), Some(provided)) => {
+                let expected_bytes = expected.as_bytes();
+                let provided_bytes = provided.as_bytes();
+                // Constant-time comparison: prevents timing attacks
+                expected_bytes.len() == provided_bytes.len()
+                    && bool::from(expected_bytes.ct_eq(provided_bytes))
+            }
             (Some(_), None) => false,
         }
     }

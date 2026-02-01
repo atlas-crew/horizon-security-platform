@@ -25,9 +25,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
 import {
   useBeamStats,
@@ -55,7 +52,7 @@ const COLORS = {
   },
 };
 
-const PIE_COLORS = ['#0057B7', '#00B140', '#E35205', '#EF3340', '#440099']; // Atlas Crew approved colors
+const ATTACK_COLORS = ['#0057B7', '#D62598', '#E35205', '#EF3340', '#00B140']; // Atlas Crew brand palette
 
 // Demo data for initial development
 const DEMO_TRAFFIC: TrafficDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
@@ -155,24 +152,26 @@ function TrafficChart({ data }: TrafficChartProps) {
             </defs>
             <XAxis
               dataKey="time"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: '#7B8FA8', fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: '#7B8FA8', fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
                 color: '#fff',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
             />
             <Area
               type="monotone"
@@ -195,52 +194,120 @@ function TrafficChart({ data }: TrafficChartProps) {
   );
 }
 
-// Attack Types Pie Chart
+// Attack Types Stacked Bar Chart with depth/gradients
 function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
+  // Calculate total for stacked bar
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+
+  // Generate gradient style for each color
+  const getBarGradient = (color: string, isHovered = false) => {
+    const opacity = isHovered ? 1 : 0.9;
+    return `linear-gradient(180deg,
+      ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%,
+      ${color}cc 50%,
+      ${color}99 100%)`;
+  };
+
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
-      <h3 className="text-lg font-semibold text-ink-primary mb-4">Attack Distribution</h3>
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={70}
-              paddingAngle={2}
-              dataKey="count"
-              nameKey="type"
-            >
-              {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '0',
-                color: '#fff',
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-4 space-y-2">
-        {data.map((item, index) => (
-          <div key={item.type} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
+    <div className="bg-surface-card border border-border-subtle p-5 relative overflow-hidden">
+      {/* Subtle background glow */}
+      <div
+        className="absolute inset-0 opacity-30 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(0, 87, 183, 0.15) 0%, transparent 60%)',
+        }}
+      />
+
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-ink-primary tracking-wide">ATTACK DISTRIBUTION</h3>
+          <span className="text-xs text-ink-muted font-mono">{total} TOTAL</span>
+        </div>
+
+        {/* Stacked horizontal bar with depth */}
+        <div
+          className="h-10 flex overflow-hidden border border-border-subtle relative"
+          style={{
+            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 -1px 2px rgba(255, 255, 255, 0.05)',
+          }}
+        >
+          {data.map((item, index) => {
+            const color = ATTACK_COLORS[index % ATTACK_COLORS.length];
+            return (
               <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-              />
-              <span className="text-ink-secondary">{item.type}</span>
-            </div>
-            <span className="text-ink-primary font-medium">{item.percentage}%</span>
-          </div>
-        ))}
+                key={item.type}
+                className="h-full relative group transition-all duration-200 hover:brightness-110"
+                style={{
+                  width: `${item.percentage}%`,
+                  background: getBarGradient(color),
+                  boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)`,
+                }}
+              >
+                {/* Highlight edge */}
+                <div
+                  className="absolute inset-y-0 right-0 w-px"
+                  style={{ background: 'rgba(0, 0, 0, 0.3)' }}
+                />
+                {/* Tooltip on hover */}
+                <div
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 text-xs text-ink-primary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(0, 30, 98, 0.95) 0%, rgba(0, 20, 60, 0.98) 100%)',
+                    border: '1px solid rgba(0, 87, 183, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+                  }}
+                >
+                  <span className="font-medium">{item.type}</span>
+                  <span className="text-ink-muted ml-2">{item.count}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend with individual bars */}
+        <div className="mt-5 space-y-3">
+          {data.map((item, index) => {
+            const color = ATTACK_COLORS[index % ATTACK_COLORS.length];
+            return (
+              <div key={item.type} className="group">
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-2.5 h-2.5"
+                      style={{
+                        background: `linear-gradient(135deg, ${color} 0%, ${color}99 100%)`,
+                        boxShadow: `0 0 6px ${color}66`,
+                      }}
+                    />
+                    <span className="text-ink-secondary">{item.type}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-ink-muted font-mono text-xs">{item.count}</span>
+                    <span className="text-ink-primary font-medium font-mono w-10 text-right">{item.percentage}%</span>
+                  </div>
+                </div>
+                {/* Individual progress bar with gradient */}
+                <div
+                  className="h-2 overflow-hidden relative"
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
+                  }}
+                >
+                  <div
+                    className="h-full transition-all duration-500 ease-out group-hover:brightness-110"
+                    style={{
+                      width: `${item.percentage}%`,
+                      background: `linear-gradient(90deg, ${color}cc 0%, ${color} 50%, ${color}cc 100%)`,
+                      boxShadow: `0 0 8px ${color}44, inset 0 1px 0 rgba(255, 255, 255, 0.15)`,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

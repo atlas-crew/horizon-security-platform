@@ -87,7 +87,9 @@ The API will be available at `http://localhost:3000` and the UI at `http://local
 
 Comprehensive documentation can be found in the [docs/](./docs/) directory:
 
-- [Architecture](./docs/architecture.md) - System design and patterns.
+- [Architecture Patterns](./docs/architecture.md) - System-wide design decisions and data flows.
+- [Rule Authoring Flow](./docs/guides/rule-authoring-flow.md) - How to create and deploy rules (Sigma, UI, Fleet).
+- [Fleet Management Spec](./docs/signal-horizon-fleet-management-spec.md) - Detailed fleet operations specification.
 - [API Reference](./docs/api.md) - REST and WebSocket protocols.
 - [Setup Guide](./docs/setup.md) - Detailed installation and configuration.
 - [Fleet Management](./docs/features/fleet-management.md) - Managing sensor fleets.

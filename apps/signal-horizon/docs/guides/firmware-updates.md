@@ -24,6 +24,14 @@ Signal Horizon supports three rollout strategies to balance speed and safety:
 
 Deploy to all target sensors simultaneously.
 
+```mermaid
+graph TD
+    Release[New Release] --> S1[Sensor 1]
+    Release --> S2[Sensor 2]
+    Release --> S3[Sensor 3]
+    Release --> SN[Sensor N]
+```
+
 **Best for:**
 - Small fleets (< 20 sensors)
 - Critical security patches requiring urgent deployment
@@ -36,6 +44,14 @@ Deploy to all target sensors simultaneously.
 #### Canary Rollout
 
 Deploy to a small percentage first, then expand after validation.
+
+```mermaid
+graph TD
+    Release[New Release] --> Canary[Canary Group 10%]
+    Canary -- "Wait & Monitor" --> Check{Healthy?}
+    Check -- "Yes" --> Remaining[Remaining 90%]
+    Check -- "No" --> Rollback[Abort & Rollback]
+```
 
 **Best for:**
 - Medium to large fleets
@@ -56,6 +72,15 @@ Deploy to a small percentage first, then expand after validation.
 #### Rolling Rollout
 
 Deploy in sequential batches with configurable delays.
+
+```mermaid
+graph TD
+    Release[New Release] --> B1[Batch 1]
+    B1 --> D1[Delay]
+    D1 --> B2[Batch 2]
+    B2 --> D2[Delay]
+    D2 --> BN[Batch N]
+```
 
 **Best for:**
 - Large fleets (100+ sensors)

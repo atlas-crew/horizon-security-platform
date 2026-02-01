@@ -129,6 +129,7 @@ model Sensor {
   syncState     SensorSyncState?
   commands      FleetCommand[]
   ruleSyncState RuleSyncState[]
+  pingoraConfig SensorPingoraConfig?
 
   // Signal Array - Relations
   apiKeys           SensorApiKey[]
@@ -719,6 +720,30 @@ model RuleSyncState {
   @@index([ruleId])
   @@index([status])
   @@map("rule_sync_state")
+}
+
+model SensorPingoraConfig {
+  id              String   @id @default(cuid())
+  sensorId        String   @unique
+  sensor          Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  // WAF Settings
+  wafEnabled      Boolean  @default(true)
+  wafThreshold    Float    @default(0.5)
+  wafOverrides    Json?    // Map of ruleId -> { enabled, action }
+
+  // Rate Limiting
+  rateLimitEnabled Boolean @default(true)
+  rps             Int      @default(100)
+  burst           Int      @default(50)
+
+  // Access Control
+  allowList       String[]
+  denyList        String[]
+
+  updatedAt       DateTime @updatedAt
+
+  @@map("sensor_pingora_configs")
 }
 
 // Scheduled rule deployments - persisted for restart recovery

@@ -56,11 +56,11 @@ const DEMO_ERROR_TYPES = [
   { type: '503 Service Unavailable', count: 140, percentage: 4 },
 ];
 
-// Demo data - error breakdown by category
+// Demo data - error breakdown by category (Atlas Crew brand colors)
 const DEMO_ERROR_CATEGORIES = [
-  { name: 'Client Errors (4xx)', value: 3100, color: '#529EEC' },
-  { name: 'Server Errors (5xx)', value: 460, color: '#ef4444' },
-  { name: 'Blocked by WAF', value: 890, color: '#8b5cf6' },
+  { name: 'Client Errors (4xx)', value: 3100, color: '#E35205' }, // Atlas Crew Orange
+  { name: 'Server Errors (5xx)', value: 460, color: '#D62598' },  // Atlas Crew Magenta
+  { name: 'Blocked by WAF', value: 890, color: '#440099' },       // Atlas Crew Purple
 ];
 
 // Demo data - endpoints with highest errors
@@ -72,11 +72,12 @@ const DEMO_ERROR_ENDPOINTS = [
   { endpoint: '/api/v1/payments/process', total: 3400, errors: 85, rate: 2.5 },
 ];
 
+// Atlas Crew brand colors
 const CHART_COLORS = {
-  total: '#3b82f6',
-  errors4xx: '#529EEC',
-  errors5xx: '#ef4444',
-  blocked: '#8b5cf6',
+  total: '#0057B7',     // Atlas Crew Blue
+  errors4xx: '#E35205', // Atlas Crew Orange
+  errors5xx: '#D62598', // Atlas Crew Magenta
+  blocked: '#440099',   // Atlas Crew Purple
 };
 
 // Time Range Selector
@@ -208,7 +209,7 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
                 <stop offset="95%" stopColor={CHART_COLORS.blocked} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
             <XAxis
               dataKey="time"
               tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
@@ -222,12 +223,13 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
-              labelStyle={{ color: 'var(--text-secondary)' }}
-              itemStyle={{ color: '#fff' }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
             />
             <Area
               type="monotone"
@@ -285,10 +287,13 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
             </Pie>
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number) => [
                 `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
                 'Errors',

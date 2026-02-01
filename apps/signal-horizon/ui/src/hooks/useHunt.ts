@@ -37,6 +37,7 @@ export interface SignalResult {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   confidence: number;
   eventCount: number;
+  metadata?: any;
 }
 
 export interface HuntResult {
@@ -96,6 +97,7 @@ const SignalResultSchema = z.object({
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   confidence: z.number(),
   eventCount: z.number(),
+  metadata: z.any().optional(),
 });
 
 const HuntResultSchema = z.object({

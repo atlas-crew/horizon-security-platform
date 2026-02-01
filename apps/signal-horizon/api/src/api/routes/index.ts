@@ -1,12 +1,15 @@
 /**
  * API Routes Index
- * Combines all route modules with authentication
+ * Combines all route modules with authentication and security middleware
+ *
+ * PEN-004: Content-type validation applied globally to all mutation endpoints.
  */
 
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { createAuthMiddleware } from '../middleware/auth.js';
+import { contentTypeValidation } from '../../middleware/content-type.js';
 import { createCampaignRoutes } from './campaigns.js';
 import { createThreatRoutes } from './threats.js';
 import { createBlocklistRoutes } from './blocklist.js';
@@ -27,6 +30,7 @@ import { createFleetPolicyRoutes } from './fleet-policy.js';
 import { createFleetSessionsRoutes } from './fleet-sessions.js';
 import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
 import { createPlaybookRoutes } from './playbooks.js';
+import docsRouter from './docs.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
@@ -56,6 +60,20 @@ export function createApiRouter(
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(prisma);
+
+  // PEN-004: Content-type validation for all mutation endpoints
+  // Applied before auth to reject malformed requests early
+  router.use(contentTypeValidation({
+    requiredType: 'application/json',
+    skipRoutes: [
+      '/docs',           // Documentation routes may not have bodies
+      /^\/fleet\/.*\/files/,  // File upload routes use multipart
+    ],
+    uploadRoutes: [
+      /^\/fleet\/.*\/files/,  // Allow multipart for file uploads
+      /^\/releases\/.*\/upload/,  // Allow multipart for release uploads
+    ],
+  }));
 
   // All API routes require authentication
   router.use(authMiddleware);
@@ -150,6 +168,10 @@ export function createApiRouter(
     warRoomService: options.warRoomService,
   }));
   logger.info('Playbook routes mounted at /api/v1/playbooks');
+
+  // Mount documentation routes
+  router.use('/docs', docsRouter);
+  logger.info('Documentation routes mounted at /api/v1/docs');
 
   return router;
 }

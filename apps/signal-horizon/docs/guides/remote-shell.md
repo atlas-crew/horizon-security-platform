@@ -8,6 +8,21 @@ This guide provides step-by-step instructions for using Signal Horizon's browser
 
 Remote Shell is a browser-based terminal that allows you to access your Synapse sensors directly from the Signal Horizon dashboard. It provides a secure, interactive command-line interface without requiring direct SSH access or VPN connections.
 
+```mermaid
+graph LR
+    Browser[Admin Browser] -- "HTTPS/WS" --> Hub[Signal Horizon Hub]
+    Hub -- "Multiplexed Tunnel" --> Sensor[Synapse Sensor]
+    Sensor -- "Outbound WS" --> Hub
+    
+    subgraph Edge ["Edge Network"]
+        Sensor
+    end
+    
+    subgraph Cloud ["Control Plane"]
+        Hub
+    end
+```
+
 The shell sessions run through Signal Horizon's tunnel broker, which establishes secure WebSocket connections between your browser and the sensor. This means:
 
 - No inbound firewall ports required on sensors

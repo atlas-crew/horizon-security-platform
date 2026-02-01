@@ -421,26 +421,33 @@ export function ConnectivityPage(): React.ReactElement {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latency Trend Chart */}
-        <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+        <div className="bg-surface-card border border-border-subtle p-6">
           <h2 className="text-lg font-semibold text-ink-primary mb-4">Latency Trend (24h)</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={latencyTrendData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border-subtle" />
-              <XAxis dataKey="time" className="text-ink-muted" tick={{ fontSize: 12 }} />
-              <YAxis className="text-ink-muted" tick={{ fontSize: 12 }} />
+              <defs>
+                <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#529EEC" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#529EEC" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+              <XAxis dataKey="time" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'var(--color-surface-card)',
-                  border: '1px solid var(--color-border-subtle)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--color-ink-primary)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(0, 87, 183, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
               />
               <Line
                 type="monotone"
                 dataKey="latency"
-                stroke="#3B82F6"
-                strokeWidth={2}
+                stroke="#529EEC"
+                strokeWidth={2.5}
                 dot={false}
                 name="Latency (ms)"
               />
@@ -449,22 +456,30 @@ export function ConnectivityPage(): React.ReactElement {
         </div>
 
         {/* Connection Events Chart */}
-        <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
+        <div className="bg-surface-card border border-border-subtle p-6">
           <h2 className="text-lg font-semibold text-ink-primary mb-4">Connection Events (Weekly)</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={connectionEventsData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border-subtle" />
-              <XAxis dataKey="day" className="text-ink-muted" tick={{ fontSize: 12 }} />
-              <YAxis className="text-ink-muted" tick={{ fontSize: 12 }} />
+              <defs>
+                <linearGradient id="reconnectGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#E35205" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#E35205" stopOpacity={0.7} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+              <XAxis dataKey="day" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'var(--color-surface-card)',
-                  border: '1px solid var(--color-border-subtle)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--color-ink-primary)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(227, 82, 5, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
+                cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
               />
-              <Bar dataKey="reconnections" fill="#F59E0B" name="Reconnections" />
+              <Bar dataKey="reconnections" fill="url(#reconnectGradient)" name="Reconnections" radius={[0, 0, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

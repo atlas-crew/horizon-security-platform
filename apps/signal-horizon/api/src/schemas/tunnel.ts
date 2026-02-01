@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { zodRegexSafeSuperRefine } from '../lib/regex-validator.js';
 
 // =============================================================================
 // Constants
@@ -147,7 +148,7 @@ export const LogLevelSchema = z.enum([
 export const LogFilterSchema = z.object({
   minLevel: LogLevelSchema.optional(),
   pattern: z.string().max(256).optional(),
-  regex: z.string().max(512).optional(),
+  regex: z.string().max(500).superRefine(zodRegexSafeSuperRefine).optional(),
   components: z.array(z.string().max(128)).max(50).optional(),
   since: z.number().int().positive().optional(),
   until: z.number().int().positive().optional(),

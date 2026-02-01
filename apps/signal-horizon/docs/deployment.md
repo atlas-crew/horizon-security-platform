@@ -12,23 +12,21 @@ Signal Horizon consists of three main components:
 | PostgreSQL | Real-time data, configuration state | 5432 |
 | ClickHouse | Historical data, time-series analytics | 8123/9000 |
 
-```
-                    ┌─────────────────────────────────────┐
-                    │           Load Balancer             │
-                    │         (HTTPS termination)         │
-                    └─────────────────┬───────────────────┘
-                                      │
-                    ┌─────────────────┴───────────────────┐
-                    │        Signal Horizon API           │
-                    │   (Express + WebSocket Gateway)     │
-                    └─────────────────┬───────────────────┘
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-    ┌─────────┴─────────┐   ┌─────────┴─────────┐   ┌─────────┴─────────┐
-    │    PostgreSQL     │   │    ClickHouse     │   │       Redis       │
-    │  (real-time data) │   │ (historical data) │   │  (session cache)  │
-    └───────────────────┘   └───────────────────┘   └───────────────────┘
+```mermaid
+graph TD
+    LB[Load Balancer<br/>HTTPS Termination]
+    API[Signal Horizon API<br/>Express + WS Gateway]
+    
+    subgraph Storage ["Database Cluster"]
+        PG[(PostgreSQL<br/>Real-time State)]
+        CH[(ClickHouse<br/>Historical Analytics)]
+        RD[(Redis<br/>Session Cache)]
+    end
+
+    LB --> API
+    API --> PG
+    API --> CH
+    API --> RD
 ```
 
 ## Prerequisites

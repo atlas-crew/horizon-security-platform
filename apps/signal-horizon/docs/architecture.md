@@ -8,15 +8,36 @@ Signal Horizon is a multi-tenant hub that ingests threat signals from Synapse se
 
 High-level components:
 
-```
-+-------------------+        +-------------------+        +-------------------+
-|  Synapse Sensors  |  WS    |  Signal Horizon   |  REST  |     Dashboards    |
-|  (many tenants)   +------->|  Hub (API + WS)   +------->|  Web UI / SOC     |
-+-------------------+        +-------------------+        +-------------------+
-          |                            |
-          |                            |
-          v                            v
-   PostgreSQL (source of truth)   ClickHouse (optional history)
+```mermaid
+graph LR
+    subgraph Sensors ["Synapse Sensors"]
+        S1[Tenant A]
+        S2[Tenant B]
+        S3[Tenant C]
+    end
+
+    subgraph Hub ["Signal Horizon Hub"]
+        API[API Server]
+        WS[WebSocket Gateway]
+    end
+
+    subgraph Storage ["Intelligence Core"]
+        PG[(PostgreSQL)]
+        CH[(ClickHouse)]
+    end
+
+    subgraph Consumers ["Management"]
+        UI[Web UI / SOC]
+        CLI[Edge CLI]
+    end
+
+    Sensors -- "WS (Signals)" --> WS
+    WS --> API
+    API --> PG
+    API --> CH
+    API -- "REST" --> Consumers
+    API -- "WS (Commands)" --> WS
+    WS -- "Down-Tunnel" --> Sensors
 ```
 
 Key internal services:

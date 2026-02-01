@@ -127,19 +127,21 @@ export default function IntelPage() {
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={volumeData}>
-              <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
-              <XAxis dataKey="day" stroke="var(--text-muted)" />
-              <YAxis stroke="var(--text-muted)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+              <XAxis dataKey="day" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: 'var(--surface-base)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-primary)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(0, 87, 183, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
               />
-              <Line type="monotone" dataKey="attacks" stroke="var(--ac-magenta)" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="blocked" stroke="var(--ac-green)" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="campaigns" stroke="var(--ac-blue)" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="attacks" stroke="#D62598" strokeWidth={2.5} dot={false} name="Attacks" />
+              <Line type="monotone" dataKey="blocked" stroke="#00B140" strokeWidth={2.5} dot={false} name="Blocked" />
+              <Line type="monotone" dataKey="campaigns" stroke="#529EEC" strokeWidth={2.5} dot={false} name="Campaigns" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -218,10 +220,21 @@ export default function IntelPage() {
           <div className="card-body h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topOrigins} layout="vertical">
-                <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
-                <XAxis type="number" stroke="var(--text-muted)" />
-                <YAxis dataKey="label" type="category" width={90} stroke="var(--text-muted)" />
-                <Bar dataKey="value" fill="var(--ac-magenta)" />
+                <defs>
+                  <linearGradient id="barGradientMagenta" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#D62598" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#D62598" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" horizontal={true} vertical={false} />
+                <XAxis type="number" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} hide />
+                <YAxis dataKey="label" type="category" width={90} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#001544', border: '1px solid rgba(214, 37, 152, 0.4)', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)' }}
+                  labelStyle={{ color: '#FFFFFF' }}
+                  cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
+                />
+                <Bar dataKey="value" fill="url(#barGradientMagenta)" radius={[0, 0, 0, 0]} barSize={14} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -236,10 +249,21 @@ export default function IntelPage() {
           <div className="card-body h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={targetedEndpoints} layout="vertical">
-                <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
-                <XAxis type="number" stroke="var(--text-muted)" />
-                <YAxis dataKey="label" type="category" width={120} stroke="var(--text-muted)" />
-                <Bar dataKey="value" fill="var(--ac-blue)" />
+                <defs>
+                  <linearGradient id="barGradientBlue" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#0057B7" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#529EEC" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" horizontal={true} vertical={false} />
+                <XAxis type="number" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} hide />
+                <YAxis dataKey="label" type="category" width={120} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#001544', border: '1px solid rgba(0, 87, 183, 0.4)', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)' }}
+                  labelStyle={{ color: '#FFFFFF' }}
+                  cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
+                />
+                <Bar dataKey="value" fill="url(#barGradientBlue)" radius={[0, 0, 0, 0]} barSize={14} />
               </BarChart>
             </ResponsiveContainer>
           </div>

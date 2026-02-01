@@ -9,35 +9,37 @@ interface SeverityBadgeProps {
   className?: string;
 }
 
+// Signal Horizon Design System: Solid backgrounds for severity badges
+// Critical=Magenta, Warning=Orange, Success=Green, Info=Blue outline
 const severityConfig: Record<SeverityLevel, { bg: string; text: string; border: string; Icon: typeof AlertCircle }> = {
   CRITICAL: {
-    bg: 'bg-risk-critical/10',
-    text: 'text-risk-critical',
-    border: 'border-risk-critical/30',
+    bg: 'bg-ac-magenta',
+    text: 'text-white',
+    border: 'border-ac-magenta',
     Icon: AlertCircle,
   },
   HIGH: {
-    bg: 'bg-risk-high/10',
-    text: 'text-risk-high',
-    border: 'border-risk-high/30',
+    bg: 'bg-ac-orange',
+    text: 'text-white',
+    border: 'border-ac-orange',
     Icon: AlertTriangle,
   },
   MEDIUM: {
-    bg: 'bg-risk-medium/10',
-    text: 'text-risk-medium',
-    border: 'border-risk-medium/30',
+    bg: 'bg-ac-orange/80',
+    text: 'text-white',
+    border: 'border-ac-orange/80',
     Icon: AlertTriangle,
   },
   LOW: {
-    bg: 'bg-risk-low/10',
-    text: 'text-risk-low',
-    border: 'border-risk-low/30',
+    bg: 'bg-ac-green',
+    text: 'text-white',
+    border: 'border-ac-green',
     Icon: CheckCircle,
   },
   INFO: {
-    bg: 'bg-ctrlx-info/10',
-    text: 'text-ctrlx-info',
-    border: 'border-ctrlx-info/30',
+    bg: 'bg-transparent',
+    text: 'text-ac-blue',
+    border: 'border-ac-navy',
     Icon: Info,
   },
 };

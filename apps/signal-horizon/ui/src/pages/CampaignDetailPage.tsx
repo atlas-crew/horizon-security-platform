@@ -16,6 +16,8 @@ import {
   Swords,
   ChevronRight,
 } from 'lucide-react';
+import { CampaignGraph } from '../components/soc/CampaignGraph';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { clsx } from 'clsx';
 import {
   ResponsiveContainer,
@@ -139,6 +141,38 @@ export default function CampaignDetailPage() {
         <StatMini icon={Flame} label="Total Attempts" value="47,832" />
       </div>
 
+      {/* Campaign Graph */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+           <ErrorBoundary>
+             <CampaignGraph campaignId={id} />
+           </ErrorBoundary>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="card p-6">
+            <h3 className="text-sm font-medium text-ink-secondary mb-4">Campaign Intelligence</h3>
+             <div className="space-y-4">
+               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                 <span className="text-sm text-ink-muted">Confidence</span>
+                 <span className="text-sm font-medium text-ac-green">98%</span>
+               </div>
+               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                 <span className="text-sm text-ink-muted">Attribution</span>
+                 <span className="text-sm font-medium text-ink-primary">APT-29</span>
+               </div>
+               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                 <span className="text-sm text-ink-muted">Targeting</span>
+                 <span className="text-sm font-medium text-ink-primary">Finance, Govt</span>
+               </div>
+               <div className="pt-2 text-xs text-ink-muted">
+                 Automated graph correlation identified 3 distinct IP clusters associated with this campaign.
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Attack Timeline */}
       <section className="card">
         <div className="card-header">
@@ -147,15 +181,18 @@ export default function CampaignDetailPage() {
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={attackTimeline}>
-              <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
-              <XAxis dataKey="time" stroke="var(--text-muted)" />
-              <YAxis stroke="var(--text-muted)" />
+              <CartesianGrid stroke="rgba(0, 87, 183, 0.15)" strokeDasharray="4 4" vertical={false} />
+              <XAxis dataKey="time" stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: 'var(--surface-base)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-primary)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(0, 87, 183, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  borderRadius: '0',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
               />
               <Area type="monotone" dataKey="volume" stroke="var(--ac-red)" fill="var(--ac-red)" fillOpacity={0.25} />
             </AreaChart>

@@ -1,9 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
 import { FileBrowser } from '../../components/fleet/FileBrowser';
+import { ConfigDriftViewer } from '../../components/fleet/ConfigDriftViewer';
+import { WafConfig, type WafConfigData } from '../../components/fleet/pingora/WafConfig';
+import { RateLimitConfig, type RateLimitData } from '../../components/fleet/pingora/RateLimitConfig';
+import { AccessControlConfig, type AccessControlData } from '../../components/fleet/pingora/AccessControlConfig';
+import { ServiceControls } from '../../components/fleet/pingora/ServiceControls';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -61,6 +66,32 @@ async function runDiagnostics(id: string) {
     headers: authHeaders,
   });
   if (!response.ok) throw new Error('Failed to run diagnostics');
+  return response.json();
+}
+
+async function fetchPingoraConfig(id: string) {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, { headers: authHeaders });
+  if (!response.ok) throw new Error('Failed to fetch Pingora config');
+  return response.json();
+}
+
+async function updatePingoraConfig(id: string, config: any) {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) throw new Error('Failed to update Pingora config');
+  return response.json();
+}
+
+async function runPingoraAction(id: string, action: 'test' | 'reload' | 'restart') {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/actions/pingora`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action }),
+  });
+  if (!response.ok) throw new Error('Failed to run Pingora action');
   return response.json();
 }
 
@@ -682,9 +713,12 @@ function LogsTab({ data, logType, setLogType }: { data: any; logType: string; se
   );
 }
 
-function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
-  const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'history'>('general');
+function ConfigurationTab({ sensor }: { sensor: any }) {
+  const id = sensor.id;
+  const queryClient = useQueryClient();
+  const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
 
+  // Placeholder data for general/kernel tabs (future: fetch from API)
   const mockConfig = {
     general: {
       autoUpdates: true,
@@ -709,24 +743,134 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
     },
   };
 
+  // Load real Pingora config
+  const { data: remotePingoraConfig, isLoading } = useQuery({
+    queryKey: ['fleet', 'sensor', id, 'config', 'pingora'],
+    queryFn: () => fetchPingoraConfig(id),
+    enabled: !!id && configTab === 'pingora',
+  });
+
+  // Local state for editing
+  const [wafConfig, setWafConfig] = useState<WafConfigData>({
+    enabled: true,
+    threshold: 0.5,
+    rule_overrides: {}
+  });
+
+  const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitData>({
+    enabled: true,
+    requests_per_second: 100,
+    burst: 50
+  });
+
+  const [aclConfig, setAccessConfig] = useState<AccessControlData>({
+    allow: [],
+    deny: []
+  });
+
+  // Sync local state when remote data loads
+  useEffect(() => {
+    if (remotePingoraConfig) {
+      setWafConfig(remotePingoraConfig.waf);
+      setRateLimitConfig(remotePingoraConfig.rateLimit);
+      setAccessConfig(remotePingoraConfig.accessControl);
+    }
+  }, [remotePingoraConfig]);
+
+  // Mutations
+  const updateMutation = useMutation({
+    mutationFn: (config: any) => updatePingoraConfig(id, config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config', 'pingora'] });
+      alert('Configuration updated and push initiated');
+    },
+  });
+
+  const handlePingoraAction = async (action: 'test' | 'reload' | 'restart') => {
+    await runPingoraAction(id, action);
+  };
+
+  const handleSaveAll = () => {
+    updateMutation.mutate({
+      waf: wafConfig,
+      rateLimit: rateLimitConfig,
+      accessControl: aclConfig,
+    });
+  };
+
+  const driftData = {
+    expected: JSON.stringify(remotePingoraConfig || {}, null, 2),
+    actual: JSON.stringify({
+      ...remotePingoraConfig,
+      // Mock drift for visualization if needed
+    }, null, 2)
+  };
+
   return (
     <div className="space-y-6">
       {/* Config Tabs */}
-      <div className="flex gap-2">
-        {(['general', 'kernel', 'pingora', 'history'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setConfigTab(tab)}
-            className={`px-4 py-2 text-sm rounded-lg capitalize ${
-              configTab === tab
-                ? 'bg-accent-primary text-white'
-                : 'bg-surface-subtle text-ink-secondary hover:bg-surface-card'
-            }`}
+      <div className="flex justify-between items-center">
+        <div className="flex gap-2">
+          {(['general', 'kernel', 'pingora', 'drift', 'history'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setConfigTab(tab)}
+              className={`px-4 py-2 text-sm rounded-lg capitalize ${
+                configTab === tab
+                  ? 'bg-accent-primary text-white'
+                  : 'bg-surface-subtle text-ink-secondary hover:bg-surface-card'
+              }`}
+            >
+              {tab === 'pingora' ? 'Synapse-Pingora' : tab === 'drift' ? 'Drift Analysis' : tab}
+            </button>
+          ))}
+        </div>
+        
+        {configTab === 'pingora' && (
+          <button 
+            onClick={handleSaveAll}
+            disabled={updateMutation.isPending}
+            className="btn-primary h-10 px-6 text-sm"
           >
-            {tab === 'pingora' ? 'Synapse-Pingora Config' : tab === 'history' ? 'Change History' : tab}
+            {updateMutation.isPending ? 'Saving...' : 'Save & Push Changes'}
           </button>
-        ))}
+        )}
       </div>
+
+      {configTab === 'drift' && (
+        <ConfigDriftViewer 
+          expectedConfig={driftData.expected}
+          actualConfig={driftData.actual}
+          lastSync="Just now"
+          driftDetected={false}
+        />
+      )}
+
+      {configTab === 'pingora' && (
+        <div className="space-y-6">
+          {isLoading ? (
+            <div className="text-center py-12 text-ink-muted">Loading Pingora configuration...</div>
+          ) : (
+            <>
+              <ServiceControls onAction={handlePingoraAction} />
+              
+              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                <WafConfig config={wafConfig} onChange={setWafConfig} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                  <RateLimitConfig config={rateLimitConfig} onChange={setRateLimitConfig} />
+                </div>
+                
+                <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                  <AccessControlConfig config={aclConfig} onChange={setAccessConfig} />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {configTab === 'general' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -785,38 +929,6 @@ function ConfigurationTab({ sensor: _sensor }: { sensor: any }) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {configTab === 'pingora' && (
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-ink-primary">Synapse-Pingora Configuration</h3>
-            <div className="flex gap-2">
-              <button className="px-3 py-1.5 text-xs border border-border-subtle rounded hover:bg-surface-subtle">Validate</button>
-              <button className="px-3 py-1.5 text-xs border border-border-subtle rounded hover:bg-surface-subtle">Download</button>
-              <button className="px-3 py-1.5 text-xs bg-accent-primary text-white rounded hover:bg-accent-primary/90">Save Changes</button>
-            </div>
-          </div>
-          <pre className="bg-surface-base border border-border-subtle rounded-lg p-4 font-mono text-sm text-ink-secondary overflow-x-auto">
-{`# /etc/synapse-pingora/config.yaml
-server:
-  listen: "0.0.0.0:443"
-
-upstreams:
-  - host: "127.0.0.1"
-    port: 3003
-
-logging:
-  level: "info"
-  access_log: true
-
-tls:
-  enabled: true
-  cert_path: "/etc/ssl/certs/signal-horizon.crt"
-  key_path: "/etc/ssl/private/signal-horizon.key"
-`}
-          </pre>
         </div>
       )}
 

@@ -133,12 +133,22 @@ Regular key rotation is essential for security. Signal Array supports zero-downt
 
 ### Rotation Workflow
 
+```mermaid
+sequenceDiagram
+    participant Admin as Fleet Admin
+    participant Hub as Signal Horizon
+    participant Sensor as Synapse Sensor
+    
+    Admin->>Hub: 1. Generate New Key
+    Hub-->>Admin: Returns NEW_KEY
+    Admin->>Sensor: 2. Deploy NEW_KEY (Config)
+    Sensor->>Hub: 3. Authenticate with NEW_KEY
+    Hub-->>Sensor: Auth Success
+    Admin->>Hub: 4. Revoke OLD_KEY
+    Hub->>Hub: Update Key Status
 ```
+
 1. Generate new key  ──▶  2. Deploy new key to sensor  ──▶  3. Verify connectivity
-         │                         │                               │
-         ▼                         ▼                               ▼
-   Keep old key active      Both keys work              Old key can be revoked
-```
 
 ### Step-by-Step Rotation
 

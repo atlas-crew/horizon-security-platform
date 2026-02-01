@@ -62,11 +62,12 @@ const DEMO_LATENCY_DISTRIBUTION = [
   { range: '500ms+', count: 2000, percentage: 2 },
 ];
 
+// Atlas Crew brand colors for latency
 const CHART_COLORS = {
-  p50: '#22c55e',
-  p95: '#529EEC',
-  p99: '#ef4444',
-  distribution: '#3b82f6',
+  p50: '#00B140',   // Atlas Crew Green (fast)
+  p95: '#529EEC',   // Sky Blue
+  p99: '#D62598',   // Atlas Crew Magenta (slow)
+  distribution: '#0057B7', // Atlas Crew Blue
 };
 
 // Time Range Selector
@@ -184,7 +185,7 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
             <XAxis
               dataKey="time"
               tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
@@ -199,11 +200,13 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
-              labelStyle={{ color: 'var(--text-secondary)' }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number, name: string) => [
                 `${value}ms`,
                 name.toUpperCase(),
@@ -248,7 +251,7 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
             <XAxis
               dataKey="range"
               tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
@@ -263,10 +266,13 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar

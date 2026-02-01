@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "SignalType" ADD VALUE 'IMPOSSIBLE_TRAVEL';

@@ -9,6 +9,11 @@ import {
   Activity,
   ExternalLink,
   AlertTriangle,
+  Flame,
+  Swords,
+  ChevronRight,
+  Network,
+  Building,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
@@ -23,6 +28,8 @@ import {
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchCampaignActors, fetchCampaignDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { CampaignGraph } from '../../components/soc/CampaignGraph';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import type { SocCampaign, SocCampaignActor, SocCampaignDetailResponse, SocCampaignActorsResponse, SocCampaignSignal } from '../../types/soc';
 
 const demoSignals: SocCampaignSignal[] = [
@@ -50,6 +57,22 @@ const demoActors: SocCampaignActor[] = Array.from({ length: 6 }).map((_, index) 
   lastSeen: Date.now() - index * 35 * 60 * 1000,
   ips: [`203.0.113.${80 + index}`],
 }));
+
+const demoParticipatingIps = [
+  { ip: '185.228.101.34', hits: 8421, status: 'BLOCKED' as const },
+  { ip: '185.228.101.35', hits: 7892, status: 'BLOCKED' as const },
+  { ip: '45.134.26.108', hits: 6234, status: 'BLOCKED' as const },
+  { ip: '45.134.26.109', hits: 5102, status: 'BLOCKED' as const },
+  { ip: '91.240.118.42', hits: 4891, status: 'MONITORING' as const },
+];
+
+const demoAffectedCustomers = [
+  { name: 'Healthcare-A', attempts: 12421, status: 'ACTIVE' as const },
+  { name: 'Finance-B', attempts: 9832, status: 'ACTIVE' as const },
+  { name: 'Retail-C', attempts: 8421, status: 'PROTECTED' as const },
+  { name: 'Healthcare-D', attempts: 6234, status: 'PROTECTED' as const },
+  { name: 'E-commerce-E', attempts: 4102, status: 'PROTECTED' as const },
+];
 
 function buildVelocitySeries(baseTime: number) {
   return Array.from({ length: 8 }).map((_, index) => {
@@ -132,7 +155,8 @@ export default function CampaignDetailPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <Link to="/campaigns" className="text-sm text-link hover:text-link-hover">
+          <Link to="/campaigns" className="text-sm text-link hover:text-link-hover flex items-center gap-1">
+            <ChevronRight className="w-4 h-4 rotate-180" />
             Back to Campaigns
           </Link>
           <div className="mt-2 flex items-center gap-3 flex-wrap">
@@ -159,6 +183,11 @@ export default function CampaignDetailPage() {
             >
               {campaign.severity}
             </span>
+            {campaign.actorCount > 5 && (
+              <span className="px-2 py-0.5 text-xs border bg-ac-purple/10 text-ac-purple border-ac-purple/30">
+                Cross-Tenant
+              </span>
+            )}
           </div>
           <p className="text-ink-secondary mt-2">
             {campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
@@ -171,7 +200,7 @@ export default function CampaignDetailPage() {
           </button>
           <button className="btn-primary h-10 px-4 text-xs">
             <Shield className="w-4 h-4 mr-2" />
-            Resolve Campaign
+            Open War Room
           </button>
         </div>
       </div>
@@ -183,6 +212,11 @@ export default function CampaignDetailPage() {
         <StatMini icon={Target} label="Last Seen" value={new Date(campaign.lastSeen).toLocaleTimeString()} />
       </div>
 
+      {/* Campaign Correlation Graph */}
+      <ErrorBoundary>
+        <CampaignGraph campaignId={id} />
+      </ErrorBoundary>
+
       <section className="card">
         <div className="card-header">
           <h2 className="font-medium text-ink-primary">Campaign Velocity</h2>
@@ -190,15 +224,18 @@ export default function CampaignDetailPage() {
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={velocityData}>
-              <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
-              <XAxis dataKey="time" stroke="var(--text-muted)" />
-              <YAxis stroke="var(--text-muted)" />
+              <CartesianGrid stroke="rgba(0, 87, 183, 0.15)" strokeDasharray="4 4" vertical={false} />
+              <XAxis dataKey="time" stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  background: 'var(--surface-base)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-primary)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(0, 87, 183, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  borderRadius: '0',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
               />
               <Area type="monotone" dataKey="volume" stroke="var(--ac-red)" fill="var(--ac-red)" fillOpacity={0.25} />
             </AreaChart>
@@ -271,6 +308,95 @@ export default function CampaignDetailPage() {
           </div>
         </section>
       </div>
+
+      {/* Participating IPs & Affected Customers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="card">
+          <div className="card-header flex items-center justify-between">
+            <h2 className="font-medium text-ink-primary">Participating IPs</h2>
+            <button className="btn-outline h-8 px-3 text-xs">Block All</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>IP</th>
+                  <th>Hits</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {demoParticipatingIps.map((ip) => (
+                  <tr key={ip.ip}>
+                    <td className="font-mono text-sm text-ink-primary">{ip.ip}</td>
+                    <td className="text-ink-secondary">{ip.hits.toLocaleString()}</td>
+                    <td>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs border',
+                          ip.status === 'BLOCKED'
+                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
+                            : 'bg-ac-orange/10 text-ac-orange border-ac-orange/30'
+                        )}
+                      >
+                        {ip.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header flex items-center justify-between">
+            <h2 className="font-medium text-ink-primary">Affected Customers</h2>
+            <button className="btn-outline h-8 px-3 text-xs">View All</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Attempts</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {demoAffectedCustomers.map((customer) => (
+                  <tr key={customer.name}>
+                    <td className="text-ink-primary">{customer.name}</td>
+                    <td className="text-ink-secondary">{customer.attempts.toLocaleString()}</td>
+                    <td>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs border',
+                          customer.status === 'ACTIVE'
+                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
+                            : 'bg-ac-green/10 text-ac-green border-ac-green/30'
+                        )}
+                      >
+                        {customer.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {/* Response Actions */}
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <ActionButton icon={Swords} label="Block All IPs" tone="bg-ac-red" />
+        <ActionButton icon={Shield} label="Block Fingerprint" tone="bg-ac-red" />
+        <ActionButton icon={Network} label="Block ASN" tone="bg-ac-red" />
+        <ActionButton icon={Flame} label="Challenge Mode" tone="bg-ac-orange" />
+        <ActionButton icon={ExternalLink} label="Export IOCs" tone="bg-ac-blue" />
+        <ActionButton icon={Building} label="Notify Customers" tone="bg-ac-blue" />
+      </section>
     </div>
   );
 }
@@ -294,5 +420,27 @@ function StatMini({
         <p className="text-lg font-medium text-ink-primary mt-1">{value}</p>
       </div>
     </div>
+  );
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  tone,
+}: {
+  icon: typeof Target;
+  label: string;
+  tone: string;
+}) {
+  return (
+    <button
+      className={clsx(
+        'px-4 py-3 text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors hover:brightness-110',
+        tone
+      )}
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
   );
 }

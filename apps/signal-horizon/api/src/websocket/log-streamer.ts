@@ -17,6 +17,7 @@ import type {
   LogFilter,
   LogEntryMessage,
 } from '../types/tunnel.js';
+import { createSafeRegex } from '../lib/regex-validator.js';
 
 // =============================================================================
 // Types
@@ -389,16 +390,16 @@ export class LogStreamer extends EventEmitter {
       }
     }
 
-    // Check regex pattern
+    // Check regex pattern (with ReDoS protection)
     if (filter.regex) {
-      try {
-        const regex = new RegExp(filter.regex, 'i');
-        if (!regex.test(entry.message)) {
-          return { passes: false, reason: 'regex_no_match' };
-        }
-      } catch {
-        // Invalid regex, skip this filter
-        this.logger.warn({ regex: filter.regex }, 'Invalid regex in filter');
+      const regex = createSafeRegex(filter.regex, 'i');
+      if (regex === null) {
+        // Invalid or unsafe regex - reject for security
+        this.logger.warn({ regex: filter.regex }, 'Rejected unsafe or invalid regex in filter');
+        return { passes: false, reason: 'regex_invalid_or_unsafe' };
+      }
+      if (!regex.test(entry.message)) {
+        return { passes: false, reason: 'regex_no_match' };
       }
     }
 

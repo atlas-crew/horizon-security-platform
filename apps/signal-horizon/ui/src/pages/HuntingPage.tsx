@@ -26,6 +26,7 @@ export default function HuntingPage() {
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [queryToSave, setQueryToSave] = useState<HuntQuery | null>(null);
+  const [activeExampleQuery, setActiveExampleQuery] = useState<HuntQuery | null>(null);
 
   // Fetch status and saved queries on mount
   useEffect(() => {
@@ -90,6 +91,49 @@ export default function HuntingPage() {
     }
   };
 
+  const handleRunExample = async (queryString: string) => {
+    // Simple parser for demo purposes: key:value AND key:value
+    const query: HuntQuery = {
+      startTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      endTime: new Date().toISOString(),
+      limit: 100,
+    };
+
+    // Split by AND
+    const parts = queryString.split(' AND ');
+    
+    parts.forEach(part => {
+      const [key, value] = part.split(':').map(s => s.trim());
+      if (!key || !value) return;
+
+      const cleanValue = value.replace(/"/g, ''); // Remove quotes
+
+      switch (key) {
+        case 'ip':
+          query.sourceIps = [cleanValue.replace('*', '')]; // Simple wildcard handling
+          break;
+        case 'fingerprint':
+          query.anonFingerprint = cleanValue;
+          break;
+        case 'customer':
+        case 'tenant':
+          query.tenantId = cleanValue;
+          break;
+        case 'severity':
+          if (['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(cleanValue.toUpperCase())) {
+            query.severities = [cleanValue.toUpperCase() as any];
+          }
+          break;
+        case 'campaign':
+          // In a real implementation, we'd add campaignId to HuntQuery
+          break;
+      }
+    });
+
+    setActiveExampleQuery(query);
+    handleQuery(query);
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -135,6 +179,7 @@ export default function HuntingPage() {
         onSave={handleSaveQuery}
         isLoading={isLoading}
         historicalEnabled={status?.historical ?? false}
+        externalQuery={activeExampleQuery}
       />
 
       <HuntResultsTable result={result} isLoading={isLoading} />
@@ -146,7 +191,7 @@ export default function HuntingPage() {
           onDelete={handleDeleteSavedQuery}
           isLoading={isLoading}
         />
-        <QueryExamples />
+        <QueryExamples onRun={handleRunExample} />
       </div>
 
       {/* Save Query Modal */}
@@ -234,7 +279,7 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   );
 }
 
-function QueryExamples() {
+function QueryExamples({ onRun }: { onRun: (query: string) => void }) {
   const examples = [
     'ip:185.228.*',
     'fingerprint:"curl" AND blocked:true',
@@ -258,7 +303,10 @@ function QueryExamples() {
             className="flex items-center justify-between px-3 py-2 border border-border-subtle bg-surface-inset text-sm text-ink-secondary"
           >
             <span className="font-mono">{example}</span>
-            <button className="text-link text-xs font-semibold tracking-[0.14em] uppercase">
+            <button
+              onClick={() => onRun(example)}
+              className="text-link text-xs font-semibold tracking-[0.14em] uppercase hover:text-link-hover"
+            >
               Run →
             </button>
           </div>

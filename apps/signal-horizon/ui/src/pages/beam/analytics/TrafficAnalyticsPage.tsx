@@ -26,6 +26,9 @@ import {
 } from 'recharts';
 import { useTrafficTimeline } from '../../../stores/beamStore';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { GeoTrafficMap } from '../../../components/beam/analytics/GeoTrafficMap';
+import { LatencyHistogram } from '../../../components/beam/analytics/LatencyHistogram';
+import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChart';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -60,14 +63,15 @@ const DEMO_TOP_ENDPOINTS = [
   { endpoint: '/api/v1/search', requests: 4200, blocked: 12 },
 ];
 
+// Atlas Crew brand colors
 const CHART_COLORS = {
-  requests: '#3b82f6',
-  blocked: '#ef4444',
-  allowed: '#22c55e',
-  get: '#3b82f6',
-  post: '#22c55e',
-  put: '#D62598',
-  delete: '#ef4444',
+  requests: '#0057B7',  // Atlas Crew Blue
+  blocked: '#D62598',   // Atlas Crew Magenta
+  allowed: '#00B140',   // Atlas Crew Green
+  get: '#0057B7',       // Atlas Crew Blue
+  post: '#00B140',      // Atlas Crew Green
+  put: '#E35205',       // Atlas Crew Orange
+  delete: '#D62598',    // Atlas Crew Magenta
 };
 
 // Time Range Selector
@@ -182,7 +186,7 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
                 <stop offset="95%" stopColor={CHART_COLORS.allowed} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
             <XAxis
               dataKey="time"
               tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
@@ -197,12 +201,13 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
-              labelStyle={{ color: 'var(--text-secondary)' }}
-              itemStyle={{ color: '#fff' }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
             />
             <Area
               type="monotone"
@@ -250,7 +255,7 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" horizontal={false} />
             <XAxis
               type="number"
               tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
@@ -268,10 +273,13 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--border-subtle)',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
               }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar
@@ -458,8 +466,18 @@ export default function TrafficAnalyticsPage() {
         />
       </div>
 
-      {/* Traffic Timeline */}
-      <TrafficTimelineChart data={displayData} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Traffic Timeline */}
+        <TrafficTimelineChart data={displayData} />
+        
+        {/* Geo Distribution */}
+        <GeoTrafficMap />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <LatencyHistogram />
+        <ErrorRateChart />
+      </div>
 
       {/* Method Breakdown + Top Endpoints */}
       <div className="grid grid-cols-3 gap-6">

@@ -173,24 +173,26 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
             </defs>
             <XAxis
               dataKey="time"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: '#7B8FA8', fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              axisLine={{ stroke: '#374151' }}
+              tick={{ fill: '#7B8FA8', fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `${v.toFixed(0)} MB`}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
                 color: '#fff',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number, name: string) => [
                 `${value.toFixed(2)} MB`,
                 name === 'ingressMB' ? 'Ingress' : 'Egress',
@@ -373,11 +375,14 @@ function BillingPanel({
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
                 color: '#fff',
               }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number) => formatBytes(value)}
             />
           </PieChart>
@@ -418,15 +423,18 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} layout="vertical" margin={{ left: 100 }}>
-            <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)} GB`} />
-            <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={100} />
+            <XAxis type="number" tick={{ fill: '#7B8FA8', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)} GB`} />
+            <YAxis type="category" dataKey="name" tick={{ fill: '#7B8FA8', fontSize: 12 }} width={100} />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
+                backgroundColor: '#001544',
+                border: '1px solid rgba(0, 87, 183, 0.4)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                 borderRadius: '0',
                 color: '#fff',
               }}
+              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+              itemStyle={{ color: '#B0C4DE' }}
               formatter={(value: number) => [`${value.toFixed(2)} GB`, 'Bandwidth']}
             />
             <Bar dataKey="bytes" fill={COLORS.primary} radius={[0, 4, 4, 0]} />

@@ -22,6 +22,8 @@ import {
 import { useApiIntelligence } from '../hooks/useApiIntelligence';
 import { StatsGridSkeleton, TableSkeleton } from '../components/LoadingStates';
 import { StatsCard, EndpointsTable, ViolationsFeed } from '../components/api-intelligence';
+import { ApiTreemap } from '../components/api-intelligence/ApiTreemap';
+import { SchemaDriftDiff } from '../components/api-intelligence/SchemaDriftDiff';
 
 export default function ApiIntelligencePage() {
   const {
@@ -149,7 +151,9 @@ export default function ApiIntelligencePage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card h-80">
+        <ApiTreemap />
+        
+        <div className="card h-[400px]">
           <div className="card-header">
             <h2 className="font-medium text-ink-primary">Discovery Trend (7 Days)</h2>
           </div>
@@ -158,38 +162,87 @@ export default function ApiIntelligencePage() {
               <AreaChart data={stats?.discoveryTrend ?? []}>
                 <defs>
                   <linearGradient id="colorDiscovery" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--ac-blue)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--ac-blue)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#529EEC" stopOpacity={0.5} />
+                    <stop offset="50%" stopColor="#0057B7" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#0057B7" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
-                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
+                <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--surface-base)', borderColor: 'var(--border-subtle)' }}
-                  labelStyle={{ color: 'var(--text-primary)' }}
+                  contentStyle={{
+                    backgroundColor: '#001544',
+                    borderColor: 'rgba(0, 87, 183, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  }}
+                  labelStyle={{ color: '#FFFFFF' }}
+                  itemStyle={{ color: '#529EEC' }}
                 />
-                <Area type="monotone" dataKey="count" stroke="var(--ac-blue)" fillOpacity={1} fill="url(#colorDiscovery)" />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#529EEC"
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#colorDiscovery)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
-        <div className="card h-80">
+      {/* Drift Analysis & Violations */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <h2 className="font-medium text-ink-primary">Recent Schema Drift</h2>
+          <SchemaDriftDiff 
+            endpoint="/api/v1/checkout" 
+            method="POST" 
+            detectedAt={new Date().toISOString()}
+            changes={[
+              { field: 'body.amount', oldType: 'number', newType: 'string', description: 'Type mismatch: expected number, received string', severity: 'high' },
+              { field: 'body.currency', oldType: 'enum(USD,EUR)', newType: 'string(GBP)', description: 'Unexpected enum value', severity: 'medium' }
+            ]}
+          />
+          <SchemaDriftDiff 
+            endpoint="/api/v1/users/profile" 
+            method="GET" 
+            detectedAt={new Date(Date.now() - 3600000).toISOString()}
+            changes={[
+              { field: 'response.social_links', oldType: 'undefined', newType: 'array', description: 'New field detected in response', severity: 'low' }
+            ]}
+          />
+        </div>
+
+        <div className="card h-full">
           <div className="card-header">
             <h2 className="font-medium text-ink-primary">Top Violating Endpoints</h2>
           </div>
-          <div className="card-body h-full">
+          <div className="card-body h-96">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats?.topViolatingEndpoints ?? []} layout="vertical" margin={{ left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border-subtle)" />
-                <XAxis type="number" stroke="var(--text-muted)" fontSize={12} hide />
-                <YAxis dataKey="endpoint" type="category" width={150} stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                <defs>
+                  <linearGradient id="violationGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#D62598" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#E35205" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
+                <XAxis type="number" stroke="#7B8FA8" fontSize={12} hide />
+                <YAxis dataKey="endpoint" type="category" width={150} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
-                  cursor={{ fill: 'var(--surface-subtle)' }}
-                  contentStyle={{ backgroundColor: 'var(--surface-base)', borderColor: 'var(--border-subtle)' }}
+                  cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
+                  contentStyle={{
+                    backgroundColor: '#001544',
+                    borderColor: 'rgba(214, 37, 152, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  }}
+                  labelStyle={{ color: '#FFFFFF' }}
+                  itemStyle={{ color: '#D62598' }}
                 />
-                <Bar dataKey="violationCount" fill="var(--ac-orange)" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="violationCount" fill="url(#violationGradient)" radius={[0, 0, 0, 0]} barSize={18} />
               </BarChart>
             </ResponsiveContainer>
           </div>

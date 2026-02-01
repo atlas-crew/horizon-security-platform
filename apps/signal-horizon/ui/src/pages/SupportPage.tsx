@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { marked } from 'marked';
 import mermaid from 'mermaid';
+import { BookOpen, Stethoscope, MessageCircle } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
 
 const authHeaders = {
@@ -43,22 +44,26 @@ export function SupportPage() {
 
 
 
+  // Demo docs fallback when API unavailable
+  const demoDocs: DocItem[] = [
+    { id: 'setup', title: 'Setup Guide', category: 'Getting Started', path: '/docs/setup' },
+    { id: 'architecture', title: 'Architecture', category: 'Getting Started', path: '/docs/architecture' },
+    { id: 'deployment', title: 'Deployment', category: 'Getting Started', path: '/docs/deployment' },
+    { id: 'tutorials:sensor-onboarding', title: 'Sensor Onboarding', category: 'Tutorials', path: '/docs/tutorials/sensor-onboarding' },
+    { id: 'guides:api-intelligence', title: 'API Intelligence', category: 'Guides', path: '/docs/guides/api-intelligence' },
+    { id: 'guides:capacity-planning', title: 'Capacity Planning', category: 'Guides', path: '/docs/guides/capacity-planning' },
+  ];
+
   // Fetch doc index
-
-  const { data: docs = [] } = useQuery<DocItem[]> ({
-
+  const { data: docs = demoDocs, isError: docsError } = useQuery<DocItem[]>({
     queryKey: ['docs', 'index'],
-
     queryFn: async () => {
-
-      const res = await fetch(`${API_BASE}/api/v1/docs`, { headers: authHeaders });
-
+      const res = await fetch(`${API_BASE_URL}/docs`, { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch docs index');
-
       return res.json();
-
-    }
-
+    },
+    retry: 1,
+    staleTime: 60000,
   });
 
 
@@ -85,60 +90,45 @@ export function SupportPage() {
 
                 onClick={() => setActiveTab('docs')}
 
-                className={`px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
-
-                  activeTab === 'docs' 
-
-                    ? 'bg-ac-blue text-white shadow-lg' 
-
+                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'docs'
+                    ? 'bg-ac-blue text-white shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
-
                 }`}
 
               >
-
-                📚 Documentation
-
+                <BookOpen className="w-4 h-4 mr-2" />
+                Documentation
               </button>
 
               <button
 
                 onClick={() => setActiveTab('diagnostics')}
 
-                className={`px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
-
-                  activeTab === 'diagnostics' 
-
-                    ? 'bg-ac-magenta text-white shadow-lg' 
-
+                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'diagnostics'
+                    ? 'bg-ac-magenta text-white shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
-
                 }`}
 
               >
-
-                🩺 System Diagnostics
-
+                <Stethoscope className="w-4 h-4 mr-2" />
+                System Diagnostics
               </button>
 
               <button
 
                 onClick={() => setActiveTab('contact')}
 
-                className={`px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
-
-                  activeTab === 'contact' 
-
-                    ? 'bg-ac-sky text-ac-navy shadow-lg' 
-
+                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'contact'
+                    ? 'bg-ac-sky text-ac-navy shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
-
                 }`}
 
               >
-
-                💬 Contact Support
-
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Contact Support
               </button>
 
             </nav>
@@ -212,22 +202,254 @@ export function SupportPage() {
 function DocumentationViewer({ docs, selectedDocId, onSelectDoc }: { docs: DocItem[], selectedDocId: string, onSelectDoc: (id: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Demo content fallback - actual documentation from docs/
+  const demoContent: Record<string, string> = {
+    'setup': `# Setup Guide
+
+This guide covers setting up the Signal Horizon Hub for local development.
+
+## Prerequisites
+
+- **Node.js**: v18.18.0 or higher
+- **PostgreSQL**: v14 or higher (Source of truth)
+- **ClickHouse**: (Optional) v23.x or higher (Historical analytics)
+
+## Environment Configuration
+
+### API Configuration
+
+1. Copy the example file:
+\`\`\`bash
+cp api/.env.example api/.env
+\`\`\`
+
+2. Configure core variables:
+   - \`DATABASE_URL\`: Your PostgreSQL connection string
+   - \`CLICKHOUSE_ENABLED\`: Set to \`true\` if you have ClickHouse
+   - \`CORS_ORIGINS\`: Ensure your UI URL is included
+
+## Database Setup
+
+### PostgreSQL (Prisma)
+
+\`\`\`bash
+cd api
+npm install
+npx prisma migrate dev --name init
+npx prisma db seed
+\`\`\`
+
+## Running in Development
+
+**Start the Backend:**
+\`\`\`bash
+cd api && npm run dev
+\`\`\`
+
+**Start the Frontend:**
+\`\`\`bash
+cd ui && npm run dev
+\`\`\``,
+
+    'architecture': `# Signal Horizon Architecture
+
+Signal Horizon is a multi-tenant hub that ingests threat signals from Synapse sensors, correlates them into campaigns and threats, and distributes intel to dashboards and the fleet.
+
+## System Overview
+
+\`\`\`mermaid
+graph LR
+    subgraph Sensors ["Synapse Sensors"]
+        S1[Tenant A]
+        S2[Tenant B]
+    end
+    subgraph Hub ["Signal Horizon Hub"]
+        API[API Server]
+        WS[WebSocket Gateway]
+    end
+    subgraph Storage ["Intelligence Core"]
+        PG[(PostgreSQL)]
+        CH[(ClickHouse)]
+    end
+    Sensors --> WS --> API --> PG
+    API --> CH
+\`\`\`
+
+## Key Services
+
+- **Sensor Gateway** - WebSocket ingestion
+- **Aggregator** - Batching, dedupe, anonymization
+- **Correlator** - Cross-tenant campaign detection
+- **Broadcaster** - Real-time dashboard push
+- **Fleet Management** - Metrics, config, commands, rules
+
+## Core Data Flow
+
+1. Sensors authenticate via WebSocket
+2. Signals are queued, deduplicated, and enriched
+3. Stored in PostgreSQL (source of truth)
+4. Async write to ClickHouse for analytics
+5. Correlator detects cross-tenant campaigns
+6. Broadcaster notifies dashboards`,
+
+    'deployment': `# Deployment Guide
+
+## Production Deployment
+
+### Docker Compose
+
+\`\`\`yaml
+version: '3.8'
+services:
+  api:
+    image: signal-horizon/api:latest
+    environment:
+      DATABASE_URL: postgres://...
+      NODE_ENV: production
+    ports:
+      - "3100:3100"
+
+  ui:
+    image: signal-horizon/ui:latest
+    ports:
+      - "80:80"
+\`\`\`
+
+### Kubernetes
+
+Deploy using Helm charts for production-grade deployments with auto-scaling and high availability.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| DATABASE_URL | PostgreSQL connection | Required |
+| CLICKHOUSE_ENABLED | Enable analytics | false |
+| CORS_ORIGINS | Allowed origins | localhost |`,
+
+    'tutorials:sensor-onboarding': `# Sensor Onboarding Guide
+
+Connect your first sensor to Signal Horizon's Signal Array fleet management system.
+
+## Onboarding Methods
+
+| Method | Best For | Setup Speed |
+|--------|----------|-------------|
+| Agent Script | Quick deployments | Fast |
+| Manual Registration | Maximum control | Moderate |
+| Auto-Discovery | Zero-touch | Fast |
+
+## Method 1: Agent Script (Recommended)
+
+### Step 1: Generate a Registration Token
+
+\`\`\`bash
+curl -X POST https://your-hub.com/api/v1/onboarding/tokens \\
+  -H "Authorization: Bearer $API_KEY" \\
+  -d '{"name": "Production Token", "maxUses": 50}'
+\`\`\`
+
+### Step 2: Run on Your Sensor
+
+\`\`\`bash
+curl -sSL https://your-hub.com/api/v1/fleet/onboarding/script | \\
+  REGISTRATION_TOKEN="sh_reg_xxx" bash
+\`\`\`
+
+## Troubleshooting
+
+- **Token Expired**: Generate a new token with longer expiration
+- **Connection Timeout**: Check firewall allows outbound HTTPS (443)
+- **Auth Failed**: Verify sensor ID and API key are correct`,
+
+    'guides:api-intelligence': `# API Intelligence & Schema Security
+
+Learn how Signal Horizon automatically discovers your API surface area and protects against schema violations.
+
+## The Discovery & Validation Loop
+
+\`\`\`mermaid
+flowchart LR
+    Ingest[Request] --> Discover{Known?}
+    Discover -- No --> Learn[Map Endpoint]
+    Discover -- Yes --> Validate[Compare Schema]
+    Validate -- Match --> Clean[Allow]
+    Validate -- Mismatch --> Signal[Violation]
+\`\`\`
+
+## 1. Automatic Endpoint Discovery
+
+- **Normalization**: \`/api/user/123\` → \`/api/user/{id}\`
+- **Cataloging**: New endpoints appear in the API Catalog
+
+## 2. Schema Baseline (Learning)
+
+During the Learning Phase, the Hub:
+- Analyzes JSON payload structure
+- Identifies required vs. optional fields
+- Maps data types (String, Number, Boolean, UUID)
+
+## 3. Schema Violation Detection
+
+Deviations trigger **Schema Violation** signals:
+- **Unexpected Fields**: \`role: admin\` in registration
+- **Type Mismatch**: String where number expected
+- **Structure Drift**: Major JSON hierarchy changes
+
+## Best Practices
+
+1. Review and "Promote" newly discovered endpoints
+2. Set high-sensitivity alerts for \`/api/auth\` paths
+3. Monitor in "Log Only" mode after major releases`,
+
+    'guides:capacity-planning': `# Capacity Planning
+
+Plan your Signal Horizon deployment for optimal performance.
+
+## Sizing Guidelines
+
+### Small (< 10 sensors)
+- 2 CPU cores
+- 4GB RAM
+- 50GB storage
+
+### Medium (10-100 sensors)
+- 4 CPU cores
+- 8GB RAM
+- 200GB storage
+
+### Large (100+ sensors)
+- 8+ CPU cores
+- 16GB+ RAM
+- 500GB+ storage
+- ClickHouse recommended
+
+## Monitoring
+
+Track these metrics:
+- Signal ingestion rate
+- Query latency (P95)
+- WebSocket connection count
+- Database size growth`,
+  };
+
   // Fetch doc content
-  const { data: docContent, isLoading } = useQuery({
+  const { data: docContent, isLoading, isError } = useQuery({
     queryKey: ['docs', 'content', selectedDocId],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/v1/docs/${selectedDocId}`, { headers: authHeaders });
+      const res = await fetch(`${API_BASE_URL}/docs/${selectedDocId}`, { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch doc content');
       return res.json();
     },
-    enabled: !!selectedDocId
+    enabled: !!selectedDocId,
+    retry: 1,
   });
 
-  const content = docContent?.content || '';
+  const content = docContent?.content || demoContent[selectedDocId] || '# Documentation\n\nSelect a document from the sidebar.';
   
   // Parse markdown to HTML safely
   const htmlContent = useMemo(() => {
-    return marked.parse(content);
+    return marked.parse(content) as string;
   }, [content]);
 
   // Run mermaid rendering when content changes
@@ -296,7 +518,7 @@ function DocumentationViewer({ docs, selectedDocId, onSelectDoc }: { docs: DocIt
       {/* Doc Content - Main viewport */}
       <div className="flex-1 p-16 overflow-y-auto bg-surface-base" ref={containerRef}>
         <div className="max-w-3xl mx-auto">
-          {isLoading ? (
+          {isLoading && !content ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ac-blue"></div>
             </div>

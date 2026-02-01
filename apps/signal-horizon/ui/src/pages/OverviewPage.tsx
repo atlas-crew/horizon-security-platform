@@ -198,12 +198,12 @@ export default function OverviewPage() {
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Live Attack Map */}
-        <section className="xl:col-span-2 card" aria-labelledby="attack-map-heading">
+        {/* Live Attack Map - tactical display */}
+        <section className="xl:col-span-2 card scanlines" aria-labelledby="attack-map-heading">
           <div className="card-header flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 id="attack-map-heading" className="font-medium text-ink-primary">
-                Live Attack Map
+              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
+                LIVE ATTACK MAP
               </h2>
               {error && (
                 <span className="text-xs text-ac-orange flex items-center gap-1">
@@ -234,13 +234,17 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Threat Feed */}
-        <section className="card" aria-labelledby="threat-feed-heading" aria-live="polite">
+        {/* Threat Feed - with data stream effect */}
+        <section className="card data-stream" aria-labelledby="threat-feed-heading" aria-live="polite">
           <div className="card-header flex items-center justify-between">
-            <h2 id="threat-feed-heading" className="font-medium text-ink-primary">Threat Feed</h2>
-            <TrendingUp className="w-4 h-4 text-ink-muted" aria-hidden="true" />
+            <h2 id="threat-feed-heading" className="font-medium text-ink-primary tracking-wide">
+              THREAT FEED
+            </h2>
+            <span className="status-blink">
+              <TrendingUp className="w-4 h-4 text-ac-magenta" aria-hidden="true" />
+            </span>
           </div>
-          <div className="card-body max-h-80 overflow-y-auto" role="log" aria-label="Recent threat alerts">
+          <div className="card-body max-h-80 overflow-y-auto stagger-fade" role="log" aria-label="Recent threat alerts">
             {alerts.length === 0 ? (
               <div className="text-center text-ink-muted py-8" role="status">
                 No recent alerts

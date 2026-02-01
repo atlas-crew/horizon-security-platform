@@ -1,6 +1,17 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import {
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Zap,
+  Search,
+  ClipboardList,
+  Settings,
+  Globe,
+  type LucideIcon,
+} from 'lucide-react';
 import { SensorTable } from '../../components/fleet/SensorTable';
 import { useFleetStore } from '../../stores/fleetStore';
 import { useDemoMode } from '../../stores/demoModeStore';
@@ -141,18 +152,18 @@ export function FleetOverviewPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatsCard icon="✓" iconBg="bg-status-success/10" iconColor="text-status-success" value={summary.onlineCount} label="SENSORS ONLINE" />
-        <StatsCard icon="⚠" iconBg="bg-status-warning/10" iconColor="text-status-warning" value={summary.warningCount} label="NEEDS ATTENTION" />
-        <StatsCard icon="✗" iconBg="bg-status-error/10" iconColor="text-status-error" value={summary.offlineCount} label="OFFLINE" />
-        <StatsCard icon="⚡" iconBg="bg-accent-primary/10" iconColor="text-accent-primary" value={formatNumber(fleetMetrics.totalRps)} label="REQUESTS/MIN" />
+        <StatsCard icon={CheckCircle} iconBg="bg-status-success/10" iconColor="text-status-success" value={summary.onlineCount} label="SENSORS ONLINE" />
+        <StatsCard icon={AlertTriangle} iconBg="bg-status-warning/10" iconColor="text-status-warning" value={summary.warningCount} label="NEEDS ATTENTION" />
+        <StatsCard icon={XCircle} iconBg="bg-status-error/10" iconColor="text-status-error" value={summary.offlineCount} label="OFFLINE" />
+        <StatsCard icon={Zap} iconBg="bg-accent-primary/10" iconColor="text-accent-primary" value={formatNumber(fleetMetrics.totalRps)} label="REQUESTS/MIN" />
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
-        <QuickAction icon="🔍" title="Run Diagnostics" description="Check sensor health & connectivity" />
-        <QuickAction icon="📋" title="View Access Logs" description="Synapse-Pingora access & error logs" />
-        <QuickAction icon="⚙️" title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} />
-        <QuickAction icon="🌐" title="Test Connectivity" description="Run network connectivity tests" />
+        <QuickAction icon={Search} title="Run Diagnostics" description="Check sensor health & connectivity" />
+        <QuickAction icon={ClipboardList} title="View Access Logs" description="Synapse-Pingora access & error logs" />
+        <QuickAction icon={Settings} title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} />
+        <QuickAction icon={Globe} title="Test Connectivity" description="Run network connectivity tests" />
       </div>
 
       {/* Alerts and Distribution */}
@@ -220,11 +231,11 @@ export function FleetOverviewPage() {
   );
 }
 
-function StatsCard({ icon, iconBg, iconColor, value, label }: { icon: string; iconBg: string; iconColor: string; value: number | string; label: string }) {
+function StatsCard({ icon: Icon, iconBg, iconColor, value, label }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string }) {
   return (
     <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
       <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center mb-3`}>
-        <span className={`text-xl ${iconColor}`}>{icon}</span>
+        <Icon className={`w-5 h-5 ${iconColor}`} />
       </div>
       <div className="text-3xl font-bold text-ink-primary">{value}</div>
       <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide mt-1">{label}</div>
@@ -232,11 +243,13 @@ function StatsCard({ icon, iconBg, iconColor, value, label }: { icon: string; ic
   );
 }
 
-function QuickAction({ icon, title, description, onClick }: { icon: string; title: string; description: string; onClick?: () => void }) {
+function QuickAction({ icon: Icon, title, description, onClick }: { icon: LucideIcon; title: string; description: string; onClick?: () => void }) {
   return (
     <button onClick={onClick} className="bg-surface-card border border-border-subtle rounded-xl p-4 text-left hover:bg-surface-subtle transition-colors group">
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
+        <div className="w-10 h-10 rounded-lg bg-accent-primary/10 flex items-center justify-center">
+          <Icon className="w-5 h-5 text-accent-primary" />
+        </div>
         <div>
           <div className="font-semibold text-ink-primary group-hover:text-accent-primary transition-colors">{title}</div>
           <div className="text-sm text-ink-secondary">{description}</div>
@@ -250,7 +263,7 @@ function AlertItem({ alert }: { alert: { id: string; sensorName: string; type: s
   const timeAgo = getTimeAgo(new Date(alert.createdAt));
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-surface-subtle transition-colors">
-      <span className="text-status-error">⚠</span>
+      <AlertTriangle className="w-5 h-5 text-status-error flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <div className="font-medium text-ink-primary truncate">{alert.type.replace(/_/g, ' ')}</div>
         <div className="text-sm text-ink-secondary truncate">{alert.sensorName}: {alert.error || 'Command failed'}</div>

@@ -6,18 +6,28 @@ This guide documents how sensors (like Cutlass/Echo Pro) connect to and communic
 
 Sensors connect to Signal Horizon via WebSocket to stream threat signals in real-time. The hub aggregates, correlates, and distributes threat intelligence across the sensor fleet.
 
-```
-┌─────────────────┐        WebSocket        ┌──────────────────┐
-│     Sensor      │ ────────────────────>   │  Signal Horizon  │
-│  (Tracer, etc)  │ <──── Commands ──────   │  Hub             │
-└─────────────────┘        Blocklist        └──────────────────┘
-                                                     │
-                                                     ▼
-                                            ┌──────────────────┐
-                                            │   Dashboards     │
-                                            │   War Rooms      │
-                                            │   Alerting       │
-                                            └──────────────────┘
+```mermaid
+graph TD
+    subgraph Edge ["Sensor Layer"]
+        S1[Sensor A]
+        S2[Sensor B]
+    end
+
+    subgraph Core ["Command & Control"]
+        Hub[Signal Horizon Hub]
+    end
+
+    subgraph Consumers ["SOC & Dashboards"]
+        D1[Threat Dashboard]
+        D2[War Rooms]
+        D3[Fleet Alerts]
+    end
+
+    S1 -- "Signals" --> Hub
+    S2 -- "Signals" --> Hub
+    Hub -- "Commands" --> S1
+    Hub -- "Blocklist" --> S2
+    Hub -- "Updates" --> Consumers
 ```
 
 ## Connection Setup

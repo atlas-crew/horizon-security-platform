@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
+import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -50,6 +51,12 @@ export function ConfigManagerPage() {
   const queryClient = useQueryClient();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  // Create Modal State
+  const [newName, setNewName] = useState('');
+  const [newEnv, setNewEnv] = useState('production');
+  const [newDesc, setNewDesc] = useState('');
+  const [newConfig, setNewConfig] = useState('{\n  "version": "1.0.0",\n  "settings": {\n    "logLevel": "info"\n  }\n}');
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['fleet', 'config', 'templates'],
@@ -209,35 +216,61 @@ export function ConfigManagerPage() {
       {/* Create Modal Placeholder */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-lg">
+          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
             <h2 className="text-xl font-light text-ink-primary mb-4">Create Configuration Template</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Name</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
-                  placeholder="Template name"
-                />
+            
+            <div className="grid grid-cols-3 gap-6 flex-1 overflow-hidden">
+              {/* Left Column: Metadata */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink-secondary mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
+                    placeholder="Template name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-secondary mb-1">Environment</label>
+                  <select 
+                    value={newEnv}
+                    onChange={(e) => setNewEnv(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
+                  >
+                    <option value="dev">Development</option>
+                    <option value="staging">Staging</option>
+                    <option value="production">Production</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-secondary mb-1">Description</label>
+                  <textarea
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue resize-none h-32"
+                    placeholder="Optional description"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Environment</label>
-                <select className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue">
-                  <option value="dev">Development</option>
-                  <option value="staging">Staging</option>
-                  <option value="production">Production</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Description</label>
-                <textarea
-                  className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
-                  rows={3}
-                  placeholder="Optional description"
-                />
+
+              {/* Right Column: JSON Editor */}
+              <div className="col-span-2 flex flex-col h-full">
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Configuration (JSON)</label>
+                <div className="flex-1 border border-border-subtle">
+                  <CodeEditor
+                    value={newConfig}
+                    onChange={setNewConfig}
+                    language="json"
+                    height="100%"
+                    className="h-full"
+                  />
+                </div>
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
+
+            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border-subtle">
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="btn-outline h-10 px-4 text-sm"
@@ -245,7 +278,7 @@ export function ConfigManagerPage() {
                 Cancel
               </button>
               <button className="btn-primary h-10 px-4 text-sm">
-                Create
+                Create Template
               </button>
             </div>
           </div>

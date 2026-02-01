@@ -8,7 +8,7 @@ import { logger } from '../../lib/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const router = Router();
+const router: ReturnType<typeof Router> = Router();
 
 // Resilient path resolution:
 // In dev: ../../../../docs
@@ -100,7 +100,7 @@ async function listDocs(dir: string, baseDir: string = DOCS_ROOT): Promise<DocIt
  * GET /api/v1/docs
  * List all available documentation files
  */
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const docs = await listDocs(DOCS_ROOT);
     res.json(docs);
@@ -122,7 +122,8 @@ router.get('/:id', async (req, res) => {
 
     // Security check: ensure the path is within DOCS_ROOT
     if (!fullPath.startsWith(DOCS_ROOT)) {
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
 
     const content = await fs.readFile(fullPath, 'utf-8');

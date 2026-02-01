@@ -20,14 +20,14 @@ interface ResponseTimeDistributionChartProps {
   className?: string;
 }
 
-// Gradient colors from fast (green) to slow (red)
+// Atlas Crew brand colors from fast (green) to slow (magenta)
 const bucketColors = [
-  '#22c55e', // <25ms - green
-  '#84cc16', // 25-50ms - lime
-  '#529EEC', // 50-100ms - sky blue (Atlas Crew brand)
-  '#f97316', // 100-250ms - orange
-  '#ef4444', // 250-500ms - red
-  '#dc2626', // >500ms - dark red
+  '#00B140', // <25ms - Atlas Crew Green (fast)
+  '#00B140', // 25-50ms - Atlas Crew Green
+  '#529EEC', // 50-100ms - Sky Blue (ok)
+  '#E35205', // 100-250ms - Atlas Crew Orange (slow)
+  '#D62598', // 250-500ms - Atlas Crew Magenta (critical)
+  '#D62598', // >500ms - Atlas Crew Magenta
 ];
 
 /**
@@ -47,12 +47,12 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
         >
           <XAxis
             dataKey="range"
-            tick={{ fontSize: 11, fill: '#627d98' }}
+            tick={{ fontSize: 11, fill: '#7B8FA8' }}
             tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
+            axisLine={false}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#627d98' }}
+            tick={{ fontSize: 11, fill: '#7B8FA8' }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(value) => `${value}%`}
@@ -63,12 +63,14 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
               'Requests',
             ]}
             contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e5e7eb',
+              backgroundColor: '#001544',
+              border: '1px solid rgba(0, 87, 183, 0.4)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
               borderRadius: '0',
               fontSize: '12px',
             }}
-            labelStyle={{ color: '#1e3a5f', fontWeight: 600 }}
+            labelStyle={{ color: '#FFFFFF', fontWeight: 600 }}
+            itemStyle={{ color: '#B0C4DE' }}
           />
           <Bar dataKey="percentage">
             {data.map((_entry, index) => (

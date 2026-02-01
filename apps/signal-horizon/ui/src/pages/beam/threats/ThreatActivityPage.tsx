@@ -27,9 +27,6 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Cell,
-  PieChart,
-  Pie,
 } from 'recharts';
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
@@ -138,27 +135,32 @@ const DEMO_TOP_SOURCES = [
   { ip: '45.67.89.123', threats: 38, country: 'IN', blocked: 38 },
 ];
 
-// Demo data - severity distribution
+// Demo data - severity distribution (brand colors: Magenta, Orange, Atlas Crew Blue, Navy)
 const DEMO_SEVERITY_DIST = [
-  { name: 'Critical', value: 42, color: '#ef4444' },
-  { name: 'High', value: 168, color: '#f97316' },
-  { name: 'Medium', value: 289, color: '#529EEC' },
-  { name: 'Low', value: 198, color: '#3b82f6' },
+  { name: 'Critical', value: 42, color: '#D62598' },  // Magenta
+  { name: 'High', value: 168, color: '#E35205' },     // Orange
+  { name: 'Medium', value: 289, color: '#0057B7' },   // Atlas Crew Blue
+  { name: 'Low', value: 198, color: '#001E62' },      // Navy
 ];
 
+// Calculate total for percentage display
+const SEVERITY_TOTAL = DEMO_SEVERITY_DIST.reduce((sum, d) => sum + d.value, 0);
+
+// Brand colors for severity (Magenta, Orange, Atlas Crew Blue, Navy)
 const SEVERITY_CONFIG: Record<ThreatSeverity, { color: string; bg: string; label: string }> = {
-  critical: { color: 'text-red-400', bg: 'bg-red-500/20', label: 'Critical' },
-  high: { color: 'text-orange-400', bg: 'bg-orange-500/20', label: 'High' },
-  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20', label: 'Medium' },
-  low: { color: 'text-blue-400', bg: 'bg-blue-500/20', label: 'Low' },
+  critical: { color: 'text-ac-magenta', bg: 'bg-ac-magenta/20', label: 'Critical' },
+  high: { color: 'text-ac-orange', bg: 'bg-ac-orange/20', label: 'High' },
+  medium: { color: 'text-ac-blue', bg: 'bg-ac-blue/20', label: 'Medium' },
+  low: { color: 'text-ac-navy', bg: 'bg-ac-navy/20', label: 'Low' },
 };
 
+// Brand colors for charts
 const CHART_COLORS = {
-  threats: '#ef4444',
-  blocked: '#22c55e',
+  threats: '#D62598',     // Magenta for threats
+  blocked: '#00B140',     // Atlas Crew Green for blocked
   gradient: {
-    start: '#ef4444',
-    end: '#f97316',
+    start: '#D62598',     // Magenta
+    end: '#E35205',       // Orange
   },
 };
 
@@ -451,76 +453,77 @@ export default function ThreatActivityPage() {
               <AreaChart data={DEMO_THREAT_TIMELINE}>
                 <defs>
                   <linearGradient id="threatGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_COLORS.gradient.start} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={CHART_COLORS.gradient.end} stopOpacity={0} />
+                    <stop offset="0%" stopColor="#D62598" stopOpacity={0.5} />
+                    <stop offset="50%" stopColor="#D62598" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#D62598" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
                 <XAxis
                   dataKey="time"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  tick={{ fill: '#7B8FA8', fontSize: 11 }}
                 />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '0',
+                    backgroundColor: '#001544',
+                    border: '1px solid rgba(214, 37, 152, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                   }}
-                  labelStyle={{ color: '#9ca3af' }}
+                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                  itemStyle={{ color: '#B0C4DE' }}
                 />
                 <Area
                   type="monotone"
                   dataKey="threats"
-                  stroke={CHART_COLORS.threats}
+                  stroke="#D62598"
                   fill="url(#threatGradient)"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* Severity Distribution */}
+        {/* Severity Distribution - Horizontal Stacked Bar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-surface-card border border-border-subtle p-5"
         >
           <h3 className="text-ink-primary font-medium mb-4">Severity Distribution</h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={DEMO_SEVERITY_DIST}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {DEMO_SEVERITY_DIST.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '0',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
+
+          {/* Stacked Bar */}
+          <div className="h-10 flex w-full overflow-hidden">
             {DEMO_SEVERITY_DIST.map((item) => (
-              <div key={item.name} className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-sm text-ink-secondary">{item.name}</span>
-                <span className="text-sm text-ink-primary ml-auto">{item.value}</span>
+              <div
+                key={item.name}
+                className="h-full transition-all hover:opacity-80"
+                style={{
+                  backgroundColor: item.color,
+                  width: `${(item.value / SEVERITY_TOTAL) * 100}%`,
+                }}
+                title={`${item.name}: ${item.value} (${((item.value / SEVERITY_TOTAL) * 100).toFixed(1)}%)`}
+              />
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            {DEMO_SEVERITY_DIST.map((item) => (
+              <div key={item.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
+                  <span className="text-sm text-ink-secondary">{item.name}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm text-ink-primary font-medium">{item.value}</span>
+                  <span className="text-xs text-ink-muted ml-1">
+                    ({((item.value / SEVERITY_TOTAL) * 100).toFixed(0)}%)
+                  </span>
+                </div>
               </div>
             ))}
           </div>
@@ -558,23 +561,26 @@ export default function ThreatActivityPage() {
           <div className="h-48 mb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 12 }} />
                 <YAxis
                   type="category"
                   dataKey="ip"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 11 }}
+                  tick={{ fill: '#7B8FA8', fontSize: 11 }}
                   width={110}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
+                    backgroundColor: '#001544',
+                    border: '1px solid rgba(0, 87, 183, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                     borderRadius: '0',
                   }}
+                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                  itemStyle={{ color: '#B0C4DE' }}
                 />
-                <Bar dataKey="threats" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="threats" fill="#D62598" radius={[0, 0, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

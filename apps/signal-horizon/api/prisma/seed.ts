@@ -297,6 +297,68 @@ async function main() {
     },
   });
 
+  // ===========================================================================
+  // Create Mock Signals for Threat Hunting Demo
+  // ===========================================================================
+  console.log('Creating mock signals for hunting demo...');
+  
+  const now = Date.now();
+  const mockSignals = [];
+
+  // 1. IP Threat Signals (matching example 'ip:185.228.*')
+  for (let i = 0; i < 15; i++) {
+    mockSignals.push({
+      tenantId: 'tenant-acme',
+      sensorId: 'sensor-acme-1',
+      signalType: 'IP_THREAT',
+      sourceIp: `185.228.101.${10 + i}`,
+      severity: 'CRITICAL',
+      confidence: 0.95,
+      eventCount: Math.floor(Math.random() * 50) + 1,
+      metadata: { asn: '12345', isp: 'BadActor ISP', country: 'RU' },
+      createdAt: new Date(now - Math.random() * 86400000), // Last 24h
+    });
+  }
+
+  // 2. Fingerprint Signals (matching example 'fingerprint:"curl"')
+  for (let i = 0; i < 10; i++) {
+    mockSignals.push({
+      tenantId: 'tenant-globex',
+      sensorId: 'sensor-globex-1',
+      signalType: 'BOT_SIGNATURE',
+      sourceIp: `45.33.22.${i}`,
+      anonFingerprint: 'curl/7.68.0', // Raw string for demo matching
+      severity: 'MEDIUM',
+      confidence: 0.80,
+      eventCount: 1,
+      metadata: { userAgent: 'curl/7.68.0', ja3: 'e7d705a3286e19ea42f55823' },
+      createdAt: new Date(now - Math.random() * 86400000),
+    });
+  }
+
+  // 3. API Discovery Signals (matching example 'endpoint:/api/auth/*')
+  for (let i = 0; i < 8; i++) {
+    mockSignals.push({
+      tenantId: 'tenant-initech',
+      sensorId: 'sensor-initech-1',
+      signalType: 'TEMPLATE_DISCOVERY',
+      sourceIp: `10.0.0.${50 + i}`,
+      severity: 'LOW',
+      confidence: 0.60,
+      eventCount: 12,
+      metadata: { method: 'POST', path: '/api/auth/login', risk: 'low' },
+      createdAt: new Date(now - Math.random() * 86400000),
+    });
+  }
+
+  // Bulk insert signals
+  // Note: createMany is faster but create allows relations if needed (we use createMany here)
+  await prisma.signal.createMany({
+    data: mockSignals as any, // Cast to any to avoid strict enum typing issues in seed
+  });
+
+  console.log(`Created ${mockSignals.length} mock signals`);
+
   console.log('Seed completed successfully!');
   console.log('\n=== TEST CREDENTIALS ===');
   console.log('\nSensor IDs (use for tunnel testing):');

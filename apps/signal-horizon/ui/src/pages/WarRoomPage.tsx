@@ -14,6 +14,8 @@ import {
   Clock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
+import { PlaybookRunner } from '../components/warroom/PlaybookRunner';
 
 interface Activity {
   id: string;
@@ -68,6 +70,12 @@ const quickActions = [
 export default function WarRoomPage() {
   const { id } = useParams();
   const [message, setMessage] = useState('');
+  const [activePlaybook, setActivePlaybook] = useState<Playbook | null>(null);
+
+  const handlePlaybookComplete = () => {
+    // In a real app, this would add an activity log
+    console.log('Playbook completed');
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -131,23 +139,18 @@ export default function WarRoomPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-80 border-l border-border-subtle p-4 space-y-6 bg-surface-subtle">
-          {/* Quick Actions */}
+        <div className="w-80 border-l border-border-subtle p-4 space-y-6 bg-surface-subtle overflow-y-auto">
+          {/* Playbooks */}
           <div>
-            <h3 className="text-sm font-semibold text-ink-muted mb-3">
-              Quick Actions
-            </h3>
-            <div className="space-y-2">
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  className="w-full flex items-center gap-2 px-3 py-2 border border-border-subtle bg-surface-base hover:bg-surface-card text-sm transition-colors"
-                >
-                  <action.icon className={clsx('w-4 h-4', action.color)} />
-                  <span className="text-ink-secondary">{action.label}</span>
-                </button>
-              ))}
-            </div>
+            {activePlaybook ? (
+              <PlaybookRunner
+                playbook={activePlaybook}
+                onClose={() => setActivePlaybook(null)}
+                onComplete={handlePlaybookComplete}
+              />
+            ) : (
+              <PlaybookSelector onSelect={setActivePlaybook} />
+            )}
           </div>
 
           {/* Live Metrics */}

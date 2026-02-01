@@ -25,8 +25,8 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-import signalHorizonLogoLight from './assets/brand/signal-horizon-icon-light.svg';
-import signalHorizonLogoDark from './assets/brand/signal-horizon-icon-dark.svg';
+import signalHorizonLogoLight from './assets/brand/signal-logo-light.svg';
+import signalHorizonLogoDark from './assets/brand/signal-logo-dark.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { DemoModeControls } from './components/beam/DemoModeControls';
@@ -62,6 +62,9 @@ const primaryNavItems = [
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/warroom', icon: Users, label: 'War Room' },
+];
+
+const supportNavItems = [
   { path: '/support', icon: HelpCircle, label: 'Support & Docs' },
 ];
 
@@ -91,10 +94,11 @@ const settingsItems = [
 ];
 
 function getInitialTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return 'dark';
   const stored = window.localStorage.getItem('signal-horizon-theme');
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Default to dark mode (war room aesthetic)
+  return 'dark';
 }
 
 function App() {
@@ -125,38 +129,44 @@ function App() {
   const ThemeIcon = themeIcon;
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary">
-      {/* Top Header */}
-      <header className="h-14 border-b border-border-subtle bg-surface-hero">
+    <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
+      {/* Top Header - Command Bar with gradient depth */}
+      <header className="h-14 border-b border-border-subtle bg-surface-hero relative z-10 surface-hero-gradient edge-highlight">
         <div className="h-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
               <span className="tracking-[0.2em] text-xs text-ink-muted">Atlas Crew</span>
             </div>
-            {/* Status Indicators */}
+            {/* Status Indicators - Tactical Display */}
             <div className="hidden lg:flex items-center gap-6">
               <div className="flex items-center gap-2">
-                <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-red' : 'text-ink-muted')} />
-                <span className="text-xs text-ink-secondary">
-                  <span className={clsx('font-semibold', activeCampaigns > 0 && 'text-ac-red')}>{activeCampaigns}</span> Active Campaigns
+                <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
+                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-ink-muted')} />
+                </span>
+                <span className="text-xs text-ink-secondary font-mono">
+                  <span className={clsx('font-semibold', activeCampaigns > 0 && 'text-ac-magenta')}>{activeCampaigns}</span> ACTIVE
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-ink-muted')} />
-                <span className="text-xs text-ink-secondary">
-                  <span className={clsx('font-semibold', criticalThreats > 0 && 'text-ac-orange')}>{criticalThreats}</span> Critical Threats
+                <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
+                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-ink-muted')} />
+                </span>
+                <span className="text-xs text-ink-secondary font-mono">
+                  <span className={clsx('font-semibold', criticalThreats > 0 && 'text-ac-orange')}>{criticalThreats}</span> CRITICAL
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-cyan' : 'text-ink-muted')} />
-                <span className="text-xs text-ink-secondary">
-                  <span className={clsx('font-semibold', unreadAlerts > 0 && 'text-ac-cyan')}>{unreadAlerts}</span> Recent Alerts
+                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue' : 'text-ink-muted')} />
+                <span className="text-xs text-ink-secondary font-mono">
+                  <span className={clsx('font-semibold', unreadAlerts > 0 && 'text-ac-blue')}>{unreadAlerts}</span> ALERTS
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-ink-muted')} />
-                <span className="text-xs text-ink-secondary">
-                  <span className={clsx('font-semibold', sensorCount > 0 && 'text-ac-green')}>{sensorCount}</span> Sensors
+                <span className={clsx(sensorCount > 0 && 'status-blink')}>
+                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-ink-muted')} />
+                </span>
+                <span className="text-xs text-ink-secondary font-mono">
+                  <span className={clsx('font-semibold', sensorCount > 0 && 'text-ac-green')}>{sensorCount}</span> ONLINE
                 </span>
               </div>
             </div>
@@ -187,29 +197,32 @@ function App() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar */}
-        <aside className="w-64 bg-surface-subtle border-r border-border-subtle flex flex-col">
+        {/* Sidebar with gradient depth */}
+        <aside className="w-64 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative">
           <div className="p-4 border-b border-border-subtle">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 flex items-center justify-center">
+              <div className="w-11 h-11 flex items-center justify-center">
                 <img
                   src={signalHorizonLogoLight}
                   alt="Signal Horizon"
-                  className="w-9 h-9 block dark:hidden"
+                  className="w-11 h-11 block dark:hidden"
                 />
                 <img
                   src={signalHorizonLogoDark}
                   alt="Signal Horizon"
-                  className="w-9 h-9 hidden dark:block"
+                  className="w-11 h-11 hidden dark:block"
                 />
               </div>
               <div>
-                <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Signal Horizon</p>
-                <h1 className="text-sm font-medium text-ink-primary">Fleet Intelligence</h1>
+                <h1 className="text-sm font-medium text-ink-primary tracking-wide">SIGNAL HORIZON</h1>
+                <p className="text-xs text-ink-muted">See Further. Act Faster.</p>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-[10px] tracking-[0.18em] uppercase text-ac-magenta border border-ac-magenta/40 px-2 py-0.5">
+              <span className="text-[10px] tracking-[0.18em] uppercase text-ac-magenta border border-ac-magenta/40 px-2 py-0.5 status-blink">
+                LIVE
+              </span>
+              <span className="text-[10px] tracking-[0.1em] uppercase text-ink-muted">
                 Collective Defense
               </span>
             </div>
@@ -217,9 +230,32 @@ function App() {
 
           <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Signal Horizon</p>
+              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Threat Intelligence</p>
               <div className="space-y-1">
                 {primaryNavItems.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      clsx(
+                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2',
+                        isActive
+                          ? 'bg-surface-card text-link border-link'
+                          : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
+                      )
+                    }
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Sensor Console</p>
+              <div className="space-y-1">
+                {beamNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
@@ -263,9 +299,23 @@ function App() {
             </div>
 
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Beam Console</p>
+              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Settings</p>
               <div className="space-y-1">
-                {beamNavItems.map((item) => (
+                {settingsItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-ink-muted"
+                  >
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Support</p>
+              <div className="space-y-1">
+                {supportNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
@@ -281,20 +331,6 @@ function App() {
                     <item.icon className="w-4 h-4" />
                     {item.label}
                   </NavLink>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Settings</p>
-              <div className="space-y-1">
-                {settingsItems.map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-ink-muted"
-                  >
-                    {item.label}
-                  </div>
                 ))}
               </div>
             </div>

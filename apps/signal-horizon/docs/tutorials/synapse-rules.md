@@ -365,6 +365,23 @@ curl -X DELETE https://your-signal-horizon.com/api/v1/synapse/sen_xxx/rules/rule
 
 Rules are evaluated in priority order (highest first). When multiple rules match:
 
+```mermaid
+flowchart TD
+    Start([Request Ingest]) --> Sort[Sort Rules by Priority]
+    Sort --> Eval{Matches Condition?}
+    
+    Eval -- No --> Next[Try Next Rule]
+    Eval -- Yes --> Collect[Collect Actions]
+    
+    Next --> AllDone{All Rules Done?}
+    AllDone -- No --> Eval
+    
+    AllDone -- Yes --> Dedupe[Deduplicate Actions]
+    Dedupe --> Restrict{Resolve Restrictive}
+    
+    Restrict -- "Block > Challenge > Tag" --> Enforce([Enforce Action])
+```
+
 1. All matching rules' actions are collected
 2. Actions are deduplicated by type
 3. Most restrictive action wins (block > challenge > rate_limit > tag > log)

@@ -3,36 +3,51 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
+    // Override default border-radius - design system requires 0 everywhere
+    borderRadius: {
+      none: '0',
+      DEFAULT: '0',
+    },
     extend: {
       colors: {
-        // Atlas Crew brand palette + theme tokens
+        // Atlas Crew brand palette (Signal Horizon Design System)
         ac: {
-          blue: 'var(--ac-blue)',
-          navy: 'var(--ac-navy)',
-          white: 'var(--ac-white)',
-          sky: 'var(--ac-sky-blue)',
-          magenta: 'var(--ac-magenta)',
-          black: 'var(--ac-black)',
-          purple: 'var(--ac-purple)',
-          orange: 'var(--ac-orange)',
-          cloud: 'var(--ac-cloud-blue)',
-          green: 'var(--ac-green)',
-          red: 'var(--ac-red)',
-          cyan: '#00bcd4',
-          'blue-light': 'var(--ac-blue-light)',
-          'blue-dark': 'var(--ac-blue-dark)',
-          'blue-darker': 'var(--ac-blue-darker)',
-          'sky-light': 'var(--ac-sky-light)',
-          'sky-dark': 'var(--ac-sky-dark)',
-          'gray-mid': 'var(--ac-gray-mid)',
-          'charcoal-darkest': 'var(--ac-charcoal-darkest)',
-          'charcoal-darker': 'var(--ac-charcoal-darker)',
-          'charcoal-dark': 'var(--ac-charcoal-dark)',
-          charcoal: 'var(--ac-charcoal)',
-          'charcoal-light': 'var(--ac-charcoal-light)',
-          'charcoal-lighter': 'var(--ac-charcoal-lighter)',
+          // Primary (60/25/10 rule)
+          blue: '#0057B7',           // Atlas Crew Blue - 25% interactive elements
+          navy: '#001E62',           // Navy Blue - 60% dominant surfaces
+          magenta: '#D62598',        // Magenta - 10% alerts, key metrics
+          white: '#FFFFFF',
+          black: '#000000',
+          // Accent colors (data visualization)
+          orange: '#E35205',         // Warnings
+          green: '#00B140',          // Success
+          red: '#BF3A30',            // Critical, blocked (design system spec)
+          purple: '#A400FF',         // Anomalies (design system spec)
+          sky: '#3298BC',            // Informational (design system spec)
+          'sky-blue': '#3298BC',
+          // Tints
+          'blue-tint': '#70BAF7',
+          'magenta-tint': '#E97BC1',
+          // Shades
+          'blue-shade': '#004189',
+          'navy-shade': '#001E6A',
+          'magenta-shade': '#A60B72',
+          'magenta-darker': '#6D0A50',
+          // Extended shades for backward compatibility
+          'blue-dark': '#004189',
+          'blue-darker': '#001E6A',
+          'gray-mid': '#7F7F7F',
+          'sky-light': '#BEDDFF',
+          // Legacy - keep for transition
+          cloud: '#5EAB44',
         },
-        // CtrlX design system colors
+        // Mappings for Hub UI
+        accent: {
+          primary: '#0057B7', // Atlas Crew Blue
+          secondary: '#001E62', // Atlas Crew Navy
+          magenta: '#D62598',
+        },
+        // CtrlX design system colors (existing)
         navy: {
           50: '#f0f4f8',
           100: '#d9e2ec',
@@ -47,17 +62,17 @@ export default {
           950: '#102a43',
         },
         ctrlx: {
-          primary: '#1e3a5f',
-          success: '#22c55e',
-          warning: '#f59e0b',
-          danger: '#ef4444',
-          info: '#3b82f6',
+          primary: '#001E62',        // Navy - design system primary
+          success: '#00B140',        // Atlas Crew Green
+          warning: '#E35205',        // Atlas Crew Orange
+          danger: '#BF3A30',         // Atlas Crew Red (design system)
+          info: '#3298BC',           // Sky Blue (design system)
         },
         risk: {
-          low: '#22c55e',
-          medium: '#f59e0b',
-          high: '#f97316',
-          critical: '#ef4444',
+          low: '#00B140',            // Atlas Crew Green
+          medium: '#E35205',         // Atlas Crew Orange
+          high: '#E35205',           // Atlas Crew Orange (higher intensity)
+          critical: '#D62598',       // Magenta for critical (design system)
         },
         method: {
           get: '#22c55e',
@@ -179,5 +194,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [require('@tailwindcss/typography')],
 };

@@ -26,9 +26,6 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 
@@ -154,37 +151,41 @@ const DEMO_PATTERN_TIMELINE = [
   { day: 'Sun', injection: 28, auth: 20, bot: 15, other: 10 },
 ];
 
-// Demo data - category distribution
+// Demo data - category distribution (reduced to 4 brand colors)
 const DEMO_CATEGORY_DIST = [
-  { name: 'Injection', value: 2562, color: '#ef4444' },
-  { name: 'Authentication', value: 756, color: '#f97316' },
-  { name: 'Bot Activity', value: 534, color: '#8b5cf6' },
-  { name: 'Rate Abuse', value: 389, color: '#3b82f6' },
-  { name: 'Data Exposure', value: 234, color: '#22c55e' },
-  { name: 'Protocol', value: 178, color: '#529EEC' },
+  { name: 'Injection', value: 2562, color: '#D62598' },      // Magenta - highest volume
+  { name: 'Authentication', value: 756, color: '#E35205' },   // Orange
+  { name: 'Bot Activity', value: 534, color: '#0057B7' },     // Atlas Crew Blue
+  { name: 'Other', value: 801, color: '#001E62' },            // Navy (combined Rate Abuse + Data Exposure + Protocol)
 ];
 
+// Calculate total for percentage display
+const CATEGORY_TOTAL = DEMO_CATEGORY_DIST.reduce((sum, d) => sum + d.value, 0);
+
+// Brand colors for categories (reduced to 4 colors)
 const CATEGORY_CONFIG: Record<PatternCategory, { label: string; color: string; bg: string }> = {
-  injection: { label: 'Injection', color: 'text-red-400', bg: 'bg-red-500/20' },
-  authentication: { label: 'Authentication', color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  bot: { label: 'Bot Activity', color: 'text-purple-400', bg: 'bg-purple-500/20' },
-  rate_abuse: { label: 'Rate Abuse', color: 'text-blue-400', bg: 'bg-blue-500/20' },
-  data_exposure: { label: 'Data Exposure', color: 'text-green-400', bg: 'bg-green-500/20' },
-  protocol: { label: 'Protocol', color: 'text-sky-400', bg: 'bg-sky-500/20' },
+  injection: { label: 'Injection', color: 'text-ac-magenta', bg: 'bg-ac-magenta/20' },
+  authentication: { label: 'Authentication', color: 'text-ac-orange', bg: 'bg-ac-orange/20' },
+  bot: { label: 'Bot Activity', color: 'text-ac-blue', bg: 'bg-ac-blue/20' },
+  rate_abuse: { label: 'Rate Abuse', color: 'text-ac-navy', bg: 'bg-ac-navy/20' },
+  data_exposure: { label: 'Data Exposure', color: 'text-ac-navy', bg: 'bg-ac-navy/20' },
+  protocol: { label: 'Protocol', color: 'text-ac-navy', bg: 'bg-ac-navy/20' },
 };
 
+// Brand colors for severity
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string }> = {
-  critical: { color: 'text-red-400', bg: 'bg-red-500/20' },
-  high: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20' },
-  low: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
+  critical: { color: 'text-ac-magenta', bg: 'bg-ac-magenta/20' },
+  high: { color: 'text-ac-orange', bg: 'bg-ac-orange/20' },
+  medium: { color: 'text-ac-blue', bg: 'bg-ac-blue/20' },
+  low: { color: 'text-ac-navy', bg: 'bg-ac-navy/20' },
 };
 
+// Brand colors for charts (4 max)
 const CHART_COLORS = {
-  injection: '#ef4444',
-  auth: '#f97316',
-  bot: '#8b5cf6',
-  other: '#6b7280',
+  injection: '#D62598',   // Magenta
+  auth: '#E35205',        // Orange
+  bot: '#0057B7',         // Atlas Crew Blue
+  other: '#001E62',       // Navy
 };
 
 // Stat Card
@@ -458,16 +459,18 @@ export default function AttackPatternsPage() {
                   dataKey="day"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  tick={{ fill: '#7B8FA8', fontSize: 12 }}
                 />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
+                    backgroundColor: '#001544',
+                    border: '1px solid rgba(0, 87, 183, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                     borderRadius: '0',
                   }}
-                  labelStyle={{ color: '#9ca3af' }}
+                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                  itemStyle={{ color: '#B0C4DE' }}
                 />
                 <Line
                   type="monotone"
@@ -514,47 +517,43 @@ export default function AttackPatternsPage() {
           </div>
         </motion.div>
 
-        {/* Category Distribution */}
+        {/* Category Distribution - Horizontal Stacked Bar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-surface-card border border-border-subtle p-5"
         >
-          <h3 className="text-ink-primary font-medium mb-4">Category Distribution</h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={DEMO_CATEGORY_DIST}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {DEMO_CATEGORY_DIST.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '0',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+          <h3 className="text-ink-primary font-medium mb-4">Attack Classification</h3>
+
+          {/* Stacked Bar */}
+          <div className="h-10 flex w-full overflow-hidden">
+            {DEMO_CATEGORY_DIST.map((item) => (
+              <div
+                key={item.name}
+                className="h-full transition-all hover:opacity-80"
+                style={{
+                  backgroundColor: item.color,
+                  width: `${(item.value / CATEGORY_TOTAL) * 100}%`,
+                }}
+                title={`${item.name}: ${item.value.toLocaleString()} (${((item.value / CATEGORY_TOTAL) * 100).toFixed(1)}%)`}
+              />
+            ))}
           </div>
-          <div className="space-y-2 mt-4">
-            {DEMO_CATEGORY_DIST.slice(0, 4).map((item) => (
+
+          {/* Legend */}
+          <div className="space-y-3 mt-4">
+            {DEMO_CATEGORY_DIST.map((item) => (
               <div key={item.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                  <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
                   <span className="text-ink-secondary">{item.name}</span>
                 </div>
-                <span className="text-ink-primary">{item.value.toLocaleString()}</span>
+                <div className="text-right">
+                  <span className="text-ink-primary font-medium">{item.value.toLocaleString()}</span>
+                  <span className="text-xs text-ink-muted ml-1">
+                    ({((item.value / CATEGORY_TOTAL) * 100).toFixed(0)}%)
+                  </span>
+                </div>
               </div>
             ))}
           </div>
@@ -575,24 +574,27 @@ export default function AttackPatternsPage() {
                 type="number"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#9ca3af', fontSize: 12 }}
+                tick={{ fill: '#7B8FA8', fontSize: 12 }}
               />
               <YAxis
                 type="category"
                 dataKey="name"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#7B8FA8', fontSize: 11 }}
                 width={140}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'var(--surface-card)',
-                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: '#001544',
+                  border: '1px solid rgba(0, 87, 183, 0.4)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                   borderRadius: '0',
                 }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
+                itemStyle={{ color: '#B0C4DE' }}
               />
-              <Bar dataKey="count" fill="#3b82f6" radius={[0, 0, 0, 0]} name="Detections" />
+              <Bar dataKey="count" fill="#0057B7" radius={[0, 0, 0, 0]} name="Detections" />
             </BarChart>
           </ResponsiveContainer>
         </div>

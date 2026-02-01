@@ -12,11 +12,12 @@ interface StatusCodesDonutProps {
   className?: string;
 }
 
+// Atlas Crew brand colors for status codes
 const statusCodeColors: Record<string, string> = {
-  '2xx': '#22c55e', // success - green
-  '3xx': '#3b82f6', // redirect - blue
-  '4xx': '#529EEC', // client error - sky blue (Atlas Crew brand)
-  '5xx': '#ef4444', // server error - red
+  '2xx': '#00B140', // success - Atlas Crew Green
+  '3xx': '#0057B7', // redirect - Atlas Crew Blue
+  '4xx': '#E35205', // client error - Atlas Crew Orange
+  '5xx': '#D62598', // server error - Atlas Crew Magenta
 };
 
 /**
@@ -52,11 +53,14 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               name,
             ]}
             contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: '0',
+              backgroundColor: '#001544',
+              border: '1px solid rgba(0, 87, 183, 0.4)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
               fontSize: '12px',
+              color: '#FFFFFF',
             }}
+            labelStyle={{ color: '#FFFFFF' }}
+            itemStyle={{ color: '#B0C4DE' }}
           />
           <Legend
             verticalAlign="bottom"
@@ -65,7 +69,7 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               const item = data.find((d) => d.name === value);
               const percentage = item ? ((item.value / total) * 100).toFixed(1) : '0';
               return (
-                <span className="text-xs text-gray-600">
+                <span className="text-xs text-ink-secondary">
                   {value} ({percentage}%)
                 </span>
               );

@@ -183,22 +183,16 @@ curl -X POST https://your-signal-horizon.com/api/v1/onboarding/pending/sen_pendi
 
 ## Decision Flowchart
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  How many sensors?                          │
-└─────────────────────────────────────────────────────────────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            ▼
-         1-5 sensors   6-50 sensors   50+ sensors
-              │            │            │
-              ▼            ▼            ▼
-         ┌────────┐   ┌─────────┐   ┌──────────────┐
-         │ Manual │   │ Agent   │   │ Auto-        │
-         │ Regis- │   │ Script  │   │ Discovery    │
-         │ tration│   │         │   │              │
-         └────────┘   └─────────┘   └──────────────┘
+```mermaid
+flowchart TD
+    Start{How many sensors?}
+    Start -- "1-5" --> Manual[Manual Registration]
+    Start -- "6-50" --> Agent[Agent Script]
+    Start -- "50+" --> Auto[Auto-Discovery]
+    
+    Manual --> Control[Maximum Control]
+    Agent --> Speed[Setup Speed]
+    Auto --> Scale[Zero-Touch Scale]
 ```
 
 ## Troubleshooting

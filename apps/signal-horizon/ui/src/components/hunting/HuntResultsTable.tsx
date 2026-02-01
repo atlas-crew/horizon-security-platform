@@ -3,9 +3,11 @@
  * Results table with severity badges, timestamp formatting
  */
 
-import { Download, ChevronDown, Database, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Terminal } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
+import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -102,6 +104,8 @@ function exportToCsv(signals: SignalResult[]) {
 }
 
 export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   if (!result && !isLoading) {
     return (
       <div className="card">
@@ -125,6 +129,10 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
   }
 
   const signals = result?.signals || [];
+
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
 
   return (
     <div className="card">
@@ -164,6 +172,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
           <table className="data-table">
             <thead>
               <tr>
+                <th className="w-10"></th>
                 <th>
                   <button className="flex items-center gap-1">
                     Timestamp
@@ -172,7 +181,6 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                 </th>
                 <th>Signal Type</th>
                 <th>Source IP</th>
-                <th>Tenant</th>
                 <th>Severity</th>
                 <th>Confidence</th>
                 <th>Events</th>
@@ -180,46 +188,114 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
             </thead>
             <tbody>
               {signals.map((signal) => (
-                <tr key={signal.id}>
-                  <td className="text-sm text-ink-muted whitespace-nowrap">
-                    {formatTimestamp(signal.timestamp)}
-                  </td>
-                  <td>
-                    <span className="px-2 py-0.5 text-xs bg-surface-subtle border border-border-subtle font-mono">
-                      {getSignalTypeLabel(signal.signalType)}
-                    </span>
-                  </td>
-                  <td className="font-mono text-sm text-ink-primary">
-                    {signal.sourceIp || '-'}
-                  </td>
-                  <td className="text-sm text-ink-muted font-mono">
-                    {signal.tenantId.substring(0, 8)}...
-                  </td>
-                  <td>
-                    <span
-                      className={clsx(
-                        'px-2 py-0.5 text-xs',
-                        getSeverityColor(signal.severity)
+                <React.Fragment key={signal.id}>
+                  <tr 
+                    className={clsx(
+                      "cursor-pointer hover:bg-surface-subtle transition-colors",
+                      expandedId === signal.id && "bg-surface-subtle"
+                    )}
+                    onClick={() => toggleExpand(signal.id)}
+                  >
+                    <td className="text-center">
+                      {expandedId === signal.id ? (
+                        <ChevronDown className="w-4 h-4 text-ink-muted" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-ink-muted" />
                       )}
-                    >
-                      {signal.severity}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 h-1.5 overflow-hidden bg-surface-subtle">
-                        <div
-                          className="h-full bg-ac-blue"
-                          style={{ width: `${signal.confidence * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-sm text-ink-muted">
-                        {(signal.confidence * 100).toFixed(0)}%
+                    </td>
+                    <td className="text-sm text-ink-muted whitespace-nowrap">
+                      {formatTimestamp(signal.timestamp)}
+                    </td>
+                    <td>
+                      <span className="px-2 py-0.5 text-xs bg-surface-subtle border border-border-subtle font-mono">
+                        {getSignalTypeLabel(signal.signalType)}
                       </span>
-                    </div>
-                  </td>
-                  <td className="text-sm">{signal.eventCount.toLocaleString()}</td>
-                </tr>
+                    </td>
+                    <td className="font-mono text-sm text-ink-primary">
+                      {signal.sourceIp || '-'}
+                    </td>
+                    <td>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs',
+                          getSeverityColor(signal.severity)
+                        )}
+                      >
+                        {signal.severity}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-1.5 overflow-hidden bg-surface-subtle">
+                          <div
+                            className="h-full bg-ac-blue"
+                            style={{ width: `${signal.confidence * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-ink-muted">
+                          {(signal.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="text-sm">{signal.eventCount.toLocaleString()}</td>
+                  </tr>
+                  {expandedId === signal.id && (
+                    <tr className="bg-surface-inset">
+                      <td colSpan={7} className="p-0">
+                        <div className="p-4 border-t border-border-subtle space-y-4">
+                          <div className="grid grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                              <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                                Signal Metadata
+                              </h3>
+                              <div className="bg-surface-base border border-border-subtle p-3 rounded-sm">
+                                <pre className="text-xs font-mono text-ink-secondary overflow-auto max-h-48">
+                                  {JSON.stringify(signal.metadata || {}, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                                SOC Actions
+                              </h3>
+                              <div className="flex flex-wrap gap-3">
+                                <a
+                                  href={getCyberChefUrl(
+                                    JSON.stringify(signal.metadata || {}),
+                                    CyberChefRecipes.MAGIC
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
+                                >
+                                  <Terminal className="w-4 h-4 text-ac-blue" />
+                                  <span>Analyze Metadata in CyberChef</span>
+                                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </a>
+                                
+                                {signal.anonFingerprint && (
+                                  <a
+                                    href={getCyberChefUrl(
+                                      signal.anonFingerprint,
+                                      CyberChefRecipes.MAGIC
+                                    )}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
+                                  >
+                                    <Terminal className="w-4 h-4 text-ac-blue" />
+                                    <span>Analyze Fingerprint</span>
+                                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

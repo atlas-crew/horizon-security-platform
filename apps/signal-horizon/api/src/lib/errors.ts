@@ -29,11 +29,23 @@ export const ErrorCodes = {
 } as const;
 
 /**
+ * PEN-005: Fail-safe development mode detection.
+ * Only expose details when explicitly in development mode.
+ */
+function isDevelopmentMode(): boolean {
+  const env = process.env.NODE_ENV?.toLowerCase();
+  return env === 'development';
+}
+
+/**
  * Sanitize error for client response
  * Never exposes stack traces in production
+ *
+ * PEN-005: Uses fail-safe approach - if NODE_ENV is undefined
+ * or misconfigured, defaults to production-safe behavior.
  */
 export function sanitizeError(error: unknown): ErrorResponse {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isDevelopment = isDevelopmentMode();
 
   // Handle Zod validation errors
   if (error instanceof ZodError) {
@@ -74,9 +86,10 @@ export function sanitizeError(error: unknown): ErrorResponse {
 
 /**
  * Handle validation error from Zod
+ * PEN-005: Uses fail-safe development mode detection.
  */
 export function handleValidationError(res: Response, error: ZodError): Response {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isDevelopment = isDevelopmentMode();
 
   return res.status(400).json({
     code: ErrorCodes.VALIDATION_ERROR,

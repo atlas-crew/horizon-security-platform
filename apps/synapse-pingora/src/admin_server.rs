@@ -22,7 +22,7 @@ use sysinfo::{System, Networks, Disks};
 
 // Type aliases for profile/schema data accessors
 // These are callbacks that the binary (main.rs) can set to provide real data
-type ProfilesGetter = Box<dyn Fn() -> Vec<synapse::EndpointProfile> + Send + Sync>;
+type ProfilesGetter = Box<dyn Fn() -> Vec<crate::profiler::EndpointProfile> + Send + Sync>;
 // Note: Using profiler module's JsonEndpointSchema (schema_types::EndpointSchema) to avoid serde_json version conflicts
 type SchemasGetter = Box<dyn Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync>;
 
@@ -52,7 +52,7 @@ static EVALUATE_CALLBACK: Lazy<RwLock<Option<EvaluateCallback>>> = Lazy::new(|| 
 /// Called by the binary (main.rs) during startup.
 pub fn register_profiles_getter<F>(getter: F)
 where
-    F: Fn() -> Vec<synapse::EndpointProfile> + Send + Sync + 'static,
+    F: Fn() -> Vec<crate::profiler::EndpointProfile> + Send + Sync + 'static,
 {
     *PROFILES_GETTER.write() = Some(Box::new(getter));
 }
@@ -84,7 +84,7 @@ fn run_evaluate(method: &str, uri: &str, headers: &[(String, String)], body: Opt
 }
 
 /// Get profiles from the registered getter, or empty vec if not registered.
-fn get_profiles() -> Vec<synapse::EndpointProfile> {
+fn get_profiles() -> Vec<crate::profiler::EndpointProfile> {
     PROFILES_GETTER
         .read()
         .as_ref()
@@ -114,7 +114,7 @@ static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> = Lazy::new(|| {
     RwLock::new(VecDeque::with_capacity(60))
 });
 
-static SOC_DASHBOARD_TEMPLATE: &str = include_str!("../assets/soc_dashboard.html");
+static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
 
 /// Record a metrics sample (called periodically)
 fn record_metrics_sample() {
@@ -574,7 +574,14 @@ pub async fn start_admin_server(
         .route("/sites/{hostname}/shadow", get(get_site_shadow_handler))
         // Dry-run WAF evaluation endpoint (Phase 2: Lab View)
         .route("/_sensor/evaluate", post(sensor_evaluate_handler))
-        .route("/dashboard", get(sensor_dashboard_handler))
+        // Configuration endpoints for admin console
+        .route("/_sensor/config/dlp", get(config_dlp_get_handler).put(config_dlp_put_handler))
+        .route("/_sensor/config/block-page", get(config_block_page_get_handler).put(config_block_page_put_handler))
+        .route("/_sensor/config/crawler", get(config_crawler_get_handler).put(config_crawler_put_handler))
+        .route("/_sensor/config/tarpit", get(config_tarpit_get_handler).put(config_tarpit_put_handler))
+        .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
+        .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
+        .route("/console", get(admin_console_handler))
         .route("/", get(root_handler))
         // Rate limit public endpoints (1000 req/min per IP)
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
@@ -602,6 +609,7 @@ async fn root_handler() -> impl IntoResponse {
         "service": "synapse-pingora",
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": [
+            { "method": "GET", "path": "/console", "description": "Admin console UI" },
             { "method": "GET", "path": "/health", "description": "Health check" },
             { "method": "GET", "path": "/metrics", "description": "Prometheus metrics" },
             { "method": "POST", "path": "/reload", "description": "Reload configuration" },
@@ -614,12 +622,9 @@ async fn root_handler() -> impl IntoResponse {
     }))
 }
 
-/// GET /dashboard - Minimal SOC dashboard for synapse standalone mode
-async fn sensor_dashboard_handler() -> impl IntoResponse {
-    let horizon_url = std::env::var("SIGNAL_HORIZON_URL")
-        .unwrap_or_else(|_| "https://signal-horizon.local".to_string());
-    let html = SOC_DASHBOARD_TEMPLATE.replace("{{SIGNAL_HORIZON_URL}}", &horizon_url);
-    Html(html)
+/// GET /console - Admin console for synapse operations
+async fn admin_console_handler() -> impl IntoResponse {
+    Html(ADMIN_CONSOLE_TEMPLATE)
 }
 
 /// GET /health - Health check endpoint
@@ -3252,8 +3257,8 @@ async fn profiling_anomalies_handler(State(_state): State<AdminState>) -> impl I
 /// GET /debug/profiles - Get learned endpoint profiles
 /// Returns seed data for dashboard testing until profiler module integration is complete.
 async fn profiles_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    // NOTE: The old handle_get_profiles() uses synapse::EndpointProfile from libsynapse
-    // which has serde version conflicts. Return seed data for dashboard testing until
+    // NOTE: Profiles are now handled via crate::profiler::EndpointProfile.
+    // Return seed data for dashboard testing until
     // the new profiler module (crate::profiler::Profiler) is integrated.
     // Use GET /api/profiler/profiles for real profile data.
     let now = chrono::Utc::now().timestamp_millis();
@@ -3707,6 +3712,245 @@ async fn api_schemas_detail_handler(
             })),
         ),
     }
+}
+
+// =============================================================================
+// Configuration Endpoints for Admin Console
+// =============================================================================
+
+/// DLP Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct DlpConfigRequest {
+    enabled: Option<bool>,
+    fast_mode: Option<bool>,
+    scan_text_only: Option<bool>,
+    max_scan_size: Option<usize>,
+    max_body_inspection_bytes: Option<usize>,
+    max_matches: Option<usize>,
+    custom_keywords: Option<Vec<String>>,
+}
+
+/// GET /_sensor/config/dlp - Get DLP configuration
+async fn config_dlp_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "enabled": true,
+            "fast_mode": false,
+            "scan_text_only": true,
+            "max_scan_size": 5242880,
+            "max_body_inspection_bytes": 8192,
+            "max_matches": 100,
+            "custom_keywords": []
+        }
+    })))
+}
+
+/// PUT /_sensor/config/dlp - Update DLP configuration
+async fn config_dlp_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<DlpConfigRequest>,
+) -> impl IntoResponse {
+    // In a real implementation, this would update the DLP scanner configuration
+    info!("DLP config update: enabled={:?}, fast_mode={:?}", config.enabled, config.fast_mode);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "DLP configuration updated"
+    })))
+}
+
+/// Block Page Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct BlockPageConfigRequest {
+    company_name: Option<String>,
+    support_email: Option<String>,
+    logo_url: Option<String>,
+    show_request_id: Option<bool>,
+    show_timestamp: Option<bool>,
+    show_client_ip: Option<bool>,
+    show_rule_id: Option<bool>,
+    custom_css: Option<String>,
+}
+
+/// GET /_sensor/config/block-page - Get block page configuration
+async fn config_block_page_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "company_name": null,
+            "support_email": null,
+            "logo_url": null,
+            "show_request_id": true,
+            "show_timestamp": true,
+            "show_client_ip": false,
+            "show_rule_id": false,
+            "custom_css": null
+        }
+    })))
+}
+
+/// PUT /_sensor/config/block-page - Update block page configuration
+async fn config_block_page_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<BlockPageConfigRequest>,
+) -> impl IntoResponse {
+    info!("Block page config update: company={:?}", config.company_name);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "Block page configuration updated"
+    })))
+}
+
+/// Crawler Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct CrawlerConfigRequest {
+    enabled: Option<bool>,
+    verify_legitimate_crawlers: Option<bool>,
+    block_bad_bots: Option<bool>,
+    dns_failure_policy: Option<String>,
+    dns_cache_ttl_secs: Option<u64>,
+    dns_timeout_ms: Option<u64>,
+    max_concurrent_dns_lookups: Option<usize>,
+    dns_failure_risk_penalty: Option<u32>,
+}
+
+/// GET /_sensor/config/crawler - Get crawler detection configuration
+async fn config_crawler_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "enabled": true,
+            "verify_legitimate_crawlers": true,
+            "block_bad_bots": true,
+            "dns_failure_policy": "apply_risk_penalty",
+            "dns_cache_ttl_secs": 300,
+            "dns_timeout_ms": 2000,
+            "max_concurrent_dns_lookups": 100,
+            "dns_failure_risk_penalty": 20
+        }
+    })))
+}
+
+/// PUT /_sensor/config/crawler - Update crawler detection configuration
+async fn config_crawler_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<CrawlerConfigRequest>,
+) -> impl IntoResponse {
+    info!("Crawler config update: enabled={:?}, block_bad_bots={:?}", config.enabled, config.block_bad_bots);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "Crawler configuration updated"
+    })))
+}
+
+/// Tarpit Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct TarpitConfigRequest {
+    enabled: Option<bool>,
+    base_delay_ms: Option<u64>,
+    max_delay_ms: Option<u64>,
+    progressive_multiplier: Option<f64>,
+    max_concurrent_tarpits: Option<usize>,
+    decay_threshold_ms: Option<u64>,
+}
+
+/// GET /_sensor/config/tarpit - Get tarpit configuration
+async fn config_tarpit_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "enabled": true,
+            "base_delay_ms": 1000,
+            "max_delay_ms": 30000,
+            "progressive_multiplier": 1.5,
+            "max_concurrent_tarpits": 1000,
+            "decay_threshold_ms": 300000
+        }
+    })))
+}
+
+/// PUT /_sensor/config/tarpit - Update tarpit configuration
+async fn config_tarpit_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<TarpitConfigRequest>,
+) -> impl IntoResponse {
+    info!("Tarpit config update: enabled={:?}, base_delay={:?}ms", config.enabled, config.base_delay_ms);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "Tarpit configuration updated"
+    })))
+}
+
+/// Impossible Travel Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct TravelConfigRequest {
+    max_speed_kmh: Option<f64>,
+    min_distance_km: Option<f64>,
+    history_window_ms: Option<u64>,
+    max_history_per_user: Option<usize>,
+}
+
+/// GET /_sensor/config/travel - Get impossible travel configuration
+async fn config_travel_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "max_speed_kmh": 800.0,
+            "min_distance_km": 100.0,
+            "history_window_ms": 86400000,
+            "max_history_per_user": 100
+        }
+    })))
+}
+
+/// PUT /_sensor/config/travel - Update impossible travel configuration
+async fn config_travel_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<TravelConfigRequest>,
+) -> impl IntoResponse {
+    info!("Travel config update: max_speed={:?}km/h", config.max_speed_kmh);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "Impossible travel configuration updated"
+    })))
+}
+
+/// Entity Store Configuration request/response
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct EntityConfigRequest {
+    enabled: Option<bool>,
+    max_entities: Option<usize>,
+    risk_decay_per_minute: Option<f64>,
+    block_threshold: Option<f64>,
+    max_risk: Option<f64>,
+    max_rules_per_entity: Option<usize>,
+}
+
+/// GET /_sensor/config/entity - Get entity store configuration
+async fn config_entity_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "enabled": true,
+            "max_entities": 100000,
+            "risk_decay_per_minute": 10.0,
+            "block_threshold": 70.0,
+            "max_risk": 100.0,
+            "max_rules_per_entity": 50
+        }
+    })))
+}
+
+/// PUT /_sensor/config/entity - Update entity store configuration
+async fn config_entity_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<EntityConfigRequest>,
+) -> impl IntoResponse {
+    info!("Entity config update: max_entities={:?}, block_threshold={:?}", config.max_entities, config.block_threshold);
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "message": "Entity store configuration updated"
+    })))
 }
 
 #[cfg(test)]

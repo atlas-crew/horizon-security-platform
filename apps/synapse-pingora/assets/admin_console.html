@@ -1,0 +1,5396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synapse Admin Console</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Atlas Crew Brand Colors */
+      --ac-blue: #0057B7;
+      --ac-navy: #001E62;
+      --ac-magenta: #D62598;
+      --ac-green: #00B140;
+      --ac-orange: #E35205;
+      --ac-red: #EF3340;
+      --ac-purple: #440099;
+      --ac-sky-blue: #529EEC;
+
+      /* Light Mode (default) */
+      --surface-base: #FAFCFD;
+      --surface-subtle: #F0F4F8;
+      --surface-card: #FFFFFF;
+      --surface-inset: #F4F7FA;
+      --surface-header: #001E62;
+
+      --text-primary: #001E62;
+      --text-secondary: #334E68;
+      --text-muted: #627D98;
+      --text-inverse: #FFFFFF;
+
+      --border-subtle: #D6E1EB;
+      --border-medium: #B8C9DA;
+      --border-strong: #001E62;
+
+      --shadow-card: 0 1px 3px rgba(0, 30, 98, 0.08), 0 4px 12px rgba(0, 30, 98, 0.06);
+      --shadow-card-hover: 0 4px 8px rgba(0, 30, 98, 0.10), 0 12px 24px rgba(0, 30, 98, 0.08);
+
+      --glow-blue: rgba(0, 87, 183, 0.2);
+      --glow-magenta: rgba(214, 37, 152, 0.2);
+    }
+
+    .dark {
+      --surface-base: #001544;
+      --surface-subtle: #001E62;
+      --surface-card: #0A2A6E;
+      --surface-inset: #00102E;
+      --surface-header: #001E62;
+
+      --text-primary: #FFFFFF;
+      --text-secondary: #B0C4DE;
+      --text-muted: #7B8FA8;
+      --text-inverse: #001E62;
+
+      --border-subtle: rgba(0, 87, 183, 0.25);
+      --border-medium: rgba(0, 87, 183, 0.35);
+      --border-strong: rgba(0, 87, 183, 0.4);
+
+      --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+      --glow-blue: rgba(0, 87, 183, 0.5);
+      --glow-magenta: rgba(214, 37, 152, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    body {
+      font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--surface-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Light mode background */
+    body:not(.dark) {
+      background:
+        linear-gradient(rgba(0, 30, 98, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 30, 98, 0.02) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(0, 30, 98, 0.03) 0%, transparent 20%),
+        radial-gradient(ellipse at 0% 0%, rgba(0, 87, 183, 0.06) 0%, transparent 40%),
+        linear-gradient(180deg, #FAFCFD 0%, #F8FAFC 100%);
+      background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100%;
+      background-attachment: fixed;
+    }
+
+    /* Dark mode background */
+    body.dark {
+      background:
+        linear-gradient(rgba(0, 87, 183, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 87, 183, 0.02) 1px, transparent 1px),
+        radial-gradient(ellipse at 30% 20%, rgba(0, 87, 183, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 80%, rgba(214, 37, 152, 0.06) 0%, transparent 40%),
+        linear-gradient(180deg, #001544 0%, #00102E 100%);
+      background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100%;
+      background-attachment: fixed;
+    }
+
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--surface-header);
+      border: 1px solid var(--border-subtle);
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+    }
+
+    .logo-text {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .logo-text .title {
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--text-inverse);
+      letter-spacing: -0.01em;
+    }
+
+    .logo-text .badge {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ac-magenta);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: var(--text-inverse);
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .theme-toggle:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-inverse);
+      opacity: 0.9;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--ac-green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface-inset);
+      padding: 4px;
+      margin-bottom: 24px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+      background: var(--surface-subtle);
+    }
+
+    .tab.active {
+      background: var(--ac-navy);
+      color: var(--text-inverse);
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 16px;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-medium);
+      box-shadow: var(--shadow-card-hover);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: linear-gradient(180deg, rgba(0, 87, 183, 0.03) 0%, transparent 100%);
+    }
+
+    .dark .card-header {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    /* Stat Grid */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-card);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card-hover);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--ac-blue);
+    }
+
+    .stat-card[data-accent="magenta"]::before {
+      background: var(--ac-magenta);
+    }
+
+    .stat-card[data-accent="green"]::before {
+      background: var(--ac-green);
+    }
+
+    .stat-card[data-accent="orange"]::before {
+      background: var(--ac-orange);
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 300;
+      color: var(--text-primary);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    /* Performance Metrics */
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .perf-card {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+    }
+
+    .perf-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .perf-card-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .perf-card-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--ac-sky-blue);
+    }
+
+    .perf-meter {
+      height: 8px;
+      background: var(--surface-subtle);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .perf-meter-fill {
+      height: 100%;
+      background: var(--ac-blue);
+      transition: width 0.5s ease;
+    }
+
+    .perf-meter-fill.warning {
+      background: var(--ac-orange);
+    }
+
+    .perf-meter-fill.danger {
+      background: var(--ac-red);
+    }
+
+    .perf-details {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .perf-detail {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .perf-detail-label {
+      color: var(--text-muted);
+    }
+
+    .perf-detail-value {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+    }
+
+    /* Feature Toggles */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .feature-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .feature-toggle:hover {
+      border-color: var(--ac-blue);
+    }
+
+    .feature-toggle input {
+      display: none;
+    }
+
+    .toggle-switch {
+      width: 36px;
+      height: 20px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--text-muted);
+      transition: all 0.15s ease;
+    }
+
+    .feature-toggle input:checked + .toggle-switch {
+      background: var(--ac-blue);
+      border-color: var(--ac-blue);
+    }
+
+    .feature-toggle input:checked + .toggle-switch::after {
+      left: 18px;
+      background: var(--text-inverse);
+    }
+
+    .feature-name {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    /* Action Grid */
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 24px;
+    }
+
+    .action-group {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+    }
+
+    .action-group-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* Threshold Inputs */
+    .threshold-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .threshold-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .threshold-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .threshold-input {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .threshold-input input {
+      flex: 1;
+      padding: 10px 12px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+    }
+
+    .threshold-input input:focus {
+      outline: none;
+      border-color: var(--ac-blue);
+      box-shadow: 0 0 0 2px var(--glow-blue);
+    }
+
+    .threshold-unit {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 80px;
+    }
+
+    /* Site List */
+    .site-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .site-item {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+    }
+
+    .site-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .site-hostname {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--ac-sky-blue);
+    }
+
+    .site-badges {
+      display: flex;
+      gap: 8px;
+    }
+
+    .badge {
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-success {
+      background: var(--ac-green);
+      color: white;
+    }
+
+    .badge-warning {
+      background: var(--ac-orange);
+      color: white;
+    }
+
+    .badge-info {
+      background: transparent;
+      color: var(--ac-blue);
+      border: 1px solid var(--ac-blue);
+    }
+
+    .badge-danger {
+      background: var(--ac-magenta);
+      color: white;
+    }
+
+    .site-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .site-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Entity List */
+    .entity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .entity-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .entity-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .entity-ip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--ac-sky-blue);
+      min-width: 120px;
+    }
+
+    .entity-risk {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .entity-risk strong {
+      color: var(--ac-magenta);
+    }
+
+    .entity-reason {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .entity-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Campaign List */
+    .campaign-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .campaign-item {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+    }
+
+    .campaign-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .campaign-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--ac-sky-blue);
+    }
+
+    .campaign-type {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .campaign-meta {
+      display: flex;
+      gap: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .campaign-meta strong {
+      color: var(--text-secondary);
+    }
+
+    .campaign-attacks {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .campaign-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Access List */
+    .access-section {
+      margin-bottom: 24px;
+    }
+
+    .access-section h4 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .access-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .access-rule {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .access-rule-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .access-cidr {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .access-comment {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: var(--ac-magenta);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 0 16px var(--glow-magenta);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--ac-blue);
+      border: 2px solid var(--ac-blue);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 87, 183, 0.1);
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text-primary);
+      border-color: var(--ac-blue);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--ac-red);
+      border: 1px solid var(--ac-red);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 51, 64, 0.1);
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 11px;
+    }
+
+    /* Select */
+    .select-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .select-wrapper select {
+      appearance: none;
+      padding: 10px 36px 10px 12px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      min-width: 200px;
+    }
+
+    .select-wrapper select:focus {
+      outline: none;
+      border-color: var(--ac-blue);
+    }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 16, 46, 0.8);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface-card);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .modal-close:hover {
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--ac-blue);
+      box-shadow: 0 0 0 2px var(--glow-blue);
+    }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-text {
+      font-size: 14px;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+      color: var(--text-muted);
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border-subtle);
+      border-top-color: var(--ac-blue);
+      animation: spin 1s linear infinite;
+      margin-right: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 16px;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: slide-in 0.3s ease;
+    }
+
+    @keyframes slide-in {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast-success {
+      border-left: 3px solid var(--ac-green);
+    }
+
+    .toast-error {
+      border-left: 3px solid var(--ac-red);
+    }
+
+    .toast-info {
+      border-left: 3px solid var(--ac-blue);
+    }
+
+    /* Rule Templates Grid */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .template-card {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .template-card:hover {
+      border-color: var(--ac-blue);
+      transform: translateY(-2px);
+    }
+
+    .template-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .template-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .template-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Rule List */
+    .rule-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rule-item {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .rule-info {
+      flex: 1;
+    }
+
+    .rule-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .rule-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--ac-sky-blue);
+    }
+
+    .rule-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .rule-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .rule-risk {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .rule-risk-bar {
+      width: 60px;
+      height: 6px;
+      background: var(--surface-subtle);
+      overflow: hidden;
+    }
+
+    .rule-risk-fill {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .rule-tags {
+      display: flex;
+      gap: 4px;
+    }
+
+    .rule-tag {
+      padding: 2px 8px;
+      font-size: 10px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+    }
+
+    .rule-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Security Stats */
+    .security-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .security-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .security-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .security-stat-value {
+      font-size: 20px;
+      font-weight: 300;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    /* Device Breakdown */
+    .device-breakdown {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .device-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .device-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      width: 60px;
+    }
+
+    .device-bar {
+      flex: 1;
+      height: 6px;
+      background: var(--surface-subtle);
+      overflow: hidden;
+    }
+
+    .device-bar-fill {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .device-value {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+      width: 40px;
+      text-align: right;
+    }
+
+    /* Alert List */
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .alert-item {
+      background: var(--surface-inset);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--ac-red);
+      padding: 12px 16px;
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .alert-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .alert-severity {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .alert-severity.critical { color: var(--ac-red); }
+    .alert-severity.high { color: var(--ac-orange); }
+    .alert-severity.medium { color: #F59E0B; }
+
+    .alert-details {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Risk Breakdown */
+    .risk-breakdown {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .risk-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface-inset);
+    }
+
+    .risk-label {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .risk-value {
+      font-size: 18px;
+      font-weight: 300;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Discovery List */
+    .discovery-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .discovery-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .discovery-item:last-child {
+      border-bottom: none;
+    }
+
+    .discovery-type {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .discovery-detail {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+    }
+
+    .discovery-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Method Badge */
+    .method-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+    }
+
+    .method-badge.get { color: var(--ac-green); }
+    .method-badge.post { color: var(--ac-blue); }
+    .method-badge.put { color: var(--ac-orange); }
+    .method-badge.delete { color: var(--ac-red); }
+    .method-badge.patch { color: #F59E0B; }
+
+    /* Risk Badge */
+    .risk-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      text-transform: uppercase;
+    }
+
+    .risk-badge.critical {
+      background: rgba(239, 51, 64, 0.1);
+      color: var(--ac-red);
+      border: 1px solid rgba(239, 51, 64, 0.3);
+    }
+
+    .risk-badge.high {
+      background: rgba(227, 82, 5, 0.1);
+      color: var(--ac-orange);
+      border: 1px solid rgba(227, 82, 5, 0.3);
+    }
+
+    .risk-badge.medium {
+      background: rgba(245, 158, 11, 0.1);
+      color: #F59E0B;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .risk-badge.low {
+      background: rgba(0, 177, 64, 0.1);
+      color: var(--ac-green);
+      border: 1px solid rgba(0, 177, 64, 0.3);
+    }
+
+    /* Slider */
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .slider-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .slider-value {
+      font-size: 14px;
+      font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--surface-subtle);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--ac-blue);
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--ac-blue);
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Certificates */
+    .cert-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      margin-bottom: 8px;
+    }
+
+    .cert-info {
+      flex: 1;
+    }
+
+    .cert-name {
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .cert-domains {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .cert-paths {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+    }
+
+    .cert-paths div {
+      margin-top: 2px;
+    }
+
+    .cert-expiry {
+      font-size: 11px;
+      padding: 4px 8px;
+      background: var(--ac-green);
+      color: white;
+    }
+
+    .cert-expiry.warning {
+      background: var(--ac-orange);
+    }
+
+    .cert-expiry.expired {
+      background: var(--ac-red);
+    }
+
+    /* CIDR Access Lists */
+    .cidr-section {
+      margin-bottom: 20px;
+    }
+
+    .cidr-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .cidr-header h4 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .cidr-count {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .cidr-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .cidr-input {
+      flex: 1;
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      border: 1px solid var(--border-medium);
+      background: var(--surface-card);
+      color: var(--text-primary);
+    }
+
+    .cidr-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .cidr-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid;
+    }
+
+    .cidr-tag.allow {
+      background: rgba(0, 177, 64, 0.1);
+      border-color: rgba(0, 177, 64, 0.3);
+      color: var(--ac-green);
+    }
+
+    .cidr-tag.deny {
+      background: rgba(239, 51, 64, 0.1);
+      border-color: rgba(239, 51, 64, 0.3);
+      color: var(--ac-red);
+    }
+
+    .cidr-tag button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: inherit;
+      opacity: 0.6;
+      font-size: 14px;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .cidr-tag button:hover {
+      opacity: 1;
+    }
+
+    /* WAF Lab */
+    .lab-section {
+      margin-bottom: 24px;
+    }
+
+    .lab-mode-toggle {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 16px;
+    }
+
+    .lab-mode-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .lab-mode-btn.active {
+      background: var(--ac-blue);
+      border-color: var(--ac-blue);
+      color: white;
+    }
+
+    .lab-mode-btn:hover:not(.active) {
+      background: var(--surface-card);
+    }
+
+    .raw-input {
+      width: 100%;
+      height: 200px;
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: #0a0a0a;
+      color: #4ade80;
+      border: 1px solid var(--border-subtle);
+      resize: vertical;
+    }
+
+    .example-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .example-btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .example-btn:hover {
+      border-color: var(--ac-magenta);
+      color: var(--ac-magenta);
+    }
+
+    .lab-form-grid {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .lab-result {
+      padding: 16px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .lab-result.blocked {
+      border-color: var(--ac-red);
+      background: rgba(239, 51, 64, 0.05);
+    }
+
+    .lab-result.allowed {
+      border-color: var(--ac-green);
+      background: rgba(0, 177, 64, 0.05);
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .result-verdict {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .result-verdict.blocked {
+      color: var(--ac-red);
+    }
+
+    .result-verdict.allowed {
+      color: var(--ac-green);
+    }
+
+    .result-score {
+      padding: 4px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .result-rules {
+      margin-top: 12px;
+    }
+
+    .result-rule {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface-card);
+      border-left: 3px solid var(--ac-orange);
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .result-rule-id {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--ac-blue);
+    }
+
+    /* Bot Indicators */
+    .bot-indicators-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .bot-indicator {
+      padding: 12px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-subtle);
+      transition: all 0.15s ease;
+    }
+
+    .bot-indicator.active {
+      border-color: var(--ac-orange);
+      background: rgba(227, 82, 5, 0.05);
+    }
+
+    .bot-indicator.critical {
+      border-color: var(--ac-red);
+      background: rgba(239, 51, 64, 0.05);
+    }
+
+    .bot-indicator-icon {
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+
+    .bot-indicator-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .bot-indicator-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Header Profile */
+    .anomaly-breakdown {
+      margin-top: 12px;
+    }
+
+    .anomaly-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .anomaly-bar-container {
+      flex: 1;
+      margin: 0 12px;
+      height: 6px;
+      background: var(--surface-subtle);
+    }
+
+    .anomaly-bar {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .anomaly-bar.injection { background: var(--ac-red); }
+    .anomaly-bar.missing { background: var(--ac-orange); }
+    .anomaly-bar.unexpected { background: var(--ac-purple); }
+    .anomaly-bar.length { background: var(--ac-blue); }
+
+    /* Schema Viewer */
+    .schema-tree {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .schema-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-left: 2px solid var(--border-subtle);
+      margin-left: 12px;
+    }
+
+    .schema-field:hover {
+      background: var(--surface-subtle);
+    }
+
+    .schema-expand {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .schema-name {
+      color: var(--text-primary);
+    }
+
+    .schema-name .required {
+      color: var(--ac-red);
+    }
+
+    .type-badge {
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .type-badge.string { background: rgba(0, 87, 183, 0.1); color: var(--ac-blue); }
+    .type-badge.number { background: rgba(0, 177, 64, 0.1); color: var(--ac-green); }
+    .type-badge.boolean { background: rgba(68, 0, 153, 0.1); color: var(--ac-purple); }
+    .type-badge.object { background: rgba(214, 37, 152, 0.1); color: var(--ac-magenta); }
+    .type-badge.array { background: rgba(227, 82, 5, 0.1); color: var(--ac-orange); }
+
+    .pattern-badge {
+      padding: 2px 6px;
+      font-size: 10px;
+      background: var(--surface-subtle);
+      color: var(--text-muted);
+    }
+
+    /* Rule Test Runner */
+    .test-config {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .test-results-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .test-result-card {
+      padding: 16px;
+      text-align: center;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .test-result-card.passed {
+      background: rgba(0, 177, 64, 0.1);
+      border-color: rgba(0, 177, 64, 0.3);
+    }
+
+    .test-result-card.failed {
+      background: rgba(239, 51, 64, 0.1);
+      border-color: rgba(239, 51, 64, 0.3);
+    }
+
+    .test-result-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .test-result-value {
+      font-size: 20px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="logo">
+        <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100" height="100" rx="6" fill="#519DEC"/>
+          <rect x="7" y="7" width="86" height="86" rx="4" fill="#0256B6"/>
+          <line x1="50" y1="50" x2="25" y2="30" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <line x1="50" y1="50" x2="72" y2="25" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <line x1="50" y1="50" x2="78" y2="52" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <line x1="50" y1="50" x2="65" y2="75" stroke="#D62598" stroke-width="3.5" stroke-linecap="round"/>
+          <line x1="50" y1="50" x2="28" y2="68" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          <line x1="25" y1="30" x2="72" y2="25" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+          <line x1="72" y1="25" x2="78" y2="52" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+          <line x1="28" y1="68" x2="65" y2="75" stroke="#D62598" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+          <circle cx="25" cy="30" r="6" fill="white"/>
+          <circle cx="72" cy="25" r="5" fill="white"/>
+          <circle cx="78" cy="52" r="5" fill="white"/>
+          <circle cx="28" cy="68" r="5" fill="white"/>
+          <circle cx="65" cy="75" r="7" fill="#D62598"/>
+          <circle cx="50" cy="50" r="9" fill="white"/>
+        </svg>
+        <div class="logo-text">
+          <span class="title">Synapse</span>
+          <span class="badge">Admin</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="status">Status</button>
+      <button class="tab" data-tab="sites">Sites</button>
+      <button class="tab" data-tab="rules">Rules</button>
+      <button class="tab" data-tab="security">Security</button>
+      <button class="tab" data-tab="api">API</button>
+      <button class="tab" data-tab="lab">Lab</button>
+      <button class="tab" data-tab="certs">Certs</button>
+      <button class="tab" data-tab="features">Features</button>
+      <button class="tab" data-tab="thresholds">Thresholds</button>
+      <button class="tab" data-tab="access">Access</button>
+      <button class="tab" data-tab="entities">Entities</button>
+      <button class="tab" data-tab="campaigns">Campaigns</button>
+    </div>
+
+    <!-- Status Tab -->
+    <div id="status" class="tab-content active">
+      <div class="stat-grid">
+        <div class="stat-card" data-accent="blue">
+          <div class="stat-value" id="statRules">-</div>
+          <div class="stat-label">Detection Rules</div>
+        </div>
+        <div class="stat-card" data-accent="magenta">
+          <div class="stat-value" id="statSites">-</div>
+          <div class="stat-label">Active Sites</div>
+        </div>
+        <div class="stat-card" data-accent="green">
+          <div class="stat-value" id="statEntities">-</div>
+          <div class="stat-label">Tracked Entities</div>
+        </div>
+        <div class="stat-card" data-accent="orange">
+          <div class="stat-value" id="statCampaigns">-</div>
+          <div class="stat-label">Active Campaigns</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">System Health</div>
+        </div>
+        <div class="card-body">
+          <div class="feature-grid" id="healthGrid">
+            <div class="loading"><div class="spinner"></div>Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Performance Metrics</div>
+        </div>
+        <div class="card-body">
+          <div class="perf-grid" id="perfGrid">
+            <div class="loading"><div class="spinner"></div>Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">System Resources</div>
+        </div>
+        <div class="card-body">
+          <div class="perf-grid" id="systemGrid">
+            <div class="loading"><div class="spinner"></div>Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Admin Actions</div>
+        </div>
+        <div class="card-body">
+          <div class="action-grid">
+            <div class="action-group">
+              <div class="action-group-title">Configuration</div>
+              <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="testConfig()">Test Config</button>
+                <button class="btn btn-primary" onclick="reloadConfig()">Reload Config</button>
+              </div>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Service</div>
+              <div class="action-buttons">
+                <button class="btn btn-danger" onclick="restartService()">Restart Service</button>
+              </div>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Reset Data</div>
+              <div class="action-buttons">
+                <button class="btn btn-ghost" onclick="resetMetrics()">Reset Metrics</button>
+                <button class="btn btn-ghost" onclick="resetProfiles()">Reset Profiles</button>
+                <button class="btn btn-ghost" onclick="resetSchemas()">Reset Schemas</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sites Tab -->
+    <div id="sites" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Configured Sites</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddSiteModal()">+ Add Site</button>
+        </div>
+        <div class="card-body">
+          <div class="site-list" id="siteList">
+            <div class="loading"><div class="spinner"></div>Loading sites...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules Tab -->
+    <div id="rules" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Custom Detection Rules</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddRuleModal()">+ Create Rule</button>
+        </div>
+        <div class="card-body">
+          <div class="rule-list" id="ruleList">
+            <div class="loading"><div class="spinner"></div>Loading rules...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Rule Templates</div>
+        </div>
+        <div class="card-body">
+          <div class="template-grid" id="templateGrid">
+            <div class="template-card" onclick="useTemplate('sqli')">
+              <div class="template-icon">💉</div>
+              <div class="template-name">SQL Injection</div>
+              <div class="template-desc">Detect SQL injection patterns</div>
+            </div>
+            <div class="template-card" onclick="useTemplate('xss')">
+              <div class="template-icon">🔓</div>
+              <div class="template-name">XSS Attack</div>
+              <div class="template-desc">Cross-site scripting detection</div>
+            </div>
+            <div class="template-card" onclick="useTemplate('rce')">
+              <div class="template-icon">⚡</div>
+              <div class="template-name">Command Injection</div>
+              <div class="template-desc">Remote code execution attempts</div>
+            </div>
+            <div class="template-card" onclick="useTemplate('lfi')">
+              <div class="template-icon">📁</div>
+              <div class="template-name">Path Traversal</div>
+              <div class="template-desc">Local file inclusion attacks</div>
+            </div>
+            <div class="template-card" onclick="useTemplate('auth')">
+              <div class="template-icon">🔑</div>
+              <div class="template-name">Auth Bypass</div>
+              <div class="template-desc">Authentication bypass attempts</div>
+            </div>
+            <div class="template-card" onclick="useTemplate('rate')">
+              <div class="template-icon">⏱️</div>
+              <div class="template-name">Rate Abuse</div>
+              <div class="template-desc">Excessive request patterns</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security Tab -->
+    <div id="security" class="tab-content">
+      <div class="stat-grid">
+        <div class="stat-card" data-accent="blue">
+          <div class="stat-value" id="statSchemas">-</div>
+          <div class="stat-label">Schemas Learned</div>
+        </div>
+        <div class="stat-card" data-accent="magenta">
+          <div class="stat-value" id="statFingerprints">-</div>
+          <div class="stat-label">Unique Fingerprints</div>
+        </div>
+        <div class="stat-card" data-accent="orange">
+          <div class="stat-value" id="statAuthFailures">-</div>
+          <div class="stat-label">Auth Failures (24h)</div>
+        </div>
+        <div class="stat-card" data-accent="green">
+          <div class="stat-value" id="statBotBlocked">-</div>
+          <div class="stat-label">Bots Blocked</div>
+        </div>
+      </div>
+
+      <div class="perf-grid">
+        <!-- Schema Learning -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Schema Learning</div>
+            <span class="badge badge-success" id="schemaHealthBadge">Healthy</span>
+          </div>
+          <div class="card-body">
+            <div class="security-stats" id="schemaStats">
+              <div class="security-stat">
+                <span class="security-stat-label">Endpoints</span>
+                <span class="security-stat-value" id="schemaEndpoints">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Versions</span>
+                <span class="security-stat-value" id="schemaVersions">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Violations (24h)</span>
+                <span class="security-stat-value" id="schemaViolations">0</span>
+              </div>
+            </div>
+            <div class="perf-meter" style="margin-top: 12px;">
+              <div class="perf-meter-fill" id="schemaCoverage" style="width: 0%"></div>
+            </div>
+            <div class="text-xs" style="color: var(--text-muted); margin-top: 4px;">
+              Learning progress: <span id="schemaCoverageText">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Credential Stuffing -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Credential Stuffing</div>
+          </div>
+          <div class="card-body">
+            <div class="security-stats" id="stuffingStats">
+              <div class="security-stat">
+                <span class="security-stat-label">Auth Failures</span>
+                <span class="security-stat-value" id="stuffingFailures">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Takeovers</span>
+                <span class="security-stat-value" id="stuffingTakeovers" style="color: var(--ac-red);">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Distributed</span>
+                <span class="security-stat-value" id="stuffingDistributed" style="color: var(--ac-purple);">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Suspicious</span>
+                <span class="security-stat-value" id="stuffingSuspicious" style="color: var(--ac-orange);">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fingerprint Intelligence -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Fingerprint Intelligence</div>
+          </div>
+          <div class="card-body">
+            <div class="security-stats" id="fingerprintStats">
+              <div class="security-stat">
+                <span class="security-stat-label">Unique</span>
+                <span class="security-stat-value" id="fpUnique">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Cross-Session</span>
+                <span class="security-stat-value" id="fpCrossSession" style="color: var(--ac-orange);">0</span>
+              </div>
+            </div>
+            <div class="device-breakdown" id="deviceBreakdown" style="margin-top: 12px;">
+              <div class="device-row">
+                <span class="device-label">Desktop</span>
+                <div class="device-bar"><div class="device-bar-fill" style="width: 60%; background: var(--ac-blue);"></div></div>
+                <span class="device-value">60%</span>
+              </div>
+              <div class="device-row">
+                <span class="device-label">Mobile</span>
+                <div class="device-bar"><div class="device-bar-fill" style="width: 30%; background: var(--ac-green);"></div></div>
+                <span class="device-value">30%</span>
+              </div>
+              <div class="device-row">
+                <span class="device-label">Bot</span>
+                <div class="device-bar"><div class="device-bar-fill" style="width: 10%; background: var(--ac-red);"></div></div>
+                <span class="device-value">10%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Headless Detection -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Bot Detection</div>
+          </div>
+          <div class="card-body">
+            <div class="security-stats" id="headlessStats">
+              <div class="security-stat">
+                <span class="security-stat-label">Suspected</span>
+                <span class="security-stat-value" id="headlessSuspected" style="color: var(--ac-orange);">0</span>
+              </div>
+              <div class="security-stat">
+                <span class="security-stat-label">Blocked</span>
+                <span class="security-stat-value" id="headlessBlocked" style="color: var(--ac-red);">0</span>
+              </div>
+            </div>
+            <div style="margin-top: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                <span>Detection Rate</span>
+                <span id="detectionRateValue">0%</span>
+              </div>
+              <div class="perf-meter">
+                <div class="perf-meter-fill" id="detectionRateBar" style="width: 0%"></div>
+              </div>
+            </div>
+            <div style="margin-top: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                <span>JS Challenge Success</span>
+                <span id="jsChallengeValue">0%</span>
+              </div>
+              <div class="perf-meter">
+                <div class="perf-meter-fill" id="jsChallengeBar" style="width: 0%; background: var(--ac-green);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session Hijacking Alerts -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Session Hijack Alerts</div>
+          <span class="badge badge-danger" id="hijackAlertCount" style="display: none;">0</span>
+        </div>
+        <div class="card-body">
+          <div class="alert-list" id="hijackAlertList">
+            <div class="empty-state">
+              <div class="empty-state-text">No active hijack alerts</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bot Indicators -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Bot Indicators</div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="badge badge-danger" id="botCriticalCount" style="display: none;">0</span>
+            <span class="badge badge-warning" id="botHighCount" style="display: none;">0</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="bot-indicators-grid" id="botIndicatorsGrid">
+            <div class="bot-indicator" data-type="noJsExecution">
+              <div class="bot-indicator-icon">📵</div>
+              <div class="bot-indicator-label">No JS Execution</div>
+              <div class="bot-indicator-value" id="botNoJs">0</div>
+            </div>
+            <div class="bot-indicator" data-type="consistentTiming">
+              <div class="bot-indicator-icon">⏱️</div>
+              <div class="bot-indicator-label">Consistent Timing</div>
+              <div class="bot-indicator-value" id="botTiming">0</div>
+            </div>
+            <div class="bot-indicator" data-type="rapidRequests">
+              <div class="bot-indicator-icon">⚡</div>
+              <div class="bot-indicator-label">Rapid Requests</div>
+              <div class="bot-indicator-value" id="botRapid">0</div>
+            </div>
+            <div class="bot-indicator" data-type="fingerprintAnomaly">
+              <div class="bot-indicator-icon">🔍</div>
+              <div class="bot-indicator-label">FP Anomaly</div>
+              <div class="bot-indicator-value" id="botFpAnomaly">0</div>
+            </div>
+            <div class="bot-indicator" data-type="missingHeaders">
+              <div class="bot-indicator-icon">📋</div>
+              <div class="bot-indicator-label">Missing Headers</div>
+              <div class="bot-indicator-value" id="botMissingHeaders">0</div>
+            </div>
+            <div class="bot-indicator" data-type="suspiciousUserAgent">
+              <div class="bot-indicator-icon">🖥️</div>
+              <div class="bot-indicator-label">Suspicious UA</div>
+              <div class="bot-indicator-value" id="botSuspiciousUa">0</div>
+            </div>
+            <div class="bot-indicator" data-type="automatedBehavior">
+              <div class="bot-indicator-icon">🔄</div>
+              <div class="bot-indicator-label">Automated</div>
+              <div class="bot-indicator-value" id="botAutomated">0</div>
+            </div>
+            <div class="bot-indicator" data-type="sessionAnomaly">
+              <div class="bot-indicator-icon">🔑</div>
+              <div class="bot-indicator-label">Session Anomaly</div>
+              <div class="bot-indicator-value" id="botSession">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Header Profiling -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Header Profiling</div>
+        </div>
+        <div class="card-body">
+          <div class="security-stats">
+            <div class="security-stat">
+              <span class="security-stat-label">Endpoints Profiled</span>
+              <span class="security-stat-value" id="headerEndpoints">0</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Anomalies (24h)</span>
+              <span class="security-stat-value" id="headerAnomalies" style="color: var(--ac-orange);">0</span>
+            </div>
+          </div>
+          <div class="anomaly-breakdown" id="anomalyBreakdown" style="margin-top: 16px;">
+            <div class="anomaly-row">
+              <span style="font-size: 12px; width: 120px;">Injection</span>
+              <div class="anomaly-bar-container">
+                <div class="anomaly-bar injection" id="anomalyInjection" style="width: 0%;"></div>
+              </div>
+              <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace;" id="anomalyInjectionCount">0</span>
+            </div>
+            <div class="anomaly-row">
+              <span style="font-size: 12px; width: 120px;">Missing Required</span>
+              <div class="anomaly-bar-container">
+                <div class="anomaly-bar missing" id="anomalyMissing" style="width: 0%;"></div>
+              </div>
+              <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace;" id="anomalyMissingCount">0</span>
+            </div>
+            <div class="anomaly-row">
+              <span style="font-size: 12px; width: 120px;">Unexpected</span>
+              <div class="anomaly-bar-container">
+                <div class="anomaly-bar unexpected" id="anomalyUnexpected" style="width: 0%;"></div>
+              </div>
+              <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace;" id="anomalyUnexpectedCount">0</span>
+            </div>
+            <div class="anomaly-row">
+              <span style="font-size: 12px; width: 120px;">Length Anomaly</span>
+              <div class="anomaly-bar-container">
+                <div class="anomaly-bar length" id="anomalyLength" style="width: 0%;"></div>
+              </div>
+              <span style="font-size: 12px; font-family: 'JetBrains Mono', monospace;" id="anomalyLengthCount">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Tab -->
+    <div id="api" class="tab-content">
+      <div class="stat-grid">
+        <div class="stat-card" data-accent="blue">
+          <div class="stat-value" id="statEndpoints">-</div>
+          <div class="stat-label">API Endpoints</div>
+        </div>
+        <div class="stat-card" data-accent="magenta">
+          <div class="stat-value" id="statServices">-</div>
+          <div class="stat-label">Services</div>
+        </div>
+        <div class="stat-card" data-accent="orange">
+          <div class="stat-value" id="statSensitive">-</div>
+          <div class="stat-label">Sensitive</div>
+        </div>
+        <div class="stat-card" data-accent="green">
+          <div class="stat-value" id="statCoverage">-</div>
+          <div class="stat-label">Health %</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Discovered Endpoints</div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="apiSearch" placeholder="Search endpoints..." style="padding: 6px 12px; border: 1px solid var(--border-subtle); background: var(--surface-inset); color: var(--text-primary); font-size: 12px; min-width: 200px;">
+            <div class="select-wrapper">
+              <select id="apiMethodFilter" onchange="filterEndpoints()">
+                <option value="">All Methods</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+                <option value="PATCH">PATCH</option>
+              </select>
+            </div>
+            <div class="select-wrapper">
+              <select id="apiRiskFilter" onchange="filterEndpoints()">
+                <option value="">All Risks</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card-body" style="padding: 0;">
+          <div class="endpoint-table" id="endpointTable">
+            <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-subtle); text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; color: var(--text-muted);">
+                  <th style="padding: 12px 16px; text-align: left;">Method</th>
+                  <th style="padding: 12px 16px; text-align: left;">Endpoint</th>
+                  <th style="padding: 12px 16px; text-align: center;">Risk</th>
+                  <th style="padding: 12px 16px; text-align: right;">Requests</th>
+                  <th style="padding: 12px 16px; text-align: right;">Latency</th>
+                  <th style="padding: 12px 16px; text-align: right;">Anomaly</th>
+                </tr>
+              </thead>
+              <tbody id="endpointTableBody">
+                <tr>
+                  <td colspan="6" style="padding: 32px; text-align: center; color: var(--text-muted);">No endpoints discovered yet</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="perf-grid">
+        <!-- Risk Breakdown -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Risk Breakdown</div>
+          </div>
+          <div class="card-body">
+            <div class="risk-breakdown" id="riskBreakdown">
+              <div class="risk-row">
+                <span class="risk-label" style="color: var(--ac-red);">Critical</span>
+                <span class="risk-value" id="riskCritical">0</span>
+              </div>
+              <div class="risk-row">
+                <span class="risk-label" style="color: var(--ac-orange);">High</span>
+                <span class="risk-value" id="riskHigh">0</span>
+              </div>
+              <div class="risk-row">
+                <span class="risk-label" style="color: #F59E0B;">Medium</span>
+                <span class="risk-value" id="riskMedium">0</span>
+              </div>
+              <div class="risk-row">
+                <span class="risk-label" style="color: var(--ac-green);">Low</span>
+                <span class="risk-value" id="riskLow">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Discovery -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Recent Discovery</div>
+          </div>
+          <div class="card-body">
+            <div class="discovery-list" id="discoveryList">
+              <div class="empty-state">
+                <div class="empty-state-text">No recent discoveries</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features Tab -->
+    <div id="features" class="tab-content">
+      <!-- Protection Mode -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Protection Mode</div>
+          <span class="badge" id="protectionModeBadge">Active</span>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="threshold-label">Block Mode</label>
+              <div class="select-wrapper" style="width: 100%;">
+                <select id="blockModeSelect" style="width: 100%;" onchange="updateProtectionBadge()">
+                  <option value="block">Block - Actively block malicious requests</option>
+                  <option value="detect">Detect - Log but allow (monitoring mode)</option>
+                  <option value="off">Off - Disable risk-based blocking</option>
+                </select>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="blockPageEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Show Block Page (instead of generic 403)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Core Features -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Core Features</div>
+          <button class="btn btn-primary btn-sm" onclick="saveFeatures()">Save Changes</button>
+        </div>
+        <div class="card-body">
+          <div class="feature-grid" id="featureGrid">
+            <div class="loading"><div class="spinner"></div>Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WAF Settings -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">WAF Settings</div>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="threshold-label">WAF Mode</label>
+              <div class="select-wrapper" style="width: 100%;">
+                <select id="wafModeSelect" style="width: 100%;">
+                  <option value="block">Block - Actively block threats</option>
+                  <option value="detect">Detect - Log only</option>
+                  <option value="off">Off - Disable WAF</option>
+                </select>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="inspectRequestBody" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Inspect Request Body</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="inspectResponseBody">
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Inspect Response Body (impacts performance)</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Body Size (MB)</label>
+              <div class="threshold-input">
+                <input type="number" id="maxBodySize" value="10" min="1" max="100">
+                <span class="threshold-unit">MB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rate Limiting Settings -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Rate Limiting</div>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="rateLimitEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Rate Limiting</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Rate Limit By</label>
+              <div class="select-wrapper" style="width: 100%;">
+                <select id="rateLimitBy" style="width: 100%;">
+                  <option value="ip">IP Address</option>
+                  <option value="session">Session ID</option>
+                  <option value="user">User ID (requires auth)</option>
+                </select>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Burst Size</label>
+              <div class="threshold-input">
+                <input type="number" id="burstSize" value="50" min="1" max="10000">
+                <span class="threshold-unit">requests</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session Settings -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Session Tracking</div>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="sessionTrackingEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Session Tracking</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Session Expiration</label>
+              <div class="threshold-input">
+                <input type="number" id="sessionExpiration" value="60" min="5" max="1440">
+                <span class="threshold-unit">minutes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DLP Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">DLP (Data Loss Prevention)</div>
+          <button class="btn btn-primary btn-sm" onclick="saveDlpConfig()">Save DLP</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="dlpEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable DLP Scanner</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="dlpFastMode">
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Fast Mode (critical patterns only)</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="dlpScanTextOnly" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Scan Text Content Only</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Scan Size</label>
+              <div class="threshold-input">
+                <input type="number" id="dlpMaxScanSize" value="5" min="1" max="50">
+                <span class="threshold-unit">MB</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Inspection Bytes</label>
+              <div class="threshold-input">
+                <input type="number" id="dlpMaxInspectionBytes" value="8" min="1" max="64">
+                <span class="threshold-unit">KB</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Matches</label>
+              <div class="threshold-input">
+                <input type="number" id="dlpMaxMatches" value="100" min="10" max="1000">
+                <span class="threshold-unit">per request</span>
+              </div>
+            </div>
+            <div class="threshold-item" style="grid-column: 1 / -1;">
+              <label class="threshold-label">Custom Keywords (comma-separated)</label>
+              <input type="text" id="dlpCustomKeywords" placeholder="project-alpha, confidential, internal-only" style="width: 100%; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 13px;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Block Page Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Block Page Customization</div>
+          <button class="btn btn-primary btn-sm" onclick="saveBlockPageConfig()">Save Block Page</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="threshold-label">Company Name</label>
+              <input type="text" id="blockPageCompanyName" placeholder="Your Company" style="width: 100%; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); font-size: 13px;">
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Support Email</label>
+              <input type="email" id="blockPageSupportEmail" placeholder="security@example.com" style="width: 100%; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); font-size: 13px;">
+            </div>
+            <div class="threshold-item" style="grid-column: 1 / -1;">
+              <label class="threshold-label">Logo URL</label>
+              <input type="url" id="blockPageLogoUrl" placeholder="https://example.com/logo.png" style="width: 100%; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); font-size: 13px;">
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="blockPageShowRequestId" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Show Request ID</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="blockPageShowTimestamp" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Show Timestamp</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="blockPageShowClientIp">
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Show Client IP</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="blockPageShowRuleId">
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Show Rule ID (debug)</span>
+              </label>
+            </div>
+            <div class="threshold-item" style="grid-column: 1 / -1;">
+              <label class="threshold-label">Custom CSS</label>
+              <textarea id="blockPageCustomCss" placeholder=".block-page { background: #1a1a2e; }" style="width: 100%; height: 80px; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 12px; resize: vertical;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Crawler/Bot Detection Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Crawler/Bot Detection</div>
+          <button class="btn btn-primary btn-sm" onclick="saveCrawlerConfig()">Save Crawler</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="crawlerEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Crawler Detection</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="crawlerVerifyLegitimate" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Verify Legitimate Crawlers (DNS)</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="crawlerBlockBadBots" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Block Bad Bots</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">DNS Failure Policy</label>
+              <div class="select-wrapper" style="width: 100%;">
+                <select id="crawlerDnsFailurePolicy" style="width: 100%;">
+                  <option value="apply_risk_penalty">Apply Risk Penalty (recommended)</option>
+                  <option value="allow">Allow (fail-open)</option>
+                  <option value="block">Block (fail-secure)</option>
+                </select>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">DNS Cache TTL</label>
+              <div class="threshold-input">
+                <input type="number" id="crawlerDnsCacheTtl" value="300" min="60" max="3600">
+                <span class="threshold-unit">seconds</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">DNS Timeout</label>
+              <div class="threshold-input">
+                <input type="number" id="crawlerDnsTimeout" value="2000" min="500" max="10000">
+                <span class="threshold-unit">ms</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Concurrent DNS</label>
+              <div class="threshold-input">
+                <input type="number" id="crawlerMaxConcurrentDns" value="100" min="10" max="500">
+                <span class="threshold-unit">lookups</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">DNS Failure Risk Penalty</label>
+              <div class="threshold-input">
+                <input type="number" id="crawlerDnsFailurePenalty" value="20" min="0" max="100">
+                <span class="threshold-unit">points</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarpit Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Tarpit (Slow-Drip Defense)</div>
+          <button class="btn btn-primary btn-sm" onclick="saveTarpitConfig()">Save Tarpit</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="tarpitEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Tarpit</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Base Delay</label>
+              <div class="threshold-input">
+                <input type="number" id="tarpitBaseDelay" value="1000" min="100" max="10000">
+                <span class="threshold-unit">ms</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Delay</label>
+              <div class="threshold-input">
+                <input type="number" id="tarpitMaxDelay" value="30000" min="1000" max="120000">
+                <span class="threshold-unit">ms</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Progressive Multiplier</label>
+              <div class="threshold-input">
+                <input type="number" id="tarpitMultiplier" value="1.5" min="1.0" max="3.0" step="0.1">
+                <span class="threshold-unit">x</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Concurrent Tarpits</label>
+              <div class="threshold-input">
+                <input type="number" id="tarpitMaxConcurrent" value="1000" min="100" max="10000">
+                <span class="threshold-unit">connections</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Decay Threshold</label>
+              <div class="threshold-input">
+                <input type="number" id="tarpitDecayThreshold" value="5" min="1" max="60">
+                <span class="threshold-unit">minutes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Impossible Travel Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Impossible Travel Detection</div>
+          <button class="btn btn-primary btn-sm" onclick="saveTravelConfig()">Save Travel</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="threshold-label">Max Travel Speed</label>
+              <div class="threshold-input">
+                <input type="number" id="travelMaxSpeed" value="800" min="100" max="2000">
+                <span class="threshold-unit">km/h</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Min Distance to Analyze</label>
+              <div class="threshold-input">
+                <input type="number" id="travelMinDistance" value="100" min="10" max="1000">
+                <span class="threshold-unit">km</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">History Window</label>
+              <div class="threshold-input">
+                <input type="number" id="travelHistoryWindow" value="24" min="1" max="168">
+                <span class="threshold-unit">hours</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max History Per User</label>
+              <div class="threshold-input">
+                <input type="number" id="travelMaxHistory" value="100" min="10" max="500">
+                <span class="threshold-unit">entries</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Entity Store Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Entity Store</div>
+          <button class="btn btn-primary btn-sm" onclick="saveEntityConfig()">Save Entity</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="entityEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Entity Tracking</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Entities</label>
+              <div class="threshold-input">
+                <input type="number" id="entityMaxEntities" value="100000" min="1000" max="1000000" step="1000">
+                <span class="threshold-unit">IPs</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Risk Decay Rate</label>
+              <div class="threshold-input">
+                <input type="number" id="entityRiskDecay" value="10" min="1" max="50">
+                <span class="threshold-unit">points/min</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Auto-Block Threshold</label>
+              <div class="threshold-input">
+                <input type="number" id="entityBlockThreshold" value="70" min="50" max="100">
+                <span class="threshold-unit">risk score</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Risk Score</label>
+              <div class="threshold-input">
+                <input type="number" id="entityMaxRisk" value="100" min="100" max="1000">
+                <span class="threshold-unit">points</span>
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Rules Per Entity</label>
+              <div class="threshold-input">
+                <input type="number" id="entityMaxRules" value="50" min="10" max="200">
+                <span class="threshold-unit">rules</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thresholds Tab -->
+    <div id="thresholds" class="tab-content">
+      <!-- Risk Management -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Risk Management</div>
+          <button class="btn btn-primary btn-sm" onclick="saveThresholds()">Save Changes</button>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid" id="thresholdGrid">
+            <div class="loading"><div class="spinner"></div>Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly Detection -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Anomaly Detection</div>
+        </div>
+        <div class="card-body">
+          <div class="threshold-grid">
+            <div class="threshold-item">
+              <label class="feature-toggle">
+                <input type="checkbox" id="anomalyDetectionEnabled" checked>
+                <span class="toggle-switch"></span>
+                <span class="feature-name">Enable Anomaly Detection</span>
+              </label>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Anomaly Threshold</label>
+              <div class="slider-container">
+                <div class="slider-header">
+                  <span class="slider-label">More Sensitive</span>
+                  <span class="slider-value" id="anomalyThresholdValue">50</span>
+                  <span class="slider-label">Less Sensitive</span>
+                </div>
+                <input type="range" id="anomalyThreshold" min="10" max="100" value="50" oninput="document.getElementById('anomalyThresholdValue').textContent = this.value">
+              </div>
+            </div>
+            <div class="threshold-item">
+              <label class="threshold-label">Max Risk History</label>
+              <div class="threshold-input">
+                <input type="number" id="maxRiskHistory" value="100" min="10" max="500" step="10">
+                <span class="threshold-unit">events/entity</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Access Tab -->
+    <div id="access" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Access Lists (CIDR)</div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="select-wrapper">
+              <select id="accessSiteSelect" onchange="loadAccessList()">
+                <option value="global">Global</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- CIDR Allow Section -->
+          <div class="cidr-section">
+            <div class="cidr-header">
+              <h4 style="color: var(--ac-green);">Allow List</h4>
+              <span class="cidr-count" id="allowCount">(0)</span>
+            </div>
+            <div class="cidr-input-row">
+              <input type="text" class="cidr-input" id="newAllowCidr" placeholder="192.168.1.0/24 or 2001:db8::/32" onkeydown="if(event.key==='Enter')addCidr('allow')">
+              <button class="btn btn-sm" style="background: var(--ac-green); color: white;" onclick="addCidr('allow')">Add Allow</button>
+            </div>
+            <div class="cidr-list" id="allowCidrList">
+              <span style="color: var(--text-muted); font-size: 12px;">No allow rules (all IPs allowed by default)</span>
+            </div>
+          </div>
+
+          <!-- CIDR Deny Section -->
+          <div class="cidr-section">
+            <div class="cidr-header">
+              <h4 style="color: var(--ac-red);">Deny List</h4>
+              <span class="cidr-count" id="denyCount">(0)</span>
+            </div>
+            <div class="cidr-input-row">
+              <input type="text" class="cidr-input" id="newDenyCidr" placeholder="10.0.0.0/8 or ::1/128" onkeydown="if(event.key==='Enter')addCidr('deny')">
+              <button class="btn btn-sm" style="background: var(--ac-red); color: white;" onclick="addCidr('deny')">Add Deny</button>
+            </div>
+            <div class="cidr-list" id="denyCidrList">
+              <span style="color: var(--text-muted); font-size: 12px;">No deny rules</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted);">
+            Deny rules take precedence over allow rules. Use CIDR notation (e.g., 192.168.1.0/24, 2001:db8::/32).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Entities Tab -->
+    <div id="entities" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Blocked Entities</div>
+          <button class="btn btn-danger btn-sm" onclick="releaseAllEntities()">Release All</button>
+        </div>
+        <div class="card-body">
+          <div class="entity-list" id="entityList">
+            <div class="loading"><div class="spinner"></div>Loading entities...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Campaigns Tab -->
+    <div id="campaigns" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Active Campaigns</div>
+        </div>
+        <div class="card-body">
+          <div class="campaign-list" id="campaignList">
+            <div class="loading"><div class="spinner"></div>Loading campaigns...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAF Lab Tab -->
+    <div id="lab" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">WAF Evaluation Lab</div>
+          <span class="badge badge-info">Dry Run</span>
+        </div>
+        <div class="card-body">
+          <div class="lab-section">
+            <div class="lab-mode-toggle">
+              <button class="lab-mode-btn active" onclick="setLabMode('raw')">Raw HTTP</button>
+              <button class="lab-mode-btn" onclick="setLabMode('form')">Form Input</button>
+            </div>
+
+            <div class="example-buttons">
+              <span style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">Examples:</span>
+              <button class="example-btn" onclick="loadLabExample('sqli')">SQL Injection</button>
+              <button class="example-btn" onclick="loadLabExample('xss')">XSS Attack</button>
+              <button class="example-btn" onclick="loadLabExample('traversal')">Path Traversal</button>
+              <button class="example-btn" onclick="loadLabExample('rce')">Command Injection</button>
+              <button class="example-btn" onclick="loadLabExample('auth')">Auth Bypass</button>
+            </div>
+
+            <!-- Raw HTTP Mode -->
+            <div id="labRawMode">
+              <textarea class="raw-input" id="labRawRequest" placeholder="GET /api/users?id=1 OR 1=1 HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+X-Forwarded-For: 192.168.1.100
+
+{&quot;key&quot;: &quot;value&quot;}"></textarea>
+            </div>
+
+            <!-- Form Mode -->
+            <div id="labFormMode" style="display: none;">
+              <div class="lab-form-grid">
+                <label class="form-label">Method</label>
+                <select class="form-input" id="labMethod" style="width: 120px;">
+                  <option>GET</option>
+                  <option>POST</option>
+                  <option>PUT</option>
+                  <option>DELETE</option>
+                  <option>PATCH</option>
+                </select>
+
+                <label class="form-label">URI</label>
+                <input type="text" class="form-input" id="labUri" placeholder="/api/users?id=1">
+
+                <label class="form-label">Client IP</label>
+                <input type="text" class="form-input" id="labClientIp" placeholder="192.168.1.100" style="width: 180px;">
+
+                <label class="form-label">Headers</label>
+                <textarea class="form-input" id="labHeaders" rows="3" placeholder="Content-Type: application/json
+Authorization: Bearer token123"></textarea>
+
+                <label class="form-label">Body</label>
+                <textarea class="form-input" id="labBody" rows="4" placeholder='{"username": "admin"}'></textarea>
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <button class="btn btn-primary" onclick="evaluateRequest()" id="labEvalBtn">
+                Evaluate Request
+              </button>
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div id="labResults" style="display: none; margin-top: 24px;">
+            <h4 style="margin-bottom: 12px;">Evaluation Result</h4>
+            <div class="lab-result" id="labResultCard">
+              <div class="result-header">
+                <span class="result-verdict" id="labVerdict">ALLOWED</span>
+                <span class="result-score badge" id="labScore">Risk: 0</span>
+                <span id="labAction" class="badge"></span>
+              </div>
+              <div class="result-rules" id="labMatchedRules">
+                <!-- Matched rules will be inserted here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Certificates Tab -->
+    <div id="certs" class="tab-content">
+      <div class="perf-grid">
+        <!-- Upload Certificate -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Upload Certificate</div>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-input" id="certName" placeholder="prod.example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Domains (comma separated)</label>
+              <input type="text" class="form-input" id="certDomains" placeholder="example.com, api.example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Certificate (PEM)</label>
+              <textarea class="form-input" id="certPem" rows="6" placeholder="-----BEGIN CERTIFICATE-----" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Private Key (PEM)</label>
+              <textarea class="form-input" id="certKey" rows="6" placeholder="-----BEGIN PRIVATE KEY-----" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;"></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="uploadCertificate()">Upload Certificate</button>
+          </div>
+        </div>
+
+        <!-- Existing Certificates -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Installed Certificates</div>
+            <span class="badge" id="certCount">0</span>
+          </div>
+          <div class="card-body">
+            <div id="certList">
+              <div class="empty-state">
+                <div class="empty-state-text">No certificates installed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Site Modal -->
+  <div class="modal-overlay" id="addSiteModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Add Site</div>
+        <button class="modal-close" onclick="closeModal('addSiteModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Hostname</label>
+          <input type="text" class="form-input" id="siteHostname" placeholder="api.example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Upstreams</label>
+          <input type="text" class="form-input" id="siteUpstreams" placeholder="10.0.1.5:8080, 10.0.1.6:8080">
+          <div class="form-hint">Comma-separated list of upstream addresses</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">WAF Threshold</label>
+          <input type="number" class="form-input" id="siteThreshold" value="70" min="0" max="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rate Limit (req/s)</label>
+          <input type="number" class="form-input" id="siteRateLimit" value="100" min="0">
+        </div>
+        <div class="form-group">
+          <label class="feature-toggle">
+            <input type="checkbox" id="siteWafEnabled" checked>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">WAF Enabled</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="feature-toggle">
+            <input type="checkbox" id="siteTlsEnabled" checked>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">TLS Enabled</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('addSiteModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSite()">Save Site</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Access Rule Modal -->
+  <div class="modal-overlay" id="addRuleModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Add Access Rule</div>
+        <button class="modal-close" onclick="closeModal('addRuleModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">CIDR</label>
+          <input type="text" class="form-input" id="ruleCidr" placeholder="10.0.0.0/8">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Action</label>
+          <div class="select-wrapper" style="width: 100%;">
+            <select id="ruleAction" style="width: 100%;">
+              <option value="allow">Allow</option>
+              <option value="deny">Deny</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Comment</label>
+          <input type="text" class="form-input" id="ruleComment" placeholder="Internal network">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('addRuleModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveAccessRule()">Add Rule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Rule Modal -->
+  <div class="modal-overlay" id="createRuleModal">
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <div class="modal-title">Create Custom Rule</div>
+        <button class="modal-close" onclick="closeModal('createRuleModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Rule ID</label>
+          <input type="number" class="form-input" id="newRuleId" placeholder="900001" min="900000" max="999999">
+          <div class="form-hint">Custom rule IDs must be between 900000-999999</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-input" id="newRuleName" placeholder="e.g., Block Malicious Headers">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-input" id="newRuleDescription" placeholder="Detailed description of what this rule does" rows="3" style="resize: vertical;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Risk Level</label>
+          <div class="slider-container">
+            <div class="slider-header">
+              <span class="slider-label">0 = Low Risk</span>
+              <span class="slider-value" id="riskSliderValue">50</span>
+              <span class="slider-label">High Risk = 100</span>
+            </div>
+            <input type="range" id="newRuleRisk" min="0" max="100" value="50" oninput="document.getElementById('riskSliderValue').textContent = this.value">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tags (comma separated)</label>
+          <input type="text" class="form-input" id="newRuleTags" placeholder="xss, injection, header">
+        </div>
+        <div style="display: flex; gap: 24px; margin-top: 16px;">
+          <label class="feature-toggle">
+            <input type="checkbox" id="newRuleBlocking" checked>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">Blocking</span>
+          </label>
+          <label class="feature-toggle">
+            <input type="checkbox" id="newRuleEnabled" checked>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">Enabled</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('createRuleModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCustomRule()">Create Rule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // Theme management
+    function toggleTheme() {
+      document.body.classList.toggle('dark');
+      localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+    }
+
+    // Load saved theme
+    if (localStorage.getItem('theme') === 'dark') {
+      document.body.classList.add('dark');
+    }
+
+    // API helpers
+    const apiKey = '';
+
+    async function fetchApi(endpoint, options = {}) {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+      };
+      if (apiKey) {
+        headers['X-Admin-Key'] = apiKey;
+      }
+
+      try {
+        const response = await fetch(endpoint, { ...options, headers });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+      } catch (error) {
+        console.error(`API error: ${endpoint}`, error);
+        throw error;
+      }
+    }
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Modal helpers
+    function openModal(id) {
+      document.getElementById(id).classList.add('active');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    function openAddSiteModal() {
+      document.getElementById('siteHostname').value = '';
+      document.getElementById('siteUpstreams').value = '';
+      document.getElementById('siteThreshold').value = '70';
+      document.getElementById('siteRateLimit').value = '100';
+      document.getElementById('siteWafEnabled').checked = true;
+      document.getElementById('siteTlsEnabled').checked = true;
+      openModal('addSiteModal');
+    }
+
+    function openAddRuleModal() {
+      document.getElementById('ruleCidr').value = '';
+      document.getElementById('ruleAction').value = 'allow';
+      document.getElementById('ruleComment').value = '';
+      openModal('addRuleModal');
+    }
+
+    // Format bytes
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Format uptime
+    function formatUptime(seconds) {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+
+      if (days > 0) return `${days}d ${hours}h`;
+      if (hours > 0) return `${hours}h ${mins}m`;
+      return `${mins}m`;
+    }
+
+    // Status tab
+    async function loadStatus() {
+      try {
+        const [status, sites, entities, campaigns, sysPerf, sysNet] = await Promise.all([
+          fetchApi('/_sensor/status'),
+          fetchApi('/sites'),
+          fetchApi('/_sensor/entities?limit=1000'),
+          fetchApi('/_sensor/campaigns'),
+          fetchApi('/_sensor/system/performance').catch(() => null),
+          fetchApi('/_sensor/system/network').catch(() => null)
+        ]);
+
+        document.getElementById('statusText').textContent = 'Online';
+
+        // Stats
+        document.getElementById('statRules').textContent = '237';
+        document.getElementById('statSites').textContent = sites.sites?.length || sites.data?.sites?.length || 0;
+        document.getElementById('statEntities').textContent = entities.entities?.length || 0;
+        document.getElementById('statCampaigns').textContent = campaigns.campaigns?.length || 0;
+
+        // Health grid
+        const healthGrid = document.getElementById('healthGrid');
+        const waf = status.waf || {};
+        const dlp = status.dlp || {};
+
+        healthGrid.innerHTML = `
+          <label class="feature-toggle" style="cursor: default;">
+            <input type="checkbox" ${waf.enabled ? 'checked' : ''} disabled>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">WAF Detection</span>
+          </label>
+          <label class="feature-toggle" style="cursor: default;">
+            <input type="checkbox" ${dlp?.enabled ? 'checked' : ''} disabled>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">DLP Scanner</span>
+          </label>
+          <label class="feature-toggle" style="cursor: default;">
+            <input type="checkbox" checked disabled>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">Rate Limiting</span>
+          </label>
+          <label class="feature-toggle" style="cursor: default;">
+            <input type="checkbox" disabled>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">Shadow Mirror</span>
+          </label>
+        `;
+
+        // Performance metrics grid
+        const perfGrid = document.getElementById('perfGrid');
+        const blockRate = status.blockRate || 0;
+        const analyzed = waf.analyzed || 0;
+        const blocked = waf.blocked || 0;
+
+        perfGrid.innerHTML = `
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">Uptime</span>
+              <span class="perf-card-value">${formatUptime(status.uptime || 0)}</span>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Mode</span>
+                <span class="perf-detail-value">${status.mode || 'proxy'}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Version</span>
+                <span class="perf-detail-value">${status.proxy?.version || '0.1.0'}</span>
+              </div>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">Request Processing</span>
+              <span class="perf-card-value">${analyzed.toLocaleString()} analyzed</span>
+            </div>
+            <div class="perf-meter">
+              <div class="perf-meter-fill ${blockRate > 10 ? 'warning' : ''} ${blockRate > 25 ? 'danger' : ''}" style="width: ${Math.min(blockRate * 4, 100)}%"></div>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Blocked</span>
+                <span class="perf-detail-value">${blocked.toLocaleString()}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Block Rate</span>
+                <span class="perf-detail-value">${blockRate.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">DLP Scanner</span>
+              <span class="perf-card-value">${dlp?.totalScans?.toLocaleString() || 0} scans</span>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Patterns</span>
+                <span class="perf-detail-value">${dlp?.patternCount || 0}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Matches</span>
+                <span class="perf-detail-value">${dlp?.totalMatches || 0}</span>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // System resources grid
+        const systemGrid = document.getElementById('systemGrid');
+        const perf = sysPerf?.data || sysPerf || {};
+        const net = sysNet?.data || sysNet || {};
+
+        const cpuUsage = perf.cpu_usage || 0;
+        const memUsage = perf.memory_percent || 0;
+
+        systemGrid.innerHTML = `
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">CPU Usage</span>
+              <span class="perf-card-value">${cpuUsage.toFixed(1)}%</span>
+            </div>
+            <div class="perf-meter">
+              <div class="perf-meter-fill ${cpuUsage > 70 ? 'warning' : ''} ${cpuUsage > 90 ? 'danger' : ''}" style="width: ${cpuUsage}%"></div>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Cores</span>
+                <span class="perf-detail-value">${perf.cpu_cores || '-'}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Load Avg</span>
+                <span class="perf-detail-value">${perf.load_average?.[0]?.toFixed(2) || '-'}</span>
+              </div>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">Memory</span>
+              <span class="perf-card-value">${formatBytes(perf.memory_used || 0)} / ${formatBytes(perf.memory_total || 0)}</span>
+            </div>
+            <div class="perf-meter">
+              <div class="perf-meter-fill ${memUsage > 70 ? 'warning' : ''} ${memUsage > 90 ? 'danger' : ''}" style="width: ${memUsage}%"></div>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Used</span>
+                <span class="perf-detail-value">${memUsage.toFixed(1)}%</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Available</span>
+                <span class="perf-detail-value">${formatBytes(perf.memory_available || 0)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="perf-card-header">
+              <span class="perf-card-title">Network I/O</span>
+              <span class="perf-card-value">${formatBytes(net.bytes_recv || 0)} in</span>
+            </div>
+            <div class="perf-details">
+              <div class="perf-detail">
+                <span class="perf-detail-label">Received</span>
+                <span class="perf-detail-value">${formatBytes(net.bytes_recv || 0)}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Sent</span>
+                <span class="perf-detail-value">${formatBytes(net.bytes_sent || 0)}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Connections</span>
+                <span class="perf-detail-value">${net.connections || '-'}</span>
+              </div>
+              <div class="perf-detail">
+                <span class="perf-detail-label">Errors</span>
+                <span class="perf-detail-value">${(net.errors_in || 0) + (net.errors_out || 0)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      } catch (error) {
+        document.getElementById('statusText').textContent = 'Error';
+        showToast('Failed to load status', 'error');
+      }
+    }
+
+    // Sites tab
+    async function loadSites() {
+      try {
+        const data = await fetchApi('/sites');
+        const sites = data.sites || data.data?.sites || [];
+        const siteList = document.getElementById('siteList');
+        const accessSelect = document.getElementById('accessSiteSelect');
+
+        if (sites.length === 0) {
+          siteList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-text">No sites configured</div>
+            </div>
+          `;
+          return;
+        }
+
+        siteList.innerHTML = sites.map(site => `
+          <div class="site-item">
+            <div class="site-header">
+              <span class="site-hostname">${site.hostname}</span>
+              <div class="site-badges">
+                ${site.waf?.enabled ? '<span class="badge badge-success">WAF</span>' : '<span class="badge badge-info">WAF Off</span>'}
+                ${site.tls ? '<span class="badge badge-info">TLS</span>' : ''}
+              </div>
+            </div>
+            <div class="site-meta">
+              Upstreams: ${site.upstreams?.join(', ') || 'None'}<br>
+              Threshold: ${site.waf?.threshold || 70} | Rate: ${site.rate_limit?.requests_per_second || 'Unlimited'}/s
+            </div>
+            <div class="site-actions">
+              <button class="btn btn-ghost btn-sm" onclick="editSite('${site.hostname}')">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleSiteWaf('${site.hostname}', ${!site.waf?.enabled})">
+                ${site.waf?.enabled ? 'Disable WAF' : 'Enable WAF'}
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSite('${site.hostname}')">Delete</button>
+            </div>
+          </div>
+        `).join('');
+
+        // Update access list dropdown
+        accessSelect.innerHTML = '<option value="global">Global</option>' +
+          sites.map(s => `<option value="${s.hostname}">${s.hostname}</option>`).join('');
+      } catch (error) {
+        showToast('Failed to load sites', 'error');
+      }
+    }
+
+    async function saveSite() {
+      const hostname = document.getElementById('siteHostname').value.trim();
+      const upstreams = document.getElementById('siteUpstreams').value.split(',').map(s => s.trim()).filter(Boolean);
+      const threshold = parseInt(document.getElementById('siteThreshold').value);
+      const rateLimit = parseInt(document.getElementById('siteRateLimit').value);
+      const wafEnabled = document.getElementById('siteWafEnabled').checked;
+      const tlsEnabled = document.getElementById('siteTlsEnabled').checked;
+
+      if (!hostname || upstreams.length === 0) {
+        showToast('Hostname and upstreams are required', 'error');
+        return;
+      }
+
+      try {
+        await fetchApi('/sites', {
+          method: 'POST',
+          body: JSON.stringify({
+            hostname,
+            upstreams,
+            waf: { enabled: wafEnabled, threshold },
+            rate_limit: rateLimit > 0 ? { requests_per_second: rateLimit } : null,
+            tls: tlsEnabled
+          })
+        });
+
+        closeModal('addSiteModal');
+        showToast('Site created successfully', 'success');
+        loadSites();
+      } catch (error) {
+        showToast('Failed to create site', 'error');
+      }
+    }
+
+    async function toggleSiteWaf(hostname, enabled) {
+      try {
+        await fetchApi(`/sites/${hostname}/waf`, {
+          method: 'PUT',
+          body: JSON.stringify({ enabled })
+        });
+        showToast(`WAF ${enabled ? 'enabled' : 'disabled'} for ${hostname}`, 'success');
+        loadSites();
+      } catch (error) {
+        showToast('Failed to update WAF setting', 'error');
+      }
+    }
+
+    async function deleteSite(hostname) {
+      if (!confirm(`Delete site ${hostname}?`)) return;
+
+      try {
+        await fetchApi(`/sites/${hostname}`, { method: 'DELETE' });
+        showToast('Site deleted', 'success');
+        loadSites();
+      } catch (error) {
+        showToast('Failed to delete site', 'error');
+      }
+    }
+
+    function editSite(hostname) {
+      showToast('Edit functionality coming soon', 'info');
+    }
+
+    // Features tab
+    function updateProtectionBadge() {
+      const mode = document.getElementById('blockModeSelect').value;
+      const badge = document.getElementById('protectionModeBadge');
+
+      if (mode === 'block') {
+        badge.className = 'badge badge-danger';
+        badge.textContent = 'Blocking';
+      } else if (mode === 'detect') {
+        badge.className = 'badge badge-warning';
+        badge.textContent = 'Detecting';
+      } else {
+        badge.className = 'badge badge-info';
+        badge.textContent = 'Off';
+      }
+    }
+
+    async function loadFeatures() {
+      try {
+        const data = await fetchApi('/_sensor/system/config');
+        const config = data.data || data;
+        const featureGrid = document.getElementById('featureGrid');
+
+        // Core features
+        const features = [
+          { id: 'waf', name: 'WAF Detection', enabled: config.features?.waf ?? true },
+          { id: 'dlp', name: 'DLP Scanner', enabled: config.features?.dlp ?? false },
+          { id: 'rateLimit', name: 'Rate Limiting', enabled: config.features?.rateLimit ?? true },
+          { id: 'crawler', name: 'Crawler Detection', enabled: config.features?.crawler ?? false },
+          { id: 'shadow', name: 'Shadow Mirror', enabled: config.features?.shadow ?? false },
+          { id: 'session', name: 'Session Tracking', enabled: config.features?.session ?? true },
+          { id: 'campaign', name: 'Campaign Correlation', enabled: config.features?.campaign ?? false },
+          { id: 'profiling', name: 'API Profiling', enabled: config.features?.profiling ?? true },
+          { id: 'schemaLearning', name: 'Schema Learning', enabled: config.features?.schemaLearning ?? true },
+          { id: 'fingerprinting', name: 'Fingerprinting', enabled: config.features?.fingerprinting ?? true },
+          { id: 'headlessDetection', name: 'Headless/Bot Detection', enabled: config.features?.headlessDetection ?? true },
+          { id: 'stuffingDetection', name: 'Credential Stuffing Detection', enabled: config.features?.stuffingDetection ?? true }
+        ];
+
+        featureGrid.innerHTML = features.map(f => `
+          <label class="feature-toggle">
+            <input type="checkbox" data-feature="${f.id}" ${f.enabled ? 'checked' : ''}>
+            <span class="toggle-switch"></span>
+            <span class="feature-name">${f.name}</span>
+          </label>
+        `).join('');
+
+        // Load protection settings
+        const protection = config.protection || {};
+        document.getElementById('blockModeSelect').value = protection.blockMode || 'block';
+        document.getElementById('blockPageEnabled').checked = protection.blockPageEnabled !== false;
+        document.getElementById('wafModeSelect').value = protection.wafMode || 'block';
+        document.getElementById('inspectRequestBody').checked = protection.inspectRequestBody !== false;
+        document.getElementById('inspectResponseBody').checked = protection.inspectResponseBody || false;
+        document.getElementById('maxBodySize').value = Math.round((protection.maxBodySize || 10485760) / 1048576);
+
+        // Rate limiting
+        document.getElementById('rateLimitEnabled').checked = protection.rateLimitEnabled !== false;
+        document.getElementById('rateLimitBy').value = protection.rateLimitBy || 'ip';
+        document.getElementById('burstSize').value = protection.burstSize || 50;
+
+        // Session tracking
+        document.getElementById('sessionTrackingEnabled').checked = protection.sessionTrackingEnabled !== false;
+        document.getElementById('sessionExpiration').value = Math.round((protection.sessionExpirationMs || 3600000) / 60000);
+
+        updateProtectionBadge();
+      } catch (error) {
+        showToast('Failed to load features', 'error');
+      }
+    }
+
+    async function saveFeatures() {
+      const features = {};
+      document.querySelectorAll('#featureGrid input[type="checkbox"]').forEach(cb => {
+        features[cb.dataset.feature] = cb.checked;
+      });
+
+      const protection = {
+        blockMode: document.getElementById('blockModeSelect').value,
+        blockPageEnabled: document.getElementById('blockPageEnabled').checked,
+        wafMode: document.getElementById('wafModeSelect').value,
+        inspectRequestBody: document.getElementById('inspectRequestBody').checked,
+        inspectResponseBody: document.getElementById('inspectResponseBody').checked,
+        maxBodySize: parseInt(document.getElementById('maxBodySize').value) * 1048576,
+        rateLimitEnabled: document.getElementById('rateLimitEnabled').checked,
+        rateLimitBy: document.getElementById('rateLimitBy').value,
+        burstSize: parseInt(document.getElementById('burstSize').value),
+        sessionTrackingEnabled: document.getElementById('sessionTrackingEnabled').checked,
+        sessionExpirationMs: parseInt(document.getElementById('sessionExpiration').value) * 60000,
+      };
+
+      try {
+        await fetchApi('/config', {
+          method: 'POST',
+          body: JSON.stringify({ features, protection })
+        });
+        showToast('Settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save settings', 'error');
+      }
+    }
+
+    // DLP Configuration
+    async function loadDlpConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/dlp');
+        const config = data.data || data;
+        document.getElementById('dlpEnabled').checked = config.enabled !== false;
+        document.getElementById('dlpFastMode').checked = config.fast_mode || false;
+        document.getElementById('dlpScanTextOnly').checked = config.scan_text_only !== false;
+        document.getElementById('dlpMaxScanSize').value = Math.round((config.max_scan_size || 5242880) / 1048576);
+        document.getElementById('dlpMaxInspectionBytes').value = Math.round((config.max_body_inspection_bytes || 8192) / 1024);
+        document.getElementById('dlpMaxMatches').value = config.max_matches || 100;
+        document.getElementById('dlpCustomKeywords').value = (config.custom_keywords || []).join(', ');
+      } catch (error) {
+        console.log('DLP config not available');
+      }
+    }
+
+    async function saveDlpConfig() {
+      const config = {
+        enabled: document.getElementById('dlpEnabled').checked,
+        fast_mode: document.getElementById('dlpFastMode').checked,
+        scan_text_only: document.getElementById('dlpScanTextOnly').checked,
+        max_scan_size: parseInt(document.getElementById('dlpMaxScanSize').value) * 1048576,
+        max_body_inspection_bytes: parseInt(document.getElementById('dlpMaxInspectionBytes').value) * 1024,
+        max_matches: parseInt(document.getElementById('dlpMaxMatches').value),
+        custom_keywords: document.getElementById('dlpCustomKeywords').value
+          .split(',')
+          .map(k => k.trim())
+          .filter(k => k.length > 0)
+      };
+      try {
+        await fetchApi('/_sensor/config/dlp', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('DLP settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save DLP settings', 'error');
+      }
+    }
+
+    // Block Page Configuration
+    async function loadBlockPageConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/block-page');
+        const config = data.data || data;
+        document.getElementById('blockPageCompanyName').value = config.company_name || '';
+        document.getElementById('blockPageSupportEmail').value = config.support_email || '';
+        document.getElementById('blockPageLogoUrl').value = config.logo_url || '';
+        document.getElementById('blockPageShowRequestId').checked = config.show_request_id !== false;
+        document.getElementById('blockPageShowTimestamp').checked = config.show_timestamp !== false;
+        document.getElementById('blockPageShowClientIp').checked = config.show_client_ip || false;
+        document.getElementById('blockPageShowRuleId').checked = config.show_rule_id || false;
+        document.getElementById('blockPageCustomCss').value = config.custom_css || '';
+      } catch (error) {
+        console.log('Block page config not available');
+      }
+    }
+
+    async function saveBlockPageConfig() {
+      const config = {
+        company_name: document.getElementById('blockPageCompanyName').value || null,
+        support_email: document.getElementById('blockPageSupportEmail').value || null,
+        logo_url: document.getElementById('blockPageLogoUrl').value || null,
+        show_request_id: document.getElementById('blockPageShowRequestId').checked,
+        show_timestamp: document.getElementById('blockPageShowTimestamp').checked,
+        show_client_ip: document.getElementById('blockPageShowClientIp').checked,
+        show_rule_id: document.getElementById('blockPageShowRuleId').checked,
+        custom_css: document.getElementById('blockPageCustomCss').value || null
+      };
+      try {
+        await fetchApi('/_sensor/config/block-page', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('Block page settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save block page settings', 'error');
+      }
+    }
+
+    // Crawler/Bot Configuration
+    async function loadCrawlerConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/crawler');
+        const config = data.data || data;
+        document.getElementById('crawlerEnabled').checked = config.enabled !== false;
+        document.getElementById('crawlerVerifyLegitimate').checked = config.verify_legitimate_crawlers !== false;
+        document.getElementById('crawlerBlockBadBots').checked = config.block_bad_bots !== false;
+        document.getElementById('crawlerDnsFailurePolicy').value = config.dns_failure_policy || 'apply_risk_penalty';
+        document.getElementById('crawlerDnsCacheTtl').value = config.dns_cache_ttl_secs || 300;
+        document.getElementById('crawlerDnsTimeout').value = config.dns_timeout_ms || 2000;
+        document.getElementById('crawlerMaxConcurrentDns').value = config.max_concurrent_dns_lookups || 100;
+        document.getElementById('crawlerDnsFailurePenalty').value = config.dns_failure_risk_penalty || 20;
+      } catch (error) {
+        console.log('Crawler config not available');
+      }
+    }
+
+    async function saveCrawlerConfig() {
+      const config = {
+        enabled: document.getElementById('crawlerEnabled').checked,
+        verify_legitimate_crawlers: document.getElementById('crawlerVerifyLegitimate').checked,
+        block_bad_bots: document.getElementById('crawlerBlockBadBots').checked,
+        dns_failure_policy: document.getElementById('crawlerDnsFailurePolicy').value,
+        dns_cache_ttl_secs: parseInt(document.getElementById('crawlerDnsCacheTtl').value),
+        dns_timeout_ms: parseInt(document.getElementById('crawlerDnsTimeout').value),
+        max_concurrent_dns_lookups: parseInt(document.getElementById('crawlerMaxConcurrentDns').value),
+        dns_failure_risk_penalty: parseInt(document.getElementById('crawlerDnsFailurePenalty').value)
+      };
+      try {
+        await fetchApi('/_sensor/config/crawler', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('Crawler settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save crawler settings', 'error');
+      }
+    }
+
+    // Tarpit Configuration
+    async function loadTarpitConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/tarpit');
+        const config = data.data || data;
+        document.getElementById('tarpitEnabled').checked = config.enabled !== false;
+        document.getElementById('tarpitBaseDelay').value = config.base_delay_ms || 1000;
+        document.getElementById('tarpitMaxDelay').value = config.max_delay_ms || 30000;
+        document.getElementById('tarpitMultiplier').value = config.progressive_multiplier || 1.5;
+        document.getElementById('tarpitMaxConcurrent').value = config.max_concurrent_tarpits || 1000;
+        document.getElementById('tarpitDecayThreshold').value = Math.round((config.decay_threshold_ms || 300000) / 60000);
+      } catch (error) {
+        console.log('Tarpit config not available');
+      }
+    }
+
+    async function saveTarpitConfig() {
+      const config = {
+        enabled: document.getElementById('tarpitEnabled').checked,
+        base_delay_ms: parseInt(document.getElementById('tarpitBaseDelay').value),
+        max_delay_ms: parseInt(document.getElementById('tarpitMaxDelay').value),
+        progressive_multiplier: parseFloat(document.getElementById('tarpitMultiplier').value),
+        max_concurrent_tarpits: parseInt(document.getElementById('tarpitMaxConcurrent').value),
+        decay_threshold_ms: parseInt(document.getElementById('tarpitDecayThreshold').value) * 60000
+      };
+      try {
+        await fetchApi('/_sensor/config/tarpit', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('Tarpit settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save tarpit settings', 'error');
+      }
+    }
+
+    // Impossible Travel Configuration
+    async function loadTravelConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/travel');
+        const config = data.data || data;
+        document.getElementById('travelMaxSpeed').value = config.max_speed_kmh || 800;
+        document.getElementById('travelMinDistance').value = config.min_distance_km || 100;
+        document.getElementById('travelHistoryWindow').value = Math.round((config.history_window_ms || 86400000) / 3600000);
+        document.getElementById('travelMaxHistory').value = config.max_history_per_user || 100;
+      } catch (error) {
+        console.log('Travel config not available');
+      }
+    }
+
+    async function saveTravelConfig() {
+      const config = {
+        max_speed_kmh: parseFloat(document.getElementById('travelMaxSpeed').value),
+        min_distance_km: parseFloat(document.getElementById('travelMinDistance').value),
+        history_window_ms: parseInt(document.getElementById('travelHistoryWindow').value) * 3600000,
+        max_history_per_user: parseInt(document.getElementById('travelMaxHistory').value)
+      };
+      try {
+        await fetchApi('/_sensor/config/travel', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('Impossible travel settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save travel settings', 'error');
+      }
+    }
+
+    // Entity Store Configuration
+    async function loadEntityConfig() {
+      try {
+        const data = await fetchApi('/_sensor/config/entity');
+        const config = data.data || data;
+        document.getElementById('entityEnabled').checked = config.enabled !== false;
+        document.getElementById('entityMaxEntities').value = config.max_entities || 100000;
+        document.getElementById('entityRiskDecay').value = config.risk_decay_per_minute || 10;
+        document.getElementById('entityBlockThreshold').value = config.block_threshold || 70;
+        document.getElementById('entityMaxRisk').value = config.max_risk || 100;
+        document.getElementById('entityMaxRules').value = config.max_rules_per_entity || 50;
+      } catch (error) {
+        console.log('Entity config not available');
+      }
+    }
+
+    async function saveEntityConfig() {
+      const config = {
+        enabled: document.getElementById('entityEnabled').checked,
+        max_entities: parseInt(document.getElementById('entityMaxEntities').value),
+        risk_decay_per_minute: parseFloat(document.getElementById('entityRiskDecay').value),
+        block_threshold: parseFloat(document.getElementById('entityBlockThreshold').value),
+        max_risk: parseFloat(document.getElementById('entityMaxRisk').value),
+        max_rules_per_entity: parseInt(document.getElementById('entityMaxRules').value)
+      };
+      try {
+        await fetchApi('/_sensor/config/entity', {
+          method: 'PUT',
+          body: JSON.stringify(config)
+        });
+        showToast('Entity settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save entity settings', 'error');
+      }
+    }
+
+    // Load all config sections when Features tab is shown
+    async function loadAllConfigs() {
+      await Promise.all([
+        loadDlpConfig(),
+        loadBlockPageConfig(),
+        loadCrawlerConfig(),
+        loadTarpitConfig(),
+        loadTravelConfig(),
+        loadEntityConfig()
+      ]);
+    }
+
+    // Thresholds tab
+    async function loadThresholds() {
+      try {
+        const data = await fetchApi('/_sensor/system/config');
+        const config = data.data || data;
+        const thresholdGrid = document.getElementById('thresholdGrid');
+
+        thresholdGrid.innerHTML = `
+          <div class="threshold-item">
+            <label class="threshold-label">Auto-block risk score</label>
+            <div class="slider-container">
+              <div class="slider-header">
+                <span class="slider-label">Stricter</span>
+                <span class="slider-value" id="autoBlockValue">${config.thresholds?.autoBlock || 75}</span>
+                <span class="slider-label">More Lenient</span>
+              </div>
+              <input type="range" id="thresholdAutoBlock" min="0" max="100" value="${config.thresholds?.autoBlock || 75}" oninput="document.getElementById('autoBlockValue').textContent = this.value">
+            </div>
+          </div>
+          <div class="threshold-item">
+            <label class="threshold-label">Global rate limit</label>
+            <div class="threshold-input">
+              <input type="number" id="thresholdRateLimit" value="${config.thresholds?.globalRateLimit || 1000}" min="0">
+              <span class="threshold-unit">req/s</span>
+            </div>
+          </div>
+          <div class="threshold-item">
+            <label class="threshold-label">Risk decay rate</label>
+            <div class="slider-container">
+              <div class="slider-header">
+                <span class="slider-label">Slow</span>
+                <span class="slider-value" id="decayValue">${config.thresholds?.riskDecayRate || 5}</span>
+                <span class="slider-label">Fast</span>
+              </div>
+              <input type="range" id="thresholdRiskDecay" min="1" max="20" value="${config.thresholds?.riskDecayRate || 5}" oninput="document.getElementById('decayValue').textContent = this.value">
+            </div>
+          </div>
+          <div class="threshold-item">
+            <label class="threshold-label">Campaign confidence minimum</label>
+            <div class="threshold-input">
+              <input type="number" id="thresholdCampaign" value="${config.thresholds?.campaignConfidence || 0.7}" min="0" max="1" step="0.1">
+              <span class="threshold-unit">(0.0-1.0)</span>
+            </div>
+          </div>
+        `;
+
+        // Load anomaly detection settings
+        const anomaly = config.anomalyDetection || {};
+        document.getElementById('anomalyDetectionEnabled').checked = anomaly.enabled !== false;
+        document.getElementById('anomalyThreshold').value = anomaly.threshold || 50;
+        document.getElementById('anomalyThresholdValue').textContent = anomaly.threshold || 50;
+        document.getElementById('maxRiskHistory').value = anomaly.maxRiskHistory || 100;
+      } catch (error) {
+        showToast('Failed to load thresholds', 'error');
+      }
+    }
+
+    async function saveThresholds() {
+      const thresholds = {
+        autoBlock: parseInt(document.getElementById('thresholdAutoBlock').value),
+        globalRateLimit: parseInt(document.getElementById('thresholdRateLimit').value),
+        riskDecayRate: parseInt(document.getElementById('thresholdRiskDecay').value),
+        campaignConfidence: parseFloat(document.getElementById('thresholdCampaign').value),
+      };
+
+      const anomalyDetection = {
+        enabled: document.getElementById('anomalyDetectionEnabled').checked,
+        threshold: parseInt(document.getElementById('anomalyThreshold').value),
+        maxRiskHistory: parseInt(document.getElementById('maxRiskHistory').value),
+      };
+
+      try {
+        await fetchApi('/config', {
+          method: 'POST',
+          body: JSON.stringify({ thresholds, anomalyDetection })
+        });
+        showToast('Thresholds saved', 'success');
+      } catch (error) {
+        showToast('Failed to save thresholds', 'error');
+      }
+    }
+
+    // Access tab
+    async function loadAccessList() {
+      const site = document.getElementById('accessSiteSelect').value;
+      const allowList = document.getElementById('allowList');
+      const denyList = document.getElementById('denyList');
+
+      allowList.innerHTML = '<div class="empty-state"><div class="empty-state-text">No allow rules configured</div></div>';
+      denyList.innerHTML = '<div class="empty-state"><div class="empty-state-text">No deny rules configured</div></div>';
+
+      if (site !== 'global') {
+        try {
+          const data = await fetchApi(`/sites/${site}`);
+          const accessList = data.data?.access_list || data.access_list || { allow: [], deny: [] };
+
+          if (accessList.allow?.length > 0) {
+            allowList.innerHTML = accessList.allow.map(rule => `
+              <div class="access-rule">
+                <div class="access-rule-info">
+                  <span class="access-cidr">${rule.cidr || rule}</span>
+                  <span class="access-comment">${rule.comment || ''}</span>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="removeAccessRule('${site}', 'allow', '${rule.cidr || rule}')">Remove</button>
+              </div>
+            `).join('');
+          }
+
+          if (accessList.deny?.length > 0) {
+            denyList.innerHTML = accessList.deny.map(rule => `
+              <div class="access-rule">
+                <div class="access-rule-info">
+                  <span class="access-cidr">${rule.cidr || rule}</span>
+                  <span class="access-comment">${rule.comment || ''}</span>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="removeAccessRule('${site}', 'deny', '${rule.cidr || rule}')">Remove</button>
+              </div>
+            `).join('');
+          }
+        } catch (error) {
+          console.error('Failed to load access list', error);
+        }
+      }
+    }
+
+    async function saveAccessRule() {
+      const site = document.getElementById('accessSiteSelect').value;
+      const cidr = document.getElementById('ruleCidr').value.trim();
+      const action = document.getElementById('ruleAction').value;
+      const comment = document.getElementById('ruleComment').value.trim();
+
+      if (!cidr) {
+        showToast('CIDR is required', 'error');
+        return;
+      }
+
+      if (site === 'global') {
+        showToast('Select a site first', 'error');
+        return;
+      }
+
+      try {
+        const siteData = await fetchApi(`/sites/${site}`);
+        const accessList = siteData.data?.access_list || siteData.access_list || { allow: [], deny: [] };
+
+        const newRule = { cidr, comment };
+        if (action === 'allow') {
+          accessList.allow = [...(accessList.allow || []), newRule];
+        } else {
+          accessList.deny = [...(accessList.deny || []), newRule];
+        }
+
+        await fetchApi(`/sites/${site}/access-list`, {
+          method: 'PUT',
+          body: JSON.stringify(accessList)
+        });
+
+        closeModal('addRuleModal');
+        showToast('Access rule added', 'success');
+        loadAccessList();
+      } catch (error) {
+        showToast('Failed to add access rule', 'error');
+      }
+    }
+
+    async function removeAccessRule(site, action, cidr) {
+      if (!confirm(`Remove ${action} rule for ${cidr}?`)) return;
+
+      try {
+        const siteData = await fetchApi(`/sites/${site}`);
+        const accessList = siteData.data?.access_list || siteData.access_list || { allow: [], deny: [] };
+
+        if (action === 'allow') {
+          accessList.allow = (accessList.allow || []).filter(r => (r.cidr || r) !== cidr);
+        } else {
+          accessList.deny = (accessList.deny || []).filter(r => (r.cidr || r) !== cidr);
+        }
+
+        await fetchApi(`/sites/${site}/access-list`, {
+          method: 'PUT',
+          body: JSON.stringify(accessList)
+        });
+
+        showToast('Access rule removed', 'success');
+        loadAccessList();
+      } catch (error) {
+        showToast('Failed to remove access rule', 'error');
+      }
+    }
+
+    // Entities tab
+    async function loadEntities() {
+      try {
+        const data = await fetchApi('/_sensor/entities?limit=100');
+        const entities = (data.entities || []).filter(e => e.is_blocked || e.isBlocked);
+        const entityList = document.getElementById('entityList');
+
+        if (entities.length === 0) {
+          entityList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-text">No blocked entities</div>
+            </div>
+          `;
+          return;
+        }
+
+        entityList.innerHTML = entities.map(entity => `
+          <div class="entity-item">
+            <div class="entity-info">
+              <span class="entity-ip">${entity.ip || entity.id}</span>
+              <span class="entity-risk">Risk: <strong>${entity.risk_score || entity.riskScore || 0}</strong></span>
+              <span class="entity-reason">${entity.block_reason || entity.blockReason || 'Risk threshold exceeded'}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span class="entity-time">${formatTime(entity.blocked_at || entity.blockedAt)}</span>
+              <button class="btn btn-ghost btn-sm" onclick="releaseEntity('${entity.ip || entity.id}')">Release</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        showToast('Failed to load entities', 'error');
+      }
+    }
+
+    function formatTime(timestamp) {
+      if (!timestamp) return 'Unknown';
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diff = Math.floor((now - date) / 1000);
+
+      if (diff < 60) return 'Just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    async function releaseEntity(ip) {
+      try {
+        await fetchApi(`/_sensor/entities/${ip}`, { method: 'DELETE' });
+        showToast(`Released ${ip}`, 'success');
+        loadEntities();
+        loadStatus();
+      } catch (error) {
+        showToast('Failed to release entity', 'error');
+      }
+    }
+
+    async function releaseAllEntities() {
+      if (!confirm('Release all blocked entities?')) return;
+
+      try {
+        const result = await fetchApi('/_sensor/entities/release-all', { method: 'POST' });
+        showToast(`Released ${result.released || 0} entities`, 'success');
+        loadEntities();
+        loadStatus();
+      } catch (error) {
+        showToast('Failed to release entities', 'error');
+      }
+    }
+
+    // Campaigns tab
+    async function loadCampaigns() {
+      try {
+        const data = await fetchApi('/_sensor/campaigns');
+        const campaigns = data.campaigns || [];
+        const campaignList = document.getElementById('campaignList');
+
+        if (campaigns.length === 0) {
+          campaignList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-text">No active campaigns detected</div>
+            </div>
+          `;
+          return;
+        }
+
+        campaignList.innerHTML = campaigns.map(campaign => `
+          <div class="campaign-item">
+            <div class="campaign-header">
+              <span class="campaign-id">${campaign.id || campaign.campaign_id}</span>
+              <span class="campaign-type">${campaign.type || campaign.attack_type || 'Unknown'}</span>
+            </div>
+            <div class="campaign-meta">
+              <span>Confidence: <strong>${Math.round((campaign.confidence || 0) * 100)}%</strong></span>
+              <span>Actors: <strong>${campaign.actor_count || campaign.actors?.length || 0}</strong> IPs</span>
+              <span>Requests: <strong>${(campaign.request_count || 0).toLocaleString()}</strong></span>
+            </div>
+            <div class="campaign-attacks">
+              Attack types: ${(campaign.attack_types || []).join(', ') || 'Unknown'}
+            </div>
+            <div class="campaign-actions">
+              <button class="btn btn-danger btn-sm" onclick="blockCampaign('${campaign.id || campaign.campaign_id}')">Block All IPs</button>
+              <button class="btn btn-ghost btn-sm" onclick="resolveCampaign('${campaign.id || campaign.campaign_id}')">Resolve</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        showToast('Failed to load campaigns', 'error');
+      }
+    }
+
+    async function blockCampaign(campaignId) {
+      showToast('Blocking campaign IPs...', 'info');
+      showToast('Campaign blocking coming soon', 'info');
+    }
+
+    async function resolveCampaign(campaignId) {
+      showToast('Resolving campaign...', 'info');
+      showToast('Campaign resolution coming soon', 'info');
+    }
+
+    // Admin Actions
+    async function testConfig() {
+      try {
+        showToast('Testing configuration...', 'info');
+        const result = await fetchApi('/test', { method: 'POST' });
+        if (result.success || result.data?.success) {
+          showToast('Configuration syntax OK', 'success');
+        } else {
+          showToast(result.message || result.data?.message || 'Config test failed', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to test configuration', 'error');
+      }
+    }
+
+    async function reloadConfig() {
+      if (!confirm('Reload configuration? This will apply any pending changes.')) return;
+
+      try {
+        showToast('Reloading configuration...', 'info');
+        const result = await fetchApi('/reload', { method: 'POST' });
+        if (result.success || result.data?.success) {
+          showToast('Configuration reloaded successfully', 'success');
+          loadStatus();
+          loadSites();
+        } else {
+          showToast(result.message || 'Reload failed', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to reload configuration', 'error');
+      }
+    }
+
+    async function restartService() {
+      if (!confirm('Restart the Synapse service? This will briefly interrupt traffic processing.')) return;
+
+      try {
+        showToast('Restarting service...', 'info');
+        const result = await fetchApi('/restart', { method: 'POST' });
+        if (result.success || result.data?.success) {
+          showToast('Service restart initiated', 'success');
+          setTimeout(() => {
+            loadStatus();
+          }, 2000);
+        } else {
+          showToast(result.message || 'Restart failed', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to restart service', 'error');
+      }
+    }
+
+    async function resetMetrics() {
+      if (!confirm('Reset all metrics to zero? This cannot be undone.')) return;
+
+      try {
+        const result = await fetchApi('/_sensor/metrics/reset', { method: 'POST' });
+        if (result.success) {
+          showToast('Metrics reset successfully', 'success');
+          loadStatus();
+        } else {
+          showToast('Failed to reset metrics', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to reset metrics', 'error');
+      }
+    }
+
+    async function resetProfiles() {
+      if (!confirm('Reset all API profiles? This will clear learned endpoint behavior.')) return;
+
+      try {
+        const result = await fetchApi('/api/profiles/reset', { method: 'POST' });
+        if (result.success) {
+          showToast('Profiles reset successfully', 'success');
+        } else {
+          showToast('Failed to reset profiles', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to reset profiles', 'error');
+      }
+    }
+
+    async function resetSchemas() {
+      if (!confirm('Reset all API schemas? This will clear learned schema definitions.')) return;
+
+      try {
+        const result = await fetchApi('/api/schemas/reset', { method: 'POST' });
+        if (result.success) {
+          showToast('Schemas reset successfully', 'success');
+        } else {
+          showToast('Failed to reset schemas', 'error');
+        }
+      } catch (error) {
+        showToast('Failed to reset schemas', 'error');
+      }
+    }
+
+    // ============================================================================
+    // Custom Rules Tab
+    // ============================================================================
+
+    let customRules = [];
+
+    async function loadRules() {
+      try {
+        const data = await fetchApi('/_sensor/rules/custom');
+        customRules = data.rules || [];
+        renderRuleList();
+      } catch (error) {
+        // Rules endpoint may not exist yet - show empty state
+        customRules = [];
+        renderRuleList();
+      }
+    }
+
+    function renderRuleList() {
+      const ruleList = document.getElementById('ruleList');
+
+      if (customRules.length === 0) {
+        ruleList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-text">No custom rules configured. Create one or use a template.</div>
+          </div>
+        `;
+        return;
+      }
+
+      ruleList.innerHTML = customRules.map(rule => {
+        const riskColor = rule.risk >= 75 ? 'var(--ac-red)' :
+                         rule.risk >= 50 ? 'var(--ac-orange)' :
+                         rule.risk >= 25 ? '#F59E0B' : 'var(--ac-green)';
+        return `
+          <div class="rule-item">
+            <div class="rule-info">
+              <div class="rule-header">
+                <span class="rule-id">#${rule.id}</span>
+                <span class="rule-name">${rule.name}</span>
+                ${rule.blocking ? '<span class="badge badge-danger">Blocking</span>' : '<span class="badge badge-info">Log Only</span>'}
+                ${rule.enabled ? '' : '<span class="badge badge-warning">Disabled</span>'}
+              </div>
+              <div class="rule-meta">
+                <div class="rule-risk">
+                  <span>Risk: ${rule.risk}</span>
+                  <div class="rule-risk-bar">
+                    <div class="rule-risk-fill" style="width: ${rule.risk}%; background: ${riskColor};"></div>
+                  </div>
+                </div>
+                ${rule.tags?.length ? `<div class="rule-tags">${rule.tags.map(t => `<span class="rule-tag">${t}</span>`).join('')}</div>` : ''}
+              </div>
+            </div>
+            <div class="rule-actions">
+              <button class="btn btn-ghost btn-sm" onclick="editRule(${rule.id})">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleRule(${rule.id}, ${!rule.enabled})">${rule.enabled ? 'Disable' : 'Enable'}</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRule(${rule.id})">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openAddRuleModal() {
+      document.getElementById('newRuleId').value = Math.floor(900000 + Math.random() * 99999);
+      document.getElementById('newRuleName').value = '';
+      document.getElementById('newRuleDescription').value = '';
+      document.getElementById('newRuleRisk').value = 50;
+      document.getElementById('riskSliderValue').textContent = '50';
+      document.getElementById('newRuleTags').value = '';
+      document.getElementById('newRuleBlocking').checked = true;
+      document.getElementById('newRuleEnabled').checked = true;
+      openModal('createRuleModal');
+    }
+
+    function useTemplate(templateType) {
+      const templates = {
+        sqli: { name: 'SQL Injection Detection', desc: 'Detects common SQL injection patterns', risk: 85, tags: 'sqli, injection, database', blocking: true },
+        xss: { name: 'XSS Attack Detection', desc: 'Detects cross-site scripting attempts', risk: 75, tags: 'xss, injection, script', blocking: true },
+        rce: { name: 'Command Injection Detection', desc: 'Detects remote command execution attempts', risk: 95, tags: 'rce, injection, command', blocking: true },
+        lfi: { name: 'Path Traversal Detection', desc: 'Detects local file inclusion attempts', risk: 80, tags: 'lfi, traversal, file', blocking: true },
+        auth: { name: 'Authentication Bypass Detection', desc: 'Detects authentication bypass attempts', risk: 90, tags: 'auth, bypass, credential', blocking: true },
+        rate: { name: 'Rate Abuse Detection', desc: 'Detects excessive request patterns', risk: 60, tags: 'rate, abuse, dos', blocking: false },
+      };
+
+      const template = templates[templateType];
+      if (!template) return;
+
+      document.getElementById('newRuleId').value = Math.floor(900000 + Math.random() * 99999);
+      document.getElementById('newRuleName').value = template.name;
+      document.getElementById('newRuleDescription').value = template.desc;
+      document.getElementById('newRuleRisk').value = template.risk;
+      document.getElementById('riskSliderValue').textContent = template.risk;
+      document.getElementById('newRuleTags').value = template.tags;
+      document.getElementById('newRuleBlocking').checked = template.blocking;
+      document.getElementById('newRuleEnabled').checked = true;
+      openModal('createRuleModal');
+    }
+
+    async function saveCustomRule() {
+      const rule = {
+        id: parseInt(document.getElementById('newRuleId').value),
+        name: document.getElementById('newRuleName').value.trim(),
+        description: document.getElementById('newRuleDescription').value.trim(),
+        risk: parseInt(document.getElementById('newRuleRisk').value),
+        tags: document.getElementById('newRuleTags').value.split(',').map(t => t.trim()).filter(Boolean),
+        blocking: document.getElementById('newRuleBlocking').checked,
+        enabled: document.getElementById('newRuleEnabled').checked,
+      };
+
+      if (!rule.name) {
+        showToast('Rule name is required', 'error');
+        return;
+      }
+
+      try {
+        await fetchApi('/_sensor/rules/custom', {
+          method: 'POST',
+          body: JSON.stringify(rule)
+        });
+        closeModal('createRuleModal');
+        showToast('Rule created successfully', 'success');
+        loadRules();
+      } catch (error) {
+        // For demo, add to local array if API not available
+        customRules.push(rule);
+        closeModal('createRuleModal');
+        showToast('Rule created (demo mode)', 'success');
+        renderRuleList();
+      }
+    }
+
+    async function toggleRule(ruleId, enabled) {
+      try {
+        await fetchApi(`/_sensor/rules/custom/${ruleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ enabled })
+        });
+        showToast(`Rule ${enabled ? 'enabled' : 'disabled'}`, 'success');
+        loadRules();
+      } catch (error) {
+        // Demo mode
+        const rule = customRules.find(r => r.id === ruleId);
+        if (rule) rule.enabled = enabled;
+        showToast(`Rule ${enabled ? 'enabled' : 'disabled'} (demo mode)`, 'success');
+        renderRuleList();
+      }
+    }
+
+    async function deleteRule(ruleId) {
+      if (!confirm(`Delete rule #${ruleId}?`)) return;
+
+      try {
+        await fetchApi(`/_sensor/rules/custom/${ruleId}`, { method: 'DELETE' });
+        showToast('Rule deleted', 'success');
+        loadRules();
+      } catch (error) {
+        customRules = customRules.filter(r => r.id !== ruleId);
+        showToast('Rule deleted (demo mode)', 'success');
+        renderRuleList();
+      }
+    }
+
+    function editRule(ruleId) {
+      showToast('Edit functionality coming soon', 'info');
+    }
+
+    // ============================================================================
+    // Security Tab
+    // ============================================================================
+
+    async function loadSecurityStats() {
+      try {
+        const [schemaData, stuffingData, fpData, headlessData, alertsData] = await Promise.all([
+          fetchApi('/_sensor/schemas/stats').catch(() => null),
+          fetchApi('/_sensor/stuffing/stats').catch(() => null),
+          fetchApi('/_sensor/fingerprints/stats').catch(() => null),
+          fetchApi('/_sensor/headless/stats').catch(() => null),
+          fetchApi('/_sensor/sessions/alerts').catch(() => null),
+        ]);
+
+        // Schema Learning
+        if (schemaData?.data || schemaData) {
+          const schema = schemaData?.data || schemaData;
+          document.getElementById('statSchemas').textContent = schema.endpointsLearned || 0;
+          document.getElementById('schemaEndpoints').textContent = schema.endpointsLearned || 0;
+          document.getElementById('schemaVersions').textContent = schema.totalVersions || 0;
+          document.getElementById('schemaViolations').textContent = schema.violationsLast24h || 0;
+
+          const coverage = schema.endpointsLearned > 0
+            ? Math.min(100, Math.round((schema.totalVersions / schema.endpointsLearned) * 100))
+            : 0;
+          document.getElementById('schemaCoverage').style.width = coverage + '%';
+          document.getElementById('schemaCoverageText').textContent = coverage + '%';
+
+          // Update health badge
+          const badge = document.getElementById('schemaHealthBadge');
+          if (schema.violationsLast24h === 0) {
+            badge.className = 'badge badge-success';
+            badge.textContent = 'Healthy';
+          } else if (schema.violationsLast24h < 10) {
+            badge.className = 'badge badge-warning';
+            badge.textContent = 'Low';
+          } else {
+            badge.className = 'badge badge-danger';
+            badge.textContent = 'High';
+          }
+        }
+
+        // Credential Stuffing
+        if (stuffingData?.data || stuffingData) {
+          const stuffing = stuffingData?.data || stuffingData;
+          document.getElementById('statAuthFailures').textContent = stuffing.totalFailures || 0;
+          document.getElementById('stuffingFailures').textContent = stuffing.totalFailures || 0;
+          document.getElementById('stuffingTakeovers').textContent = stuffing.takeoverAlertCount || 0;
+          document.getElementById('stuffingDistributed').textContent = stuffing.distributedAttackCount || 0;
+          document.getElementById('stuffingSuspicious').textContent = stuffing.suspiciousEntities || 0;
+        }
+
+        // Fingerprint Intelligence
+        if (fpData?.data || fpData) {
+          const fp = fpData?.data || fpData;
+          document.getElementById('statFingerprints').textContent = fp.uniqueFingerprints || 0;
+          document.getElementById('fpUnique').textContent = fp.uniqueFingerprints || 0;
+          document.getElementById('fpCrossSession').textContent = fp.crossSessionMatches || 0;
+
+          // Device breakdown
+          if (fp.deviceBreakdown) {
+            const breakdown = document.getElementById('deviceBreakdown');
+            const devices = Object.entries(fp.deviceBreakdown);
+            const total = devices.reduce((sum, [, count]) => sum + count, 0);
+
+            breakdown.innerHTML = devices.map(([device, count]) => {
+              const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+              const color = device.toLowerCase() === 'bot' ? 'var(--ac-red)' :
+                           device.toLowerCase() === 'desktop' ? 'var(--ac-blue)' :
+                           device.toLowerCase() === 'mobile' ? 'var(--ac-green)' : 'var(--ac-purple)';
+              return `
+                <div class="device-row">
+                  <span class="device-label">${device}</span>
+                  <div class="device-bar"><div class="device-bar-fill" style="width: ${percent}%; background: ${color};"></div></div>
+                  <span class="device-value">${percent}%</span>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+
+        // Headless Detection
+        if (headlessData?.data || headlessData) {
+          const headless = headlessData?.data || headlessData;
+          document.getElementById('statBotBlocked').textContent = headless.blockedHeadless || 0;
+          document.getElementById('headlessSuspected').textContent = headless.totalSuspected || 0;
+          document.getElementById('headlessBlocked').textContent = headless.blockedHeadless || 0;
+
+          document.getElementById('detectionRateValue').textContent = (headless.detectionRate || 0).toFixed(1) + '%';
+          document.getElementById('detectionRateBar').style.width = (headless.detectionRate || 0) + '%';
+
+          document.getElementById('jsChallengeValue').textContent = (headless.jsSuccessRate || 0).toFixed(1) + '%';
+          document.getElementById('jsChallengeBar').style.width = (headless.jsSuccessRate || 0) + '%';
+        }
+
+        // Session Hijack Alerts
+        if (alertsData?.alerts?.length > 0) {
+          const alertCount = document.getElementById('hijackAlertCount');
+          alertCount.textContent = alertsData.alerts.length;
+          alertCount.style.display = 'inline';
+
+          const alertList = document.getElementById('hijackAlertList');
+          alertList.innerHTML = alertsData.alerts.slice(0, 5).map(alert => `
+            <div class="alert-item">
+              <div class="alert-header">
+                <span class="alert-title">Session Hijack Detected</span>
+                <span class="alert-severity ${alert.severity}">${alert.severity}</span>
+              </div>
+              <div class="alert-details">
+                Session: ${alert.sessionId?.slice(0, 16)}... | Entity: ${alert.entityId} | ${formatTime(alert.detectedAt)}
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Failed to load security stats', error);
+      }
+    }
+
+    // ============================================================================
+    // API Catalog Tab
+    // ============================================================================
+
+    let apiEndpoints = [];
+
+    async function loadApiCatalog() {
+      try {
+        const [endpointsData, metricsData] = await Promise.all([
+          fetchApi('/_sensor/api/endpoints').catch(() => null),
+          fetchApi('/_sensor/api/metrics').catch(() => null),
+        ]);
+
+        if (endpointsData?.endpoints) {
+          apiEndpoints = endpointsData.endpoints;
+          renderEndpointTable();
+        }
+
+        if (metricsData?.data || metricsData) {
+          const metrics = metricsData?.data || metricsData;
+          document.getElementById('statEndpoints').textContent = metrics.endpoints || apiEndpoints.length || 0;
+          document.getElementById('statServices').textContent = metrics.services || 0;
+          document.getElementById('statSensitive').textContent = metrics.sensitive || 0;
+          document.getElementById('statCoverage').textContent = (metrics.coverage || 0) + '%';
+
+          // Risk breakdown
+          if (metrics.riskBreakdown) {
+            document.getElementById('riskCritical').textContent = metrics.riskBreakdown.critical || 0;
+            document.getElementById('riskHigh').textContent = metrics.riskBreakdown.high || 0;
+            document.getElementById('riskMedium').textContent = metrics.riskBreakdown.medium || 0;
+            document.getElementById('riskLow').textContent = metrics.riskBreakdown.low || 0;
+          }
+        }
+
+        // Recent discoveries
+        try {
+          const discoveriesData = await fetchApi('/_sensor/api/discoveries');
+          if (discoveriesData?.discoveries?.length > 0) {
+            const list = document.getElementById('discoveryList');
+            list.innerHTML = discoveriesData.discoveries.slice(0, 5).map(d => `
+              <div class="discovery-item">
+                <div>
+                  <div class="discovery-type">${d.type}</div>
+                  <div class="discovery-detail">${d.detail}</div>
+                </div>
+                <span class="discovery-time">${d.time}</span>
+              </div>
+            `).join('');
+          }
+        } catch (e) {}
+      } catch (error) {
+        console.error('Failed to load API catalog', error);
+      }
+    }
+
+    function renderEndpointTable() {
+      const tbody = document.getElementById('endpointTableBody');
+      const methodFilter = document.getElementById('apiMethodFilter').value;
+      const riskFilter = document.getElementById('apiRiskFilter').value;
+      const searchQuery = document.getElementById('apiSearch').value.toLowerCase();
+
+      let filtered = apiEndpoints.filter(ep => {
+        if (methodFilter && ep.method !== methodFilter) return false;
+        if (riskFilter && ep.risk !== riskFilter) return false;
+        if (searchQuery && !ep.template.toLowerCase().includes(searchQuery)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" style="padding: 32px; text-align: center; color: var(--text-muted);">
+              ${apiEndpoints.length === 0 ? 'No endpoints discovered yet. Send traffic to start discovering.' : 'No endpoints match your filters'}
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(ep => `
+        <tr style="border-bottom: 1px solid var(--border-subtle);">
+          <td style="padding: 12px 16px;"><span class="method-badge ${ep.method.toLowerCase()}">${ep.method}</span></td>
+          <td style="padding: 12px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">${ep.template}</td>
+          <td style="padding: 12px 16px; text-align: center;"><span class="risk-badge ${ep.risk}">${ep.risk}</span></td>
+          <td style="padding: 12px 16px; text-align: right; font-family: 'JetBrains Mono', monospace;">${ep.totalRequests?.toLocaleString() || 0}</td>
+          <td style="padding: 12px 16px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted);">${ep.p50ResponseTime || 0}ms</td>
+          <td style="padding: 12px 16px; text-align: right; font-family: 'JetBrains Mono', monospace; color: ${ep.anomalyScore > 50 ? 'var(--ac-red)' : ep.anomalyScore > 20 ? 'var(--ac-orange)' : 'var(--text-muted)'};">${ep.anomalyScore?.toFixed(1) || 0}</td>
+        </tr>
+      `).join('');
+    }
+
+    function filterEndpoints() {
+      renderEndpointTable();
+    }
+
+    // Add search input listener
+    document.getElementById('apiSearch')?.addEventListener('input', () => {
+      renderEndpointTable();
+    });
+
+    // ============================================================================
+    // WAF Lab Tab
+    // ============================================================================
+
+    let labMode = 'raw';
+
+    const LAB_EXAMPLES = {
+      sqli: `GET /api/users?id=1 OR 1=1-- HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+X-Forwarded-For: 192.168.1.100`,
+      xss: `POST /api/comments HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{"comment": "<script>alert('xss')</script>"}`,
+      traversal: `GET /api/files?path=../../../etc/passwd HTTP/1.1
+Host: api.example.com
+Authorization: Bearer token123`,
+      rce: `POST /api/exec HTTP/1.1
+Host: api.example.com
+Content-Type: application/x-www-form-urlencoded
+
+cmd=ls; cat /etc/shadow`,
+      auth: `POST /api/login HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{"username": "admin'--", "password": "x"}`
+    };
+
+    function setLabMode(mode) {
+      labMode = mode;
+      document.querySelectorAll('.lab-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase().includes(mode));
+      });
+      document.getElementById('labRawMode').style.display = mode === 'raw' ? 'block' : 'none';
+      document.getElementById('labFormMode').style.display = mode === 'form' ? 'block' : 'none';
+    }
+
+    function loadLabExample(type) {
+      const example = LAB_EXAMPLES[type];
+      if (example) {
+        document.getElementById('labRawRequest').value = example;
+        setLabMode('raw');
+      }
+    }
+
+    async function evaluateRequest() {
+      const btn = document.getElementById('labEvalBtn');
+      btn.disabled = true;
+      btn.textContent = 'Evaluating...';
+
+      try {
+        let request;
+        if (labMode === 'raw') {
+          const raw = document.getElementById('labRawRequest').value;
+          request = parseRawRequest(raw);
+        } else {
+          request = {
+            method: document.getElementById('labMethod').value,
+            uri: document.getElementById('labUri').value || '/',
+            headers: parseHeaders(document.getElementById('labHeaders').value),
+            body: document.getElementById('labBody').value,
+            client_ip: document.getElementById('labClientIp').value || '127.0.0.1'
+          };
+        }
+
+        const response = await fetchApi('/_sensor/evaluate', {
+          method: 'POST',
+          body: JSON.stringify(request)
+        }).catch(() => null);
+
+        // Demo mode if API doesn't exist
+        const result = response || generateDemoResult(request);
+        displayLabResult(result);
+      } catch (error) {
+        showToast('Evaluation failed: ' + error.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Evaluate Request';
+      }
+    }
+
+    function parseRawRequest(raw) {
+      const lines = raw.trim().split(/\r?\n/);
+      const [method, uri] = lines[0].split(' ');
+      const headers = [];
+      let bodyStart = -1;
+      let clientIp = '127.0.0.1';
+
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === '') {
+          bodyStart = i + 1;
+          break;
+        }
+        const match = lines[i].match(/^([^:]+):\s*(.*)$/);
+        if (match) {
+          headers.push([match[1].trim(), match[2].trim()]);
+          if (match[1].toLowerCase() === 'x-forwarded-for') {
+            clientIp = match[2].split(',')[0].trim();
+          }
+        }
+      }
+
+      const body = bodyStart > 0 ? lines.slice(bodyStart).join('\n') : '';
+      return { method: method || 'GET', uri: uri || '/', headers, body, client_ip: clientIp };
+    }
+
+    function parseHeaders(text) {
+      return text.split('\n')
+        .filter(line => line.includes(':'))
+        .map(line => {
+          const idx = line.indexOf(':');
+          return [line.slice(0, idx).trim(), line.slice(idx + 1).trim()];
+        });
+    }
+
+    function generateDemoResult(request) {
+      const rules = [];
+      const uri = request.uri?.toLowerCase() || '';
+      const body = request.body?.toLowerCase() || '';
+
+      if (uri.includes('or 1=1') || uri.includes("'--") || body.includes("'--")) {
+        rules.push({ id: 942100, name: 'SQL Injection Attack', risk: 85 });
+      }
+      if (body.includes('<script>') || uri.includes('<script>')) {
+        rules.push({ id: 941100, name: 'XSS Attack Detected', risk: 75 });
+      }
+      if (uri.includes('../') || uri.includes('etc/passwd')) {
+        rules.push({ id: 930100, name: 'Path Traversal Attack', risk: 80 });
+      }
+      if (body.includes('; cat') || body.includes('| cat')) {
+        rules.push({ id: 932100, name: 'Remote Command Execution', risk: 90 });
+      }
+
+      const totalRisk = rules.reduce((sum, r) => sum + r.risk, 0);
+      const blocked = totalRisk >= 70;
+
+      return {
+        blocked,
+        risk_score: Math.min(100, totalRisk),
+        action: blocked ? 'block' : 'allow',
+        matched_rules: rules
+      };
+    }
+
+    function displayLabResult(result) {
+      document.getElementById('labResults').style.display = 'block';
+      const card = document.getElementById('labResultCard');
+      const verdict = document.getElementById('labVerdict');
+      const score = document.getElementById('labScore');
+      const action = document.getElementById('labAction');
+      const rulesDiv = document.getElementById('labMatchedRules');
+
+      card.className = 'lab-result ' + (result.blocked ? 'blocked' : 'allowed');
+      verdict.textContent = result.blocked ? 'BLOCKED' : 'ALLOWED';
+      verdict.className = 'result-verdict ' + (result.blocked ? 'blocked' : 'allowed');
+      score.textContent = 'Risk: ' + (result.risk_score || 0);
+      score.className = 'result-score badge ' + (result.blocked ? 'badge-danger' : 'badge-success');
+      action.textContent = result.action?.toUpperCase() || '';
+      action.className = 'badge ' + (result.blocked ? 'badge-danger' : 'badge-success');
+
+      if (result.matched_rules?.length > 0) {
+        rulesDiv.innerHTML = '<h5 style="margin-bottom: 8px; font-size: 12px; color: var(--text-muted);">Matched Rules</h5>' +
+          result.matched_rules.map(r => `
+            <div class="result-rule">
+              <span class="result-rule-id">${r.id}</span>
+              <span>${r.name || r.message || 'Rule matched'}</span>
+              <span class="badge badge-warning" style="margin-left: auto;">${r.risk || r.severity || '-'}</span>
+            </div>
+          `).join('');
+      } else {
+        rulesDiv.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">No rules matched</div>';
+      }
+    }
+
+    // ============================================================================
+    // Certificates Tab
+    // ============================================================================
+
+    let certificates = [];
+
+    async function loadCertificates() {
+      try {
+        const data = await fetchApi('/_sensor/certificates').catch(() => null);
+        certificates = data?.certificates || [];
+        renderCertificates();
+      } catch (error) {
+        // Demo mode
+        certificates = [];
+        renderCertificates();
+      }
+    }
+
+    function renderCertificates() {
+      const list = document.getElementById('certList');
+      const count = document.getElementById('certCount');
+      count.textContent = certificates.length;
+
+      if (certificates.length === 0) {
+        list.innerHTML = '<div class="empty-state"><div class="empty-state-text">No certificates installed</div></div>';
+        return;
+      }
+
+      list.innerHTML = certificates.map(cert => {
+        const expiry = new Date(cert.expiresAt);
+        const now = new Date();
+        const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+        const expiryClass = daysLeft < 0 ? 'expired' : daysLeft < 30 ? 'warning' : '';
+        const expiryText = daysLeft < 0 ? 'Expired' : daysLeft + ' days';
+
+        return `
+          <div class="cert-card">
+            <div class="cert-info">
+              <div class="cert-name">${cert.name}</div>
+              <div class="cert-domains">${cert.domains?.join(', ') || '—'}</div>
+              <div class="cert-paths">
+                <div>cert: ${cert.certificatePath || '-'}</div>
+                <div>key: ${cert.keyPath || '-'}</div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+              <span class="cert-expiry ${expiryClass}">${expiryText}</span>
+              <button class="btn btn-sm btn-danger" onclick="deleteCertificate('${cert.id}')">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function uploadCertificate() {
+      const name = document.getElementById('certName').value.trim();
+      const domains = document.getElementById('certDomains').value.split(',').map(d => d.trim()).filter(Boolean);
+      const certPem = document.getElementById('certPem').value.trim();
+      const keyPem = document.getElementById('certKey').value.trim();
+
+      if (!name || !certPem || !keyPem) {
+        showToast('Please fill in name, certificate, and key', 'error');
+        return;
+      }
+
+      try {
+        await fetchApi('/_sensor/certificates', {
+          method: 'POST',
+          body: JSON.stringify({ name, domains, certificatePem: certPem, keyPem })
+        });
+        showToast('Certificate uploaded successfully', 'success');
+        document.getElementById('certName').value = '';
+        document.getElementById('certDomains').value = '';
+        document.getElementById('certPem').value = '';
+        document.getElementById('certKey').value = '';
+        await loadCertificates();
+      } catch (error) {
+        // Demo mode
+        certificates.push({
+          id: 'cert-' + Date.now(),
+          name,
+          domains,
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          certificatePath: '/etc/ssl/' + name + '.crt',
+          keyPath: '/etc/ssl/' + name + '.key'
+        });
+        renderCertificates();
+        showToast('Certificate added (demo mode)', 'success');
+        document.getElementById('certName').value = '';
+        document.getElementById('certDomains').value = '';
+        document.getElementById('certPem').value = '';
+        document.getElementById('certKey').value = '';
+      }
+    }
+
+    async function deleteCertificate(id) {
+      if (!confirm('Delete this certificate?')) return;
+
+      try {
+        await fetchApi('/_sensor/certificates/' + id, { method: 'DELETE' });
+        showToast('Certificate deleted', 'success');
+        await loadCertificates();
+      } catch (error) {
+        // Demo mode
+        certificates = certificates.filter(c => c.id !== id);
+        renderCertificates();
+        showToast('Certificate removed (demo mode)', 'success');
+      }
+    }
+
+    // ============================================================================
+    // CIDR Access Lists
+    // ============================================================================
+
+    let cidrAllowList = [];
+    let cidrDenyList = [];
+
+    const CIDR_REGEX = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$|^([0-9a-fA-F:]+)\/\d{1,3}$/;
+
+    async function loadCidrLists() {
+      try {
+        const data = await fetchApi('/_sensor/access-lists').catch(() => null);
+        cidrAllowList = data?.allow || [];
+        cidrDenyList = data?.deny || [];
+        renderCidrLists();
+      } catch (error) {
+        renderCidrLists();
+      }
+    }
+
+    function renderCidrLists() {
+      const allowContainer = document.getElementById('allowCidrList');
+      const denyContainer = document.getElementById('denyCidrList');
+      document.getElementById('allowCount').textContent = `(${cidrAllowList.length})`;
+      document.getElementById('denyCount').textContent = `(${cidrDenyList.length})`;
+
+      if (cidrAllowList.length === 0) {
+        allowContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 12px;">No allow rules (all IPs allowed by default)</span>';
+      } else {
+        allowContainer.innerHTML = cidrAllowList.map(cidr => `
+          <span class="cidr-tag allow">
+            ${cidr}
+            <button onclick="removeCidr('allow', '${cidr}')">&times;</button>
+          </span>
+        `).join('');
+      }
+
+      if (cidrDenyList.length === 0) {
+        denyContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 12px;">No deny rules</span>';
+      } else {
+        denyContainer.innerHTML = cidrDenyList.map(cidr => `
+          <span class="cidr-tag deny">
+            ${cidr}
+            <button onclick="removeCidr('deny', '${cidr}')">&times;</button>
+          </span>
+        `).join('');
+      }
+    }
+
+    function addCidr(type) {
+      const input = document.getElementById(type === 'allow' ? 'newAllowCidr' : 'newDenyCidr');
+      const cidr = input.value.trim();
+
+      if (!cidr) return;
+      if (!CIDR_REGEX.test(cidr)) {
+        showToast('Invalid CIDR format: ' + cidr, 'error');
+        return;
+      }
+
+      const list = type === 'allow' ? cidrAllowList : cidrDenyList;
+      if (list.includes(cidr)) {
+        showToast('CIDR already exists', 'error');
+        return;
+      }
+
+      list.push(cidr);
+      input.value = '';
+      renderCidrLists();
+      saveCidrLists();
+      showToast(`Added ${cidr} to ${type} list`, 'success');
+    }
+
+    function removeCidr(type, cidr) {
+      if (type === 'allow') {
+        cidrAllowList = cidrAllowList.filter(c => c !== cidr);
+      } else {
+        cidrDenyList = cidrDenyList.filter(c => c !== cidr);
+      }
+      renderCidrLists();
+      saveCidrLists();
+      showToast(`Removed ${cidr} from ${type} list`, 'success');
+    }
+
+    async function saveCidrLists() {
+      try {
+        await fetchApi('/_sensor/access-lists', {
+          method: 'PUT',
+          body: JSON.stringify({ allow: cidrAllowList, deny: cidrDenyList })
+        });
+      } catch (error) {
+        // Demo mode - already updated locally
+      }
+    }
+
+    // ============================================================================
+    // Bot Indicators & Header Profiling
+    // ============================================================================
+
+    async function loadBotIndicators() {
+      try {
+        const data = await fetchApi('/_sensor/bot-indicators').catch(() => null);
+        if (data) {
+          updateBotIndicators(data);
+        }
+      } catch (error) {
+        // Use demo data
+      }
+    }
+
+    function updateBotIndicators(data) {
+      const indicators = data.indicators || data;
+      const mapping = {
+        noJsExecution: 'botNoJs',
+        consistentTiming: 'botTiming',
+        rapidRequests: 'botRapid',
+        fingerprintAnomaly: 'botFpAnomaly',
+        missingHeaders: 'botMissingHeaders',
+        suspiciousUserAgent: 'botSuspiciousUa',
+        automatedBehavior: 'botAutomated',
+        sessionAnomaly: 'botSession'
+      };
+
+      let criticalCount = 0;
+      let highCount = 0;
+
+      Object.entries(mapping).forEach(([key, elementId]) => {
+        const value = indicators[key] || 0;
+        const el = document.getElementById(elementId);
+        if (el) {
+          el.textContent = value;
+          const card = el.closest('.bot-indicator');
+          if (card) {
+            card.classList.remove('active', 'critical');
+            if (value > 0) {
+              if (key === 'noJsExecution' || key === 'fingerprintAnomaly') {
+                card.classList.add('critical');
+                criticalCount += value;
+              } else {
+                card.classList.add('active');
+                highCount += value;
+              }
+            }
+          }
+        }
+      });
+
+      const criticalBadge = document.getElementById('botCriticalCount');
+      const highBadge = document.getElementById('botHighCount');
+      if (criticalBadge) {
+        criticalBadge.textContent = criticalCount;
+        criticalBadge.style.display = criticalCount > 0 ? 'inline' : 'none';
+      }
+      if (highBadge) {
+        highBadge.textContent = highCount;
+        highBadge.style.display = highCount > 0 ? 'inline' : 'none';
+      }
+    }
+
+    async function loadHeaderProfiling() {
+      try {
+        const data = await fetchApi('/_sensor/header-profiles').catch(() => null);
+        if (data) {
+          updateHeaderProfiling(data);
+        }
+      } catch (error) {
+        // Use demo data
+      }
+    }
+
+    function updateHeaderProfiling(data) {
+      document.getElementById('headerEndpoints').textContent = data.endpointsProfiled || 0;
+      document.getElementById('headerAnomalies').textContent = data.anomaliesLast24h || 0;
+
+      const types = data.topAnomalyTypes || {};
+      const total = Object.values(types).reduce((sum, v) => sum + v, 0);
+
+      const updateBar = (id, countId, key) => {
+        const count = types[key] || 0;
+        const percent = total > 0 ? (count / total) * 100 : 0;
+        const bar = document.getElementById(id);
+        const countEl = document.getElementById(countId);
+        if (bar) bar.style.width = percent + '%';
+        if (countEl) countEl.textContent = count;
+      };
+
+      updateBar('anomalyInjection', 'anomalyInjectionCount', 'injection_suspected');
+      updateBar('anomalyMissing', 'anomalyMissingCount', 'missing_required_header');
+      updateBar('anomalyUnexpected', 'anomalyUnexpectedCount', 'unexpected_header');
+      updateBar('anomalyLength', 'anomalyLengthCount', 'length_anomaly');
+    }
+
+    // Initialize
+    async function init() {
+      await loadStatus();
+      await loadSites();
+      await loadRules();
+      await loadSecurityStats();
+      await loadApiCatalog();
+      await loadFeatures();
+      await loadAllConfigs();
+      await loadThresholds();
+      await loadAccessList();
+      await loadCidrLists();
+      await loadEntities();
+      await loadCampaigns();
+      await loadCertificates();
+      await loadBotIndicators();
+      await loadHeaderProfiling();
+
+      // Auto-refresh status every 10 seconds
+      setInterval(loadStatus, 10000);
+      // Auto-refresh security stats every 30 seconds
+      setInterval(loadSecurityStats, 30000);
+      // Auto-refresh bot indicators every 30 seconds
+      setInterval(loadBotIndicators, 30000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

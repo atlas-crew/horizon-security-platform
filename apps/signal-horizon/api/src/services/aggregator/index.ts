@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
 import type { ImpossibleTravelService, LoginEvent } from '../impossible-travel.js';
 import type { APIIntelligenceService } from '../api-intelligence/index.js';
+import type { ThreatService } from '../threat-service.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 
@@ -49,6 +50,7 @@ export class Aggregator {
   private impossibleTravel: ImpossibleTravelService | null;
   private clickhouse: ClickHouseService | null;
   private apiIntelligence: APIIntelligenceService | null;
+  private threatService: ThreatService | null;
   private config: Required<AggregatorConfig>;
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
@@ -63,7 +65,8 @@ export class Aggregator {
     config: AggregatorConfig,
     clickhouse?: ClickHouseService,
     impossibleTravel?: ImpossibleTravelService,
-    apiIntelligenceService?: APIIntelligenceService
+    apiIntelligenceService?: APIIntelligenceService,
+    threatService?: ThreatService
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
@@ -71,6 +74,7 @@ export class Aggregator {
     this.clickhouse = clickhouse ?? null;
     this.impossibleTravel = impossibleTravel ?? null;
     this.apiIntelligence = apiIntelligenceService ?? null;
+    this.threatService = threatService ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
@@ -244,13 +248,43 @@ export class Aggregator {
   }
 
   private severityRank(severity: Severity): number {
+    // Use ThreatService for scoring when available
+    if (this.threatService) {
+      return this.threatService.severityRank(severity);
+    }
+    // Fallback to basic ranking
     const ranks: Record<Severity, number> = {
-      LOW: 1,
-      MEDIUM: 2,
-      HIGH: 3,
-      CRITICAL: 4,
+      LOW: 25,
+      MEDIUM: 50,
+      HIGH: 75,
+      CRITICAL: 100,
     };
     return ranks[severity];
+  }
+
+  /**
+   * Calculate threat score for a signal using ThreatService
+   * Returns null if ThreatService is not available
+   */
+  private calculateThreatScore(signal: IncomingSignal): number | null {
+    if (!this.threatService) return null;
+
+    const result = this.threatService.calculateThreatScore({
+      signalType: signal.signalType,
+      severity: signal.severity,
+      confidence: signal.confidence,
+      sourceIp: signal.sourceIp,
+      fingerprint: signal.fingerprint,
+      eventCount: signal.eventCount,
+      metadata: signal.metadata as Record<string, unknown> | undefined,
+    });
+
+    this.logger.debug(
+      { signalType: signal.signalType, score: result.score, action: result.recommendedAction },
+      'Calculated threat score'
+    );
+
+    return result.score;
   }
 
   /**
@@ -309,10 +343,14 @@ export class Aggregator {
       );
     }
 
+    // 5. Calculate threat score using ThreatService
+    const threatScore = this.calculateThreatScore(signal) ?? undefined;
+
     return {
       ...signal,
       anonFingerprint,
       id: stored.id,
+      threatScore,
     };
   }
 

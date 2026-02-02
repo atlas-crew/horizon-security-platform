@@ -554,6 +554,8 @@ export type EnrichedSignal = ThreatSignal & {
   anonFingerprint?: string;
   /** Database primary key after storage */
   id?: string;
+  /** Threat score from ThreatService (0-100) */
+  threatScore?: number;
 };
 
 /**

@@ -278,7 +278,7 @@ impl ConfigReloader {
 /// # Safety
 /// This function installs a signal handler. The handler must be async-signal-safe.
 #[cfg(unix)]
-pub fn setup_sighup_handler(reloader: Arc<ConfigReloader>) {
+pub fn setup_sighup_handler(_reloader: Arc<ConfigReloader>) {
     use std::thread;
 
     thread::spawn(move || {

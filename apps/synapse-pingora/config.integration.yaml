@@ -13,7 +13,7 @@ detection:
   path_traversal: true
   action: "block"
   block_status: 403
-  rules_path: "../risk-server/libsynapse/rules.json"
+  rules_path: "data/rules.json"
   anomaly_blocking:
     enabled: true
     threshold: 8.0

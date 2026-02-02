@@ -1,6 +1,14 @@
 # Synapse-Pingora VP Demo Justfile
 # Usage: just <command>
 
+# Generate self-signed certificates if they don't exist
+generate-certs:
+    @mkdir -p certs
+    @if [ ! -f certs/server.key ]; then \
+        echo "Generating self-signed certificate..."; \
+        openssl req -x509 -newkey rsa:2048 -keyout certs/server.key -out certs/server.crt -days 365 -nodes -subj "/CN=localhost" 2>/dev/null; \
+    fi
+
 # Default recipe - show help
 default:
     @just --list
@@ -10,7 +18,7 @@ default:
 # =============================================================================
 
 # Start synapse-pingora proxy
-start:
+start: generate-certs
     @pkill -9 -f "target/release/synapse-pingora" 2>/dev/null || true
     @sleep 1
     @cd {{justfile_directory()}} && ./target/release/synapse-pingora >> stdout.log 2>&1 &

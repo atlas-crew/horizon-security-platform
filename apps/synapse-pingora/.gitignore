@@ -7,3 +7,8 @@
 
 # OS files
 .DS_Store
+
+# Certificates and keys
+/certs/*.key
+/certs/*.crt
+/certs/*.pem

@@ -17,9 +17,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /usr/src/app
 
-# Copy the entire workspace context needed for the build
-# We need apps/risk-server/libsynapse because it's a path dependency
-COPY apps/risk-server/libsynapse ./apps/risk-server/libsynapse
+# Copy the synapse-pingora application (fully self-contained, no external dependencies)
 COPY apps/synapse-pingora ./apps/synapse-pingora
 
 # Build the project
@@ -42,8 +40,9 @@ RUN groupadd -r synapse && useradd -r -g synapse synapse
 
 WORKDIR /app
 
-# Copy configuration
+# Copy configuration and rules
 COPY apps/synapse-pingora/config.yaml /app/config.yaml
+COPY apps/synapse-pingora/data/rules.json /app/data/rules.json
 
 # Copy binary from builder
 COPY --from=builder /usr/src/app/apps/synapse-pingora/target/release/synapse-pingora /usr/local/bin/synapse-pingora

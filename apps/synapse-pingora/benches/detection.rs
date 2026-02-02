@@ -103,7 +103,7 @@ static SCENARIOS: Lazy<Vec<ScenarioRequest>> = Lazy::new(|| {
 });
 
 // ============================================================================
-// Detection Engine (Real libsynapse wrapper)
+// Detection Engine (Synapse WAF)
 // ============================================================================
 
 
@@ -128,7 +128,7 @@ thread_local! {
         let mut synapse = Synapse::new();
         
         // Try to load the real rules
-        let rules_path = "../risk-server/libsynapse/rules.json";
+        let rules_path = "data/rules.json";
         if Path::new(rules_path).exists() {
             match fs::read(rules_path) {
                 Ok(rules_json) => {
@@ -162,7 +162,7 @@ impl DetectionEngine {
         let request = SynapseRequest {
             method,
             path: uri,
-            query: None, // libsynapse parses this from path if None
+            query: None, // Synapse parses this from path if None
             headers: synapse_headers,
             body,
             client_ip: "127.0.0.1",

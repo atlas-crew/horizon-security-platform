@@ -532,6 +532,11 @@ async fn require_auth(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // DEV MODE: Skip authentication for local development
+    if is_dev_mode() {
+        return Ok(next.run(request).await);
+    }
+
     // Extract client IP for rate limiting
     let client_ip = extract_client_ip(&request);
 

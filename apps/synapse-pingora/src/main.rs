@@ -287,20 +287,7 @@ impl Default for LoggingConfig {
 }
 
 // NOTE: Old telemetry types removed - use TelemetryClient and TelemetryEvent instead
-// use synapse_pingora::telemetry::{AlertForwarder, SecurityEvent, ActorContext, SignalContext, RequestContext};
-
-// ... (existing imports)
-
-// Global Alert Forwarder (Legacy - replaced by TelemetryClient)
-// TODO: Migrate to TelemetryClient when refactoring telemetry integration
-// static ALERT_FORWARDER: Lazy<Option<AlertForwarder>> = Lazy::new(|| {
-//     let config = Config::load_or_default();
-//     if let Some(url) = config.detection.risk_server_url {
-//         Some(AlertForwarder::new(url, "synapse-pingora".to_string()))
-//     } else {
-//         None
-//     }
-// });
+// AlertForwarder has been deprecated in favor of TelemetryClient for all telemetry needs.
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DetectionConfig {
@@ -2763,12 +2750,10 @@ impl MetricsProvider for HorizonMetricsProvider {
         0.0
     }
     fn requests_last_minute(&self) -> u64 {
-        // TODO: Implement windowed counter in MetricsRegistry
-        0
+        self.metrics.requests_last_minute()
     }
     fn avg_latency_ms(&self) -> f64 {
-        // TODO: Implement latency tracking
-        0.0
+        self.metrics.avg_latency_ms()
     }
     fn config_hash(&self) -> String {
         CONFIG_HASH.get().cloned().unwrap_or_default()

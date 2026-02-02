@@ -16,6 +16,8 @@ pub struct MetricsRegistry {
     request_counts: RequestCounters,
     /// Latency histograms
     latencies: LatencyHistogram,
+    /// Windowed counter for requests-per-minute tracking
+    windowed_requests: WindowedCounter,
     /// WAF-specific metrics
     waf_metrics: WafMetrics,
     /// Shadow mirroring metrics (Phase 7)
@@ -510,6 +512,91 @@ impl LatencyHistogram {
     }
 }
 
+/// Sliding window counter for time-based metrics (e.g., requests per minute).
+/// Maintains per-second buckets for the configured window duration.
+#[derive(Debug)]
+pub struct WindowedCounter {
+    /// Per-second request counts (ring buffer)
+    buckets: Vec<AtomicU64>,
+    /// Per-second latency sums in microseconds (for average calculation)
+    latency_buckets: Vec<AtomicU64>,
+    /// Index of the current second
+    current_index: AtomicU64,
+    /// Timestamp of last bucket rotation
+    last_rotation: RwLock<Instant>,
+    /// Window size in seconds
+    window_secs: usize,
+}
+
+impl Default for WindowedCounter {
+    fn default() -> Self {
+        Self::new(60) // Default 60-second window
+    }
+}
+
+impl WindowedCounter {
+    /// Creates a new windowed counter with the specified window size.
+    pub fn new(window_secs: usize) -> Self {
+        let buckets = (0..window_secs).map(|_| AtomicU64::new(0)).collect();
+        let latency_buckets = (0..window_secs).map(|_| AtomicU64::new(0)).collect();
+        Self {
+            buckets,
+            latency_buckets,
+            current_index: AtomicU64::new(0),
+            last_rotation: RwLock::new(Instant::now()),
+            window_secs,
+        }
+    }
+
+    /// Rotates buckets if needed (called on each record).
+    fn maybe_rotate(&self) {
+        let now = Instant::now();
+        let mut last = self.last_rotation.write();
+        let elapsed_secs = now.duration_since(*last).as_secs() as usize;
+
+        if elapsed_secs > 0 {
+            let current = self.current_index.load(Ordering::Relaxed) as usize;
+
+            // Clear buckets that have expired
+            for i in 1..=elapsed_secs.min(self.window_secs) {
+                let idx = (current + i) % self.window_secs;
+                self.buckets[idx].store(0, Ordering::Relaxed);
+                self.latency_buckets[idx].store(0, Ordering::Relaxed);
+            }
+
+            // Update current index
+            let new_index = (current + elapsed_secs) % self.window_secs;
+            self.current_index.store(new_index as u64, Ordering::Relaxed);
+            *last = now;
+        }
+    }
+
+    /// Records a request with latency.
+    pub fn record(&self, latency_us: u64) {
+        self.maybe_rotate();
+        let idx = self.current_index.load(Ordering::Relaxed) as usize;
+        self.buckets[idx].fetch_add(1, Ordering::Relaxed);
+        self.latency_buckets[idx].fetch_add(latency_us, Ordering::Relaxed);
+    }
+
+    /// Returns the total count over the window.
+    pub fn count(&self) -> u64 {
+        self.maybe_rotate();
+        self.buckets.iter().map(|b| b.load(Ordering::Relaxed)).sum()
+    }
+
+    /// Returns the average latency in microseconds over the window.
+    pub fn average_latency_us(&self) -> f64 {
+        self.maybe_rotate();
+        let total_count: u64 = self.buckets.iter().map(|b| b.load(Ordering::Relaxed)).sum();
+        if total_count == 0 {
+            return 0.0;
+        }
+        let total_latency: u64 = self.latency_buckets.iter().map(|b| b.load(Ordering::Relaxed)).sum();
+        total_latency as f64 / total_count as f64
+    }
+}
+
 /// WAF-specific metrics.
 #[derive(Debug, Default)]
 pub struct WafMetrics {
@@ -631,6 +718,7 @@ impl MetricsRegistry {
     pub fn record_request(&self, status_code: u16, latency_us: u64) {
         self.request_counts.total.fetch_add(1, Ordering::Relaxed);
         self.latencies.observe(latency_us);
+        self.windowed_requests.record(latency_us);
 
         match status_code {
             200..=299 => self.request_counts.success_2xx.fetch_add(1, Ordering::Relaxed),
@@ -644,6 +732,16 @@ impl MetricsRegistry {
     /// Records a blocked request.
     pub fn record_blocked(&self) {
         self.request_counts.blocked.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Returns the number of requests in the last minute.
+    pub fn requests_last_minute(&self) -> u64 {
+        self.windowed_requests.count()
+    }
+
+    /// Returns the average latency in milliseconds over the last minute.
+    pub fn avg_latency_ms(&self) -> f64 {
+        self.windowed_requests.average_latency_us() / 1000.0
     }
 
     /// Records WAF metrics.
@@ -669,6 +767,21 @@ impl MetricsRegistry {
     /// Records a failed shadow mirror delivery.
     pub fn record_shadow_failed(&self) {
         self.shadow_metrics.record_failed();
+    }
+
+    /// Returns the total number of mirrored requests.
+    pub fn shadow_mirrored_total(&self) -> u64 {
+        self.shadow_metrics.mirrored.load(Ordering::Relaxed)
+    }
+
+    /// Returns the total number of rate-limited shadow attempts.
+    pub fn shadow_rate_limited_total(&self) -> u64 {
+        self.shadow_metrics.rate_limited.load(Ordering::Relaxed)
+    }
+
+    /// Returns the total number of failed shadow deliveries.
+    pub fn shadow_failed_total(&self) -> u64 {
+        self.shadow_metrics.failed.load(Ordering::Relaxed)
     }
 
     /// Records profiling metrics (Phase 2).

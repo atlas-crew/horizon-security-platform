@@ -923,12 +923,13 @@ async fn sensor_shadow_status_handler(State(state): State<AdminState>) -> impl I
         0
     };
 
+    let metrics = state.handler.metrics();
     let response = ShadowStatusResponse {
         enabled: sites_with_shadow > 0,
         sites_with_shadow,
-        total_mirrored: 0, // TODO: Track in MetricsRegistry
-        total_rate_limited: 0,
-        total_failed: 0,
+        total_mirrored: metrics.shadow_mirrored_total(),
+        total_rate_limited: metrics.shadow_rate_limited_total(),
+        total_failed: metrics.shadow_failed_total(),
     };
 
     (

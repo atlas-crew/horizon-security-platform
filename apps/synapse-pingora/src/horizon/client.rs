@@ -283,6 +283,7 @@ async fn connection_loop(
 ) {
     let mut reconnect_delay = config.reconnect_delay_ms;
     let mut attempt = 0u32;
+    let mut pending_signals: Vec<ThreatSignal> = Vec::new();
 
     loop {
         // Check for shutdown
@@ -314,6 +315,7 @@ async fn connection_loop(
             &tenant_id,
             &capabilities,
             &config_manager,
+            &mut pending_signals,
         )
         .await
         {
@@ -364,6 +366,12 @@ enum ConnectionResult {
     Stopped,
 }
 
+fn stash_pending(pending: &mut Vec<ThreatSignal>, batch: &mut Vec<ThreatSignal>) {
+    if !batch.is_empty() {
+        pending.extend(batch.drain(..));
+    }
+}
+
 async fn connect_and_run(
     config: &HorizonConfig,
     state: &Arc<RwLock<ConnectionState>>,
@@ -375,6 +383,7 @@ async fn connect_and_run(
     tenant_id: &Arc<RwLock<Option<String>>>,
     capabilities: &Arc<RwLock<Vec<String>>>,
     config_manager: &Option<Arc<ConfigManager>>,
+    pending_signals: &mut Vec<ThreatSignal>,
 ) -> ConnectionResult {
     // Connect WebSocket
     let ws_stream = match tokio_tungstenite::connect_async(&config.hub_url).await {
@@ -451,6 +460,15 @@ async fn connect_and_run(
     let mut signal_batch: Vec<ThreatSignal> = Vec::with_capacity(config.signal_batch_size);
     let mut batch_timer = tokio::time::interval(Duration::from_millis(config.signal_batch_delay_ms));
 
+    if !pending_signals.is_empty() {
+        signal_batch.extend(pending_signals.drain(..));
+        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
+            error!("Failed to send buffered signals: {}", e);
+            stash_pending(pending_signals, &mut signal_batch);
+            return ConnectionResult::Disconnected;
+        }
+    }
+
     loop {
         tokio::select! {
             // Shutdown signal
@@ -468,6 +486,7 @@ async fn connect_and_run(
                         if signal_batch.len() >= config.signal_batch_size {
                             if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
                                 error!("Failed to send batch: {}", e);
+                                stash_pending(pending_signals, &mut signal_batch);
                                 return ConnectionResult::Disconnected;
                             }
                         }
@@ -483,6 +502,7 @@ async fn connect_and_run(
                 if !signal_batch.is_empty() {
                     if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
                         error!("Failed to send batch: {}", e);
+                        stash_pending(pending_signals, &mut signal_batch);
                         return ConnectionResult::Disconnected;
                     }
                 }
@@ -501,10 +521,12 @@ async fn connect_and_run(
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         warn!("WebSocket closed");
+                        stash_pending(pending_signals, &mut signal_batch);
                         return ConnectionResult::Disconnected;
                     }
                     Some(Err(e)) => {
                         error!("WebSocket error: {}", e);
+                        stash_pending(pending_signals, &mut signal_batch);
                         return ConnectionResult::Disconnected;
                     }
                     _ => {}
@@ -553,7 +575,7 @@ where
         return Ok(());
     }
 
-    let signals = std::mem::take(batch);
+    let signals = batch.clone();
     let count = signals.len();
 
     let msg = if count == 1 {
@@ -569,6 +591,7 @@ where
         .await
         .map_err(|e| HorizonError::SendFailed(e.to_string()))?;
 
+    batch.clear();
     stats.batches_sent.fetch_add(1, Ordering::Relaxed);
     debug!("Sent batch of {} signals", count);
 
@@ -734,6 +757,57 @@ async fn handle_hub_message<S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::Sink;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    struct TestSink {
+        fail: bool,
+    }
+
+    impl Sink<Message> for TestSink {
+        type Error = std::io::Error;
+
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn start_send(self: Pin<&mut Self>, _item: Message) -> Result<(), Self::Error> {
+            if self.fail {
+                Err(std::io::Error::new(std::io::ErrorKind::Other, "send failed"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn test_stats() -> Arc<InternalStats> {
+        Arc::new(InternalStats {
+            signals_sent: AtomicU64::new(0),
+            signals_acked: AtomicU64::new(0),
+            batches_sent: AtomicU64::new(0),
+            heartbeats_sent: AtomicU64::new(0),
+            heartbeat_failures: AtomicU64::new(0),
+            reconnect_attempts: AtomicU32::new(0),
+        })
+    }
 
     #[test]
     fn test_noop_metrics_provider() {
@@ -783,5 +857,35 @@ mod tests {
 
         assert!(client.is_ip_blocked("192.168.1.100"));
         assert!(!client.is_ip_blocked("192.168.1.101"));
+    }
+
+    #[tokio::test]
+    async fn test_send_batch_keeps_signals_on_failure() {
+        let mut sink = TestSink { fail: true };
+        let stats = test_stats();
+        let mut batch = vec![
+            ThreatSignal::new(super::types::SignalType::IpThreat, super::types::Severity::Medium),
+            ThreatSignal::new(super::types::SignalType::IpThreat, super::types::Severity::High),
+        ];
+
+        let result = send_batch(&mut sink, &mut batch, &stats).await;
+
+        assert!(result.is_err());
+        assert_eq!(batch.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_send_batch_clears_signals_on_success() {
+        let mut sink = TestSink { fail: false };
+        let stats = test_stats();
+        let mut batch = vec![
+            ThreatSignal::new(super::types::SignalType::IpThreat, super::types::Severity::Medium),
+            ThreatSignal::new(super::types::SignalType::IpThreat, super::types::Severity::High),
+        ];
+
+        let result = send_batch(&mut sink, &mut batch, &stats).await;
+
+        assert!(result.is_ok());
+        assert!(batch.is_empty());
     }
 }

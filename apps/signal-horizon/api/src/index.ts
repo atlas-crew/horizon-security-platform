@@ -25,11 +25,14 @@ import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService } from './storage/clickhouse/index.js';
 // Fleet management services
 import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
+import { AutomatedPlaybookTrigger } from './services/warroom/automated-trigger.js';
+import { PlaybookService } from './services/warroom/playbook-service.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
+import { SecurityAuditService } from './services/audit/security-audit.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
 // Job queue and workers
@@ -205,6 +208,9 @@ let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
 let warRoomService: WarRoomService;
+let securityAuditService: SecurityAuditService;
+let playbookService: PlaybookService;
+let playbookTrigger: AutomatedPlaybookTrigger;
 let tunnelWss: WebSocketServer;
 let rolloutWorker: Worker<RolloutJobData, void>;
 
@@ -459,6 +465,15 @@ async function start() {
     maxActivityLimit: 200,
   };
   warRoomService = new WarRoomService(prisma, logger, warRoomConfig);
+  securityAuditService = new SecurityAuditService(prisma, logger);
+  playbookService = new PlaybookService(
+    prisma,
+    logger,
+    fleetCommander,
+    warRoomService,
+    securityAuditService
+  );
+  playbookTrigger = new AutomatedPlaybookTrigger(prisma, logger, playbookService);
 
   // Create WebSocket server for tunnel connections (noServer mode - we handle upgrades manually)
   tunnelWss = new WebSocketServer({ noServer: true });
@@ -481,6 +496,8 @@ async function start() {
     tunnelBroker,
     warRoomService,
     apiIntelligenceService,
+    playbookService,
+    securityAuditService,
   });
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
@@ -495,7 +512,9 @@ async function start() {
     config.aggregator,
     clickhouse ?? undefined,
     impossibleTravelService,
-    apiIntelligenceService
+    apiIntelligenceService,
+    undefined,
+    playbookTrigger
   );
 
   // Initialize WebSocket gateways

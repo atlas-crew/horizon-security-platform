@@ -1,6 +1,7 @@
 /**
  * Aggregator Service Tests
- * Tests signal batching, deduplication, backpressure, and error handling
+ * Tests signal batching, deduplication, backpressure, error handling,
+ * and APIIntelligenceService integration
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -8,6 +9,7 @@ import { Aggregator, type AggregatorConfig, type IncomingSignal } from './index.
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
+import type { APIIntelligenceService } from '../api-intelligence/index.js';
 
 // Mock Prisma client - use explicit type
 const mockPrisma = {
@@ -28,6 +30,21 @@ const mockLogger = {
 const mockCorrelator = {
   analyzeSignals: vi.fn().mockResolvedValue([]),
 } as unknown as Correlator;
+
+// Mock APIIntelligenceService - use explicit type
+const createMockAPIIntelligence = (): APIIntelligenceService => ({
+  processDiscoverySignal: vi.fn().mockResolvedValue(undefined),
+  getEndpointsByPattern: vi.fn().mockResolvedValue([]),
+  getEndpointByPath: vi.fn().mockResolvedValue(null),
+  getEndpointHistory: vi.fn().mockResolvedValue({ changes: [], totalChanges: 0 }),
+  getAllEndpoints: vi.fn().mockResolvedValue({ endpoints: [], total: 0 }),
+  getStats: vi.fn().mockReturnValue({
+    totalEndpoints: 0,
+    totalChanges: 0,
+    avgChangesPerEndpoint: 0,
+    endpointsByMethod: {},
+  }),
+} as unknown as APIIntelligenceService);
 
 const defaultConfig: AggregatorConfig = {
   batchSize: 5,
@@ -241,6 +258,199 @@ describe('Aggregator', () => {
       await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs * 2);
 
       expect(mockPrisma.signal.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('APIIntelligenceService integration', () => {
+    let mockAPIIntelligence: APIIntelligenceService;
+    let aggregatorWithAPIIntel: Aggregator;
+
+    beforeEach(() => {
+      mockAPIIntelligence = createMockAPIIntelligence();
+      aggregatorWithAPIIntel = new Aggregator(
+        mockPrisma,
+        mockLogger,
+        mockCorrelator,
+        defaultConfig,
+        undefined, // clickhouse
+        undefined, // impossibleTravel
+        mockAPIIntelligence
+      );
+    });
+
+    afterEach(async () => {
+      await aggregatorWithAPIIntel.stop();
+    });
+
+    it('should call APIIntelligenceService for TEMPLATE_DISCOVERY signals', async () => {
+      const signal = createTestSignal({
+        signalType: 'TEMPLATE_DISCOVERY',
+        metadata: {
+          template: '/api/users/{id}',
+          method: 'GET',
+          statusCode: 200,
+        },
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockAPIIntelligence.processDiscoverySignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          sensorId: 'sensor-1',
+          signalType: 'TEMPLATE_DISCOVERY',
+          metadata: expect.objectContaining({
+            template: '/api/users/{id}',
+          }),
+        }),
+        expect.objectContaining({
+          signalId: 'signal-id-123',
+          swallowErrors: true,
+          emitEvents: true,
+        })
+      );
+    });
+
+    it('should call APIIntelligenceService for SCHEMA_VIOLATION signals', async () => {
+      const signal = createTestSignal({
+        signalType: 'SCHEMA_VIOLATION',
+        metadata: {
+          endpoint: '/api/orders',
+          violation: 'unexpected_field',
+          field: 'extra_field',
+        },
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockAPIIntelligence.processDiscoverySignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          sensorId: 'sensor-1',
+          signalType: 'SCHEMA_VIOLATION',
+          metadata: expect.objectContaining({
+            endpoint: '/api/orders',
+            violation: 'unexpected_field',
+          }),
+        }),
+        expect.objectContaining({
+          signalId: 'signal-id-123',
+          swallowErrors: true,
+        })
+      );
+    });
+
+    it('should NOT call APIIntelligenceService for IP_THREAT signals', async () => {
+      const signal = createTestSignal({
+        signalType: 'IP_THREAT',
+        sourceIp: '10.0.0.1',
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockAPIIntelligence.processDiscoverySignal).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call APIIntelligenceService for BOT signals', async () => {
+      const signal = createTestSignal({
+        signalType: 'BOT',
+        fingerprint: 'bot-fingerprint-123',
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockAPIIntelligence.processDiscoverySignal).not.toHaveBeenCalled();
+    });
+
+    it('should handle APIIntelligenceService errors gracefully', async () => {
+      // Make APIIntelligenceService throw an error
+      vi.mocked(mockAPIIntelligence.processDiscoverySignal).mockRejectedValueOnce(
+        new Error('API Intelligence error')
+      );
+
+      const signal = createTestSignal({
+        signalType: 'TEMPLATE_DISCOVERY',
+        metadata: { template: '/api/error' },
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      // Signal should still be stored in Prisma (main flow not affected)
+      expect(mockPrisma.signal.create).toHaveBeenCalled();
+      // Correlator should still be called
+      expect(mockCorrelator.analyzeSignals).toHaveBeenCalled();
+    });
+
+    it('should process multiple discovery signals in same batch', async () => {
+      const signals = [
+        createTestSignal({
+          signalType: 'TEMPLATE_DISCOVERY',
+          sourceIp: '192.168.1.1',
+          metadata: { template: '/api/users' },
+        }),
+        createTestSignal({
+          signalType: 'SCHEMA_VIOLATION',
+          sourceIp: '192.168.1.2',
+          metadata: { endpoint: '/api/orders' },
+        }),
+        createTestSignal({
+          signalType: 'IP_THREAT', // Should not trigger API Intelligence
+          sourceIp: '192.168.1.3',
+        }),
+      ];
+
+      for (const signal of signals) {
+        aggregatorWithAPIIntel.queueSignal(signal);
+      }
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      // Should be called twice (TEMPLATE_DISCOVERY and SCHEMA_VIOLATION only)
+      expect(mockAPIIntelligence.processDiscoverySignal).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass empty metadata when signal has no metadata', async () => {
+      const signal = createTestSignal({
+        signalType: 'TEMPLATE_DISCOVERY',
+        metadata: undefined,
+      });
+
+      aggregatorWithAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockAPIIntelligence.processDiscoverySignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: {},
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it('should work when APIIntelligenceService is not provided', async () => {
+      // Create aggregator without API Intelligence service
+      const aggregatorNoAPIIntel = new Aggregator(
+        mockPrisma,
+        mockLogger,
+        mockCorrelator,
+        defaultConfig
+      );
+
+      const signal = createTestSignal({
+        signalType: 'TEMPLATE_DISCOVERY',
+        metadata: { template: '/api/test' },
+      });
+
+      aggregatorNoAPIIntel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      // Should not throw, signal should still be stored
+      expect(mockPrisma.signal.create).toHaveBeenCalled();
+
+      await aggregatorNoAPIIntel.stop();
     });
   });
 });

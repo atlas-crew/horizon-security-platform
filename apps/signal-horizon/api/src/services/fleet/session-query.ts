@@ -81,18 +81,17 @@ export class FleetSessionQueryService {
   }
 
   /**
-   * Execute an RPC call to a sensor with timeout
+   * Execute an RPC call to a sensor with timeout.
    *
-   * Note: This method currently uses the tunnel broker's getSensorSessions to check
-   * if a sensor is online, then simulates RPC. Full RPC support requires additional
-   * tunnel broker enhancements to support request/response patterns.
+   * Uses TunnelBroker request/response correlation to send a direct request
+   * to the sensor and wait for the response payload.
    */
   private async callSensorWithTimeout<T>(
     sensorId: string,
     sensorName: string,
     method: string,
-    _params: Record<string, unknown>,
-    _timeoutMs: number = SENSOR_QUERY_TIMEOUT_MS
+    params: Record<string, unknown>,
+    timeoutMs: number = SENSOR_QUERY_TIMEOUT_MS
   ): Promise<SensorRpcResult<T>> {
     const startTime = Date.now();
 
@@ -110,11 +109,9 @@ export class FleetSessionQueryService {
         };
       }
 
-      // Check if sensor has any active sessions (indicates it's connected)
-      const sessions = this.tunnelBroker.getSensorSessions(sensorId);
-      const isConnected = sessions.length > 0;
-
-      if (!isConnected) {
+      // Prefer legacy tunnel info for direct RPC support
+      const tunnelInfo = this.tunnelBroker.getSensorTunnelInfo(sensorId);
+      if (!tunnelInfo || !tunnelInfo.connected) {
         return {
           sensorId,
           sensorName,
@@ -125,20 +122,45 @@ export class FleetSessionQueryService {
         };
       }
 
-      // TODO: Implement proper RPC pattern with request/response correlation
-      // For now, log a warning and return a placeholder indicating RPC is not yet implemented
-      this.logger.warn(
-        { sensorId, method },
-        'Sensor RPC not yet implemented - returning placeholder response'
+      const response = await this.tunnelBroker.sendRequest(
+        sensorId,
+        {
+          type: method,
+          payload: params,
+        },
+        timeoutMs
       );
 
-      // Return a successful but empty response to indicate sensor is reachable
-      // but actual data retrieval requires RPC implementation
+      const payload = response.payload;
+      if (!payload || typeof payload !== 'object') {
+        return {
+          sensorId,
+          sensorName,
+          success: false,
+          error: 'Invalid response payload',
+          durationMs: Date.now() - startTime,
+          online: true,
+        };
+      }
+
+      const payloadRecord = payload as Record<string, unknown>;
+      if (payloadRecord.success === false) {
+        return {
+          sensorId,
+          sensorName,
+          success: false,
+          error: typeof payloadRecord.error === 'string' ? payloadRecord.error : 'Sensor returned error',
+          durationMs: Date.now() - startTime,
+          online: true,
+        };
+      }
+
+      const data = (payloadRecord.data as T | undefined) ?? (payload as T);
       return {
         sensorId,
         sensorName,
         success: true,
-        data: undefined as unknown as T,
+        data,
         durationMs: Date.now() - startTime,
         online: true,
       };

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { createDashboardRouter } from './dashboard.js';
 import { createEndpointsRouter } from './endpoints.js';
 import { createRulesRouter } from './rules.js';
@@ -17,7 +18,7 @@ export function createBeamRouter(
   const beamLogger = logger.child({ module: 'beam' });
 
   // Health check for synapse connectivity
-  router.get('/health', async (_req, res) => {
+  router.get('/health', requireScope('dashboard:read'), async (_req, res) => {
     const synapseAdapter = getSynapseDirectAdapter();
 
     if (synapseAdapter) {

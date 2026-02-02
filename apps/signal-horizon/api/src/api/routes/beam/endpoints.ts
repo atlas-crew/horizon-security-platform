@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
 import { EndpointQuerySchema, UUIDParamSchema } from './validation.js';
 
@@ -8,14 +9,8 @@ export function createEndpointsRouter(prisma: PrismaClient, logger: Logger): Rou
   const router = Router();
 
   // GET /api/v1/beam/endpoints - List all endpoints
-  router.get('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate query parameters
     const queryValidation = EndpointQuerySchema.safeParse(req.query);
@@ -49,14 +44,8 @@ export function createEndpointsRouter(prisma: PrismaClient, logger: Logger): Rou
   }));
 
   // GET /api/v1/beam/endpoints/:id - Get endpoint details
-  router.get('/:id', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/:id', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate UUID parameter
     const paramValidation = UUIDParamSchema.safeParse(req.params);

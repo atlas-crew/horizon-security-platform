@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../__tests__/test-request.js';
 import { createFleetRoutes } from './fleet.js';
 import type { PrismaClient, Sensor } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -26,6 +26,14 @@ vi.mock('../middleware/auth.js', () => ({
       return next();
     }
     _res.status(403).json({ error: 'Forbidden' });
+  },
+  requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+}));
+
+vi.mock('../../middleware/rate-limiter.js', () => ({
+  rateLimiters: {
+    fleetCommand: (_req: Request, _res: Response, next: NextFunction) => next(),
+    configMutation: (_req: Request, _res: Response, next: NextFunction) => next(),
   },
 }));
 
@@ -79,6 +87,7 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   approvedAt: null,
   approvedBy: null,
   registrationTokenId: null,
+  fingerprint: null,
   ...overrides,
 });
 

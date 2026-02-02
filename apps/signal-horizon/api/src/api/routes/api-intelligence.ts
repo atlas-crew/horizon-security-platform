@@ -21,10 +21,11 @@ import { getErrorMessage } from '../../utils/errors.js';
 
 export function createAPIIntelligenceRoutes(
   prisma: PrismaClient,
-  logger: Logger
+  logger: Logger,
+  apiIntelligenceService?: APIIntelligenceService
 ): Router {
   const router = Router();
-  const service = new APIIntelligenceService(prisma, logger);
+  const service = apiIntelligenceService ?? new APIIntelligenceService(prisma, logger);
 
   // ===========================================================================
   // Signal Ingestion Endpoints

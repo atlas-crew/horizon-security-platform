@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express, { type Express } from 'express';
-import request from 'supertest';
+import request from '../../__tests__/test-request.js';
 import { createTunnelRoutes } from './tunnel.js';
 import type { PrismaClient, Sensor } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -54,6 +54,7 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   approvedAt: null,
   approvedBy: null,
   registrationTokenId: null,
+  fingerprint: null,
   ...overrides,
 });
 

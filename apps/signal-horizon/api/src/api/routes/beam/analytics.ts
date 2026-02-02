@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler } from '../../../lib/errors.js';
 import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
 
@@ -8,14 +9,8 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
   const router = Router();
 
   // GET /api/v1/beam/analytics - Traffic analytics data
-  router.get('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     const now = new Date();
     const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);

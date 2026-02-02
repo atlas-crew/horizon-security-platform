@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
 import { ThreatQuerySchema, UUIDParamSchema } from './validation.js';
 
@@ -8,14 +9,8 @@ export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Route
   const router = Router();
 
   // GET /api/v1/beam/threats - List recent block decisions
-  router.get('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate query parameters
     const queryValidation = ThreatQuerySchema.safeParse(req.query);
@@ -78,14 +73,8 @@ export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Route
   }));
 
   // GET /api/v1/beam/threats/:id - Get block decision details
-  router.get('/:id', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/:id', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate UUID parameter
     const paramValidation = UUIDParamSchema.safeParse(req.params);

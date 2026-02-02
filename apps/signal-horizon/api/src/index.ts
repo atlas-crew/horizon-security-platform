@@ -20,6 +20,7 @@ import { Aggregator } from './services/aggregator/index.js';
 import { Correlator } from './services/correlator/index.js';
 import { Broadcaster } from './services/broadcaster/index.js';
 import { HuntService } from './services/hunt/index.js';
+import { APIIntelligenceService } from './services/api-intelligence/index.js';
 import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService } from './storage/clickhouse/index.js';
 // Fleet management services
@@ -145,6 +146,7 @@ let huntService: HuntService;
 let aggregator: Aggregator;
 let correlator: Correlator;
 let broadcaster: Broadcaster;
+let apiIntelligenceService: APIIntelligenceService;
 let sensorGateway: SensorGateway;
 let dashboardGateway: DashboardGateway;
 // Fleet management services
@@ -379,6 +381,7 @@ async function start() {
 
   // Initialize Hunt service (always available, routes to ClickHouse when enabled)
   huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
+  apiIntelligenceService = new APIIntelligenceService(prisma, logger);
 
   // Initialize protocol handlers for fleet management
   commandSender = new CommandSender();
@@ -431,6 +434,7 @@ async function start() {
     synapseProxy,
     tunnelBroker,
     warRoomService,
+    apiIntelligenceService,
   });
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
@@ -438,7 +442,15 @@ async function start() {
   // Initialize core services (pass ClickHouse for dual-write)
   broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
-  aggregator = new Aggregator(prisma, logger, correlator, config.aggregator, clickhouse ?? undefined, impossibleTravelService);
+  aggregator = new Aggregator(
+    prisma,
+    logger,
+    correlator,
+    config.aggregator,
+    clickhouse ?? undefined,
+    impossibleTravelService,
+    apiIntelligenceService
+  );
 
   // Initialize WebSocket gateways
   sensorGateway = new SensorGateway(prisma, logger, aggregator, fleetAggregator, {

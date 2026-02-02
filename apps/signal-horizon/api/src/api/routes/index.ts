@@ -41,6 +41,7 @@ import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 import type { SynapseProxyService } from '../../services/synapse-proxy.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
 import type { WarRoomService } from '../../services/warroom/index.js';
+import type { APIIntelligenceService } from '../../services/api-intelligence/index.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -52,6 +53,7 @@ export interface ApiRouterOptions {
   tunnelBroker?: TunnelBroker;
   sessionQueryService?: FleetSessionQueryService;
   warRoomService?: WarRoomService;
+  apiIntelligenceService?: APIIntelligenceService;
 }
 
 export function createApiRouter(
@@ -145,7 +147,11 @@ export function createApiRouter(
   }
 
   // Mount API Intelligence routes for endpoint discovery and schema violations
-  router.use('/api-intelligence', createAPIIntelligenceRoutes(prisma, logger));
+  router.use('/api-intelligence', createAPIIntelligenceRoutes(
+    prisma,
+    logger,
+    options.apiIntelligenceService
+  ));
   logger.info('API Intelligence routes mounted at /api/v1/api-intelligence');
 
   // Mount Fleet Control routes for remote sensor management

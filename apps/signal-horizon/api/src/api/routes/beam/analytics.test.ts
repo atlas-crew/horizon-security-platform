@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express, { Express } from 'express';
-import request from 'supertest';
+import request from '../../../__tests__/test-request.js';
 import { createAnalyticsRouter } from './analytics.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -45,7 +45,7 @@ describe('Beam Analytics Route', () => {
         const response = await request(app).get('/analytics');
 
         expect(response.status).toBe(401);
-        expect(response.body).toHaveProperty('code', 'UNAUTHORIZED');
+        expect(response.body).toHaveProperty('error', 'Not authenticated');
       });
 
       it('should return 401 with proper error message', async () => {
@@ -53,10 +53,7 @@ describe('Beam Analytics Route', () => {
 
         const response = await request(app).get('/analytics');
 
-        expect(response.body).toEqual({
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        });
+        expect(response.body).toEqual({ error: 'Not authenticated' });
       });
     });
 
@@ -64,7 +61,7 @@ describe('Beam Analytics Route', () => {
       beforeEach(() => {
         // Simulate authenticated request
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant-123' };
+          (req as any).auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));
@@ -149,7 +146,7 @@ describe('Beam Analytics Route', () => {
     describe('With Block Decisions', () => {
       beforeEach(() => {
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant-123' };
+          (req as any).auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));
@@ -216,7 +213,7 @@ describe('Beam Analytics Route', () => {
     describe('Response Content-Type', () => {
       beforeEach(() => {
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant' };
+          (req as any).auth = { tenantId: 'test-tenant', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));

@@ -9,7 +9,7 @@
  * - Discovery statistics and trends
  */
 
-import type { PrismaClient, SignalType } from '@prisma/client';
+import type { Prisma, PrismaClient, SignalType } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'events';
 import type {
@@ -28,6 +28,19 @@ export interface APIIntelligenceEvents {
   signal: { signal: APIIntelligenceSignal; tenantId: string };
   endpointDiscovered: { templatePattern: string; method: string; tenantId: string };
   schemaViolation: { endpoint: string; violationType: string; tenantId: string };
+}
+
+interface DiscoverySignalContext {
+  tenantId: string;
+  sensorId: string;
+  signalType: 'TEMPLATE_DISCOVERY' | 'SCHEMA_VIOLATION';
+  metadata?: Record<string, unknown>;
+}
+
+interface DiscoverySignalOptions {
+  signalId?: string;
+  swallowErrors?: boolean;
+  emitEvents?: boolean;
 }
 
 // =============================================================================
@@ -113,41 +126,16 @@ export class APIIntelligenceService extends EventEmitter {
       throw new Error('TEMPLATE_DISCOVERY requires templatePattern');
     }
 
-    // Check if this endpoint already exists using the Endpoint model
-    const existingEndpoint = await this.prisma.endpoint.findFirst({
-      where: {
+    const result = await this.processDiscoverySignal(
+      {
         tenantId,
-        pathTemplate: signal.templatePattern,
-        method: signal.method,
-      },
-    });
+        sensorId: signal.sensorId,
+        signalType: 'TEMPLATE_DISCOVERY',
+        metadata: this.buildMetadataFromSignal(signal),
+      }
+    );
 
-    if (existingEndpoint) {
-      // Update existing endpoint
-      await this.prisma.endpoint.update({
-        where: { id: existingEndpoint.id },
-        data: {
-          lastSeenAt: new Date(),
-          requestCount: { increment: 1 },
-        },
-      });
-    } else {
-      // Create new endpoint discovery - need a sensorId
-      await this.prisma.endpoint.create({
-        data: {
-          tenantId,
-          sensorId: signal.sensorId,
-          method: signal.method,
-          path: signal.endpoint,
-          pathTemplate: signal.templatePattern,
-          service: 'discovered',
-          requestCount: 1,
-          metadata: signal.parameterTypes
-            ? { parameterTypes: signal.parameterTypes }
-            : undefined,
-        },
-      });
-
+    if (result?.created) {
       // Emit endpoint discovered event
       this.emit('endpointDiscovered', {
         templatePattern: signal.templatePattern,
@@ -176,6 +164,13 @@ export class APIIntelligenceService extends EventEmitter {
     signal: APIIntelligenceSignal,
     tenantId: string
   ): Promise<void> {
+    await this.processDiscoverySignal({
+      tenantId,
+      sensorId: signal.sensorId,
+      signalType: 'SCHEMA_VIOLATION',
+      metadata: this.buildMetadataFromSignal(signal),
+    });
+
     // Store the violation signal
     await this.storeSignal(signal, tenantId);
 
@@ -222,6 +217,206 @@ export class APIIntelligenceService extends EventEmitter {
         },
       },
     });
+  }
+
+  // ===========================================================================
+  // Discovery Processing
+  // ===========================================================================
+
+  async processDiscoverySignal(
+    context: DiscoverySignalContext,
+    options: DiscoverySignalOptions = {}
+  ): Promise<{ created: boolean; endpointId: string } | null> {
+    try {
+      const metadata = context.metadata ?? {};
+      const { endpointId, created } = await this.upsertEndpointFromMetadata(
+        context.tenantId,
+        context.sensorId,
+        metadata
+      );
+
+      if (context.signalType === 'SCHEMA_VIOLATION') {
+        await this.recordSchemaViolation(endpointId, context.tenantId, metadata);
+      }
+
+      if (options.emitEvents) {
+        const eventSignal = this.buildEventSignal(context, metadata);
+        this.emit('signal', { signal: eventSignal, tenantId: context.tenantId });
+
+        if (created && eventSignal.templatePattern) {
+          this.emit('endpointDiscovered', {
+            templatePattern: eventSignal.templatePattern,
+            method: eventSignal.method,
+            tenantId: context.tenantId,
+          });
+        }
+
+        if (context.signalType === 'SCHEMA_VIOLATION') {
+          this.emit('schemaViolation', {
+            endpoint: eventSignal.endpoint,
+            violationType: eventSignal.violationType ?? 'unknown',
+            tenantId: context.tenantId,
+          });
+        }
+      }
+
+      return { created, endpointId };
+    } catch (error) {
+      this.logger.error(
+        { error, signalId: options.signalId, signalType: context.signalType },
+        'Failed to process discovery signal'
+      );
+      if (options.swallowErrors) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private buildMetadataFromSignal(signal: APIIntelligenceSignal): Record<string, unknown> {
+    return {
+      method: signal.method,
+      template: signal.templatePattern ?? signal.endpoint,
+      path: signal.endpoint,
+      service: 'discovered',
+      schema: signal.expectedSchema,
+      parameters: signal.parameterTypes,
+      field: signal.violationPath,
+      violationType: signal.violationType,
+      expectedType: this.coerceString(signal.expectedSchema),
+      receivedType: this.coerceString(signal.actualPayload),
+    };
+  }
+
+  private buildEventSignal(
+    context: DiscoverySignalContext,
+    metadata: Record<string, unknown>
+  ): APIIntelligenceSignal {
+    const method = typeof metadata.method === 'string' ? metadata.method.toUpperCase() : 'GET';
+    const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+    const normalizedMethod = allowedMethods.has(method) ? method : 'GET';
+    const templatePattern = typeof metadata.template === 'string' && metadata.template.length > 0
+      ? metadata.template
+      : undefined;
+    const endpoint = typeof metadata.path === 'string' && metadata.path.length > 0
+      ? metadata.path
+      : templatePattern ?? 'unknown';
+    const violationType = typeof metadata.violationType === 'string'
+      ? metadata.violationType
+      : undefined;
+    const violationPath = typeof metadata.field === 'string' ? metadata.field : undefined;
+
+    return {
+      type: context.signalType,
+      sensorId: context.sensorId,
+      timestamp: new Date().toISOString(),
+      endpoint,
+      method: normalizedMethod as APIIntelligenceSignal['method'],
+      templatePattern,
+      violationType,
+      violationPath,
+    };
+  }
+
+  private async upsertEndpointFromMetadata(
+    tenantId: string,
+    sensorId: string,
+    metadata: Record<string, unknown>
+  ): Promise<{ endpointId: string; created: boolean }> {
+    const method = typeof metadata.method === 'string' && metadata.method.length > 0
+      ? metadata.method
+      : 'UNKNOWN';
+    const template = typeof metadata.template === 'string' && metadata.template.length > 0
+      ? metadata.template
+      : undefined;
+    const path = typeof metadata.path === 'string' && metadata.path.length > 0
+      ? metadata.path
+      : undefined;
+    const pathTemplate = template ?? path ?? 'unknown';
+    const service = typeof metadata.service === 'string' && metadata.service.length > 0
+      ? metadata.service
+      : 'default';
+    const schema = metadata.schema;
+    const tags = Array.isArray(metadata.tags) ? metadata.tags : [];
+    const parameters = metadata.parameters;
+
+    const existingEndpoint = await this.prisma.endpoint.findFirst({
+      where: {
+        tenantId,
+        sensorId,
+        method,
+        pathTemplate,
+      },
+    });
+
+    if (existingEndpoint) {
+      const updated = await this.prisma.endpoint.update({
+        where: { id: existingEndpoint.id },
+        data: {
+          lastSeenAt: new Date(),
+          requestCount: { increment: 1 },
+          hasSchema: schema ? true : undefined,
+        },
+      });
+
+      return { endpointId: updated.id, created: false };
+    }
+
+    const created = await this.prisma.endpoint.create({
+      data: {
+        tenantId,
+        sensorId,
+        method,
+        path: path ?? pathTemplate,
+        pathTemplate,
+        service,
+        firstSeenAt: new Date(),
+        lastSeenAt: new Date(),
+        requestCount: 1,
+        hasSchema: !!schema,
+        requestSchema: schema ? (schema as Prisma.InputJsonValue) : undefined,
+        metadata: {
+          tags,
+          parameters,
+        },
+      },
+    });
+
+    return { endpointId: created.id, created: true };
+  }
+
+  private async recordSchemaViolation(
+    endpointId: string,
+    tenantId: string,
+    metadata: Record<string, unknown>
+  ): Promise<void> {
+    const field = typeof metadata.field === 'string' && metadata.field.length > 0
+      ? metadata.field
+      : 'unknown';
+
+    await this.prisma.endpointSchemaChange.create({
+      data: {
+        endpointId,
+        tenantId,
+        changeType: 'violation',
+        field,
+        oldValue: this.coerceString(metadata.expectedType),
+        newValue: this.coerceString(metadata.receivedType),
+        riskLevel: 'medium',
+        detectedAt: new Date(),
+      },
+    });
+  }
+
+  private coerceString(value: unknown): string | null {
+    if (value == null) return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
   }
 
   // ===========================================================================

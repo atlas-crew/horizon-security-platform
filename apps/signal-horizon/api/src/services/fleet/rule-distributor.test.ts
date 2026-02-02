@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { RuleDistributor, TenantIsolationError } from './rule-distributor.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -79,9 +80,9 @@ const createMockLogger = () =>
 
 // Mock FleetCommander
 const createMockFleetCommander = () =>
-  ({
+  Object.assign(new EventEmitter(), {
     sendCommand: vi.fn().mockResolvedValue('cmd-123'),
-    sendCommandToMultiple: vi.fn().mockImplementation((sensorIds: string[]) =>
+    sendCommandToMultiple: vi.fn().mockImplementation((_tenantId: string, sensorIds: string[]) =>
       Promise.resolve(sensorIds.map((_, i) => `cmd-${i}`))
     ),
     broadcastCommand: vi.fn().mockResolvedValue(['cmd-broadcast-1', 'cmd-broadcast-2']),
@@ -754,8 +755,8 @@ describe('RuleDistributor', () => {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through staging poll loop
-      for (let i = 0; i < 6; i++) {
+      // Advance through staging poll loop (enough to cover 1s poll interval)
+      for (let i = 0; i < 3; i++) {
         await vi.advanceTimersByTimeAsync(500);
         await Promise.resolve();
       }
@@ -764,8 +765,8 @@ describe('RuleDistributor', () => {
         distributor.updateSensorActivationStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through switch poll loop
-      for (let i = 0; i < 4; i++) {
+      // Advance through switch poll loop (enough to cover 1s poll interval)
+      for (let i = 0; i < 3; i++) {
         await vi.advanceTimersByTimeAsync(500);
         await Promise.resolve();
       }
@@ -816,8 +817,8 @@ describe('RuleDistributor', () => {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through staging poll loop
-      for (let i = 0; i < 6; i++) {
+      // Advance through staging poll loop (enough to cover 1s poll interval)
+      for (let i = 0; i < 3; i++) {
         await vi.advanceTimersByTimeAsync(500);
         await Promise.resolve();
       }
@@ -826,8 +827,8 @@ describe('RuleDistributor', () => {
         distributor.updateSensorActivationStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through switch poll loop
-      for (let i = 0; i < 4; i++) {
+      // Advance through switch poll loop (enough to cover 1s poll interval)
+      for (let i = 0; i < 3; i++) {
         await vi.advanceTimersByTimeAsync(500);
         await Promise.resolve();
       }
@@ -1129,6 +1130,7 @@ describe('RuleDistributor', () => {
       expect(result.totalTargets).toBe(3);
       expect(result.pendingCount).toBe(3);
       expect(mockFleetCommander.sendCommandToMultiple).toHaveBeenCalledWith(
+        TEST_TENANT_ID,
         sensorIds,
         expect.objectContaining({
           type: 'push_rules',
@@ -2150,6 +2152,7 @@ describe('RuleDistributor', () => {
       expect(result.pendingCount).toBe(1);
       expect(mockPrisma.ruleSyncState.update).toHaveBeenCalledTimes(2);
       expect(mockFleetCommander.sendCommand).toHaveBeenCalledWith(
+        TEST_TENANT_ID,
         'sensor-1',
         expect.objectContaining({
           type: 'push_rules',

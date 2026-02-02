@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
 import { CreateRuleSchema, UUIDParamSchema } from './validation.js';
 
@@ -8,14 +9,8 @@ export function createRulesRouter(prisma: PrismaClient, logger: Logger): Router 
   const router = Router();
 
   // GET /api/v1/beam/rules - List all customer rules
-  router.get('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/', requireScope('rules:read', 'dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     const rules = await prisma.customerRule.findMany({
       where: { tenantId },
@@ -33,14 +28,8 @@ export function createRulesRouter(prisma: PrismaClient, logger: Logger): Router 
   }));
 
   // GET /api/v1/beam/rules/:id - Get rule details
-  router.get('/:id', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/:id', requireScope('rules:read', 'dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate UUID parameter
     const paramValidation = UUIDParamSchema.safeParse(req.params);
@@ -88,14 +77,8 @@ export function createRulesRouter(prisma: PrismaClient, logger: Logger): Router 
   }));
 
   // POST /api/v1/beam/rules - Create a new rule
-  router.post('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.post('/', requireScope('rules:write'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     // Validate request body
     const bodyValidation = CreateRuleSchema.safeParse(req.body);

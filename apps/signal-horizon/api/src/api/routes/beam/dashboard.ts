@@ -1,19 +1,14 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler } from '../../../lib/errors.js';
 
 export function createDashboardRouter(prisma: PrismaClient, logger: Logger): Router {
   const router = Router();
 
-  router.get('/', asyncHandler(async (req, res) => {
-    const tenantId = (req as any).auth?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({
-        code: 'UNAUTHORIZED',
-        message: 'Authentication required',
-      });
-    }
+  router.get('/', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
+    const tenantId = req.auth!.tenantId;
 
     const [endpointCount, ruleCount, activeRuleCount, blockCount] = await Promise.all([
       prisma.endpoint.count({ where: { tenantId } }),

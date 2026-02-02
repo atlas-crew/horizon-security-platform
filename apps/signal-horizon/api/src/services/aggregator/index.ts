@@ -7,6 +7,7 @@ import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
 import type { ImpossibleTravelService } from '../impossible-travel.js';
+import type { APIIntelligenceService } from '../api-intelligence/index.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 
@@ -47,6 +48,7 @@ export class Aggregator {
   private correlator: Correlator;
   private impossibleTravel: ImpossibleTravelService | null;
   private clickhouse: ClickHouseService | null;
+  private apiIntelligence: APIIntelligenceService | null;
   private config: Required<AggregatorConfig>;
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
@@ -60,13 +62,15 @@ export class Aggregator {
     correlator: Correlator,
     config: AggregatorConfig,
     clickhouse?: ClickHouseService,
-    impossibleTravel?: ImpossibleTravelService
+    impossibleTravel?: ImpossibleTravelService,
+    apiIntelligenceService?: APIIntelligenceService
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
     this.correlator = correlator;
     this.clickhouse = clickhouse ?? null;
     this.impossibleTravel = impossibleTravel ?? null;
+    this.apiIntelligence = apiIntelligenceService ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
@@ -304,7 +308,15 @@ export class Aggregator {
 
     // 4. Persist API Discovery signals to Endpoint model
     if (signal.signalType === 'TEMPLATE_DISCOVERY' || signal.signalType === 'SCHEMA_VIOLATION') {
-      void this.processDiscoverySignal(signal, stored.id);
+      void this.apiIntelligence?.processDiscoverySignal(
+        {
+          tenantId: signal.tenantId,
+          sensorId: signal.sensorId,
+          signalType: signal.signalType,
+          metadata: signal.metadata ?? {},
+        },
+        { signalId: stored.id, swallowErrors: true, emitEvents: true }
+      );
     }
 
     return {
@@ -312,73 +324,6 @@ export class Aggregator {
       anonFingerprint,
       id: stored.id,
     };
-  }
-
-  /**
-   * Process API Discovery signals to maintain Endpoint inventory
-   */
-  private async processDiscoverySignal(signal: IncomingSignal, signalId: string): Promise<void> {
-    try {
-      const metadata = signal.metadata as Record<string, any>;
-      const method = metadata.method || 'UNKNOWN';
-      const pathTemplate = metadata.template || metadata.path || 'unknown';
-      const service = metadata.service || 'default';
-      
-      // Upsert Endpoint record
-      const endpoint = await this.prisma.endpoint.upsert({
-        where: {
-          tenantId_sensorId_method_pathTemplate: {
-            tenantId: signal.tenantId,
-            sensorId: signal.sensorId,
-            method,
-            pathTemplate,
-          },
-        },
-        create: {
-          tenantId: signal.tenantId,
-          sensorId: signal.sensorId,
-          method,
-          path: metadata.path || pathTemplate,
-          pathTemplate,
-          service,
-          firstSeenAt: new Date(),
-          lastSeenAt: new Date(),
-          requestCount: 1,
-          hasSchema: !!metadata.schema,
-          requestSchema: metadata.schema ? (metadata.schema as Prisma.InputJsonValue) : undefined,
-          metadata: {
-            tags: metadata.tags || [],
-            parameters: metadata.parameters,
-          },
-        },
-        update: {
-          lastSeenAt: new Date(),
-          requestCount: { increment: 1 },
-          hasSchema: !!metadata.schema || undefined, // Only update if true
-        },
-      });
-
-      // Record schema violation if applicable
-      if (signal.signalType === 'SCHEMA_VIOLATION') {
-        await this.prisma.endpointSchemaChange.create({
-          data: {
-            endpointId: endpoint.id,
-            tenantId: signal.tenantId,
-            changeType: 'violation',
-            field: metadata.field || 'unknown',
-            oldValue: metadata.expectedType || null,
-            newValue: metadata.receivedType || null,
-            riskLevel: 'medium',
-            detectedAt: new Date(),
-          },
-        });
-      }
-    } catch (error) {
-      this.logger.error(
-        { error, signalId, signalType: signal.signalType },
-        'Failed to process discovery signal'
-      );
-    }
   }
 
   /**

@@ -616,11 +616,96 @@ impl ConfigManager {
     pub fn update_full_config(&self, new_config: ConfigFile) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();
 
-        // Validate the new configuration
-        // TODO: Add comprehensive validation logic here
+        // Validate the new configuration comprehensively
         if new_config.sites.is_empty() {
              // It's allowed to have no sites, but worth a warning
              result.add_warning("Configuration has no sites defined");
+        }
+
+        // Validate each site in the configuration
+        let mut seen_hostnames: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (idx, site) in new_config.sites.iter().enumerate() {
+            // Validate hostname
+            if let Err(e) = validate_hostname(&site.hostname) {
+                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                    "Site[{}] hostname '{}': {}",
+                    idx, site.hostname, e
+                ))));
+            }
+
+            // Check for duplicate hostnames
+            let normalized = site.hostname.to_lowercase();
+            if seen_hostnames.contains(&normalized) {
+                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                    "Site[{}] hostname '{}' is duplicated",
+                    idx, site.hostname
+                ))));
+            }
+            seen_hostnames.insert(normalized);
+
+            // Validate upstreams
+            if site.upstreams.is_empty() {
+                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                    "Site[{}] '{}' has no upstreams defined",
+                    idx, site.hostname
+                ))));
+            }
+            for (u_idx, upstream) in site.upstreams.iter().enumerate() {
+                // UpstreamConfig has host/port fields - format as host:port for validation
+                let upstream_str = format!("{}:{}", upstream.host, upstream.port);
+                if let Err(e) = validate_upstream(&upstream_str) {
+                    return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                        "Site[{}] '{}' upstream[{}] '{}:{}': {}",
+                        idx, site.hostname, u_idx, upstream.host, upstream.port, e
+                    ))));
+                }
+            }
+
+            // Validate WAF threshold if present
+            if let Some(ref waf) = site.waf {
+                if let Some(threshold) = waf.threshold {
+                    // threshold is u8 (0-255), validate_waf_threshold expects f64 (0-100)
+                    if let Err(e) = validate_waf_threshold(threshold as f64) {
+                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                            "Site[{}] '{}' WAF threshold: {}",
+                            idx, site.hostname, e
+                        ))));
+                    }
+                }
+            }
+
+            // Validate rate limit if present
+            if let Some(ref rl) = site.rate_limit {
+                // RateLimitConfig has rps: u32, burst: Option<u32>
+                // validate_rate_limit expects (requests: u64, window: u64)
+                let burst = rl.burst.unwrap_or(rl.rps.saturating_mul(2));
+                if let Err(e) = validate_rate_limit(rl.rps as u64, burst as u64) {
+                    return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                        "Site[{}] '{}' rate limit: {}",
+                        idx, site.hostname, e
+                    ))));
+                }
+            }
+
+            // Validate access control CIDRs if present
+            if let Some(ref ac) = site.access_control {
+                for (c_idx, cidr) in ac.allow.iter().enumerate() {
+                    if let Err(e) = validate_cidr(cidr) {
+                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                            "Site[{}] '{}' access_control.allow[{}] '{}': {}",
+                            idx, site.hostname, c_idx, cidr, e
+                        ))));
+                    }
+                }
+                for (c_idx, cidr) in ac.deny.iter().enumerate() {
+                    if let Err(e) = validate_cidr(cidr) {
+                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
+                            "Site[{}] '{}' access_control.deny[{}] '{}': {}",
+                            idx, site.hostname, c_idx, cidr, e
+                        ))));
+                    }
+                }
+            }
         }
 
         // Apply changes atomically

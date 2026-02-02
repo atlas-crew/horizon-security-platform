@@ -3706,97 +3706,171 @@ fn run_config_check(file: &str, json_output: bool) {
         std::process::exit(1);
     }
 
-    // Try to load and validate config
-    match Config::load(file) {
-        Ok(config) => {
-            result.valid = true;
+    let contents = match fs::read_to_string(file) {
+        Ok(contents) => contents,
+        Err(e) => {
+            result.errors.push(format!("Failed to read config file: {}", e));
+            output_validation_result(&result, json_output);
+            std::process::exit(1);
+        }
+    };
 
-            // Validate server listen addresses
-            if config.server.listen.parse::<SocketAddr>().is_err() {
-                result.errors.push(format!(
-                    "Server listen address is invalid: {}",
-                    config.server.listen
-                ));
-                result.valid = false;
-            }
-            if config.server.admin_listen.parse::<SocketAddr>().is_err() {
-                result.errors.push(format!(
-                    "Admin listen address is invalid: {}",
-                    config.server.admin_listen
-                ));
-                result.valid = false;
-            }
+    let yaml_value: serde_yaml::Value = match serde_yaml::from_str(&contents) {
+        Ok(value) => value,
+        Err(e) => {
+            result
+                .errors
+                .push(format!("Failed to parse config file: {}", e));
+            output_validation_result(&result, json_output);
+            std::process::exit(1);
+        }
+    };
 
-            // Validate trusted proxies CIDR format
-            for (idx, proxy) in config.server.trusted_proxies.iter().enumerate() {
-                if proxy.parse::<CidrRange>().is_err() {
+    let is_multisite = yaml_value
+        .as_mapping()
+        .map(|mapping| mapping.contains_key(&serde_yaml::Value::String("sites".to_string())))
+        .unwrap_or(false);
+
+    // Try to load and validate config (multi-site or legacy)
+    if is_multisite {
+        match ConfigLoader::load(file) {
+            Ok(config_file) => {
+                result.valid = true;
+                result.sites = Some(config_file.sites.len());
+
+                if config_file.sites.is_empty() {
+                    result
+                        .errors
+                        .push("No sites configured in multi-site config".to_string());
+                    result.valid = false;
+                }
+
+                if config_file.server.http_addr.parse::<SocketAddr>().is_err() {
                     result.errors.push(format!(
-                        "Trusted proxy #{} has invalid CIDR format: {}",
-                        idx + 1, proxy
+                        "Server HTTP listen address is invalid: {}",
+                        config_file.server.http_addr
+                    ));
+                    result.valid = false;
+                }
+
+                if config_file.server.https_addr.parse::<SocketAddr>().is_err() {
+                    result.errors.push(format!(
+                        "Server HTTPS listen address is invalid: {}",
+                        config_file.server.https_addr
                     ));
                     result.valid = false;
                 }
             }
+            Err(e) => {
+                result.errors.push(format!("Configuration error: {}", e));
+            }
+        }
+    } else {
+        match Config::load(file) {
+            Ok(config) => {
+                result.valid = true;
 
-            // Validate WAF rules if path is provided
-            let rules_path = &config.detection.rules_path;
-            if Path::new(rules_path).exists() {
-                match fs::read(rules_path) {
-                    Ok(rules_json) => {
-                        let mut engine = synapse_pingora::waf::Engine::empty();
-                        match engine.load_rules(&rules_json) {
-                            Ok(count) => {
-                                info!("Validated {} WAF rules from {}", count, rules_path);
-                            }
-                            Err(e) => {
-                                result.errors.push(format!(
-                                    "WAF rules validation failed for {}: {}",
-                                    rules_path, e
-                                ));
-                                result.valid = false;
-                            }
-                        }
-                    }
-                    Err(e) => {
+                // Validate server listen addresses
+                if config.server.listen.parse::<SocketAddr>().is_err() {
+                    result.errors.push(format!(
+                        "Server listen address is invalid: {}",
+                        config.server.listen
+                    ));
+                    result.valid = false;
+                }
+                if config.server.admin_listen.parse::<SocketAddr>().is_err() {
+                    result.errors.push(format!(
+                        "Admin listen address is invalid: {}",
+                        config.server.admin_listen
+                    ));
+                    result.valid = false;
+                }
+
+                // Validate trusted proxies CIDR format
+                for (idx, proxy) in config.server.trusted_proxies.iter().enumerate() {
+                    if proxy.parse::<CidrRange>().is_err() {
                         result.errors.push(format!(
-                            "Failed to read WAF rules file {}: {}",
-                            rules_path, e
+                            "Trusted proxy #{} has invalid CIDR format: {}",
+                            idx + 1,
+                            proxy
                         ));
                         result.valid = false;
                     }
                 }
-            } else if rules_path != "data/rules.json" {
-                // Only warn if non-default path is missing
-                result.warnings.push(format!(
-                    "WAF rules file not found: {}",
-                    rules_path
-                ));
-            }
 
-            // Additional validation checks
-            if config.upstreams.is_empty() {
-                result.errors.push("No upstream backends configured".to_string());
-                result.valid = false;
-            }
-
-            // Check TLS cert files exist if TLS is configured
-            if config.tls.enabled {
-                if !Path::new(&config.tls.cert_path).exists() {
+                // Validate WAF rules if path is provided
+                let rules_path = &config.detection.rules_path;
+                if Path::new(rules_path).exists() {
+                    match fs::read(rules_path) {
+                        Ok(rules_json) => {
+                            let mut engine = synapse_pingora::waf::Engine::empty();
+                            match engine.load_rules(&rules_json) {
+                                Ok(count) => {
+                                    info!("Validated {} WAF rules from {}", count, rules_path);
+                                }
+                                Err(e) => {
+                                    result.errors.push(format!(
+                                        "WAF rules validation failed for {}: {}",
+                                        rules_path, e
+                                    ));
+                                    result.valid = false;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            result.errors.push(format!(
+                                "Failed to read WAF rules file {}: {}",
+                                rules_path, e
+                            ));
+                            result.valid = false;
+                        }
+                    }
+                } else if rules_path != "data/rules.json" {
+                    // Only warn if non-default path is missing
                     result.warnings.push(format!(
-                        "TLS cert file not found: {}",
-                        config.tls.cert_path
+                        "WAF rules file not found: {}",
+                        rules_path
                     ));
                 }
-                if !Path::new(&config.tls.key_path).exists() {
-                    result.warnings.push(format!(
-                        "TLS key file not found: {}",
-                        config.tls.key_path
-                    ));
+
+                // Additional validation checks
+                if config.upstreams.is_empty() {
+                    result.errors.push("No upstream backends configured".to_string());
+                    result.valid = false;
+                }
+
+                // Check TLS cert files exist if TLS is configured
+                if config.tls.enabled {
+                    if config.tls.cert_path.trim().is_empty() {
+                        result
+                            .errors
+                            .push("TLS cert path is empty while TLS is enabled".to_string());
+                        result.valid = false;
+                    } else if !Path::new(&config.tls.cert_path).exists() {
+                        result.errors.push(format!(
+                            "TLS cert file not found: {}",
+                            config.tls.cert_path
+                        ));
+                        result.valid = false;
+                    }
+
+                    if config.tls.key_path.trim().is_empty() {
+                        result
+                            .errors
+                            .push("TLS key path is empty while TLS is enabled".to_string());
+                        result.valid = false;
+                    } else if !Path::new(&config.tls.key_path).exists() {
+                        result.errors.push(format!(
+                            "TLS key file not found: {}",
+                            config.tls.key_path
+                        ));
+                        result.valid = false;
+                    }
                 }
             }
-        }
-        Err(e) => {
-            result.errors.push(format!("Configuration error: {}", e));
+            Err(e) => {
+                result.errors.push(format!("Configuration error: {}", e));
+            }
         }
     }
 

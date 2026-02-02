@@ -99,67 +99,133 @@ impl TokenBucket {
     }
 
     /// Tries to acquire a token, returning true if successful.
+    ///
+    /// Uses atomic CAS loop with proper memory ordering to prevent race conditions.
     pub fn try_acquire(&self) -> bool {
+        // First refill based on elapsed time
         self.refill();
 
+        // CAS loop to atomically decrement tokens
         loop {
-            let current = self.tokens.load(Ordering::Relaxed);
+            // Acquire ordering ensures we see all previous writes
+            let current = self.tokens.load(Ordering::Acquire);
             if current == 0 {
                 return false;
             }
-            if self.tokens.compare_exchange_weak(
+
+            // AcqRel ordering on success ensures the decrement is visible to other threads
+            // and that we see their updates
+            match self.tokens.compare_exchange_weak(
                 current,
                 current - 1,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ).is_ok() {
-                return true;
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return true,
+                Err(_) => {
+                    // CAS failed, retry with fresh value
+                    // Use core::hint::spin_loop to hint CPU we're in a spin loop
+                    core::hint::spin_loop();
+                    continue;
+                }
             }
         }
     }
 
     /// Refills tokens based on elapsed time.
+    ///
+    /// SECURITY: Uses atomic CAS operations to prevent race conditions that could
+    /// allow burst bypass. The timestamp and token updates are coordinated to ensure
+    /// only one thread adds tokens for any given time period.
     fn refill(&self) {
         let now_nanos = self.start_time.elapsed().as_nanos() as u64;
-        let last = self.last_refill.load(Ordering::Relaxed);
 
-        if now_nanos <= last {
-            return;
-        }
+        // Retry loop for the entire refill operation to handle concurrent access
+        loop {
+            // Acquire ordering ensures we see the latest timestamp
+            let last = self.last_refill.load(Ordering::Acquire);
 
-        let elapsed_nanos = now_nanos - last;
-        let elapsed_secs = elapsed_nanos as f64 / 1_000_000_000.0;
-        let tokens_to_add = (elapsed_secs * self.refill_rate as f64) as u64;
+            // No time has passed or time went backwards (shouldn't happen with Instant)
+            if now_nanos <= last {
+                return;
+            }
 
-        if tokens_to_add > 0 {
-            // Try to update last_refill
-            if self.last_refill.compare_exchange_weak(
+            let elapsed_nanos = now_nanos - last;
+            // Only refill if meaningful time has passed (at least 1 microsecond)
+            if elapsed_nanos < 1000 {
+                return;
+            }
+
+            let elapsed_secs = elapsed_nanos as f64 / 1_000_000_000.0;
+            let tokens_to_add = (elapsed_secs * self.refill_rate as f64) as u64;
+
+            if tokens_to_add == 0 {
+                return;
+            }
+
+            // Atomically claim this time window by updating last_refill
+            // If another thread updated it, we'll retry with the new value
+            match self.last_refill.compare_exchange(
                 last,
                 now_nanos,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ).is_ok() {
-                // Add tokens up to max
-                loop {
-                    let current = self.tokens.load(Ordering::Relaxed);
-                    let new_tokens = (current + tokens_to_add).min(self.max_tokens);
-                    if self.tokens.compare_exchange_weak(
-                        current,
-                        new_tokens,
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    ).is_ok() {
-                        break;
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    // We won the race to claim this time window
+                    // Now atomically add the tokens
+                    self.add_tokens(tokens_to_add);
+                    return;
+                }
+                Err(actual) => {
+                    // Another thread claimed this time window
+                    // If the actual value is >= now_nanos, no need to retry
+                    if actual >= now_nanos {
+                        return;
                     }
+                    // Otherwise, there may be more time to claim, retry
+                    core::hint::spin_loop();
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// Atomically adds tokens up to the maximum capacity.
+    ///
+    /// Uses a CAS loop to ensure thread-safe token addition without races.
+    #[inline]
+    fn add_tokens(&self, tokens_to_add: u64) {
+        loop {
+            let current = self.tokens.load(Ordering::Acquire);
+            let new_tokens = (current.saturating_add(tokens_to_add)).min(self.max_tokens);
+
+            // If we're already at max, nothing to do
+            if new_tokens == current {
+                return;
+            }
+
+            match self.tokens.compare_exchange_weak(
+                current,
+                new_tokens,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(_) => {
+                    core::hint::spin_loop();
+                    continue;
                 }
             }
         }
     }
 
     /// Returns the current number of available tokens.
+    ///
+    /// Performs a refill first to ensure the count is up-to-date.
     pub fn available_tokens(&self) -> u64 {
         self.refill();
-        self.tokens.load(Ordering::Relaxed)
+        self.tokens.load(Ordering::Acquire)
     }
 }
 
@@ -507,5 +573,99 @@ mod tests {
     fn test_available_tokens() {
         let bucket = TokenBucket::new(100, 50);
         assert_eq!(bucket.available_tokens(), 50); // Starts at burst capacity
+    }
+
+    /// Concurrent stress test to verify no race condition in token bucket.
+    ///
+    /// SECURITY TEST: Verifies that under high concurrent load, the token bucket
+    /// doesn't allow more requests than the burst capacity (which would indicate
+    /// a race condition allowing burst bypass).
+    #[test]
+    fn test_concurrent_token_bucket_no_burst_bypass() {
+        use std::sync::atomic::AtomicUsize;
+
+        let bucket = Arc::new(TokenBucket::new(10, 100)); // 10 RPS, 100 burst
+        let successful_acquires = Arc::new(AtomicUsize::new(0));
+
+        // Spawn multiple threads to hammer the bucket concurrently
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let bucket = Arc::clone(&bucket);
+                let counter = Arc::clone(&successful_acquires);
+
+                thread::spawn(move || {
+                    for _ in 0..50 {
+                        if bucket.try_acquire() {
+                            counter.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        // Wait for all threads
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let total = successful_acquires.load(Ordering::Relaxed);
+
+        // Should never exceed burst capacity (100).
+        // With the race condition fix, this should be exactly 100.
+        // Before the fix, it could be 110-120 (10-20% bypass).
+        assert!(
+            total <= 100,
+            "Race condition detected! Got {} successful acquires, expected <= 100",
+            total
+        );
+
+        // Should get close to the burst capacity
+        assert!(
+            total >= 95,
+            "Token bucket may have performance issue: only {} acquires, expected ~100",
+            total
+        );
+    }
+
+    /// Test concurrent refill doesn't double-add tokens.
+    #[test]
+    fn test_concurrent_refill_no_double_add() {
+        let bucket = Arc::new(TokenBucket::new(1000, 10)); // 1000 RPS, 10 burst
+
+        // Drain the bucket
+        for _ in 0..10 {
+            bucket.try_acquire();
+        }
+
+        // Wait a bit for refill opportunity
+        thread::sleep(Duration::from_millis(50)); // Should add ~50 tokens worth
+
+        let tokens_before = bucket.available_tokens();
+
+        // Spawn threads to trigger concurrent refills
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let bucket = Arc::clone(&bucket);
+                thread::spawn(move || {
+                    // Just read available_tokens which triggers refill
+                    bucket.available_tokens()
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let tokens_after = bucket.available_tokens();
+
+        // Tokens should not have increased dramatically due to race
+        // (at most a few more tokens from the small time elapsed)
+        assert!(
+            tokens_after <= tokens_before + 10,
+            "Possible double-add race: before={}, after={}",
+            tokens_before,
+            tokens_after
+        );
     }
 }

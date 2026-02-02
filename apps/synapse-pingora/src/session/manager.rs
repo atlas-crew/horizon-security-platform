@@ -354,58 +354,105 @@ impl SessionManager {
         // Check capacity and evict if needed
         self.maybe_evict();
 
-        // Try to get existing session
-        if let Some(mut entry) = self.sessions.get_mut(token_hash) {
-            let session = entry.value_mut();
+        // Use entry API for atomic check-and-modify to prevent TOCTOU races
+        // This ensures the session state is consistent throughout the operation
+        match self.sessions.entry(token_hash.to_string()) {
+            dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+                let session = entry.get_mut();
 
-            // Check expiration
-            if self.is_session_expired(session) {
-                // Remove expired session
-                drop(entry);
-                self.remove_session(token_hash);
-                self.stats.expired_sessions.fetch_add(1, Ordering::Relaxed);
-                return SessionDecision::Expired;
-            }
+                // Check expiration - if expired, remove atomically while holding the lock
+                if self.is_session_expired(session) {
+                    let session_id = session.session_id.clone();
+                    let actor_id = session.actor_id.clone();
+                    let was_suspicious = session.is_suspicious;
 
-            // Check for hijacking
-            if let Some(alert) = self.detect_hijack(session, ip, ja4) {
-                session.add_alert(alert.clone());
+                    // Remove from primary store (still holding entry lock)
+                    entry.remove();
+
+                    // Clean up secondary indices
+                    self.session_by_id.remove(&session_id);
+                    if let Some(aid) = actor_id {
+                        if let Some(mut actor_entry) = self.actor_sessions.get_mut(&aid) {
+                            actor_entry.retain(|id| id != &session_id);
+                        }
+                    }
+
+                    // Update stats
+                    self.stats.total_sessions.fetch_sub(1, Ordering::Relaxed);
+                    self.stats.active_sessions.fetch_sub(1, Ordering::Relaxed);
+                    self.stats.expired_sessions.fetch_add(1, Ordering::Relaxed);
+                    if was_suspicious {
+                        self.stats.suspicious_sessions.fetch_sub(1, Ordering::Relaxed);
+                    }
+
+                    return SessionDecision::Expired;
+                }
+
+                // Check for hijacking
+                if let Some(alert) = self.detect_hijack(session, ip, ja4) {
+                    let was_suspicious = session.is_suspicious;
+                    session.add_alert(alert.clone());
+                    session.touch();
+
+                    // Trim alerts if needed
+                    if session.hijack_alerts.len() > self.config.max_alerts_per_session {
+                        let excess = session.hijack_alerts.len() - self.config.max_alerts_per_session;
+                        session.hijack_alerts.drain(0..excess);
+                    }
+
+                    self.stats.hijack_alerts.fetch_add(1, Ordering::Relaxed);
+
+                    // Update suspicious count if first alert
+                    if !was_suspicious {
+                        self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
+                    }
+
+                    return SessionDecision::Suspicious(alert);
+                }
+
+                // Valid session - update activity
                 session.touch();
 
-                // Trim alerts if needed
-                if session.hijack_alerts.len() > self.config.max_alerts_per_session {
-                    let excess = session.hijack_alerts.len() - self.config.max_alerts_per_session;
-                    session.hijack_alerts.drain(0..excess);
+                // Bind fingerprint if first request or not yet bound
+                if let Some(ja4_str) = ja4 {
+                    session.bind_ja4(ja4_str.to_string());
                 }
 
-                self.stats.hijack_alerts.fetch_add(1, Ordering::Relaxed);
-
-                // Update suspicious count if first alert
-                if session.hijack_alerts.len() == 1 {
-                    self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
+                if self.config.enable_ip_binding {
+                    session.bind_ip(ip);
                 }
 
-                return SessionDecision::Suspicious(alert);
+                SessionDecision::Valid
             }
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                // Session doesn't exist - create atomically
+                let session_id = generate_session_id();
+                let mut session = SessionState::new(session_id.clone(), token_hash.to_string());
+                session.touch();
 
-            // Valid session - update activity
-            session.touch();
+                // Bind fingerprint and IP
+                if let Some(ja4_str) = ja4 {
+                    session.bind_ja4(ja4_str.to_string());
+                }
 
-            // Bind fingerprint if first request or not yet bound
-            if let Some(ja4_str) = ja4 {
-                session.bind_ja4(ja4_str.to_string());
+                if self.config.enable_ip_binding {
+                    session.bind_ip(ip);
+                }
+
+                // Insert atomically into primary store
+                entry.insert(session);
+
+                // Update secondary index
+                self.session_by_id.insert(session_id, token_hash.to_string());
+
+                // Update stats
+                self.stats.total_sessions.fetch_add(1, Ordering::Relaxed);
+                self.stats.active_sessions.fetch_add(1, Ordering::Relaxed);
+                self.stats.total_created.fetch_add(1, Ordering::Relaxed);
+
+                SessionDecision::New
             }
-
-            if self.config.enable_ip_binding {
-                session.bind_ip(ip);
-            }
-
-            return SessionDecision::Valid;
         }
-
-        // Session doesn't exist - create new one
-        let _session = self.create_session(token_hash, ip, ja4);
-        SessionDecision::New
     }
 
     /// Create a new session.
@@ -476,22 +523,47 @@ impl SessionManager {
 
     /// Bind session to an actor.
     ///
+    /// Uses atomic operations to prevent TOCTOU race conditions when
+    /// updating both the session and actor_sessions mappings.
+    ///
     /// # Arguments
     /// * `token_hash` - Hash of the session token
     /// * `actor_id` - Actor ID to bind to
-    pub fn bind_to_actor(&self, token_hash: &str, actor_id: &str) {
-        if let Some(mut entry) = self.sessions.get_mut(token_hash) {
-            let session = entry.value_mut();
-            let session_id = session.session_id.clone();
+    ///
+    /// # Returns
+    /// `true` if the binding was successful, `false` if session not found.
+    pub fn bind_to_actor(&self, token_hash: &str, actor_id: &str) -> bool {
+        // Use entry API for atomic modification
+        match self.sessions.entry(token_hash.to_string()) {
+            dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+                let session = entry.get_mut();
 
-            // Update session's actor_id
-            session.actor_id = Some(actor_id.to_string());
+                // Check if already bound to same actor (idempotent)
+                if session.actor_id.as_deref() == Some(actor_id) {
+                    return true;
+                }
 
-            // Update actor_sessions mapping
-            self.actor_sessions
-                .entry(actor_id.to_string())
-                .or_insert_with(Vec::new)
-                .push(session_id);
+                // If bound to different actor, remove from old actor's list first
+                if let Some(ref old_actor_id) = session.actor_id {
+                    if let Some(mut old_actor_entry) = self.actor_sessions.get_mut(old_actor_id) {
+                        old_actor_entry.retain(|id| id != &session.session_id);
+                    }
+                }
+
+                let session_id = session.session_id.clone();
+
+                // Update session's actor_id atomically while holding the lock
+                session.actor_id = Some(actor_id.to_string());
+
+                // Update actor_sessions mapping
+                self.actor_sessions
+                    .entry(actor_id.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(session_id);
+
+                true
+            }
+            dashmap::mapref::entry::Entry::Vacant(_) => false,
         }
     }
 
@@ -541,27 +613,38 @@ impl SessionManager {
 
     /// Mark session as suspicious with a hijack alert.
     ///
+    /// Uses atomic operations to prevent TOCTOU race conditions.
+    ///
     /// # Arguments
     /// * `token_hash` - Hash of the session token
     /// * `alert` - Hijack alert to add
-    pub fn mark_suspicious(&self, token_hash: &str, alert: HijackAlert) {
-        if let Some(mut entry) = self.sessions.get_mut(token_hash) {
-            let session = entry.value_mut();
-            let was_suspicious = session.is_suspicious;
-            session.add_alert(alert);
+    ///
+    /// # Returns
+    /// `true` if the session was marked suspicious, `false` if not found.
+    pub fn mark_suspicious(&self, token_hash: &str, alert: HijackAlert) -> bool {
+        // Use entry API for atomic modification
+        match self.sessions.entry(token_hash.to_string()) {
+            dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+                let session = entry.get_mut();
+                let was_suspicious = session.is_suspicious;
+                session.add_alert(alert);
 
-            // Trim alerts if needed
-            if session.hijack_alerts.len() > self.config.max_alerts_per_session {
-                let excess = session.hijack_alerts.len() - self.config.max_alerts_per_session;
-                session.hijack_alerts.drain(0..excess);
+                // Trim alerts if needed
+                if session.hijack_alerts.len() > self.config.max_alerts_per_session {
+                    let excess = session.hijack_alerts.len() - self.config.max_alerts_per_session;
+                    session.hijack_alerts.drain(0..excess);
+                }
+
+                self.stats.hijack_alerts.fetch_add(1, Ordering::Relaxed);
+
+                // Update suspicious count if first alert
+                if !was_suspicious {
+                    self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
+                }
+
+                true
             }
-
-            self.stats.hijack_alerts.fetch_add(1, Ordering::Relaxed);
-
-            // Update suspicious count if first alert
-            if !was_suspicious {
-                self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
-            }
+            dashmap::mapref::entry::Entry::Vacant(_) => false,
         }
     }
 
@@ -1198,10 +1281,58 @@ mod tests {
         let ip = create_test_ip(1);
 
         manager.create_session("token_hash_1", ip, None);
-        manager.bind_to_actor("token_hash_1", "actor_123");
+        let result = manager.bind_to_actor("token_hash_1", "actor_123");
 
+        assert!(result);
         let session = manager.get_session("token_hash_1").unwrap();
         assert_eq!(session.actor_id, Some("actor_123".to_string()));
+    }
+
+    #[test]
+    fn test_bind_to_actor_nonexistent() {
+        let manager = create_test_manager();
+
+        let result = manager.bind_to_actor("nonexistent", "actor_123");
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_bind_to_actor_idempotent() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.create_session("token_hash_1", ip, None);
+
+        // Bind twice to same actor should succeed
+        assert!(manager.bind_to_actor("token_hash_1", "actor_123"));
+        assert!(manager.bind_to_actor("token_hash_1", "actor_123"));
+
+        // Should still only have one entry in actor_sessions
+        let sessions = manager.get_actor_sessions("actor_123");
+        assert_eq!(sessions.len(), 1);
+    }
+
+    #[test]
+    fn test_bind_to_actor_rebind() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.create_session("token_hash_1", ip, None);
+
+        // Bind to first actor
+        assert!(manager.bind_to_actor("token_hash_1", "actor_123"));
+        assert_eq!(manager.get_actor_sessions("actor_123").len(), 1);
+
+        // Rebind to second actor
+        assert!(manager.bind_to_actor("token_hash_1", "actor_456"));
+
+        // Old actor should have no sessions
+        assert_eq!(manager.get_actor_sessions("actor_123").len(), 0);
+        // New actor should have the session
+        assert_eq!(manager.get_actor_sessions("actor_456").len(), 1);
+
+        let session = manager.get_session("token_hash_1").unwrap();
+        assert_eq!(session.actor_id, Some("actor_456".to_string()));
     }
 
     #[test]
@@ -1214,9 +1345,9 @@ mod tests {
         manager.create_session("token_2", ip, None);
         manager.create_session("token_3", ip, None);
 
-        manager.bind_to_actor("token_1", "actor_123");
-        manager.bind_to_actor("token_2", "actor_123");
-        manager.bind_to_actor("token_3", "actor_456");
+        assert!(manager.bind_to_actor("token_1", "actor_123"));
+        assert!(manager.bind_to_actor("token_2", "actor_123"));
+        assert!(manager.bind_to_actor("token_3", "actor_456"));
 
         let actor_sessions = manager.get_actor_sessions("actor_123");
         assert_eq!(actor_sessions.len(), 2);
@@ -1299,11 +1430,29 @@ mod tests {
             confidence: 0.9,
         };
 
-        manager.mark_suspicious("token_hash_1", alert);
+        let result = manager.mark_suspicious("token_hash_1", alert);
+        assert!(result);
 
         let session = manager.get_session("token_hash_1").unwrap();
         assert!(session.is_suspicious);
         assert_eq!(session.hijack_alerts.len(), 1);
+    }
+
+    #[test]
+    fn test_mark_suspicious_nonexistent() {
+        let manager = create_test_manager();
+
+        let alert = HijackAlert {
+            session_id: "test".to_string(),
+            alert_type: HijackType::Ja4Mismatch,
+            original_value: "old".to_string(),
+            new_value: "new".to_string(),
+            timestamp: now_ms(),
+            confidence: 0.9,
+        };
+
+        let result = manager.mark_suspicious("nonexistent", alert);
+        assert!(!result);
     }
 
     #[test]
@@ -1325,9 +1474,9 @@ mod tests {
             confidence: 0.9,
         };
 
-        manager.mark_suspicious("token_0", alert.clone());
-        manager.mark_suspicious("token_2", alert.clone());
-        manager.mark_suspicious("token_4", alert);
+        assert!(manager.mark_suspicious("token_0", alert.clone()));
+        assert!(manager.mark_suspicious("token_2", alert.clone()));
+        assert!(manager.mark_suspicious("token_4", alert));
 
         let suspicious = manager.list_suspicious_sessions();
         assert_eq!(suspicious.len(), 3);
@@ -1546,7 +1695,7 @@ mod tests {
                 timestamp: now_ms(),
                 confidence: 0.9,
             };
-            manager.mark_suspicious("token_hash_1", alert);
+            assert!(manager.mark_suspicious("token_hash_1", alert));
         }
 
         let session = manager.get_session("token_hash_1").unwrap();

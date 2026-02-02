@@ -1,9 +1,49 @@
 //! Shadow mirroring protocol and payload definitions.
 //!
 //! Defines the JSON payload format sent to honeypot endpoints.
+//!
+//! # Security
+//!
+//! Headers are sanitized before being sent to honeypots to prevent credential leakage.
+//! Sensitive headers (Authorization, Cookie, etc.) are stripped automatically.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// Headers that contain sensitive credentials and must be stripped before mirroring.
+/// These headers could expose user credentials if forwarded to honeypot systems.
+const SENSITIVE_HEADERS: &[&str] = &[
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "x-auth-token",
+    "proxy-authorization",
+    "www-authenticate",
+    "proxy-authenticate",
+    "x-csrf-token",
+    "x-xsrf-token",
+];
+
+/// Sanitizes headers by removing sensitive credential headers.
+///
+/// This prevents credential leakage when forwarding requests to honeypot systems.
+/// Headers are matched case-insensitively.
+pub fn sanitize_headers(headers: &HashMap<String, String>) -> HashMap<String, String> {
+    headers
+        .iter()
+        .filter(|(key, _)| {
+            let lower_key = key.to_lowercase();
+            !SENSITIVE_HEADERS.contains(&lower_key.as_str())
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
+/// Checks if a header name is considered sensitive.
+pub fn is_sensitive_header(name: &str) -> bool {
+    SENSITIVE_HEADERS.contains(&name.to_lowercase().as_str())
+}
 
 /// JSON payload sent to honeypot endpoints.
 ///
@@ -122,8 +162,22 @@ impl MirrorPayload {
         self
     }
 
-    /// Sets the request headers.
+    /// Sets the request headers after sanitizing sensitive credentials.
+    ///
+    /// Automatically strips Authorization, Cookie, and other credential headers
+    /// to prevent leaking user credentials to honeypot systems.
     pub fn with_headers(mut self, headers: HashMap<String, String>) -> Self {
+        self.headers = sanitize_headers(&headers);
+        self
+    }
+
+    /// Sets the request headers without sanitization.
+    ///
+    /// # Safety
+    /// This method bypasses header sanitization. Only use this when headers
+    /// have already been sanitized or when intentionally including all headers
+    /// (e.g., for internal testing honeypots).
+    pub fn with_headers_unsanitized(mut self, headers: HashMap<String, String>) -> Self {
         self.headers = headers;
         self
     }
@@ -148,6 +202,76 @@ impl MirrorPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sanitize_headers() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Authorization".to_string(), "Bearer secret-token".to_string());
+        headers.insert("Cookie".to_string(), "session=abc123".to_string());
+        headers.insert("X-Api-Key".to_string(), "api-key-value".to_string());
+        headers.insert("User-Agent".to_string(), "test-agent".to_string());
+        headers.insert("X-Request-ID".to_string(), "req-123".to_string());
+
+        let sanitized = sanitize_headers(&headers);
+
+        // Safe headers should be preserved
+        assert!(sanitized.contains_key("Content-Type"));
+        assert!(sanitized.contains_key("User-Agent"));
+        assert!(sanitized.contains_key("X-Request-ID"));
+
+        // Sensitive headers should be removed
+        assert!(!sanitized.contains_key("Authorization"));
+        assert!(!sanitized.contains_key("Cookie"));
+        assert!(!sanitized.contains_key("X-Api-Key"));
+
+        assert_eq!(sanitized.len(), 3);
+    }
+
+    #[test]
+    fn test_sanitize_headers_case_insensitive() {
+        let mut headers = HashMap::new();
+        headers.insert("AUTHORIZATION".to_string(), "Bearer token".to_string());
+        headers.insert("cookie".to_string(), "session=xyz".to_string());
+        headers.insert("X-API-KEY".to_string(), "key".to_string());
+
+        let sanitized = sanitize_headers(&headers);
+        assert!(sanitized.is_empty());
+    }
+
+    #[test]
+    fn test_is_sensitive_header() {
+        assert!(is_sensitive_header("authorization"));
+        assert!(is_sensitive_header("Authorization"));
+        assert!(is_sensitive_header("COOKIE"));
+        assert!(is_sensitive_header("x-api-key"));
+        assert!(is_sensitive_header("X-CSRF-Token"));
+
+        assert!(!is_sensitive_header("Content-Type"));
+        assert!(!is_sensitive_header("User-Agent"));
+        assert!(!is_sensitive_header("X-Request-ID"));
+    }
+
+    #[test]
+    fn test_with_headers_sanitizes() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Authorization".to_string(), "Bearer secret".to_string());
+
+        let payload = MirrorPayload::new(
+            "test".to_string(),
+            "10.0.0.1".to_string(),
+            50.0,
+            "POST".to_string(),
+            "/api".to_string(),
+            "site".to_string(),
+            "sensor".to_string(),
+        )
+        .with_headers(headers);
+
+        assert!(payload.headers.contains_key("Content-Type"));
+        assert!(!payload.headers.contains_key("Authorization"));
+    }
 
     #[test]
     fn test_new_payload() {

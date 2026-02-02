@@ -49,5 +49,9 @@ pub use ja4::{
 
 pub use integrity::{
     analyze_integrity,
+    analyze_integrity_with_ja4,
+    analyze_ja4_spoofing,
     IntegrityAnalysis,
+    Ja4SpoofingAnalysis,
+    BrowserJa4Profile,
 };

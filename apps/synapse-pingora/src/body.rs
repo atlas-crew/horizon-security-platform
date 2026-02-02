@@ -246,9 +246,45 @@ impl BodyInspector {
             Ok(s) => s,
             Err(e) => return (None, false, Some(e.to_string())),
         };
-        match serde_json::from_str(text) {
+
+        // Parse with depth limit to prevent stack overflow from deeply nested payloads
+        match self.parse_json_with_depth_limit(text, self.config.max_parse_depth) {
             Ok(value) => (Some(ParsedBody::Json(value)), true, None),
-            Err(e) => (None, false, Some(e.to_string())),
+            Err(e) => (None, false, Some(e)),
+        }
+    }
+
+    /// Parse JSON with a maximum nesting depth limit.
+    ///
+    /// This prevents stack overflow attacks from payloads with extreme nesting depth.
+    fn parse_json_with_depth_limit(&self, text: &str, max_depth: usize) -> Result<serde_json::Value, String> {
+        use serde_json::Value;
+
+        let value: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+
+        // Check depth after parsing (serde_json has a default recursion limit of 128,
+        // but we enforce a stricter limit for security)
+        if self.check_json_depth(&value, 0, max_depth) {
+            Ok(value)
+        } else {
+            Err(format!("JSON nesting depth exceeds limit of {}", max_depth))
+        }
+    }
+
+    /// Recursively check if JSON depth exceeds the limit.
+    fn check_json_depth(&self, value: &serde_json::Value, current_depth: usize, max_depth: usize) -> bool {
+        if current_depth > max_depth {
+            return false;
+        }
+
+        match value {
+            serde_json::Value::Array(arr) => {
+                arr.iter().all(|v| self.check_json_depth(v, current_depth + 1, max_depth))
+            }
+            serde_json::Value::Object(obj) => {
+                obj.values().all(|v| self.check_json_depth(v, current_depth + 1, max_depth))
+            }
+            _ => true,
         }
     }
 
@@ -334,5 +370,54 @@ mod tests {
         let body = b"this is way too large";
         let result = inspector.inspect(body, None);
         assert!(matches!(result, Err(BodyError::PayloadTooLarge { .. })));
+    }
+
+    #[test]
+    fn test_json_depth_limit_within_limit() {
+        let mut config = BodyConfig::default();
+        config.max_parse_depth = 4;
+        let inspector = BodyInspector::new(config);
+
+        // Depth 3: {"a": {"b": {"c": "value"}}}
+        let body = br#"{"a": {"b": {"c": "value"}}}"#;
+        let result = inspector.inspect(body, Some("application/json")).unwrap();
+        assert!(result.parse_success);
+    }
+
+    #[test]
+    fn test_json_depth_limit_exceeded() {
+        let mut config = BodyConfig::default();
+        config.max_parse_depth = 2;
+        let inspector = BodyInspector::new(config);
+
+        // Depth 3: {"a": {"b": {"c": "value"}}} - exceeds limit of 2
+        let body = br#"{"a": {"b": {"c": "value"}}}"#;
+        let result = inspector.inspect(body, Some("application/json")).unwrap();
+        assert!(!result.parse_success);
+        assert!(result.parse_error.unwrap().contains("depth"));
+    }
+
+    #[test]
+    fn test_json_array_depth_limit() {
+        let mut config = BodyConfig::default();
+        config.max_parse_depth = 3;
+        let inspector = BodyInspector::new(config);
+
+        // Depth 4: [[[[1]]]] - exceeds limit of 3
+        let body = br#"[[[[1]]]]"#;
+        let result = inspector.inspect(body, Some("application/json")).unwrap();
+        assert!(!result.parse_success);
+    }
+
+    #[test]
+    fn test_json_mixed_depth_limit() {
+        let mut config = BodyConfig::default();
+        config.max_parse_depth = 3;
+        let inspector = BodyInspector::new(config);
+
+        // Mix of arrays and objects at depth 3 - within limit
+        let body = br#"{"arr": [{"key": "value"}]}"#;
+        let result = inspector.inspect(body, Some("application/json")).unwrap();
+        assert!(result.parse_success);
     }
 }

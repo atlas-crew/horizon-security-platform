@@ -14,8 +14,26 @@ use serde::{Deserialize, Serialize};
 pub struct EntityConfig {
     /// Maximum number of entities to track (LRU eviction when exceeded).
     pub max_entities: usize,
-    /// Risk points decayed per minute.
-    pub risk_decay_per_minute: f64,
+    /// Risk half-life in minutes (time for risk to decay to 50% of current value).
+    ///
+    /// SECURITY: Using exponential decay prevents attackers from predicting when
+    /// their risk score will drop below threshold. With linear decay (deprecated),
+    /// attackers could time attacks to occur right after score drops below threshold.
+    ///
+    /// Formula: new_risk = old_risk * 0.5^(elapsed_minutes / half_life_minutes)
+    ///
+    /// Default: 5 minutes (score decays to 50% every 5 minutes)
+    /// - After 5 min: 50% of original
+    /// - After 10 min: 25% of original
+    /// - After 20 min: 6.25% of original
+    pub risk_half_life_minutes: f64,
+    /// Minimum half-life for repeat offenders (multiplied from base).
+    ///
+    /// Entities with many rule matches decay slower as punishment.
+    /// Applied as: effective_half_life = base_half_life * repeat_offender_factor
+    ///
+    /// Default factor range: 1.0 (first offense) to 3.0 (heavy offender)
+    pub repeat_offender_max_factor: f64,
     /// Risk threshold for automatic blocking.
     pub block_threshold: f64,
     /// Maximum number of rule matches to track per entity.
@@ -32,7 +50,8 @@ impl Default for EntityConfig {
     fn default() -> Self {
         Self {
             max_entities: 100_000,  // 100K for production
-            risk_decay_per_minute: 10.0,
+            risk_half_life_minutes: 5.0, // 50% decay every 5 minutes
+            repeat_offender_max_factor: 3.0, // Up to 3x longer half-life for repeat offenders
             block_threshold: 70.0,
             max_rules_per_entity: 50,
             enabled: true,
@@ -665,8 +684,17 @@ impl EntityManager {
 
     // Internal helpers
 
-    /// Apply decay to an entity based on elapsed time.
+    /// Apply exponential decay to an entity based on elapsed time.
+    ///
+    /// SECURITY: Uses exponential decay (half-life model) instead of linear decay
+    /// to prevent attackers from predicting when their risk score will drop below
+    /// threshold. With linear decay, attackers could precisely calculate wait times.
+    ///
+    /// Formula: new_risk = old_risk * 0.5^(elapsed_minutes / effective_half_life)
+    ///
+    /// Repeat offenders decay slower (longer half-life) as punishment.
     fn apply_decay(&self, entity: &mut EntityState, now: u64) {
+        // Early exit if no risk to decay
         if entity.risk <= 0.0 {
             entity.last_decay_at = now;
             return;
@@ -678,12 +706,55 @@ impl EntityManager {
             return;
         }
 
-        // decay_per_minute / 60000 = decay per ms
-        let decay_per_ms = self.config.risk_decay_per_minute / 60_000.0;
-        let decay_amount = decay_per_ms * elapsed_ms as f64;
+        // Calculate repeat offender factor based on total rule match history
+        // More matches = slower decay (longer half-life) as punishment
+        let total_matches: u32 = entity.matches.values().map(|h| h.count).sum();
+        let repeat_factor = self.calculate_repeat_offender_factor(total_matches);
 
-        entity.risk = (entity.risk - decay_amount).max(0.0);
+        // Effective half-life increases with repeat offenses
+        let effective_half_life_minutes = self.config.risk_half_life_minutes * repeat_factor;
+
+        // Convert elapsed time to minutes
+        let elapsed_minutes = elapsed_ms as f64 / 60_000.0;
+
+        // Exponential decay: risk = risk * 0.5^(elapsed / half_life)
+        // Using natural log: risk = risk * e^(-ln(2) * elapsed / half_life)
+        let decay_exponent = -0.693147 * elapsed_minutes / effective_half_life_minutes;
+        let decay_factor = decay_exponent.exp();
+
+        // Apply decay
+        entity.risk = (entity.risk * decay_factor).max(0.0);
+
+        // Clamp very small values to zero (floating point cleanup)
+        if entity.risk < 0.01 {
+            entity.risk = 0.0;
+        }
+
         entity.last_decay_at = now;
+    }
+
+    /// Calculate the repeat offender factor for decay slowdown.
+    ///
+    /// Returns a multiplier (1.0 to max_factor) based on total rule match count.
+    /// Higher match counts result in slower decay (longer half-life).
+    ///
+    /// Tiers:
+    /// - 0-2 matches: 1.0x (normal decay)
+    /// - 3-5 matches: 1.25x slower
+    /// - 6-10 matches: 1.5x slower
+    /// - 11-20 matches: 2.0x slower
+    /// - 21+ matches: max_factor (default 3.0x slower)
+    fn calculate_repeat_offender_factor(&self, total_matches: u32) -> f64 {
+        let factor = match total_matches {
+            0..=2 => 1.0,
+            3..=5 => 1.25,
+            6..=10 => 1.5,
+            11..=20 => 2.0,
+            _ => self.config.repeat_offender_max_factor,
+        };
+
+        // Clamp to configured maximum
+        factor.min(self.config.repeat_offender_max_factor)
     }
 
     /// Maybe evict oldest entities if at capacity.
@@ -756,6 +827,31 @@ impl EntityManager {
         for id in remove_ids {
             matches.remove(&id);
         }
+    }
+
+    // ========== Testing Methods ==========
+
+    /// Simulate time-based decay for testing purposes.
+    ///
+    /// This method allows tests to verify decay behavior without waiting for real time to pass.
+    /// It sets the entity's last_decay_at to a past time, then applies decay based on elapsed time.
+    #[cfg(test)]
+    pub fn test_decay(&self, ip: &str, elapsed_ms: u64) -> Option<f64> {
+        let now = now_ms();
+        if let Some(mut entry) = self.entities.get_mut(ip) {
+            // Set last_decay_at to simulate elapsed time
+            entry.last_decay_at = now.saturating_sub(elapsed_ms);
+            self.apply_decay(&mut entry, now);
+            Some(entry.risk)
+        } else {
+            None
+        }
+    }
+
+    /// Get the full entity state for testing (exposes internal fields).
+    #[cfg(test)]
+    pub fn test_get_entity_state(&self, ip: &str) -> Option<EntityState> {
+        self.entities.get(ip).map(|e| e.value().clone())
     }
 
     // ========== Persistence Methods ==========
@@ -1608,4 +1704,189 @@ mod tests {
             assert!(r.is_some(), "Failed for fingerprint: {}", fp);
         }
     }
+
+    // ==================== Exponential Decay Tests ====================
+
+    #[test]
+    fn test_exponential_decay_basic() {
+        // With 5 minute half-life, risk should decay to ~50% after 5 minutes
+        let config = EntityConfig {
+            risk_half_life_minutes: 5.0,
+            repeat_offender_max_factor: 3.0,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        // Create entity with risk
+        manager.touch_entity("1.2.3.4");
+        manager.apply_rule_risk("1.2.3.4", 100, 80.0, false);
+
+        let initial = manager.get_entity("1.2.3.4").unwrap();
+        assert!((initial.risk - 80.0).abs() < 0.1, "Initial risk should be ~80");
+
+        // Simulate 5 minutes passing (half-life)
+        let five_minutes_ms = 5 * 60 * 1000;
+        let risk_after = manager.test_decay("1.2.3.4", five_minutes_ms).unwrap();
+
+        // Risk should be approximately 50% (40.0)
+        let ratio = risk_after / 80.0;
+        assert!(
+            (ratio - 0.5).abs() < 0.05,
+            "After 1 half-life, risk should be ~50%: got ratio {}",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_exponential_decay_two_half_lives() {
+        let config = EntityConfig {
+            risk_half_life_minutes: 5.0,
+            repeat_offender_max_factor: 3.0,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        manager.touch_entity("1.2.3.4");
+        manager.apply_rule_risk("1.2.3.4", 100, 100.0, false);
+
+        // Simulate 10 minutes passing (2 half-lives)
+        let ten_minutes_ms = 10 * 60 * 1000;
+        let risk_after = manager.test_decay("1.2.3.4", ten_minutes_ms).unwrap();
+
+        // Risk should be approximately 25% (2 half-lives = 0.5^2 = 0.25)
+        let ratio = risk_after / 100.0;
+        assert!(
+            (ratio - 0.25).abs() < 0.05,
+            "After 2 half-lives, risk should be ~25%: got ratio {}",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_repeat_offender_decay_slowdown() {
+        let config = EntityConfig {
+            risk_half_life_minutes: 5.0,
+            repeat_offender_max_factor: 3.0,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        // Create two entities: one first-time offender, one repeat offender
+        manager.touch_entity("first.offender");
+        manager.touch_entity("repeat.offender");
+
+        // First offender: just one rule match
+        manager.apply_rule_risk("first.offender", 100, 80.0, true);
+
+        // Repeat offender: many rule matches (21+ matches = 3x factor)
+        manager.apply_rule_risk("repeat.offender", 100, 80.0, true);
+        for i in 2..=25 {
+            manager.apply_rule_risk("repeat.offender", i, 0.0, true);
+        }
+
+        // Verify initial risk is similar
+        let first_initial = manager.get_entity("first.offender").unwrap().risk;
+        let repeat_initial = manager.test_get_entity_state("repeat.offender").unwrap().risk;
+        assert!((first_initial - repeat_initial).abs() < 1.0, "Initial risk should be similar");
+
+        // Simulate 5 minutes of decay
+        let five_minutes_ms = 5 * 60 * 1000;
+        let first_risk_after = manager.test_decay("first.offender", five_minutes_ms).unwrap();
+        let repeat_risk_after = manager.test_decay("repeat.offender", five_minutes_ms).unwrap();
+
+        // Repeat offender should have higher remaining risk (slower decay)
+        assert!(
+            repeat_risk_after > first_risk_after,
+            "Repeat offender should decay slower: first={}, repeat={}",
+            first_risk_after, repeat_risk_after
+        );
+
+        // First offender: 5 min = 1 half-life → ~50% remaining
+        let first_ratio = first_risk_after / first_initial;
+        assert!(
+            (first_ratio - 0.5).abs() < 0.1,
+            "First offender should be ~50%: got {}",
+            first_ratio
+        );
+
+        // Repeat offender with 3x factor: 5 min = only ~1/3 half-life → ~79% remaining
+        let repeat_ratio = repeat_risk_after / repeat_initial;
+        assert!(
+            repeat_ratio > 0.7,
+            "Repeat offender should retain >70%: got {}",
+            repeat_ratio
+        );
+    }
+
+    #[test]
+    fn test_calculate_repeat_offender_factor() {
+        let manager = EntityManager::default();
+
+        // Test all tiers
+        assert_eq!(manager.calculate_repeat_offender_factor(0), 1.0);
+        assert_eq!(manager.calculate_repeat_offender_factor(2), 1.0);
+        assert_eq!(manager.calculate_repeat_offender_factor(3), 1.25);
+        assert_eq!(manager.calculate_repeat_offender_factor(5), 1.25);
+        assert_eq!(manager.calculate_repeat_offender_factor(6), 1.5);
+        assert_eq!(manager.calculate_repeat_offender_factor(10), 1.5);
+        assert_eq!(manager.calculate_repeat_offender_factor(11), 2.0);
+        assert_eq!(manager.calculate_repeat_offender_factor(20), 2.0);
+        assert_eq!(manager.calculate_repeat_offender_factor(21), 3.0); // max_factor
+        assert_eq!(manager.calculate_repeat_offender_factor(100), 3.0);
+    }
+
+    #[test]
+    fn test_decay_clamps_small_values_to_zero() {
+        let config = EntityConfig {
+            risk_half_life_minutes: 1.0, // Fast decay for testing
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        manager.touch_entity("1.2.3.4");
+        manager.apply_rule_risk("1.2.3.4", 100, 0.005, false); // Very small risk
+
+        // After significant decay, should clamp to exactly zero
+        let sixty_minutes_ms = 60 * 60 * 1000; // 60 half-lives
+        let risk_after = manager.test_decay("1.2.3.4", sixty_minutes_ms).unwrap();
+
+        assert_eq!(risk_after, 0.0, "Very small risk should clamp to 0.0");
+    }
+
+    #[test]
+    fn test_nonlinear_decay_prevents_timing_attacks() {
+        // This test verifies that decay is non-linear (proportional to current risk),
+        // making timing attacks harder than with linear decay
+        let config = EntityConfig {
+            risk_half_life_minutes: 5.0,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        // Test two entities with different starting risks
+        manager.touch_entity("high.risk");
+        manager.touch_entity("low.risk");
+        manager.apply_rule_risk("high.risk", 100, 80.0, false);
+        manager.apply_rule_risk("low.risk", 100, 40.0, false);
+
+        // Decay both for 1 minute
+        let one_minute_ms = 60 * 1000;
+        let high_after = manager.test_decay("high.risk", one_minute_ms).unwrap();
+        let low_after = manager.test_decay("low.risk", one_minute_ms).unwrap();
+
+        // Calculate absolute drops
+        let drop_from_80 = 80.0 - high_after;
+        let drop_from_40 = 40.0 - low_after;
+
+        // With exponential decay, the *amount* dropped is proportional to current level
+        // 80 → drops more than 40 → in the same time period
+        // Drop from 80 should be about 2x the drop from 40 (since risk is 2x higher)
+        let drop_ratio = drop_from_80 / drop_from_40;
+        assert!(
+            (drop_ratio - 2.0).abs() < 0.1,
+            "Exponential decay should be proportional to current risk: ratio={}",
+            drop_ratio
+        );
+    }
+
 }

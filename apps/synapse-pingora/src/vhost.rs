@@ -69,7 +69,7 @@ impl From<crate::config::SiteYamlConfig> for SiteConfig {
             waf_enabled: yaml.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
             access_control: yaml.access_control,
             headers: yaml.headers,
-            shadow_mirror: None,
+            shadow_mirror: yaml.shadow_mirror,
         }
     }
 }

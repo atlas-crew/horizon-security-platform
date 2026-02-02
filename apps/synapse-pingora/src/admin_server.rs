@@ -205,6 +205,96 @@ pub mod scopes {
     /// All available scopes
     pub const ALL: &[&str] = &[ADMIN_READ, ADMIN_WRITE, CONFIG_WRITE, SERVICE_MANAGE, SENSOR_READ];
 }
+
+// =============================================================================
+// Error Sanitization (Security: Prevent Information Disclosure)
+// =============================================================================
+
+/// Error codes for admin API responses.
+///
+/// SECURITY: These generic error codes prevent internal details from being
+/// exposed to clients. Full error details are logged internally.
+mod error_codes {
+    pub const BAD_REQUEST: &str = "BAD_REQUEST";
+    pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
+    pub const NOT_FOUND: &str = "NOT_FOUND";
+    pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+    pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
+}
+
+/// Create a sanitized error response that hides internal details.
+///
+/// SECURITY: Logs the full error internally but returns a generic message
+/// to clients to prevent information disclosure.
+fn sanitized_error(
+    status: StatusCode,
+    code: &str,
+    public_message: &str,
+    internal_error: Option<&dyn std::fmt::Display>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    // Log internal details if provided
+    if let Some(err) = internal_error {
+        tracing::warn!(
+            code = code,
+            status = %status,
+            internal_error = %err,
+            "Admin API error (sanitized for client)"
+        );
+    }
+
+    (
+        status,
+        Json(serde_json::json!({
+            "success": false,
+            "error": {
+                "code": code,
+                "message": public_message
+            }
+        })),
+    )
+}
+
+/// Create a validation error response (400 Bad Request).
+fn validation_error(public_message: &str, internal_error: Option<&dyn std::fmt::Display>) -> (StatusCode, Json<serde_json::Value>) {
+    sanitized_error(
+        StatusCode::BAD_REQUEST,
+        error_codes::VALIDATION_ERROR,
+        public_message,
+        internal_error,
+    )
+}
+
+/// Create an internal server error response (500).
+fn internal_error(public_message: &str, internal_error: Option<&dyn std::fmt::Display>) -> (StatusCode, Json<serde_json::Value>) {
+    sanitized_error(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        error_codes::INTERNAL_ERROR,
+        public_message,
+        internal_error,
+    )
+}
+
+/// Create a not found error response (404).
+fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json<serde_json::Value>) {
+    // Note: We don't include the resource_id in the response to avoid enumeration attacks
+    sanitized_error(
+        StatusCode::NOT_FOUND,
+        error_codes::NOT_FOUND,
+        &format!("{} not found", resource_type),
+        None,
+    )
+}
+
+/// Create a service unavailable error response (503).
+fn service_unavailable(service_name: &str) -> (StatusCode, Json<serde_json::Value>) {
+    sanitized_error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        error_codes::SERVICE_UNAVAILABLE,
+        &format!("{} is not available", service_name),
+        None,
+    )
+}
+
 use crate::config_manager::{
     CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
     RateLimitRequest, AccessListRequest, MutationResult,
@@ -239,10 +329,18 @@ pub struct AdminState {
     /// Per-IP rate limiter for admin endpoints (100 req/min for admin, 1000 req/min for public)
     pub admin_rate_limiter: Arc<IpRateLimiter>,
     pub public_rate_limiter: Arc<IpRateLimiter>,
+    /// Per-IP rate limiter for authentication failures (5 failures per minute).
+    ///
+    /// SECURITY: This stricter rate limiter prevents brute-force attacks on the admin API key.
+    /// After 5 failed auth attempts per minute per IP, further requests are blocked with 429.
+    pub auth_failure_limiter: Arc<IpRateLimiter>,
 }
 
 /// Authentication middleware for privileged admin endpoints.
 /// Checks X-Admin-Key header against configured API key.
+///
+/// SECURITY: Implements rate limiting for authentication failures to prevent
+/// brute-force attacks. After 5 failed attempts per minute, returns 429.
 async fn require_auth(
     State(state): State<AdminState>,
     request: Request,
@@ -252,6 +350,9 @@ async fn require_auth(
     let Some(ref expected_key) = state.admin_api_key else {
         return Ok(next.run(request).await);
     };
+
+    // Extract client IP for rate limiting
+    let client_ip = extract_client_ip(&request);
 
     // Check X-Admin-Key header
     let provided_key = request
@@ -272,15 +373,64 @@ async fn require_auth(
             if is_valid {
                 Ok(next.run(request).await)
             } else {
-                warn!("Admin auth failed: invalid API key");
+                // SECURITY: Track failed auth attempt and check rate limit
+                record_auth_failure(&state, client_ip)?;
+                warn!(client_ip = %client_ip, "Admin auth failed: invalid API key");
                 Err(StatusCode::UNAUTHORIZED)
             }
         }
         None => {
-            warn!("Admin auth failed: missing X-Admin-Key header");
+            // SECURITY: Track failed auth attempt (missing header counts as failure)
+            record_auth_failure(&state, client_ip)?;
+            warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
             Err(StatusCode::UNAUTHORIZED)
         }
     }
+}
+
+/// Record a failed authentication attempt and check if rate limit exceeded.
+///
+/// SECURITY: Returns 429 Too Many Requests if the client has exceeded the
+/// allowed number of authentication failures (5 per minute by default).
+fn record_auth_failure(state: &AdminState, client_ip: IpAddr) -> Result<(), StatusCode> {
+    match state.auth_failure_limiter.check_key(&client_ip) {
+        Ok(_) => Ok(()), // Within rate limit
+        Err(_not_until) => {
+            warn!(
+                client_ip = %client_ip,
+                "Auth rate limit exceeded: too many failed authentication attempts"
+            );
+            Err(StatusCode::TOO_MANY_REQUESTS)
+        }
+    }
+}
+
+/// Extract client IP address from request headers or socket.
+fn extract_client_ip(request: &Request) -> IpAddr {
+    // Try X-Forwarded-For first (for proxied requests)
+    if let Some(xff) = request.headers().get("X-Forwarded-For") {
+        if let Ok(xff_str) = xff.to_str() {
+            // Take the first IP in the chain (client IP)
+            if let Some(first_ip) = xff_str.split(',').next() {
+                if let Ok(ip) = first_ip.trim().parse() {
+                    return ip;
+                }
+            }
+        }
+    }
+
+    // Try X-Real-IP
+    if let Some(real_ip) = request.headers().get("X-Real-IP") {
+        if let Ok(real_ip_str) = real_ip.to_str() {
+            if let Ok(ip) = real_ip_str.trim().parse() {
+                return ip;
+            }
+        }
+    }
+
+    // Default to localhost if no headers found
+    // In production, the admin server should be behind a proxy that sets these headers
+    "127.0.0.1".parse().unwrap()
 }
 
 /// Scope-checking middleware for admin:write scope (WS2-004).
@@ -397,33 +547,6 @@ async fn rate_limit_public(
     }
 }
 
-/// Extract client IP from request headers or connection info.
-fn extract_client_ip(request: &Request) -> IpAddr {
-    // Try X-Forwarded-For first (for reverse proxy setups)
-    if let Some(xff) = request.headers().get("X-Forwarded-For") {
-        if let Ok(xff_str) = xff.to_str() {
-            // Take the first IP in the chain (original client)
-            if let Some(first_ip) = xff_str.split(',').next() {
-                if let Ok(ip) = first_ip.trim().parse::<IpAddr>() {
-                    return ip;
-                }
-            }
-        }
-    }
-
-    // Try X-Real-IP
-    if let Some(real_ip) = request.headers().get("X-Real-IP") {
-        if let Ok(ip_str) = real_ip.to_str() {
-            if let Ok(ip) = ip_str.trim().parse::<IpAddr>() {
-                return ip;
-            }
-        }
-    }
-
-    // Fall back to loopback (connection info not available in this context)
-    "127.0.0.1".parse().unwrap()
-}
-
 /// Starts the admin HTTP server.
 ///
 /// # Arguments
@@ -445,11 +568,16 @@ pub async fn start_admin_server(
     // Create rate limiters:
     // - Admin routes: 100 requests per minute per IP (stricter for privileged operations)
     // - Public routes: 1000 requests per minute per IP (more generous for monitoring)
+    // - Auth failures: 5 attempts per minute per IP (very strict to prevent brute-force)
     let admin_rate_limiter = Arc::new(RateLimiter::keyed(
         Quota::per_minute(NonZeroU32::new(100).unwrap())
     ));
     let public_rate_limiter = Arc::new(RateLimiter::keyed(
         Quota::per_minute(NonZeroU32::new(1000).unwrap())
+    ));
+    // SECURITY: Very strict rate limit for auth failures to prevent brute-force attacks
+    let auth_failure_limiter = Arc::new(RateLimiter::keyed(
+        Quota::per_minute(NonZeroU32::new(5).unwrap())
     ));
 
     let state = AdminState {
@@ -458,6 +586,7 @@ pub async fn start_admin_server(
         admin_scopes,
         admin_rate_limiter,
         public_rate_limiter,
+        auth_failure_limiter,
     };
 
     // Initialize metrics history with current values
@@ -899,13 +1028,8 @@ async fn update_site_shadow_handler(
 
         // Validate the config
         if let Err(e) = shadow_config.validate() {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "success": false,
-                    "error": format!("Invalid shadow config: {}", e)
-                }))
-            );
+            // SECURITY: Log internal error but return generic message
+            return validation_error("Invalid shadow mirror configuration", Some(&e));
         }
 
         // Create UpdateSiteRequest with just shadow_mirror
@@ -916,13 +1040,8 @@ async fn update_site_shadow_handler(
 
         // Update site in config manager
         if let Err(e) = config_mgr.update_site(&hostname, update_request) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "success": false,
-                    "error": format!("Failed to update site: {}", e)
-                }))
-            );
+            // SECURITY: Log internal error but return generic message
+            return internal_error("Failed to update site configuration", Some(&e));
         }
 
         return (
@@ -937,13 +1056,8 @@ async fn update_site_shadow_handler(
         );
     }
 
-    (
-        StatusCode::NOT_FOUND,
-        Json(serde_json::json!({
-            "success": false,
-            "error": "Config manager not available"
-        }))
-    )
+    // SECURITY: Use generic service unavailable message
+    service_unavailable("Configuration service")
 }
 
 /// GET /stats - Runtime statistics
@@ -3968,13 +4082,15 @@ mod tests {
         // Create test rate limiters (1000 req/min)
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
-        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
             admin_api_key: None,
             admin_scopes: vec![],
             admin_rate_limiter,
             public_rate_limiter,
+            auth_failure_limiter,
         };
 
         Router::new()

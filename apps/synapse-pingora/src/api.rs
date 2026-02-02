@@ -32,7 +32,7 @@ use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions};
 use crate::crawler::CrawlerDetector;
 use crate::horizon::HorizonClient;
 use crate::dlp::DlpScanner;
-use synapse::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Verdict};
+use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Verdict, Action as SynapseAction};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,7 +196,7 @@ impl ApiHandler {
     /// Handles GET /debug/profiles request.
     /// Note: This requires the profiles_getter callback to be set; returns empty vec if not available.
     /// In the full binary context, profiles are retrieved via DetectionEngine which uses thread-local storage.
-    pub fn handle_get_profiles(&self) -> ApiResponse<Vec<synapse::EndpointProfile>> {
+    pub fn handle_get_profiles(&self) -> ApiResponse<Vec<crate::profiler::EndpointProfile>> {
         // Library context: profiles_getter not available, return empty
         // The binary (main.rs) should provide profiles via a route handler that calls DetectionEngine directly
         ApiResponse::ok(Vec::new())
@@ -397,7 +397,7 @@ impl ApiHandler {
 
         let start = std::time::Instant::now();
 
-        // Build libsynapse Request
+        // Build Synapse Request
         let synapse_headers: Vec<SynapseHeader> = headers
             .iter()
             .map(|(name, value)| SynapseHeader::new(name, value))
@@ -418,7 +418,7 @@ impl ApiHandler {
         let elapsed = start.elapsed();
 
         Some(EvaluateResult {
-            blocked: matches!(verdict.action, synapse::Action::Block),
+            blocked: matches!(verdict.action, SynapseAction::Block),
             risk_score: verdict.risk_score,
             matched_rules: verdict.matched_rules.clone(),
             block_reason: verdict.block_reason.clone(),

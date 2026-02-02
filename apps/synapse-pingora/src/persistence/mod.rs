@@ -175,41 +175,53 @@ impl SnapshotManager {
         let log_interval = config.save_interval_secs;
         let log_dir = config.data_dir.clone();
 
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(config.save_interval_secs));
+        // Spawn a dedicated thread with its own tokio runtime
+        // This avoids requiring a pre-existing runtime context
+        std::thread::Builder::new()
+            .name("persistence-saver".into())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to create persistence runtime");
 
-            // Ensure data directory exists
-            if let Err(e) = tokio::fs::create_dir_all(&config.data_dir).await {
-                error!("Failed to create data directory {:?}: {}", config.data_dir, e);
-                return;
-            }
+                rt.block_on(async move {
+                    let mut interval = time::interval(Duration::from_secs(config.save_interval_secs));
 
-            loop {
-                interval.tick().await;
+                    // Ensure data directory exists
+                    if let Err(e) = tokio::fs::create_dir_all(&config.data_dir).await {
+                        error!("Failed to create data directory {:?}: {}", config.data_dir, e);
+                        return;
+                    }
 
-                let snapshot = fetch_snapshot();
-                if snapshot.is_empty() {
-                    debug!("Snapshot empty, skipping save");
-                    continue;
-                }
+                    loop {
+                        interval.tick().await;
 
-                let path = config.data_dir.join("waf_state.json");
-                let path_clone = path.clone();
-                let stats = snapshot.stats();
+                        let snapshot = fetch_snapshot();
+                        if snapshot.is_empty() {
+                            debug!("Snapshot empty, skipping save");
+                            continue;
+                        }
 
-                // Offload CPU-intensive serialization and blocking I/O to a worker thread
-                let res = tokio::task::spawn_blocking(move || {
-                    Self::save_snapshot(&snapshot, &path_clone)
-                })
-                .await;
+                        let path = config.data_dir.join("waf_state.json");
+                        let path_clone = path.clone();
+                        let stats = snapshot.stats();
 
-                match res {
-                    Ok(Ok(_)) => info!("Saved WAF state to {:?} ({})", path, stats),
-                    Ok(Err(e)) => error!("Failed to save WAF state: {}", e),
-                    Err(e) => error!("Save task panicked: {}", e),
-                }
-            }
-        });
+                        // Offload CPU-intensive serialization and blocking I/O to a worker thread
+                        let res = tokio::task::spawn_blocking(move || {
+                            Self::save_snapshot(&snapshot, &path_clone)
+                        })
+                        .await;
+
+                        match res {
+                            Ok(Ok(_)) => info!("Saved WAF state to {:?} ({})", path, stats),
+                            Ok(Err(e)) => error!("Failed to save WAF state: {}", e),
+                            Err(e) => error!("Save task panicked: {}", e),
+                        }
+                    }
+                });
+            })
+            .expect("Failed to spawn persistence thread");
 
         info!(
             "Background persistence started (interval: {}s, dir: {:?})",

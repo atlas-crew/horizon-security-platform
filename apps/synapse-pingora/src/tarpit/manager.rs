@@ -3,8 +3,10 @@
 //! Implements progressive delay calculation and state tracking for slow-drip defense.
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
+use tokio::sync::Semaphore;
 
 use dashmap::DashMap;
 
@@ -25,6 +27,14 @@ pub struct TarpitConfig {
     pub decay_threshold_ms: u64,
     /// Cleanup threshold in milliseconds (remove state after this idle time).
     pub cleanup_threshold_ms: u64,
+    /// Maximum number of concurrent tarpit delays (prevents resource exhaustion).
+    /// Default: 1000 - limits how many connections can be simultaneously tarpitted.
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent_tarpits: usize,
+}
+
+fn default_max_concurrent() -> usize {
+    1000
 }
 
 impl Default for TarpitConfig {
@@ -37,6 +47,7 @@ impl Default for TarpitConfig {
             max_states: 10_000,
             decay_threshold_ms: 5 * 60 * 1000,    // 5 minutes
             cleanup_threshold_ms: 30 * 60 * 1000, // 30 minutes
+            max_concurrent_tarpits: default_max_concurrent(),
         }
     }
 }
@@ -100,11 +111,16 @@ pub struct TarpitStats {
     pub states_created: u64,
     /// States evicted.
     pub states_evicted: u64,
+    /// Tarpits rejected due to concurrent capacity limits.
+    pub rejected_tarpits: u64,
+    /// Available concurrent tarpit slots.
+    pub available_slots: usize,
 }
 
 /// Thread-safe tarpit manager.
 ///
 /// Uses DashMap for lock-free concurrent access to tarpit states.
+/// Uses a semaphore to limit concurrent tarpit delays and prevent resource exhaustion.
 pub struct TarpitManager {
     /// Tarpit states by IP address.
     states: DashMap<String, TarpitState>,
@@ -116,6 +132,10 @@ pub struct TarpitManager {
     total_evicted: AtomicU64,
     /// Maximum delay level (calculated from config).
     max_level: u32,
+    /// Semaphore to limit concurrent tarpit delays (prevents resource exhaustion).
+    delay_semaphore: Arc<Semaphore>,
+    /// Counter for rejected tarpits due to capacity limits.
+    rejected_tarpits: AtomicU64,
 }
 
 impl Default for TarpitManager {
@@ -136,8 +156,12 @@ impl TarpitManager {
             1
         };
 
+        let semaphore = Arc::new(Semaphore::new(config.max_concurrent_tarpits));
+
         Self {
             states: DashMap::with_capacity(config.max_states),
+            delay_semaphore: semaphore,
+            rejected_tarpits: AtomicU64::new(0),
             config,
             total_created: AtomicU64::new(0),
             total_evicted: AtomicU64::new(0),
@@ -249,14 +273,46 @@ impl TarpitManager {
     /// Apply tarpit delay asynchronously.
     ///
     /// Uses tokio::time::sleep which releases the worker thread during the delay.
+    /// Limited by semaphore to prevent resource exhaustion from too many concurrent delays.
+    ///
+    /// If the concurrent delay limit is reached, returns a decision with delay_ms=0
+    /// to prevent DoS attacks that exploit the tarpit mechanism itself.
     pub async fn apply_delay(&self, ip: &str) -> TarpitDecision {
         let decision = self.tarpit(ip);
 
         if decision.delay_ms > 0 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(decision.delay_ms)).await;
+            // Try to acquire a semaphore permit to limit concurrent delays
+            match self.delay_semaphore.try_acquire() {
+                Ok(permit) => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(decision.delay_ms)).await;
+                    // Permit is released when dropped
+                    drop(permit);
+                }
+                Err(_) => {
+                    // At capacity - reject this tarpit to prevent resource exhaustion
+                    self.rejected_tarpits.fetch_add(1, Ordering::Relaxed);
+                    // Return a decision indicating we couldn't apply the delay
+                    return TarpitDecision {
+                        delay_ms: 0,
+                        level: decision.level,
+                        hit_count: decision.hit_count,
+                        is_tarpitted: decision.is_tarpitted,
+                    };
+                }
+            }
         }
 
         decision
+    }
+
+    /// Returns the number of tarpits rejected due to capacity limits.
+    pub fn rejected_count(&self) -> u64 {
+        self.rejected_tarpits.load(Ordering::Relaxed)
+    }
+
+    /// Returns the number of available tarpit slots.
+    pub fn available_slots(&self) -> usize {
+        self.delay_semaphore.available_permits()
     }
 
     /// Check if an IP is actively tarpitted (level > 1).
@@ -337,6 +393,8 @@ impl TarpitManager {
             total_delay_ms,
             states_created: self.total_created.load(Ordering::Relaxed),
             states_evicted: self.total_evicted.load(Ordering::Relaxed),
+            rejected_tarpits: self.rejected_tarpits.load(Ordering::Relaxed),
+            available_slots: self.delay_semaphore.available_permits(),
         }
     }
 

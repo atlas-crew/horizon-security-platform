@@ -3,6 +3,7 @@
 //! This module handles YAML configuration parsing with security validations
 //! including file size limits, path validation, and schema verification.
 
+use crate::shadow::ShadowMirrorConfig;
 use crate::trap::TrapConfig;
 use crate::vhost::SiteConfig;
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,9 @@ pub struct GlobalConfig {
     /// Log level (trace, debug, info, warn, error)
     #[serde(default = "default_log_level")]
     pub log_level: String,
+    /// API key for the admin server (requires authentication if set)
+    #[serde(default)]
+    pub admin_api_key: Option<String>,
     /// Honeypot trap endpoint configuration
     #[serde(default)]
     pub trap_config: Option<TrapConfig>,
@@ -77,6 +81,7 @@ impl Default for GlobalConfig {
             waf_threshold: default_waf_threshold(),
             waf_enabled: true,
             log_level: default_log_level(),
+            admin_api_key: None,
             trap_config: None,
         }
     }
@@ -218,6 +223,9 @@ pub struct SiteYamlConfig {
     pub access_control: Option<AccessControlConfig>,
     /// Header manipulation (optional)
     pub headers: Option<HeaderConfig>,
+    /// Shadow mirroring configuration (optional)
+    #[serde(default)]
+    pub shadow_mirror: Option<ShadowMirrorConfig>,
 }
 
 /// Profiler configuration for endpoint behavior learning.
@@ -523,6 +531,16 @@ impl ConfigLoader {
                     );
                 }
             }
+
+            // Validate shadow mirroring config
+            if let Some(shadow) = &site.shadow_mirror {
+                if let Err(e) = shadow.validate() {
+                    return Err(ConfigError::ValidationError(format!(
+                        "site '{}' has invalid shadow_mirror config: {}",
+                        site.hostname, e
+                    )));
+                }
+            }
         }
 
         // Warn if global WAF is disabled (SYNAPSE-SEC-011)
@@ -613,7 +631,7 @@ impl ConfigLoader {
                 waf_enabled: site.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
                 access_control: site.access_control.clone(),
                 headers: site.headers.clone(),
-                shadow_mirror: None,
+                shadow_mirror: site.shadow_mirror.clone(),
             })
             .collect()
     }

@@ -49,6 +49,16 @@ pub struct ActorConfig {
     /// Default: 50
     pub max_session_ids: usize,
 
+    /// Maximum number of fingerprints to track per actor.
+    /// Prevents memory exhaustion from fingerprint flooding attacks.
+    /// Default: 20
+    pub max_fingerprints_per_actor: usize,
+
+    /// Maximum number of global fingerprint-to-actor mappings.
+    /// Prevents memory exhaustion from unique fingerprint attacks.
+    /// Default: 500,000 (5x max_actors)
+    pub max_fingerprint_mappings: usize,
+
     /// Whether actor tracking is enabled.
     /// Default: true
     pub enabled: bool,
@@ -67,6 +77,8 @@ impl Default for ActorConfig {
             risk_decay_factor: 0.9,
             max_rule_matches: 100,
             max_session_ids: 50, // Prevents memory exhaustion
+            max_fingerprints_per_actor: 20, // Prevents per-actor memory exhaustion
+            max_fingerprint_mappings: 500_000, // 5x max_actors for global limit
             enabled: true,
             max_risk: 100.0,
         }
@@ -181,12 +193,30 @@ impl ActorState {
         self.touch();
     }
 
-    /// Add a fingerprint to this actor.
-    pub fn add_fingerprint(&mut self, fingerprint: String) {
-        if !fingerprint.is_empty() {
-            self.fingerprints.insert(fingerprint);
-            self.touch();
+    /// Add a fingerprint to this actor with a maximum limit.
+    ///
+    /// Returns `true` if the fingerprint was added, `false` if at capacity or empty.
+    pub fn add_fingerprint(&mut self, fingerprint: String, max_fingerprints: usize) -> bool {
+        if fingerprint.is_empty() {
+            return false;
         }
+
+        // Check if already present (no limit needed)
+        if self.fingerprints.contains(&fingerprint) {
+            self.touch();
+            return true;
+        }
+
+        // Enforce per-actor fingerprint limit to prevent memory exhaustion
+        if self.fingerprints.len() >= max_fingerprints {
+            // At capacity - don't add new fingerprint
+            self.touch();
+            return false;
+        }
+
+        self.fingerprints.insert(fingerprint);
+        self.touch();
+        true
     }
 
     /// Add a rule match to this actor's history.
@@ -263,6 +293,9 @@ pub struct ActorStats {
 
     /// Total rule matches recorded.
     pub total_rule_matches: AtomicU64,
+
+    /// Total fingerprint mappings evicted due to capacity limits.
+    pub fingerprint_evictions: AtomicU64,
 }
 
 impl ActorStats {
@@ -280,6 +313,7 @@ impl ActorStats {
             evictions: self.evictions.load(Ordering::Relaxed),
             total_created: self.total_created.load(Ordering::Relaxed),
             total_rule_matches: self.total_rule_matches.load(Ordering::Relaxed),
+            fingerprint_evictions: self.fingerprint_evictions.load(Ordering::Relaxed),
         }
     }
 }
@@ -293,6 +327,7 @@ pub struct ActorStatsSnapshot {
     pub evictions: u64,
     pub total_created: u64,
     pub total_rule_matches: u64,
+    pub fingerprint_evictions: u64,
 }
 
 // ============================================================================
@@ -384,9 +419,12 @@ impl ActorManager {
                 entry.add_ip(ip);
                 if let Some(fp) = fingerprint {
                     if !fp.is_empty() {
-                        entry.add_fingerprint(fp.to_string());
-                        // Update fingerprint mapping
-                        self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                        // Only update fingerprint mapping if the actor accepted it
+                        if entry.add_fingerprint(fp.to_string(), self.config.max_fingerprints_per_actor) {
+                            // Check global fingerprint mapping capacity before inserting
+                            self.maybe_evict_fingerprint_mappings();
+                            self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                        }
                     }
                 }
                 // Ensure IP mapping is current
@@ -402,8 +440,12 @@ impl ActorManager {
 
         if let Some(fp) = fingerprint {
             if !fp.is_empty() {
-                actor.add_fingerprint(fp.to_string());
-                self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                // Only update fingerprint mapping if the actor accepted it
+                if actor.add_fingerprint(fp.to_string(), self.config.max_fingerprints_per_actor) {
+                    // Check global fingerprint mapping capacity before inserting
+                    self.maybe_evict_fingerprint_mappings();
+                    self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                }
             }
         }
 
@@ -735,6 +777,41 @@ impl ActorManager {
         // Evict oldest 1% of actors
         let evict_count = (self.config.max_actors / 100).max(1);
         self.evict_oldest(evict_count);
+    }
+
+    /// Maybe evict fingerprint mappings if at capacity.
+    ///
+    /// Prevents unbounded memory growth from fingerprint flooding attacks.
+    /// Evicts random entries when capacity is exceeded (fingerprints don't
+    /// have timestamps, so we use random eviction).
+    fn maybe_evict_fingerprint_mappings(&self) {
+        let current_len = self.fingerprint_to_actor.len();
+        if current_len < self.config.max_fingerprint_mappings {
+            return;
+        }
+
+        // Evict 10% of entries to avoid repeated evictions
+        let target_len = (self.config.max_fingerprint_mappings * 9) / 10;
+        let to_evict = current_len.saturating_sub(target_len);
+
+        if to_evict == 0 {
+            return;
+        }
+
+        // Collect keys to evict (sample from iteration order)
+        let keys_to_evict: Vec<String> = self
+            .fingerprint_to_actor
+            .iter()
+            .take(to_evict)
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        // Remove collected entries
+        for key in keys_to_evict {
+            self.fingerprint_to_actor.remove(&key);
+        }
+
+        self.stats.fingerprint_evictions.fetch_add(to_evict as u64, Ordering::Relaxed);
     }
 
     /// Evict the N oldest actors by last_seen timestamp.

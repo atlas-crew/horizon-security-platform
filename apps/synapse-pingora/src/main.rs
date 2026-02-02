@@ -1,7 +1,7 @@
-//! Synapse-Pingora PoC
+//! Synapse-Pingora
 //!
-//! A proof-of-concept integrating the Synapse detection engine with Cloudflare's
-//! Pingora proxy framework. Pure Rust, no Node.js.
+//! High-performance WAF detection engine on Cloudflare's Pingora proxy framework.
+//! Pure Rust implementation with integrated WAF rules and behavioral detection.
 //!
 //! # Architecture
 //!
@@ -12,7 +12,7 @@
 //! └─────────────┘     └──────────────────┘     └──────────────┘
 //!                              │
 //!                     ┌────────┴────────┐
-//!                     │  libsynapse     │
+//!                     │  waf::Engine    │
 //!                     │  • 237+ Rules   │
 //!                     │  • Actor Track  │
 //!                     │  • Risk Scoring │
@@ -22,9 +22,12 @@
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use synapse::{Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse, Verdict as SynapseVerdict};
+// WAF engine types (integrated Synapse WAF engine)
+use synapse_pingora::waf::{
+    Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest,
+    Synapse, Verdict as SynapseVerdict, BlockingMode,
+};
 // Schema learning and validation (API anomaly detection)
-// Note: Using synapse_pingora::profiler instead of synapse::schema to avoid serde_json version conflicts
 use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig, ViolationSeverity, ValidationResult as SchemaValidationResult};
 use log::{debug, info, warn, error};
 use once_cell::sync::Lazy;
@@ -355,7 +358,7 @@ fn default_block_status() -> u16 {
 
 fn default_rules_path() -> String {
     // Default rules path relative to the binary
-    "../risk-server/libsynapse/rules.json".to_string()
+    "data/rules.json".to_string()
 }
 
 impl Default for DetectionConfig {
@@ -482,7 +485,7 @@ impl Config {
 }
 
 // ============================================================================
-// Detection Engine (Real libsynapse)
+// Detection Engine (Synapse WAF)
 // ============================================================================
 
 /// Result of detection analysis
@@ -532,7 +535,7 @@ impl From<SynapseVerdict> for DetectionResult {
 static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
     // Try multiple paths for rules.json
     let rules_paths = [
-        "../risk-server/libsynapse/rules.json",
+        "data/rules.json",
         "rules.json",
         "/etc/synapse-pingora/rules.json",
     ];
@@ -672,13 +675,13 @@ static RULE_COUNT: Lazy<usize> = Lazy::new(|| {
 pub struct DetectionEngine;
 
 impl DetectionEngine {
-    /// Analyze a request using the real libsynapse engine.
+    /// Analyze a request using the Synapse WAF engine.
     /// Returns a DetectionResult with timing information.
     #[inline]
     pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
         let start = Instant::now();
 
-        // Build libsynapse Request
+        // Build Synapse Request
         let synapse_headers: Vec<SynapseHeader> = headers
             .iter()
             .map(|(name, value)| SynapseHeader::new(name, value))
@@ -687,7 +690,7 @@ impl DetectionEngine {
         let request = SynapseRequest {
             method,
             path: uri,
-            query: None, // Extracted from path by libsynapse
+            query: None, // Extracted from path by Synapse
             headers: synapse_headers,
             body,
             client_ip,
@@ -711,12 +714,12 @@ impl DetectionEngine {
     }
 
     /// Get all learned profiles.
-    pub fn get_profiles() -> Vec<synapse::EndpointProfile> {
+    pub fn get_profiles() -> Vec<synapse_pingora::profiler::EndpointProfile> {
         SYNAPSE.read().get_profiles()
     }
 
     /// Load profiles (e.g. from persistence).
-    pub fn load_profiles(profiles: Vec<synapse::EndpointProfile>) {
+    pub fn load_profiles(profiles: Vec<synapse_pingora::profiler::EndpointProfile>) {
         SYNAPSE.read().load_profiles(profiles);
     }
 
@@ -950,6 +953,7 @@ impl SynapseProxy {
             Arc::new(BlockLog::default()),
             Arc::new(ActorManager::new(ActorConfig::default())),
             Arc::new(SessionManager::new(SessionConfig::default())),
+            None,
             Arc::new(crawler_detector),
             None, // No horizon_manager for simple constructor
         )
@@ -970,6 +974,7 @@ impl SynapseProxy {
         block_log: Arc<BlockLog>,
         actor_manager: Arc<ActorManager>,
         session_manager: Arc<SessionManager>,
+        shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
@@ -995,7 +1000,7 @@ impl SynapseProxy {
             block_log,
             actor_manager,
             session_manager,
-            shadow_mirror_manager: None,
+            shadow_mirror_manager,
             crawler_detector,
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
@@ -1057,6 +1062,7 @@ impl SynapseProxy {
         block_log: Arc<BlockLog>,
         actor_manager: Arc<ActorManager>,
         session_manager: Arc<SessionManager>,
+        shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
@@ -1082,7 +1088,7 @@ impl SynapseProxy {
             block_log,
             actor_manager,
             session_manager,
-            shadow_mirror_manager: None,
+            shadow_mirror_manager,
             crawler_detector,
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
@@ -1570,7 +1576,7 @@ impl ProxyHttp for SynapseProxy {
         // Cache headers for late body inspection
         ctx.headers = headers.clone();
 
-        // Run detection using the real libsynapse engine (headers only initially)
+        // Run detection using the Synapse WAF engine (headers only initially)
         let result = DetectionEngine::analyze(method, &uri, &headers, None, client_ip);
 
         // Phase 3: Entity tracking - touch entity and apply risk from matched rules
@@ -2882,6 +2888,23 @@ fn create_multisite_managers(
     )
 }
 
+/// Creates a shadow mirror manager if any site has shadow mirroring configured.
+fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirrorManager>> {
+    let mut configs = sites.iter().filter_map(|site| site.shadow_mirror.clone());
+    let Some(config) = configs.next() else {
+        return None;
+    };
+
+    if configs.next().is_some() {
+        warn!("Multiple shadow_mirror configs found; using the first configured site");
+    }
+
+    let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
+        .unwrap_or_else(|_| "synapse-default".to_string());
+
+    Some(Arc::new(ShadowMirrorManager::new(config, sensor_id)))
+}
+
 fn main() {
     // Initialize logging
     env_logger::init();
@@ -2957,7 +2980,7 @@ fn main() {
     if config.detection.anomaly_blocking.enabled {
         let synapse = SYNAPSE.write();
         let mut risk_config = synapse.risk_config();
-        risk_config.blocking_mode = synapse::BlockingMode::Enforcement;
+        risk_config.blocking_mode = BlockingMode::Enforcement;
         risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
         synapse.set_risk_config(risk_config);
         info!("Anomaly blocking ENABLED (threshold: {:.1})", config.detection.anomaly_blocking.threshold);
@@ -3237,6 +3260,8 @@ fn main() {
             Arc::clone(&access_list_mgr),
         ));
 
+        let shadow_mirror_manager = create_shadow_mirror_manager(sites);
+
         SynapseProxy::with_multisite(
             legacy_backends.clone(),
             config.rate_limit.rps,
@@ -3257,6 +3282,7 @@ fn main() {
             Arc::clone(&shared_block_log),
             Arc::clone(&shared_actor_manager),
             Arc::clone(&shared_session_manager),
+            shadow_mirror_manager,
             Arc::clone(&shared_crawler_detector),
             None, // HorizonManager not yet initialized in main
         )
@@ -3276,6 +3302,7 @@ fn main() {
             Arc::clone(&shared_block_log),
             Arc::clone(&shared_actor_manager),
             Arc::clone(&shared_session_manager),
+            None,
             Arc::clone(&shared_crawler_detector),
             None, // HorizonManager not yet initialized in main
         )
@@ -3331,7 +3358,7 @@ fn main() {
 }
 
 // ============================================================================
-// Tests - Using REAL libsynapse engine with production rules
+// Tests - Using Synapse WAF engine with production rules
 // ============================================================================
 //
 // IMPORTANT: These tests use a global SYNAPSE engine with shared mutable state.
@@ -3689,6 +3716,7 @@ tls:
             block_log,
             actor_manager,
             session_manager,
+            None,
             crawler_detector,
             None, // No horizon_manager for test
         );

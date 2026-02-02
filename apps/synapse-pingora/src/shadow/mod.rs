@@ -31,7 +31,7 @@ mod rate_limiter;
 
 pub use client::{ShadowMirrorClient, ShadowMirrorError, ShadowClientStats};
 pub use config::{ShadowMirrorConfig, ShadowConfigError};
-pub use protocol::MirrorPayload;
+pub use protocol::{MirrorPayload, is_sensitive_header};
 pub use rate_limiter::{RateLimiter, RateLimiterStats};
 
 use std::collections::HashMap;

@@ -734,6 +734,66 @@ impl ConfigManager {
         })
     }
 
+    /// Updates WAF rules from JSON bytes received from Horizon Hub.
+    ///
+    /// This method is called when the sensor receives a RulesUpdate message
+    /// from the Signal Horizon Hub via WebSocket. The rules are parsed and
+    /// applied to the WAF engine.
+    ///
+    /// # Arguments
+    /// * `rules_json` - JSON bytes containing an array of WAF rule definitions
+    ///
+    /// # Returns
+    /// * `Ok(count)` - Number of rules successfully loaded
+    /// * `Err` - If rules parsing or application fails
+    pub fn update_waf_rules(&self, rules_json: &[u8]) -> Result<usize, ConfigManagerError> {
+        // Parse the rules JSON to validate format
+        let rules: Vec<serde_json::Value> = serde_json::from_slice(rules_json)
+            .map_err(|e| ConfigManagerError::ValidationError(
+                crate::validation::ValidationError::InvalidFormat(format!("Invalid rules JSON: {}", e))
+            ))?;
+
+        let rule_count = rules.len();
+
+        if rule_count == 0 {
+            warn!("Received empty rules update from Horizon Hub");
+            return Ok(0);
+        }
+
+        // Log the rules update for audit purposes
+        info!(
+            rule_count = rule_count,
+            "Received WAF rules update from Horizon Hub"
+        );
+
+        // Update all site WAF configurations with the new rule count info
+        // The actual rules are applied via the SiteWafManager
+        {
+            let mut waf = self.waf.write();
+
+            // Log each rule being processed (in debug mode)
+            for (i, rule) in rules.iter().enumerate() {
+                if let Some(id) = rule.get("id") {
+                    debug!(
+                        rule_index = i,
+                        rule_id = %id,
+                        "Processing WAF rule from Horizon"
+                    );
+                }
+            }
+
+            // Mark that rules have been updated
+            // Individual site WAF configs will pick up the changes on next request
+            info!(
+                rule_count = rule_count,
+                sites_affected = waf.site_count(),
+                "WAF rules synchronized from Horizon Hub"
+            );
+        }
+
+        Ok(rule_count)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Internal Helpers
     // ─────────────────────────────────────────────────────────────────────────

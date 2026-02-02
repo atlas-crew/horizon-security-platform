@@ -399,6 +399,317 @@ pub fn parse_ip(s: &str) -> Result<IpAddr, AccessError> {
     })
 }
 
+// ========== SSRF Protection Functions ==========
+
+/// Extract IPv4 address from IPv6-mapped IPv4 address (::ffff:x.x.x.x).
+///
+/// IPv6-mapped IPv4 addresses are commonly used to bypass SSRF protections
+/// that only check IPv4 addresses. This function extracts the underlying
+/// IPv4 address for proper validation.
+///
+/// Returns `Some(Ipv4Addr)` if the address is an IPv6-mapped IPv4, `None` otherwise.
+pub fn extract_mapped_ipv4(ip: &IpAddr) -> Option<std::net::Ipv4Addr> {
+    match ip {
+        IpAddr::V6(v6) => {
+            // Check for ::ffff:x.x.x.x format
+            let segments = v6.segments();
+            // IPv6-mapped IPv4: first 80 bits are 0, next 16 bits are 1s
+            // Format: ::ffff:192.168.1.1 = 0:0:0:0:0:ffff:c0a8:0101
+            if segments[0] == 0
+                && segments[1] == 0
+                && segments[2] == 0
+                && segments[3] == 0
+                && segments[4] == 0
+                && segments[5] == 0xffff
+            {
+                let octets = v6.octets();
+                Some(std::net::Ipv4Addr::new(
+                    octets[12],
+                    octets[13],
+                    octets[14],
+                    octets[15],
+                ))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Check if an IPv4 address is private/internal.
+///
+/// Private ranges (RFC 1918):
+/// - 10.0.0.0/8
+/// - 172.16.0.0/12
+/// - 192.168.0.0/16
+fn is_private_ipv4(ip: &std::net::Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    // 10.0.0.0/8
+    if octets[0] == 10 {
+        return true;
+    }
+    // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+        return true;
+    }
+    // 192.168.0.0/16
+    if octets[0] == 192 && octets[1] == 168 {
+        return true;
+    }
+    false
+}
+
+/// Check if an IP address is a loopback address.
+///
+/// Loopback addresses:
+/// - IPv4: 127.0.0.0/8
+/// - IPv6: ::1
+fn is_loopback(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.octets()[0] == 127,
+        IpAddr::V6(v6) => v6.is_loopback(),
+    }
+}
+
+/// Check if an IP address is a link-local address.
+///
+/// Link-local addresses:
+/// - IPv4: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
+/// - IPv6: fe80::/10
+fn is_link_local(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            octets[0] == 169 && octets[1] == 254
+        }
+        IpAddr::V6(v6) => {
+            // fe80::/10
+            let segments = v6.segments();
+            (segments[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+/// Check if an IP is a cloud metadata endpoint.
+///
+/// Common cloud metadata IPs:
+/// - AWS/Azure/GCP: 169.254.169.254
+/// - AWS (newer): 169.254.170.2
+/// - Google: metadata.google.internal typically resolves to 169.254.169.254
+fn is_cloud_metadata(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // 169.254.169.254 (AWS, Azure, GCP)
+            if octets == [169, 254, 169, 254] {
+                return true;
+            }
+            // 169.254.170.2 (AWS ECS task metadata)
+            if octets == [169, 254, 170, 2] {
+                return true;
+            }
+            false
+        }
+        IpAddr::V6(_) => false,
+    }
+}
+
+/// Comprehensive SSRF check for an IP address.
+///
+/// Returns `true` if the IP address is potentially dangerous for SSRF attacks:
+/// - Loopback addresses (127.0.0.0/8, ::1)
+/// - Private addresses (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+/// - Link-local addresses (169.254.0.0/16, fe80::/10)
+/// - Cloud metadata endpoints (169.254.169.254, 169.254.170.2)
+/// - IPv6-mapped IPv4 addresses that resolve to any of the above
+///
+/// # Security
+/// This function is critical for SSRF prevention. Always call this before
+/// making outbound HTTP requests to user-controlled URLs.
+///
+/// # Example
+/// ```
+/// use synapse_pingora::access::is_ssrf_target;
+/// use std::net::IpAddr;
+///
+/// // Direct localhost
+/// assert!(is_ssrf_target(&"127.0.0.1".parse().unwrap()));
+///
+/// // IPv6-mapped localhost (SSRF bypass attempt)
+/// assert!(is_ssrf_target(&"::ffff:127.0.0.1".parse().unwrap()));
+///
+/// // Cloud metadata endpoint
+/// assert!(is_ssrf_target(&"169.254.169.254".parse().unwrap()));
+///
+/// // Public IP is safe
+/// assert!(!is_ssrf_target(&"8.8.8.8".parse().unwrap()));
+/// ```
+pub fn is_ssrf_target(ip: &IpAddr) -> bool {
+    // First, check if this is an IPv6-mapped IPv4 address
+    // This catches SSRF bypass attempts using ::ffff:127.0.0.1
+    if let Some(mapped_v4) = extract_mapped_ipv4(ip) {
+        // Check the underlying IPv4 address
+        if mapped_v4.octets()[0] == 127 {
+            tracing::warn!(
+                ip = %ip,
+                mapped = %mapped_v4,
+                "SSRF attempt blocked: IPv6-mapped loopback"
+            );
+            return true;
+        }
+        if is_private_ipv4(&mapped_v4) {
+            tracing::warn!(
+                ip = %ip,
+                mapped = %mapped_v4,
+                "SSRF attempt blocked: IPv6-mapped private IP"
+            );
+            return true;
+        }
+        if is_cloud_metadata(&IpAddr::V4(mapped_v4)) {
+            tracing::warn!(
+                ip = %ip,
+                mapped = %mapped_v4,
+                "SSRF attempt blocked: IPv6-mapped cloud metadata"
+            );
+            return true;
+        }
+        if is_link_local(&IpAddr::V4(mapped_v4)) {
+            tracing::warn!(
+                ip = %ip,
+                mapped = %mapped_v4,
+                "SSRF attempt blocked: IPv6-mapped link-local"
+            );
+            return true;
+        }
+        // The mapped IPv4 is public, allow it
+        return false;
+    }
+
+    // Check direct addresses
+    if is_loopback(ip) {
+        tracing::debug!(ip = %ip, "SSRF blocked: loopback address");
+        return true;
+    }
+
+    if is_cloud_metadata(ip) {
+        tracing::warn!(ip = %ip, "SSRF blocked: cloud metadata endpoint");
+        return true;
+    }
+
+    if is_link_local(ip) {
+        tracing::debug!(ip = %ip, "SSRF blocked: link-local address");
+        return true;
+    }
+
+    // Check private IPv4 ranges
+    if let IpAddr::V4(v4) = ip {
+        if is_private_ipv4(v4) {
+            tracing::debug!(ip = %ip, "SSRF blocked: private IPv4");
+            return true;
+        }
+    }
+
+    // Check IPv6 unique local (fc00::/7) and site-local (deprecated but still used)
+    if let IpAddr::V6(v6) = ip {
+        let segments = v6.segments();
+        // fc00::/7 (Unique Local Address)
+        if (segments[0] & 0xfe00) == 0xfc00 {
+            tracing::debug!(ip = %ip, "SSRF blocked: IPv6 unique local");
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Result of SSRF validation with detailed reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SsrfCheckResult {
+    /// IP is safe for outbound connections
+    Safe,
+    /// IP is loopback (127.0.0.0/8 or ::1)
+    Loopback,
+    /// IP is private RFC1918
+    Private,
+    /// IP is link-local
+    LinkLocal,
+    /// IP is cloud metadata endpoint
+    CloudMetadata,
+    /// IP is IPv6-mapped IPv4 that resolved to a blocked address
+    MappedBlocked {
+        mapped_v4: std::net::Ipv4Addr,
+        reason: &'static str,
+    },
+    /// IP is IPv6 unique local address
+    Ipv6UniqueLocal,
+}
+
+impl SsrfCheckResult {
+    /// Returns true if the result indicates a blocked address.
+    pub fn is_blocked(&self) -> bool {
+        !matches!(self, Self::Safe)
+    }
+}
+
+/// Comprehensive SSRF check with detailed result.
+///
+/// Similar to `is_ssrf_target` but returns detailed information about why
+/// an IP was blocked, useful for logging and debugging.
+pub fn check_ssrf(ip: &IpAddr) -> SsrfCheckResult {
+    // Check IPv6-mapped IPv4 first
+    if let Some(mapped_v4) = extract_mapped_ipv4(ip) {
+        if mapped_v4.octets()[0] == 127 {
+            return SsrfCheckResult::MappedBlocked {
+                mapped_v4,
+                reason: "loopback",
+            };
+        }
+        if is_private_ipv4(&mapped_v4) {
+            return SsrfCheckResult::MappedBlocked {
+                mapped_v4,
+                reason: "private",
+            };
+        }
+        if is_cloud_metadata(&IpAddr::V4(mapped_v4)) {
+            return SsrfCheckResult::MappedBlocked {
+                mapped_v4,
+                reason: "cloud_metadata",
+            };
+        }
+        if is_link_local(&IpAddr::V4(mapped_v4)) {
+            return SsrfCheckResult::MappedBlocked {
+                mapped_v4,
+                reason: "link_local",
+            };
+        }
+        return SsrfCheckResult::Safe;
+    }
+
+    if is_loopback(ip) {
+        return SsrfCheckResult::Loopback;
+    }
+    if is_cloud_metadata(ip) {
+        return SsrfCheckResult::CloudMetadata;
+    }
+    if is_link_local(ip) {
+        return SsrfCheckResult::LinkLocal;
+    }
+    if let IpAddr::V4(v4) = ip {
+        if is_private_ipv4(v4) {
+            return SsrfCheckResult::Private;
+        }
+    }
+    if let IpAddr::V6(v6) = ip {
+        let segments = v6.segments();
+        if (segments[0] & 0xfe00) == 0xfc00 {
+            return SsrfCheckResult::Ipv6UniqueLocal;
+        }
+    }
+
+    SsrfCheckResult::Safe
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -543,5 +854,189 @@ mod tests {
         list.deny("192.168.0.0/16").unwrap();
 
         assert_eq!(list.rule_count(), 2);
+    }
+
+    // ==================== SSRF Protection Tests ====================
+
+    #[test]
+    fn test_extract_mapped_ipv4() {
+        // IPv6-mapped IPv4 localhost
+        let mapped_localhost: IpAddr = "::ffff:127.0.0.1".parse().unwrap();
+        let extracted = extract_mapped_ipv4(&mapped_localhost);
+        assert!(extracted.is_some());
+        assert_eq!(extracted.unwrap().to_string(), "127.0.0.1");
+
+        // IPv6-mapped private IP
+        let mapped_private: IpAddr = "::ffff:192.168.1.1".parse().unwrap();
+        let extracted = extract_mapped_ipv4(&mapped_private);
+        assert!(extracted.is_some());
+        assert_eq!(extracted.unwrap().to_string(), "192.168.1.1");
+
+        // Regular IPv6 (not mapped)
+        let regular_v6: IpAddr = "2001:db8::1".parse().unwrap();
+        assert!(extract_mapped_ipv4(&regular_v6).is_none());
+
+        // IPv4 (not applicable)
+        let v4: IpAddr = "127.0.0.1".parse().unwrap();
+        assert!(extract_mapped_ipv4(&v4).is_none());
+
+        // IPv6-mapped cloud metadata
+        let mapped_metadata: IpAddr = "::ffff:169.254.169.254".parse().unwrap();
+        let extracted = extract_mapped_ipv4(&mapped_metadata);
+        assert!(extracted.is_some());
+        assert_eq!(extracted.unwrap().to_string(), "169.254.169.254");
+    }
+
+    #[test]
+    fn test_ssrf_loopback() {
+        // IPv4 localhost
+        assert!(is_ssrf_target(&"127.0.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"127.0.0.2".parse().unwrap()));
+        assert!(is_ssrf_target(&"127.255.255.255".parse().unwrap()));
+
+        // IPv6 localhost
+        assert!(is_ssrf_target(&"::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_private_ipv4() {
+        // 10.0.0.0/8
+        assert!(is_ssrf_target(&"10.0.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"10.255.255.255".parse().unwrap()));
+
+        // 172.16.0.0/12
+        assert!(is_ssrf_target(&"172.16.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"172.31.255.255".parse().unwrap()));
+        assert!(!is_ssrf_target(&"172.15.0.1".parse().unwrap())); // Not in range
+        assert!(!is_ssrf_target(&"172.32.0.1".parse().unwrap())); // Not in range
+
+        // 192.168.0.0/16
+        assert!(is_ssrf_target(&"192.168.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"192.168.255.255".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_cloud_metadata() {
+        // AWS/Azure/GCP metadata
+        assert!(is_ssrf_target(&"169.254.169.254".parse().unwrap()));
+        // AWS ECS task metadata
+        assert!(is_ssrf_target(&"169.254.170.2".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_link_local() {
+        // IPv4 link-local
+        assert!(is_ssrf_target(&"169.254.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"169.254.255.255".parse().unwrap()));
+
+        // IPv6 link-local (fe80::/10)
+        assert!(is_ssrf_target(&"fe80::1".parse().unwrap()));
+        assert!(is_ssrf_target(&"fe80::abcd:1234".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_ipv6_mapped_bypass_attempts() {
+        // CRITICAL: These are common SSRF bypass attempts using IPv6-mapped IPv4
+
+        // Mapped localhost
+        assert!(is_ssrf_target(&"::ffff:127.0.0.1".parse().unwrap()));
+
+        // Mapped private IPs
+        assert!(is_ssrf_target(&"::ffff:10.0.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"::ffff:172.16.0.1".parse().unwrap()));
+        assert!(is_ssrf_target(&"::ffff:192.168.1.1".parse().unwrap()));
+
+        // Mapped cloud metadata (HIGH SEVERITY)
+        assert!(is_ssrf_target(&"::ffff:169.254.169.254".parse().unwrap()));
+
+        // Mapped link-local
+        assert!(is_ssrf_target(&"::ffff:169.254.1.1".parse().unwrap()));
+
+        // Mapped public IP should be allowed
+        assert!(!is_ssrf_target(&"::ffff:8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_ipv6_unique_local() {
+        // fc00::/7 - Unique Local Address
+        assert!(is_ssrf_target(&"fc00::1".parse().unwrap()));
+        assert!(is_ssrf_target(&"fd00::1".parse().unwrap()));
+        assert!(is_ssrf_target(&"fdab:cdef::1234".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ssrf_public_ips_allowed() {
+        // Public IPv4
+        assert!(!is_ssrf_target(&"8.8.8.8".parse().unwrap()));
+        assert!(!is_ssrf_target(&"1.1.1.1".parse().unwrap()));
+        assert!(!is_ssrf_target(&"203.0.113.1".parse().unwrap()));
+
+        // Public IPv6
+        assert!(!is_ssrf_target(&"2001:4860:4860::8888".parse().unwrap()));
+        assert!(!is_ssrf_target(&"2606:4700::1111".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_check_ssrf_detailed() {
+        // Loopback
+        assert_eq!(
+            check_ssrf(&"127.0.0.1".parse().unwrap()),
+            SsrfCheckResult::Loopback
+        );
+
+        // Private
+        assert_eq!(
+            check_ssrf(&"10.0.0.1".parse().unwrap()),
+            SsrfCheckResult::Private
+        );
+
+        // Cloud metadata
+        assert_eq!(
+            check_ssrf(&"169.254.169.254".parse().unwrap()),
+            SsrfCheckResult::CloudMetadata
+        );
+
+        // Link-local
+        assert_eq!(
+            check_ssrf(&"169.254.1.1".parse().unwrap()),
+            SsrfCheckResult::LinkLocal
+        );
+
+        // IPv6 unique local
+        assert_eq!(
+            check_ssrf(&"fc00::1".parse().unwrap()),
+            SsrfCheckResult::Ipv6UniqueLocal
+        );
+
+        // Safe public IP
+        assert_eq!(
+            check_ssrf(&"8.8.8.8".parse().unwrap()),
+            SsrfCheckResult::Safe
+        );
+
+        // IPv6-mapped blocked
+        let result = check_ssrf(&"::ffff:127.0.0.1".parse().unwrap());
+        assert!(result.is_blocked());
+        if let SsrfCheckResult::MappedBlocked { mapped_v4, reason } = result {
+            assert_eq!(mapped_v4.to_string(), "127.0.0.1");
+            assert_eq!(reason, "loopback");
+        } else {
+            panic!("Expected MappedBlocked");
+        }
+    }
+
+    #[test]
+    fn test_ssrf_check_result_is_blocked() {
+        assert!(!SsrfCheckResult::Safe.is_blocked());
+        assert!(SsrfCheckResult::Loopback.is_blocked());
+        assert!(SsrfCheckResult::Private.is_blocked());
+        assert!(SsrfCheckResult::LinkLocal.is_blocked());
+        assert!(SsrfCheckResult::CloudMetadata.is_blocked());
+        assert!(SsrfCheckResult::Ipv6UniqueLocal.is_blocked());
+        assert!(SsrfCheckResult::MappedBlocked {
+            mapped_v4: "127.0.0.1".parse().unwrap(),
+            reason: "loopback"
+        }
+        .is_blocked());
     }
 }

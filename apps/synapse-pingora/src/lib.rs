@@ -1,7 +1,7 @@
 //! Synapse-Pingora: High-performance WAF proxy using Cloudflare Pingora.
 //!
 //! This library provides multi-site reverse proxy capabilities with integrated
-//! WAF detection using the libsynapse engine.
+//! WAF detection using the Synapse engine.
 //!
 //! # Phase 1 Modules (Core Features)
 //!
@@ -84,11 +84,22 @@ pub mod horizon;
 pub mod payload;
 pub mod trends;
 
+// Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
+pub mod geo;
+pub mod waf;
+pub mod detection;
+
 // Dashboard support
 pub mod block_log;
 
 // Header Manipulation
 pub mod headers;
+
+// Body Inspection
+pub mod body;
+
+// Block Page Rendering
+pub mod block_page;
 
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
@@ -217,6 +228,35 @@ pub use trends::{
     TrendQueryOptions, TrendsSummary, TrendHistogramBucket, BucketSummary, CategorySummary,
 };
 
+// Re-export geo/impossible travel types
+pub use geo::{
+    ImpossibleTravelDetector, GeoLocation, LoginEvent, TravelAlert, TravelConfig, TravelStats,
+    Severity as GeoSeverity, haversine_distance, is_valid_coordinates, calculate_speed,
+};
+
+// Re-export WAF engine types (Phase 10)
+pub use waf::{
+    Engine as WafEngine, WafError, Synapse,
+    WafRule, MatchCondition, MatchValue, boolean_operands,
+    RuleIndex, IndexedRule, CandidateCache, CandidateCacheKey,
+    build_rule_index, get_candidate_rule_indices, method_to_mask,
+    StateStore, now_ms,
+    Request as WafRequest, Header as WafHeader, Verdict as WafVerdict,
+    Action as WafRuleAction, EvalContext, ArgEntry,
+    RiskContribution as WafRiskContribution,
+    AnomalyType as WafAnomalyType, AnomalySignal as WafAnomalySignal,
+    AnomalySignalType as WafAnomalySignalType,
+    RiskConfig as WafRiskConfig, BlockingMode as WafBlockingMode,
+    AnomalyContribution as WafAnomalyContribution, repeat_multiplier,
+};
+
+// Re-export credential stuffing detection types (Phase 10)
+pub use detection::{
+    CredentialStuffingDetector, StuffingStats, StuffingState,
+    AuthAttempt, AuthMetrics, AuthResult, DistributedAttack, EntityEndpointKey,
+    StuffingConfig, StuffingEvent, StuffingSeverity, StuffingVerdict, TakeoverAlert,
+};
+
 // ============================================================================
 // Integration Tests: ActorManager + SessionManager Integration
 // ============================================================================
@@ -244,6 +284,8 @@ mod actor_session_integration_tests {
             enabled: true,
             max_risk: 100.0,
             persist_interval_secs: 300,
+            max_fingerprints_per_actor: 20,
+            max_fingerprint_mappings: 500_000,
         }))
     }
 

@@ -102,9 +102,20 @@
     }
 
     .shell {
-      max-width: 1400px;
+      max-width: 1600px;
       margin: 0 auto;
       padding: 24px;
+    }
+
+    .main-layout {
+      display: flex;
+      gap: 24px;
+      min-height: calc(100vh - 160px);
+    }
+
+    .main-content {
+      flex: 1;
+      min-width: 0;
     }
 
     /* Header */
@@ -193,26 +204,47 @@
       50% { opacity: 0.5; }
     }
 
-    /* Tabs */
-    .tabs {
-      display: flex;
-      gap: 2px;
-      background: var(--surface-inset);
-      padding: 4px;
-      margin-bottom: 24px;
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--surface-card);
       border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-card);
+      padding: 8px;
+      height: fit-content;
+      position: sticky;
+      top: 24px;
+    }
+
+    .nav-group {
+      margin-bottom: 8px;
+    }
+
+    .nav-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .nav-group-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      padding: 8px 12px 4px;
     }
 
     .tab {
-      padding: 10px 20px;
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
       background: transparent;
       border: none;
       color: var(--text-secondary);
       font-family: inherit;
       font-size: 13px;
       font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      text-align: left;
       cursor: pointer;
       transition: all 0.15s ease;
     }
@@ -226,6 +258,11 @@
       background: var(--ac-navy);
       color: var(--text-inverse);
       box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    /* Legacy .tabs class hidden - using .sidebar now */
+    .tabs {
+      display: none;
     }
 
     /* Tab Content */
@@ -1908,22 +1945,39 @@
       </div>
     </header>
 
-    <div class="tabs">
-      <button class="tab active" data-tab="status">Status</button>
-      <button class="tab" data-tab="sites">Sites</button>
-      <button class="tab" data-tab="rules">Rules</button>
-      <button class="tab" data-tab="security">Security</button>
-      <button class="tab" data-tab="api">API</button>
-      <button class="tab" data-tab="lab">Lab</button>
-      <button class="tab" data-tab="logs">Logs</button>
-      <button class="tab" data-tab="certs">Certs</button>
-      <button class="tab" data-tab="features">Features</button>
-      <button class="tab" data-tab="thresholds">Thresholds</button>
-      <button class="tab" data-tab="access">Access</button>
-      <button class="tab" data-tab="entities">Entities</button>
-      <button class="tab" data-tab="campaigns">Campaigns</button>
-      <button class="tab" data-tab="system">System</button>
-    </div>
+    <div class="main-layout">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar">
+        <div class="nav-group">
+          <div class="nav-group-label">Overview</div>
+          <button class="tab active" data-tab="status">Status</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Configuration</div>
+          <button class="tab" data-tab="sites">Sites</button>
+          <button class="tab" data-tab="rules">Rules</button>
+          <button class="tab" data-tab="features">Features</button>
+          <button class="tab" data-tab="thresholds">Thresholds</button>
+          <button class="tab" data-tab="certs">Certificates</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Security</div>
+          <button class="tab" data-tab="security">Protection</button>
+          <button class="tab" data-tab="access">Access Control</button>
+          <button class="tab" data-tab="entities">Entities</button>
+          <button class="tab" data-tab="campaigns">Campaigns</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Operations</div>
+          <button class="tab" data-tab="api">API</button>
+          <button class="tab" data-tab="logs">Logs</button>
+          <button class="tab" data-tab="system">System</button>
+          <button class="tab" data-tab="lab">Lab</button>
+        </div>
+      </nav>
+
+      <!-- Main Content Area -->
+      <div class="main-content">
 
     <!-- Status Tab -->
     <div id="status" class="tab-content active">
@@ -3296,8 +3350,10 @@ Authorization: Bearer token123"></textarea>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+
+      </div><!-- /.main-content -->
+    </div><!-- /.main-layout -->
+  </div><!-- /.shell -->
 
   <!-- Add Site Modal -->
   <div class="modal-overlay" id="addSiteModal">

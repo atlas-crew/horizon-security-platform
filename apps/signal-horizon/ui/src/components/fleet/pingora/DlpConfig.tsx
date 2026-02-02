@@ -1,18 +1,14 @@
 import { useMemo, useCallback, memo } from 'react';
 import { Eye, Zap, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
-// Note: DEFAULT_* constants removed since parseIntSafe uses current value as fallback
 import { parseIntSafe } from '../../../utils/parseNumeric';
+import type { DlpConfig as SharedDlpConfig } from '@signal-horizon/shared/types';
 
-export interface DlpConfigData {
-  enabled: boolean;
-  fast_mode: boolean;
-  scan_text_only: boolean;
-  max_scan_size: number;
-  max_body_inspection_bytes: number;
-  max_matches: number;
-  custom_keywords: string[];
-}
+/**
+ * DLP config data used by the UI form.
+ * Based on shared DlpConfig type but omits API-only fields (redaction).
+ */
+export type DlpConfigData = Omit<SharedDlpConfig, 'redaction'>;
 
 interface DlpConfigProps {
   config: DlpConfigData;

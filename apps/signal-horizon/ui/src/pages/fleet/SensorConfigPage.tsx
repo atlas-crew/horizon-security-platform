@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Code2 } from 'lucide-react';
+import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
+import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
 import {
   AdvancedConfigPanel,
   defaultAdvancedConfig,
@@ -87,7 +88,7 @@ export function SensorConfigPage() {
     enabled: !!id,
   });
 
-  const { data: remoteConfig, isLoading, error } = useQuery({
+  const { data: remoteConfig, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'full'],
     queryFn: () => fetchFullConfig(id!),
     enabled: !!id,
@@ -154,8 +155,31 @@ export function SensorConfigPage() {
     setViewMode(mode);
   };
 
-  if (isLoading) return <div className="p-12 text-center text-ink-muted">Loading configuration...</div>;
-  if (error) return <div className="p-12 text-center text-status-error">Error: {(error as Error).message}</div>;
+  if (isLoading) return (
+    <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">
+      <div className="px-6 py-4 border-b border-border-subtle bg-surface-card">
+        <Skeleton className="h-4 w-48 rounded mb-2" />
+        <Skeleton className="h-6 w-64 rounded" />
+      </div>
+      <ConfigPanelSkeleton />
+    </div>
+  );
+  if (error) return (
+    <div className="p-12 flex flex-col items-center justify-center gap-4">
+      <div className="flex items-center gap-2 text-status-error">
+        <AlertCircle className="w-5 h-5" />
+        <span>Error: {(error as Error).message}</span>
+      </div>
+      <button
+        onClick={() => refetch()}
+        disabled={isFetching}
+        className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+      >
+        <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+        {isFetching ? 'Retrying...' : 'Retry'}
+      </button>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">

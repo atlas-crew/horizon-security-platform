@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { FleetMetrics } from '../../types/fleet';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
+import { fleetKeys, getQueryMode } from '../../lib/queryKeys';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -19,9 +20,10 @@ async function fetchFleetMetrics(): Promise<FleetMetrics> {
  */
 export function useFleetMetrics() {
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
+  const mode = getQueryMode(isDemoMode, scenario);
 
   return useQuery({
-    queryKey: ['fleet', 'metrics', isDemoMode ? scenario : 'live'],
+    queryKey: fleetKeys.metrics(mode),
     queryFn: () => {
       // Return demo data when demo mode is enabled
       if (isDemoMode) {

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { SensorSummary } from '../../types/fleet';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
+import { fleetKeys, getQueryMode } from '../../lib/queryKeys';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -22,9 +23,10 @@ async function fetchSensors(): Promise<SensorSummary[]> {
  */
 export function useSensors() {
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
+  const mode = getQueryMode(isDemoMode, scenario);
 
   return useQuery({
-    queryKey: ['fleet', 'sensors', isDemoMode ? scenario : 'live'],
+    queryKey: fleetKeys.sensors(mode),
     queryFn: () => {
       // Return demo data when demo mode is enabled
       if (isDemoMode) {

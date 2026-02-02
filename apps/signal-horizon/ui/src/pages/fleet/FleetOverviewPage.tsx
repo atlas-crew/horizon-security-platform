@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { SensorTable } from '../../components/fleet/SensorTable';
+import { FleetOverviewSkeleton } from '../../components/LoadingStates';
 import { useFleetStore } from '../../stores/fleetStore';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
@@ -127,8 +128,8 @@ export function FleetOverviewPage() {
 
   if (overviewLoading || sensorsLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-ink-muted">Loading fleet overview...</div>
+      <div className="p-6">
+        <FleetOverviewSkeleton />
       </div>
     );
   }

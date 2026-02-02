@@ -1,17 +1,17 @@
 import { useMemo, memo } from 'react';
 import { Timer, Hourglass, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
-// Note: DEFAULT_* constants are no longer needed since parseIntSafe uses current value as fallback
 import { parseIntSafe, parseFloatSafe } from '../../../utils/parseNumeric';
+import type { TarpitConfig as SharedTarpitConfig } from '@signal-horizon/shared/types';
 
-export interface TarpitConfigData {
-  enabled: boolean;
-  base_delay_ms: number;
-  max_delay_ms: number;
-  progressive_multiplier: number;
-  max_concurrent_tarpits: number;
-  decay_threshold_ms: number;
-}
+/**
+ * Tarpit config data used by the UI form.
+ * Based on shared TarpitConfig type but only includes fields exposed in the form.
+ */
+export type TarpitConfigData = Pick<
+  SharedTarpitConfig,
+  'enabled' | 'base_delay_ms' | 'max_delay_ms' | 'progressive_multiplier' | 'max_concurrent_tarpits' | 'decay_threshold_ms'
+>;
 
 interface TarpitConfigProps {
   config: TarpitConfigData;

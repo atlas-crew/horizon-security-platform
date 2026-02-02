@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
 import { BookOpen, Stethoscope, MessageCircle } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
@@ -448,9 +449,17 @@ Track these metrics:
 
   const content = docContent?.content || demoContent[selectedDocId] || '# Documentation\n\nSelect a document from the sidebar.';
   
-  // Parse markdown to HTML safely
+  // Parse markdown to HTML and sanitize with DOMPurify (labs-v20)
+  // DOMPurify prevents XSS attacks from malicious markdown content
   const htmlContent = useMemo(() => {
-    return marked.parse(content) as string;
+    const rawHtml = marked.parse(content) as string;
+    return DOMPurify.sanitize(rawHtml, {
+      // Allow mermaid diagram divs
+      ADD_TAGS: ['div'],
+      ADD_ATTR: ['class'],
+      // Allow safe URI schemes for links
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+    });
   }, [content]);
 
   // Run mermaid rendering when content changes

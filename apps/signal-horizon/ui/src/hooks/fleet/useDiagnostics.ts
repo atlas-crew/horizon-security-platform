@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
+import { diagnosticsKeys, getQueryMode } from '../../lib/queryKeys';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -231,9 +232,11 @@ export function useDiagnostics(options: UseDiagnosticsOptions): UseDiagnosticsRe
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const mode = getQueryMode(isDemoMode, scenario);
+
   // React Query for polling mode
   const query = useQuery({
-    queryKey: ['diagnostics', sensorId, sections?.join(','), isDemoMode ? scenario : 'live'],
+    queryKey: diagnosticsKeys.sensorSections(sensorId, sections?.join(','), mode),
     queryFn: () => {
       if (isDemoMode) {
         return generateDemoDiagnostics(sensorId, scenario);
@@ -333,7 +336,7 @@ export function useDiagnostics(options: UseDiagnosticsOptions): UseDiagnosticsRe
       // The useEffect will handle reconnection
     } else {
       // For polling mode, invalidate the query
-      queryClient.invalidateQueries({ queryKey: ['diagnostics', sensorId] });
+      queryClient.invalidateQueries({ queryKey: diagnosticsKeys.sensor(sensorId) });
     }
   }, [live, queryClient, sensorId]);
 

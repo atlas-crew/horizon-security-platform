@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings } from 'lucide-react';
+import { Settings, RefreshCw, AlertCircle } from 'lucide-react';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
+import { SensorDetailSkeleton, ConfigPanelSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
 import { FileBrowser } from '../../components/fleet/FileBrowser';
 import { ConfigDriftViewer } from '../../components/fleet/ConfigDriftViewer';
@@ -170,11 +171,7 @@ export function SensorDetailPage() {
   });
 
   if (isLoading || !sensor) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-ink-muted">Loading sensor details...</div>
-      </div>
-    );
+    return <SensorDetailSkeleton />;
   }
 
   const tabs: { key: TabType; label: string }[] = [
@@ -746,7 +743,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   };
 
   // Load real Pingora config
-  const { data: remotePingoraConfig, isLoading } = useQuery({
+  const { data: remotePingoraConfig, isLoading, error: pingoraError, refetch: refetchPingora, isFetching: isPingoraFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'pingora'],
     queryFn: () => fetchPingoraConfig(id),
     enabled: !!id && configTab === 'pingora',
@@ -860,7 +857,22 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       {configTab === 'pingora' && (
         <div className="space-y-6">
           {isLoading ? (
-            <div className="text-center py-12 text-ink-muted">Loading Pingora configuration...</div>
+            <ConfigPanelSkeleton />
+          ) : pingoraError ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="flex items-center gap-2 text-status-error">
+                <AlertCircle className="w-5 h-5" />
+                <span>Error: {(pingoraError as Error).message}</span>
+              </div>
+              <button
+                onClick={() => refetchPingora()}
+                disabled={isPingoraFetching}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isPingoraFetching ? 'animate-spin' : ''}`} />
+                {isPingoraFetching ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
           ) : (
             <>
               <ServiceControls onAction={handlePingoraAction} />

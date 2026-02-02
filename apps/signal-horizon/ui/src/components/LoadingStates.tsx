@@ -218,6 +218,187 @@ export function EmptyState({
 }
 
 /**
+ * Sensor detail skeleton - matches sensor detail page layout
+ */
+export function SensorDetailSkeleton() {
+  return (
+    <div className="space-y-6 p-6" aria-busy="true" aria-label="Loading sensor details">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24 rounded" />
+          <Skeleton className="h-8 w-48 rounded" />
+          <Skeleton className="h-4 w-32 rounded" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-border-subtle pb-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-24 rounded-lg" />
+        ))}
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card p-4 space-y-2">
+            <Skeleton className="h-4 w-20 rounded" />
+            <Skeleton className="h-8 w-16 rounded" />
+            <Skeleton className="h-3 w-24 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Config panel skeleton - matches config forms layout
+ */
+export function ConfigPanelSkeleton() {
+  return (
+    <div className="p-6 space-y-6" aria-busy="true" aria-label="Loading configuration">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Skeleton className="w-5 h-5 rounded" />
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-32 rounded" />
+            <Skeleton className="h-3 w-48 rounded" />
+          </div>
+        </div>
+        <Skeleton className="w-11 h-6 rounded-full" />
+      </div>
+      <div className="border-t border-border-subtle pt-6 space-y-4">
+        <div className="grid grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-4 w-24 rounded" />
+              <Skeleton className="h-10 w-full rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-4 w-20 rounded" />
+              <Skeleton className="h-10 w-full rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fleet overview skeleton - matches fleet overview page layout
+ */
+export function FleetOverviewSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading fleet overview">
+      {/* Stats Row */}
+      <div className="grid grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card p-4 space-y-2">
+            <Skeleton className="h-4 w-24 rounded" />
+            <Skeleton className="h-8 w-16 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Sensors List */}
+      <div className="card">
+        <div className="card-header flex items-center justify-between">
+          <Skeleton className="h-5 w-32 rounded" />
+          <Skeleton className="h-8 w-24 rounded" />
+        </div>
+        <div className="divide-y divide-border-subtle">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-3 h-3 rounded-full" />
+                <div className="space-y-1">
+                  <Skeleton className="h-5 w-40 rounded" />
+                  <Skeleton className="h-3 w-24 rounded" />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-4 w-16 rounded" />
+                <Skeleton className="h-4 w-20 rounded" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Rules list skeleton - matches rule distribution page layout
+ */
+export function RulesListSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading rules">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-6 w-32 rounded" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-lg" />
+        </div>
+      </div>
+      <div className="card divide-y divide-border-subtle">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-4 h-4 rounded" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-48 rounded" />
+                <Skeleton className="h-3 w-32 rounded" />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-12 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Token list skeleton - matches onboarding page token list
+ */
+export function TokenListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading tokens">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="p-4 bg-surface-card border border-border-subtle rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-32 rounded" />
+              <Skeleton className="h-4 w-48 rounded" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-20 rounded" />
+              <Skeleton className="h-8 w-20 rounded" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Connection status banner
  */
 export function ConnectionBanner({

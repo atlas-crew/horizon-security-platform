@@ -274,6 +274,23 @@ impl CrawlerDetector {
         })
     }
 
+    /// Create a disabled crawler detector when initialization fails.
+    pub fn disabled() -> Self {
+        let mut config = CrawlerConfig::default();
+        config.enabled = false;
+        config.verify_legitimate_crawlers = false;
+        config.block_bad_bots = false;
+
+        Self {
+            cache: VerificationCache::new(&config),
+            dns: None,
+            stats: CrawlerStats::new(),
+            crawler_patterns: Vec::new(),
+            bad_bot_patterns: Vec::new(),
+            config,
+        }
+    }
+
     /// Verify a request's crawler status.
     ///
     /// ## Security

@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
+use tracing::error;
 
 use super::{ChallengeResponse, Interrogator, ValidationResult};
 
@@ -147,6 +148,22 @@ impl CookieManager {
             config,
             stats: CookieStats::default(),
         })
+    }
+
+    /// Create a new cookie manager with a best-effort fallback for invalid secrets.
+    ///
+    /// This avoids panicking on invalid keys and logs a warning instead.
+    pub fn new_fallback(mut config: CookieConfig) -> Self {
+        if config.secret_key == [0u8; 32] {
+            error!("CookieManager secret key invalid; forcing non-zero fallback key");
+            config.secret_key[0] = 1;
+        }
+
+        Self {
+            challenges: DashMap::new(),
+            config,
+            stats: CookieStats::default(),
+        }
     }
 
     /// Create a new cookie manager without validating the secret key.
@@ -334,8 +351,13 @@ impl CookieManager {
 
     /// Sign data using HMAC-SHA256, return hex signature
     fn sign_data(&self, data: &str) -> String {
-        let mut mac =
-            HmacSha256::new_from_slice(&self.config.secret_key).expect("HMAC key length is valid");
+        let mut mac = match HmacSha256::new_from_slice(&self.config.secret_key) {
+            Ok(mac) => mac,
+            Err(err) => {
+                error!("Failed to initialize HMAC for cookie signature: {}", err);
+                return String::new();
+            }
+        };
         mac.update(data.as_bytes());
         let result = mac.finalize();
         hex::encode(&result.into_bytes()[..16]) // First 16 bytes = 32 hex chars

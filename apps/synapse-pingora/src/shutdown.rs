@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{broadcast, watch, Notify};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Shutdown-related errors.
 #[derive(Debug, Error)]
@@ -478,18 +478,54 @@ impl ShutdownController {
         {
             use tokio::signal::unix::{signal, SignalKind};
 
-            let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
-            let mut sigint = signal(SignalKind::interrupt()).expect("SIGINT handler");
-            let mut sigquit = signal(SignalKind::quit()).expect("SIGQUIT handler");
+            let mut sigterm = match signal(SignalKind::terminate()) {
+                Ok(signal) => Some(signal),
+                Err(err) => {
+                    error!("Failed to register SIGTERM handler: {}", err);
+                    None
+                }
+            };
+            let mut sigint = match signal(SignalKind::interrupt()) {
+                Ok(signal) => Some(signal),
+                Err(err) => {
+                    error!("Failed to register SIGINT handler: {}", err);
+                    None
+                }
+            };
+            let mut sigquit = match signal(SignalKind::quit()) {
+                Ok(signal) => Some(signal),
+                Err(err) => {
+                    error!("Failed to register SIGQUIT handler: {}", err);
+                    None
+                }
+            };
 
             tokio::select! {
-                _ = sigterm.recv() => {
+                _ = async {
+                    if let Some(sigterm) = sigterm.as_mut() {
+                        sigterm.recv().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
                     info!("Received SIGTERM");
                 }
-                _ = sigint.recv() => {
+                _ = async {
+                    if let Some(sigint) = sigint.as_mut() {
+                        sigint.recv().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
                     info!("Received SIGINT");
                 }
-                _ = sigquit.recv() => {
+                _ = async {
+                    if let Some(sigquit) = sigquit.as_mut() {
+                        sigquit.recv().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
                     info!("Received SIGQUIT");
                 }
                 _ = trigger_rx.recv() => {

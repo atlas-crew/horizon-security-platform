@@ -187,6 +187,16 @@ impl VhostMatcher {
         })
     }
 
+    /// Create an empty matcher with no sites.
+    pub fn empty() -> Self {
+        Self {
+            exact_matches: HashMap::with_hasher(RandomState::new()),
+            wildcard_patterns: Vec::new(),
+            sites: Vec::new(),
+            default_site: None,
+        }
+    }
+
     /// Converts a wildcard pattern to a regex pattern.
     fn wildcard_to_regex(pattern: &str) -> String {
         let mut regex = String::from("^");

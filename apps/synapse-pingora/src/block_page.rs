@@ -296,17 +296,22 @@ impl BlockPageRenderer {
         let mut result = template.to_string();
 
         // Process conditionals first: {{#if var}}...{{/if}}
-        let conditional_re = regex::Regex::new(r"\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{/if\}\}").unwrap();
-        result = conditional_re.replace_all(&result, |caps: &regex::Captures| {
-            let var_name = &caps[1];
-            let content = &caps[2];
-            if let Some(value) = vars.get(var_name) {
-                if !value.is_empty() {
-                    return content.to_string();
-                }
-            }
-            String::new()
-        }).to_string();
+        if let Ok(conditional_re) =
+            regex::Regex::new(r"\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{/if\}\}")
+        {
+            result = conditional_re
+                .replace_all(&result, |caps: &regex::Captures| {
+                    let var_name = &caps[1];
+                    let content = &caps[2];
+                    if let Some(value) = vars.get(var_name) {
+                        if !value.is_empty() {
+                            return content.to_string();
+                        }
+                    }
+                    String::new()
+                })
+                .to_string();
+        }
 
         // Then substitute variables: {{var}}
         for (key, value) in vars {

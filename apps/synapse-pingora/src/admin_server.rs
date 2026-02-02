@@ -355,8 +355,9 @@ pub fn record_log(level: &str, message: String) {
 }
 
 use axum::{
+    body::Body,
     extract::{Path, Query, Request, State},
-    http::{header, Method, StatusCode},
+    http::{header, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -617,7 +618,7 @@ fn extract_client_ip(request: &Request) -> IpAddr {
 
     // Default to localhost if no headers found
     // In production, the admin server should be behind a proxy that sets these headers
-    "127.0.0.1".parse().unwrap()
+    IpAddr::from([127, 0, 0, 1])
 }
 
 /// Scope-checking middleware for admin:write scope (WS2-004).
@@ -799,25 +800,25 @@ async fn security_headers(
     // Prevent MIME type sniffing attacks
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
-        "nosniff".parse().unwrap(),
+        HeaderValue::from_static("nosniff"),
     );
 
     // Prevent clickjacking - API should never be framed
     headers.insert(
         header::X_FRAME_OPTIONS,
-        "DENY".parse().unwrap(),
+        HeaderValue::from_static("DENY"),
     );
 
     // Control referrer information leakage
     headers.insert(
         header::REFERRER_POLICY,
-        "strict-origin-when-cross-origin".parse().unwrap(),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
 
     // Prevent caching of sensitive API responses
     headers.insert(
         header::CACHE_CONTROL,
-        "no-store, no-cache, must-revalidate".parse().unwrap(),
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
     );
 
     // Content-Security-Policy for API responses (stricter than console)
@@ -825,15 +826,43 @@ async fn security_headers(
     if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
-            "default-src 'none'; frame-ancestors 'none'".parse().unwrap(),
+            HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
         );
     }
 
     // Permissions-Policy to disable unnecessary browser features
     headers.insert(
         http::header::HeaderName::from_static("permissions-policy"),
-        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()".parse().unwrap(),
+        HeaderValue::from_static(
+            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+        ),
     );
+
+    response
+}
+
+fn build_response(
+    status: StatusCode,
+    body: String,
+    content_type: &'static str,
+    disposition: Option<String>,
+) -> Response {
+    let mut response = Response::new(Body::from(body));
+    *response.status_mut() = status;
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+
+    if let Some(disposition) = disposition {
+        match HeaderValue::from_str(&disposition) {
+            Ok(value) => {
+                response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
+            }
+            Err(err) => {
+                warn!("Invalid Content-Disposition header value: {}", err);
+            }
+        }
+    }
 
     response
 }
@@ -855,16 +884,16 @@ pub async fn start_admin_server(
     // - Admin routes: 100 requests per minute per IP (stricter for privileged operations)
     // - Public routes: 1000 requests per minute per IP (more generous for monitoring)
     // - Auth failures: 5 attempts per minute per IP (very strict to prevent brute-force)
-    let admin_rate_limiter = Arc::new(RateLimiter::keyed(
-        Quota::per_minute(NonZeroU32::new(100).unwrap())
-    ));
-    let public_rate_limiter = Arc::new(RateLimiter::keyed(
-        Quota::per_minute(NonZeroU32::new(1000).unwrap())
-    ));
+    let admin_rate_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(
+        NonZeroU32::new(100).unwrap_or(NonZeroU32::MIN),
+    )));
+    let public_rate_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(
+        NonZeroU32::new(1000).unwrap_or(NonZeroU32::MIN),
+    )));
     // SECURITY: Very strict rate limit for auth failures to prevent brute-force attacks
-    let auth_failure_limiter = Arc::new(RateLimiter::keyed(
-        Quota::per_minute(NonZeroU32::new(5).unwrap())
-    ));
+    let auth_failure_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(
+        NonZeroU32::new(5).unwrap_or(NonZeroU32::MIN),
+    )));
 
     let state = AdminState {
         handler,
@@ -3118,13 +3147,12 @@ async fn diagnostic_bundle_handler(State(state): State<AdminState>) -> impl Into
     let body = serde_json::to_string_pretty(&bundle).unwrap_or_default();
     let filename = format!("synapse-diagnostic-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
     let disposition = format!("attachment; filename=\"{}\"", filename);
-
-    axum::response::Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::CONTENT_DISPOSITION, disposition)
-        .body(axum::body::Body::from(body))
-        .unwrap()
+    build_response(
+        StatusCode::OK,
+        body,
+        "application/json",
+        Some(disposition),
+    )
 }
 
 // =============================================================================
@@ -3140,12 +3168,12 @@ async fn config_export_handler(State(state): State<AdminState>) -> axum::respons
         if let Ok(content) = std::fs::read_to_string(path) {
             let filename = format!("synapse-config-{}.yaml", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
             let disposition = format!("attachment; filename=\"{}\"", filename);
-            return axum::response::Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, "application/x-yaml")
-                .header(header::CONTENT_DISPOSITION, disposition)
-                .body(axum::body::Body::from(content))
-                .unwrap();
+            return build_response(
+                StatusCode::OK,
+                content,
+                "application/x-yaml",
+                Some(disposition),
+            );
         }
     }
 
@@ -3160,13 +3188,12 @@ async fn config_export_handler(State(state): State<AdminState>) -> axum::respons
     let filename = format!("synapse-config-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
     let disposition = format!("attachment; filename=\"{}\"", filename);
     let body = serde_json::to_string_pretty(&config_json).unwrap_or_default();
-
-    axum::response::Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::CONTENT_DISPOSITION, disposition)
-        .body(axum::body::Body::from(body))
-        .unwrap()
+    build_response(
+        StatusCode::OK,
+        body,
+        "application/json",
+        Some(disposition),
+    )
 }
 
 /// POST /_sensor/config/import - Import configuration from YAML/JSON

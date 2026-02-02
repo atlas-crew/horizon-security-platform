@@ -949,7 +949,12 @@ impl Default for SessionManager {
 fn generate_session_id() -> String {
     // Use getrandom for cryptographically secure random bytes
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("Failed to get random bytes");
+    if let Err(err) = getrandom::getrandom(&mut bytes) {
+        log::error!("Failed to get random bytes for session id: {}", err);
+        for byte in bytes.iter_mut() {
+            *byte = fastrand::u8(..);
+        }
+    }
 
     // Format as UUID v4 with proper version and variant bits
     bytes[6] = (bytes[6] & 0x0F) | 0x40; // Version 4

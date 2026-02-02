@@ -262,7 +262,15 @@ fn default_enabled() -> bool {
 /// Create a CookieConfig with cryptographically secure random secret key
 fn create_default_cookie_config() -> CookieConfig {
     let mut secret_key = [0u8; 32];
-    getrandom::getrandom(&mut secret_key).expect("Failed to generate random secret key");
+    if let Err(err) = getrandom::getrandom(&mut secret_key) {
+        error!("Failed to generate secure cookie secret key: {}", err);
+        for byte in secret_key.iter_mut() {
+            *byte = fastrand::u8(..);
+        }
+    }
+    if secret_key.iter().all(|byte| *byte == 0) {
+        secret_key[0] = 1;
+    }
     CookieConfig {
         cookie_name: "__synapse_challenge".to_string(),
         cookie_max_age_secs: 86400, // 1 day
@@ -281,6 +289,26 @@ fn create_progression_config() -> ProgressionConfig {
     config.risk_threshold_captcha = 0.90;
     config.risk_threshold_block = 0.95;
     config
+}
+
+fn build_trap_matcher() -> Option<Arc<TrapMatcher>> {
+    match TrapMatcher::new(TrapConfig::default()) {
+        Ok(matcher) => Some(Arc::new(matcher)),
+        Err(err) => {
+            error!("Failed to initialize TrapMatcher: {}", err);
+            None
+        }
+    }
+}
+
+async fn build_crawler_detector(config: CrawlerConfig) -> Arc<CrawlerDetector> {
+    match CrawlerDetector::new(config).await {
+        Ok(detector) => Arc::new(detector),
+        Err(err) => {
+            error!("Failed to initialize CrawlerDetector: {}", err);
+            Arc::new(CrawlerDetector::disabled())
+        }
+    }
 }
 
 impl Default for RateLimitConfig {
@@ -992,7 +1020,7 @@ pub struct SynapseProxy {
 
 impl SynapseProxy {
     pub async fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
-        let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+        let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
 
@@ -1012,7 +1040,7 @@ impl SynapseProxy {
             Arc::new(ActorManager::new(ActorConfig::default())),
             Arc::new(SessionManager::new(SessionConfig::default())),
             None,
-            Arc::new(crawler_detector),
+            crawler_detector,
             None, // No horizon_manager for simple constructor
             trends_manager,
             signal_manager,
@@ -1044,10 +1072,7 @@ impl SynapseProxy {
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
 
         // Create interrogator managers for progressive challenge system
-        let cookie_manager = Arc::new(
-            CookieManager::new(create_default_cookie_config())
-                .expect("default cookie config should be valid")
-        );
+        let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
         let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
         let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
 
@@ -1078,7 +1103,7 @@ impl SynapseProxy {
             site_waf_manager: None,
             rate_limit_manager: None,
             access_list_manager: None,
-            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            trap_matcher: build_trap_matcher(),
             block_log,
             actor_manager,
             session_manager,
@@ -1093,7 +1118,7 @@ impl SynapseProxy {
     }
 
     pub async fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
-        let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+        let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
 
@@ -1101,10 +1126,7 @@ impl SynapseProxy {
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
 
         // Create interrogator managers
-        let cookie_manager = Arc::new(
-            CookieManager::new(create_default_cookie_config())
-                .expect("default cookie config should be valid")
-        );
+        let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
         let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
         let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
 
@@ -1134,12 +1156,12 @@ impl SynapseProxy {
             site_waf_manager: None,
             rate_limit_manager: None,
             access_list_manager: None,
-            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            trap_matcher: build_trap_matcher(),
             block_log: Arc::new(BlockLog::default()),
             actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
             shadow_mirror_manager: None,
-            crawler_detector: Arc::new(crawler_detector),
+            crawler_detector,
             horizon_manager: None,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
             trends_manager,
@@ -1179,10 +1201,7 @@ impl SynapseProxy {
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
 
         // Create interrogator managers
-        let cookie_manager = Arc::new(
-            CookieManager::new(create_default_cookie_config())
-                .expect("default cookie config should be valid")
-        );
+        let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
         let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
         let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
 
@@ -1212,7 +1231,7 @@ impl SynapseProxy {
             site_waf_manager: Some(site_waf_manager),
             rate_limit_manager: Some(rate_limit_manager),
             access_list_manager: Some(access_list_manager),
-            trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            trap_matcher: build_trap_matcher(),
             block_log,
             actor_manager,
             session_manager,
@@ -3527,7 +3546,7 @@ fn create_multisite_managers(
     let vhost_matcher = VhostMatcher::new(sites.to_vec())
         .unwrap_or_else(|e| {
             warn!("Failed to create VhostMatcher: {}, using empty matcher", e);
-            VhostMatcher::new(Vec::new()).unwrap()
+            VhostMatcher::empty()
         });
 
     // Create SiteWafManager
@@ -3890,15 +3909,17 @@ fn main() {
 
     // Phase 9: Create shared CrawlerDetector for bot detection and verification
     let shared_crawler_detector = {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create tokio runtime for crawler init");
-        Arc::new(rt.block_on(async {
-            CrawlerDetector::new(CrawlerConfig::default())
-                .await
-                .expect("Failed to create CrawlerDetector")
-        }))
+        {
+            Ok(rt) => rt,
+            Err(err) => {
+                error!("Failed to create tokio runtime for crawler init: {}", err);
+                std::process::exit(1);
+            }
+        };
+        rt.block_on(build_crawler_detector(CrawlerConfig::default()))
     };
     info!("CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
         synapse_pingora::crawler::KNOWN_CRAWLERS.len(),
@@ -3939,8 +3960,13 @@ fn main() {
     });
 
     // Start admin HTTP server in a separate thread with its own tokio runtime
-    let admin_addr: SocketAddr = config.server.admin_listen.parse()
-        .expect("Invalid admin_listen address");
+    let admin_addr: SocketAddr = match config.server.admin_listen.parse() {
+        Ok(addr) => addr,
+        Err(err) => {
+            error!("Invalid admin_listen address '{}': {}", config.server.admin_listen, err);
+            std::process::exit(1);
+        }
+    };
     let admin_handler = Arc::clone(&api_handler);
     // SECURITY: Enforce authentication on admin API
     // If no API key is configured, generate a secure random token to prevent unauthorized access
@@ -4004,10 +4030,16 @@ fn main() {
     info!("Registered profile, schema, and evaluate callbacks for admin API");
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create admin runtime");
+        {
+            Ok(rt) => rt,
+            Err(err) => {
+                error!("Failed to create admin runtime: {}", err);
+                return;
+            }
+        };
 
         rt.block_on(async {
             if let Err(e) = start_admin_server(admin_addr, admin_handler, admin_api_key).await {
@@ -4019,7 +4051,13 @@ fn main() {
     info!("Admin API server starting on {}", config.server.admin_listen);
 
     // Create Pingora server
-    let mut server = Server::new(None).expect("Failed to create server");
+    let mut server = match Server::new(None) {
+        Ok(server) => server,
+        Err(err) => {
+            error!("Failed to create server: {}", err);
+            std::process::exit(1);
+        }
+    };
     server.bootstrap();
 
     // Create proxy service - use multi-site if available, otherwise legacy
@@ -4097,10 +4135,19 @@ fn main() {
 
     // Phase 6: Enable TLS Listener
     if config.tls.enabled && !config.tls.cert_path.is_empty() && !config.tls.key_path.is_empty() {
-        let tls_settings = TlsSettings::intermediate(
+        let tls_settings = match TlsSettings::intermediate(
             &config.tls.cert_path,
             &config.tls.key_path,
-        ).expect("Failed to create TLS settings from configured paths");
+        ) {
+            Ok(settings) => settings,
+            Err(err) => {
+                error!(
+                    "Failed to create TLS settings from configured paths: {}",
+                    err
+                );
+                std::process::exit(1);
+            }
+        };
         
         // Note: TlsSettings::intermediate defaults to TLS 1.2+
         
@@ -4534,5 +4581,111 @@ key_path: "/etc/keys/example.key"
         assert_eq!(cert_config.domain, "*.example.com");
         assert_eq!(cert_config.cert_path, "/etc/certs/example.pem");
         assert_eq!(cert_config.key_path, "/etc/keys/example.key");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // ProxyHttp Helper Function Tests
+    // Tests for functions supporting the ProxyHttp trait implementation
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_normalize_path_numeric_ids() {
+        assert_eq!(normalize_path_to_template("/api/users/123"), "/api/users/{id}");
+        assert_eq!(normalize_path_to_template("/api/orders/456/items/789"), "/api/orders/{id}/items/{id}");
+    }
+
+    #[test]
+    fn test_normalize_path_uuid() {
+        assert_eq!(
+            normalize_path_to_template("/api/users/550e8400-e29b-41d4-a716-446655440000"),
+            "/api/users/{id}"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_mongodb_objectid() {
+        assert_eq!(
+            normalize_path_to_template("/api/documents/507f1f77bcf86cd799439011"),
+            "/api/documents/{id}"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_unchanged() {
+        assert_eq!(normalize_path_to_template("/api/v1/products"), "/api/v1/products");
+        assert_eq!(normalize_path_to_template("/health"), "/health");
+    }
+
+    #[test]
+    fn test_compute_hash_deterministic() {
+        let hash1 = compute_hash(b"test data");
+        let hash2 = compute_hash(b"test data");
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_compute_hash_different() {
+        assert_ne!(compute_hash(b"input1"), compute_hash(b"input2"));
+    }
+
+    #[test]
+    fn test_compute_hash_length() {
+        assert_eq!(compute_hash(b"data").len(), 16);
+    }
+
+    #[test]
+    fn test_categorize_rule_sqli() {
+        assert_eq!(categorize_rule_id(942100), "sqli");
+        assert_eq!(categorize_rule_id(940100), "sqli");
+    }
+
+    #[test]
+    fn test_categorize_rule_xss() {
+        assert_eq!(categorize_rule_id(941100), "xss");
+    }
+
+    #[test]
+    fn test_categorize_rule_path_traversal() {
+        assert_eq!(categorize_rule_id(930100), "path_traversal");
+    }
+
+    #[test]
+    fn test_categorize_rule_rce() {
+        assert_eq!(categorize_rule_id(932100), "rce");
+    }
+
+    #[test]
+    fn test_categorize_rule_scanner() {
+        assert_eq!(categorize_rule_id(913100), "scanner");
+    }
+
+    #[test]
+    fn test_categorize_rule_unknown() {
+        assert_eq!(categorize_rule_id(999100), "rule_999000");
+    }
+
+    #[test]
+    #[serial]
+    fn test_rate_limit_allows_under() {
+        PER_IP_LIMITS.remove("test_under");
+        assert!(check_per_ip_rate_limit("test_under", 100));
+        assert!(check_per_ip_rate_limit("test_under", 100));
+    }
+
+    #[test]
+    #[serial]
+    fn test_rate_limit_blocks_over() {
+        PER_IP_LIMITS.remove("test_over");
+        assert!(check_per_ip_rate_limit("test_over", 2));
+        assert!(check_per_ip_rate_limit("test_over", 2));
+        assert!(!check_per_ip_rate_limit("test_over", 2));
+    }
+
+    #[test]
+    fn test_buffer_pool() {
+        let buf = get_buffer();
+        assert!(buf.is_empty());
+        assert!(buf.capacity() >= 8192);
+        return_buffer(buf);
     }
 }

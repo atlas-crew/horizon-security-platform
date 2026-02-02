@@ -14,6 +14,7 @@ use std::collections::{HashMap, VecDeque};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use tracing::warn;
 
 // ============================================================================
 // Types
@@ -176,11 +177,11 @@ impl SignalManager {
     pub fn record(&self, signal: Signal) {
         let mut store = self.store.write();
         let bucket_ts = bucket_timestamp(signal.timestamp_ms, self.config.bucket_size_ms);
-
-        let bucket = match store.buckets.back_mut() {
-            Some(last) if last.timestamp_ms == bucket_ts => last,
-            Some(last) if bucket_ts > last.timestamp_ms => {
-                // Add buckets until we reach the target (handles gaps).
+        let mut needs_bucket = true;
+        if let Some(last) = store.buckets.back() {
+            if last.timestamp_ms == bucket_ts {
+                needs_bucket = false;
+            } else if bucket_ts > last.timestamp_ms {
                 let mut ts = last.timestamp_ms + self.config.bucket_size_ms;
                 while ts <= bucket_ts {
                     store
@@ -188,15 +189,19 @@ impl SignalManager {
                         .push_back(SignalBucket::new(ts, self.config.bucket_size_ms));
                     ts += self.config.bucket_size_ms;
                 }
-                store.buckets.back_mut().expect("bucket just added")
+                needs_bucket = false;
             }
-            _ => {
-                // Either empty or out-of-order; add a fresh bucket.
-                store
-                    .buckets
-                    .push_back(SignalBucket::new(bucket_ts, self.config.bucket_size_ms));
-                store.buckets.back_mut().expect("bucket just added")
-            }
+        }
+
+        if needs_bucket {
+            store
+                .buckets
+                .push_back(SignalBucket::new(bucket_ts, self.config.bucket_size_ms));
+        }
+
+        let Some(bucket) = store.buckets.back_mut() else {
+            warn!("Signal bucket allocation failed; dropping signal");
+            return;
         };
 
         bucket.add_signal(signal, self.config.max_signals_per_bucket);

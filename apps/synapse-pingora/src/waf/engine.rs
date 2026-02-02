@@ -1076,19 +1076,19 @@ impl Engine {
             }
         };
 
-        match condition.match_value.as_ref() {
-            Some(mv) if mv.as_cond().is_some() => {
-                let child = mv.as_cond().unwrap();
-                self.eval_condition(child, ctx, Some(&unique_count.to_string()))
+        if let Some(mv) = condition.match_value.as_ref() {
+            if let Some(child) = mv.as_cond() {
+                return self.eval_condition(child, ctx, Some(&unique_count.to_string()));
             }
-            Some(mv) if mv.as_num().is_some() => unique_count as f64 >= mv.as_num().unwrap(),
-            _ => {
-                if let Some(count) = condition.count {
-                    unique_count as u64 >= count
-                } else {
-                    unique_count > 0
-                }
+            if let Some(num) = mv.as_num() {
+                return unique_count as f64 >= num;
             }
+        }
+
+        if let Some(count) = condition.count {
+            unique_count as u64 >= count
+        } else {
+            unique_count > 0
         }
     }
 
@@ -1686,7 +1686,11 @@ fn decode_html_entities(value: &str) -> String {
                         break;
                     }
                     Some(&ch) if ch.is_ascii_alphanumeric() || ch == '#' => {
-                        entity.push(chars.next().unwrap());
+                        if let Some(next) = chars.next() {
+                            entity.push(next);
+                        } else {
+                            break;
+                        }
                     }
                     _ => break,
                 }
@@ -1869,7 +1873,10 @@ fn select_argument_values(
 ) -> Vec<String> {
     let mut values = Vec::new();
     for entry in &ctx.arg_entries {
-        if selector.is_none() || matches_selector(engine, selector.unwrap(), &entry.key) {
+        if selector
+            .map(|sel| matches_selector(engine, sel, &entry.key))
+            .unwrap_or(true)
+        {
             values.push(entry.value.clone());
         }
     }

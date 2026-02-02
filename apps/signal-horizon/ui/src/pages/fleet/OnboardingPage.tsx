@@ -24,6 +24,8 @@ import {
 import { MetricCard } from '../../components/fleet';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
 interface RegistrationToken {
   id: string;
@@ -77,7 +79,7 @@ export function OnboardingPage(): React.ReactElement {
   const { data: statsData } = useQuery({
     queryKey: ['onboarding-stats'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/stats`);
+      const response = await fetch(`${API_BASE}/onboarding/stats`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch stats');
       return response.json();
     },
@@ -87,7 +89,7 @@ export function OnboardingPage(): React.ReactElement {
   const { data: tokensData, isLoading: tokensLoading, error: tokensError } = useQuery({
     queryKey: ['registration-tokens'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/tokens`);
+      const response = await fetch(`${API_BASE}/onboarding/tokens`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
@@ -98,7 +100,7 @@ export function OnboardingPage(): React.ReactElement {
   const { data: pendingData, isLoading: pendingLoading, error: pendingError } = useQuery({
     queryKey: ['pending-sensors'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/pending`);
+      const response = await fetch(`${API_BASE}/onboarding/pending`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch pending sensors');
       return response.json();
     },
@@ -113,7 +115,7 @@ export function OnboardingPage(): React.ReactElement {
     mutationFn: async (request: NewTokenRequest) => {
       const response = await fetch(`${API_BASE}/onboarding/tokens`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
       if (!response.ok) throw new Error('Failed to generate token');
@@ -131,6 +133,7 @@ export function OnboardingPage(): React.ReactElement {
     mutationFn: async (tokenId: string) => {
       const response = await fetch(`${API_BASE}/onboarding/tokens/${tokenId}`, {
         method: 'DELETE',
+        headers: authHeaders,
       });
       if (!response.ok) throw new Error('Failed to revoke token');
     },
@@ -146,7 +149,7 @@ export function OnboardingPage(): React.ReactElement {
     mutationFn: async ({ sensorId, action, assignedName }: { sensorId: string; action: 'approve' | 'reject'; assignedName?: string }) => {
       const response = await fetch(`${API_BASE}/onboarding/pending/${sensorId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, assignedName }),
       });
       if (!response.ok) throw new Error(`Failed to ${action} sensor`);

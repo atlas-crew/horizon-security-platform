@@ -8,6 +8,7 @@ import {
   defaultAdvancedConfig,
   type AdvancedConfigData,
 } from '../../components/fleet/pingora/AdvancedConfigPanel';
+import { deepMergeConfig } from '../../utils';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -51,18 +52,19 @@ function extractAdvancedConfig(fullConfig: Record<string, unknown>): AdvancedCon
 }
 
 // Merge advanced config back into full config
+// Uses deepMergeConfig to preserve nested properties that aren't in the UI
 function mergeAdvancedConfig(
   fullConfig: Record<string, unknown>,
   advancedConfig: AdvancedConfigData
 ): Record<string, unknown> {
   return {
     ...fullConfig,
-    dlp: advancedConfig.dlp,
-    block_page: advancedConfig.block_page,
-    crawler: advancedConfig.crawler,
-    tarpit: advancedConfig.tarpit,
-    entity: advancedConfig.entity,
-    travel: advancedConfig.travel,
+    dlp: deepMergeConfig(fullConfig.dlp as Record<string, unknown> || {}, advancedConfig.dlp),
+    block_page: deepMergeConfig(fullConfig.block_page as Record<string, unknown> || {}, advancedConfig.block_page),
+    crawler: deepMergeConfig(fullConfig.crawler as Record<string, unknown> || {}, advancedConfig.crawler),
+    tarpit: deepMergeConfig(fullConfig.tarpit as Record<string, unknown> || {}, advancedConfig.tarpit),
+    entity: deepMergeConfig(fullConfig.entity as Record<string, unknown> || {}, advancedConfig.entity),
+    travel: deepMergeConfig(fullConfig.travel as Record<string, unknown> || {}, advancedConfig.travel),
   };
 }
 

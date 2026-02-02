@@ -86,6 +86,24 @@ pub struct TlsCertConfig {
     pub is_wildcard: bool,
 }
 
+/// Result of a certificate reload operation.
+#[derive(Debug, Clone)]
+pub struct ReloadResult {
+    /// Number of certificates successfully reloaded
+    pub succeeded: usize,
+    /// Number of certificates that failed to reload
+    pub failed: usize,
+    /// Errors encountered during reload (domain -> error message)
+    pub errors: Vec<(String, String)>,
+}
+
+impl ReloadResult {
+    /// Returns true if all certificates were reloaded successfully.
+    pub fn is_success(&self) -> bool {
+        self.failed == 0
+    }
+}
+
 /// TLS manager with SNI-based certificate selection and hot reload.
 ///
 /// # Performance (PERF-P2-2)
@@ -99,6 +117,10 @@ pub struct TlsManager {
     default_cert: RwLock<Option<Arc<CertifiedKey>>>,
     /// Minimum TLS version
     min_version: TlsVersion,
+    /// Stored configurations for hot-reload (domain -> config)
+    cert_configs: RwLock<HashMap<String, TlsCertConfig, RandomState>>,
+    /// Default certificate config for hot-reload
+    default_cert_config: RwLock<Option<TlsCertConfig>>,
 }
 
 /// Supported TLS versions.
@@ -160,6 +182,8 @@ impl TlsManager {
             wildcard_certs: RwLock::new(HashMap::with_hasher(RandomState::new())),
             default_cert: RwLock::new(None),
             min_version,
+            cert_configs: RwLock::new(HashMap::with_hasher(RandomState::new())),
+            default_cert_config: RwLock::new(None),
         }
     }
 
@@ -194,7 +218,7 @@ impl TlsManager {
         });
 
         // Store based on type
-        if config.is_wildcard {
+        let storage_key = if config.is_wildcard {
             // Store wildcard by base domain (e.g., "example.com" for *.example.com)
             let base_domain = config.domain.trim_start_matches("*.");
             let mut wildcards = self.wildcard_certs.write();
@@ -203,6 +227,7 @@ impl TlsManager {
                 "Loaded wildcard TLS certificate for *.{}",
                 base_domain
             );
+            base_domain.to_lowercase()
         } else {
             let mut exact = self.exact_certs.write();
             exact.insert(config.domain.to_lowercase(), certified_key);
@@ -210,6 +235,13 @@ impl TlsManager {
                 "Loaded TLS certificate for {}",
                 config.domain
             );
+            config.domain.to_lowercase()
+        };
+
+        // Store config for hot-reload capability
+        {
+            let mut configs = self.cert_configs.write();
+            configs.insert(storage_key, config.clone());
         }
 
         Ok(())
@@ -231,6 +263,10 @@ impl TlsManager {
         });
 
         *self.default_cert.write() = Some(certified_key);
+
+        // Store config for hot-reload capability
+        *self.default_cert_config.write() = Some(config.clone());
+
         info!("Set default TLS certificate for {}", config.domain);
         Ok(())
     }
@@ -333,11 +369,192 @@ impl TlsManager {
 
     /// Reloads all certificates from their original paths.
     /// This is called on SIGHUP for hot reload.
-    pub fn reload_all(&self) -> Result<(), TlsError> {
+    ///
+    /// # Hot Reload Strategy
+    /// Certificates are reloaded atomically: new certificates are loaded into
+    /// temporary maps, then swapped in all at once. If any certificate fails
+    /// to load, all successfully loaded certificates are still applied and
+    /// failures are reported.
+    ///
+    /// # Returns
+    /// `ReloadResult` containing counts of succeeded/failed reloads and error details.
+    pub fn reload_all(&self) -> ReloadResult {
         info!("Reloading all TLS certificates...");
-        // Note: In production, we'd store the original configs and reload from them
-        // For now, this is a placeholder for the hot-reload mechanism
+
+        let mut result = ReloadResult {
+            succeeded: 0,
+            failed: 0,
+            errors: Vec::new(),
+        };
+
+        // Snapshot current configs to avoid holding lock during reload
+        let configs: Vec<(String, TlsCertConfig)> = {
+            let configs = self.cert_configs.read();
+            configs.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        };
+
+        let default_config: Option<TlsCertConfig> = {
+            self.default_cert_config.read().clone()
+        };
+
+        if configs.is_empty() && default_config.is_none() {
+            info!("No certificates configured for reload");
+            return result;
+        }
+
+        // Prepare new certificate maps
+        let mut new_exact: HashMap<String, Arc<CertifiedKey>, RandomState> =
+            HashMap::with_hasher(RandomState::new());
+        let mut new_wildcard: HashMap<String, Arc<CertifiedKey>, RandomState> =
+            HashMap::with_hasher(RandomState::new());
+
+        // Reload each certificate
+        for (storage_key, config) in configs {
+            match self.load_cert_internal(&config) {
+                Ok(certified_key) => {
+                    if config.is_wildcard {
+                        new_wildcard.insert(storage_key, certified_key);
+                    } else {
+                        new_exact.insert(storage_key, certified_key);
+                    }
+                    result.succeeded += 1;
+                    debug!("Reloaded certificate for {}", config.domain);
+                }
+                Err(e) => {
+                    result.failed += 1;
+                    result.errors.push((config.domain.clone(), e.to_string()));
+                    warn!("Failed to reload certificate for {}: {}", config.domain, e);
+                }
+            }
+        }
+
+        // Reload default certificate
+        let new_default = if let Some(config) = default_config {
+            match self.load_cert_internal(&config) {
+                Ok(certified_key) => {
+                    result.succeeded += 1;
+                    debug!("Reloaded default certificate for {}", config.domain);
+                    Some(certified_key)
+                }
+                Err(e) => {
+                    result.failed += 1;
+                    result.errors.push((format!("default:{}", config.domain), e.to_string()));
+                    warn!("Failed to reload default certificate for {}: {}", config.domain, e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Atomic swap: apply all successfully loaded certificates
+        if result.succeeded > 0 {
+            // Swap exact certs
+            if !new_exact.is_empty() {
+                let mut exact = self.exact_certs.write();
+                for (key, cert) in new_exact {
+                    exact.insert(key, cert);
+                }
+            }
+
+            // Swap wildcard certs
+            if !new_wildcard.is_empty() {
+                let mut wildcards = self.wildcard_certs.write();
+                for (key, cert) in new_wildcard {
+                    wildcards.insert(key, cert);
+                }
+            }
+
+            // Swap default cert
+            if let Some(cert) = new_default {
+                *self.default_cert.write() = Some(cert);
+            }
+        }
+
+        if result.is_success() {
+            info!(
+                "Successfully reloaded {} certificate(s)",
+                result.succeeded
+            );
+        } else {
+            warn!(
+                "Certificate reload completed: {} succeeded, {} failed",
+                result.succeeded, result.failed
+            );
+        }
+
+        result
+    }
+
+    /// Reloads a single certificate by domain.
+    ///
+    /// # Arguments
+    /// * `domain` - The domain to reload (case-insensitive)
+    ///
+    /// # Returns
+    /// `Ok(())` if successful, or the error that occurred.
+    pub fn reload_cert(&self, domain: &str) -> Result<(), TlsError> {
+        let normalized = domain.to_lowercase();
+        let storage_key = normalized.trim_start_matches("*.");
+
+        // Find the config
+        let config = {
+            let configs = self.cert_configs.read();
+            configs.get(storage_key).cloned()
+        };
+
+        let config = config.ok_or_else(|| TlsError::NoCertificate {
+            domain: domain.to_string(),
+        })?;
+
+        // Reload the certificate
+        let certified_key = self.load_cert_internal(&config)?;
+
+        // Apply the new certificate
+        if config.is_wildcard {
+            let mut wildcards = self.wildcard_certs.write();
+            wildcards.insert(storage_key.to_string(), certified_key);
+        } else {
+            let mut exact = self.exact_certs.write();
+            exact.insert(storage_key.to_string(), certified_key);
+        }
+
+        info!("Reloaded certificate for {}", domain);
         Ok(())
+    }
+
+    /// Internal helper to load a certificate from config without storing it.
+    fn load_cert_internal(&self, config: &TlsCertConfig) -> Result<Arc<CertifiedKey>, TlsError> {
+        // Validate paths for traversal
+        Self::validate_path(&config.cert_path)?;
+        Self::validate_path(&config.key_path)?;
+
+        // Load certificate
+        let cert_pem = Self::read_file_secure(&config.cert_path, MAX_CERT_SIZE, "certificate")?;
+
+        // Load private key
+        let key_pem = Self::read_file_secure(&config.key_path, MAX_CERT_SIZE, "key")?;
+
+        // Create certified key
+        Ok(Arc::new(CertifiedKey {
+            cert_pem: Arc::new(cert_pem),
+            key_pem: Arc::new(SecureString::new(key_pem)),
+            domain: config.domain.clone(),
+        }))
+    }
+
+    /// Returns the list of configured domains (for monitoring/diagnostics).
+    pub fn configured_domains(&self) -> Vec<String> {
+        let configs = self.cert_configs.read();
+        configs.keys().cloned().collect()
+    }
+
+    /// Returns true if a certificate is configured for the given domain.
+    pub fn has_cert_config(&self, domain: &str) -> bool {
+        let normalized = domain.to_lowercase();
+        let storage_key = normalized.trim_start_matches("*.");
+        let configs = self.cert_configs.read();
+        configs.contains_key(storage_key)
     }
 
     /// Returns the minimum TLS version.
@@ -521,5 +738,322 @@ mod tests {
 
         manager.load_cert(&config).unwrap();
         assert_eq!(manager.cert_count(), 1);
+    }
+
+    // ==================== Hot Reload Tests ====================
+
+    #[test]
+    fn test_reload_all_empty() {
+        let manager = TlsManager::default();
+        let result = manager.reload_all();
+
+        assert_eq!(result.succeeded, 0);
+        assert_eq!(result.failed, 0);
+        assert!(result.is_success());
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_reload_all_success() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        let config = TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        };
+
+        manager.load_cert(&config).unwrap();
+
+        // Reload should succeed
+        let result = manager.reload_all();
+        assert_eq!(result.succeeded, 1);
+        assert_eq!(result.failed, 0);
+        assert!(result.is_success());
+
+        // Certificate should still be available
+        assert!(manager.get_cert("example.com").is_some());
+    }
+
+    #[test]
+    fn test_reload_all_multiple_certs() {
+        let cert_file1 = create_temp_file(DUMMY_CERT);
+        let key_file1 = create_temp_file(DUMMY_KEY);
+        let cert_file2 = create_temp_file(DUMMY_CERT);
+        let key_file2 = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+
+        // Load exact cert
+        manager.load_cert(&TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file1.path().to_string_lossy().to_string(),
+            key_path: key_file1.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        // Load wildcard cert
+        manager.load_cert(&TlsCertConfig {
+            domain: "*.other.com".to_string(),
+            cert_path: cert_file2.path().to_string_lossy().to_string(),
+            key_path: key_file2.path().to_string_lossy().to_string(),
+            is_wildcard: true,
+        }).unwrap();
+
+        let result = manager.reload_all();
+        assert_eq!(result.succeeded, 2);
+        assert_eq!(result.failed, 0);
+        assert!(result.is_success());
+
+        // Both certificates should still work
+        assert!(manager.get_cert("example.com").is_some());
+        assert!(manager.get_cert("api.other.com").is_some());
+    }
+
+    #[test]
+    fn test_reload_all_with_default() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+        let default_cert = create_temp_file(DUMMY_CERT);
+        let default_key = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+
+        manager.load_cert(&TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        manager.set_default_cert(&TlsCertConfig {
+            domain: "default.local".to_string(),
+            cert_path: default_cert.path().to_string_lossy().to_string(),
+            key_path: default_key.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        let result = manager.reload_all();
+        assert_eq!(result.succeeded, 2); // 1 exact + 1 default
+        assert_eq!(result.failed, 0);
+    }
+
+    #[test]
+    fn test_reload_all_partial_failure() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+
+        // Load valid cert
+        manager.load_cert(&TlsCertConfig {
+            domain: "valid.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        // Manually insert a config with invalid paths (simulating file deletion)
+        {
+            let mut configs = manager.cert_configs.write();
+            configs.insert("invalid.com".to_string(), TlsCertConfig {
+                domain: "invalid.com".to_string(),
+                cert_path: "/nonexistent/cert.pem".to_string(),
+                key_path: "/nonexistent/key.pem".to_string(),
+                is_wildcard: false,
+            });
+        }
+
+        let result = manager.reload_all();
+        assert_eq!(result.succeeded, 1);
+        assert_eq!(result.failed, 1);
+        assert!(!result.is_success());
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].0.contains("invalid.com"));
+
+        // Valid cert should still be reloaded
+        assert!(manager.get_cert("valid.com").is_some());
+    }
+
+    #[test]
+    fn test_reload_single_cert() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        let config = TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        };
+
+        manager.load_cert(&config).unwrap();
+
+        // Reload single cert
+        let result = manager.reload_cert("example.com");
+        assert!(result.is_ok());
+        assert!(manager.get_cert("example.com").is_some());
+    }
+
+    #[test]
+    fn test_reload_single_cert_case_insensitive() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        let config = TlsCertConfig {
+            domain: "Example.COM".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        };
+
+        manager.load_cert(&config).unwrap();
+
+        // Reload with different case
+        assert!(manager.reload_cert("EXAMPLE.com").is_ok());
+    }
+
+    #[test]
+    fn test_reload_single_cert_not_found() {
+        let manager = TlsManager::default();
+
+        let result = manager.reload_cert("notfound.com");
+        assert!(matches!(result, Err(TlsError::NoCertificate { .. })));
+    }
+
+    #[test]
+    fn test_reload_wildcard_cert() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        let config = TlsCertConfig {
+            domain: "*.example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: true,
+        };
+
+        manager.load_cert(&config).unwrap();
+
+        // Reload wildcard cert
+        let result = manager.reload_cert("*.example.com");
+        assert!(result.is_ok());
+        assert!(manager.get_cert("api.example.com").is_some());
+    }
+
+    #[test]
+    fn test_configured_domains() {
+        let cert_file1 = create_temp_file(DUMMY_CERT);
+        let key_file1 = create_temp_file(DUMMY_KEY);
+        let cert_file2 = create_temp_file(DUMMY_CERT);
+        let key_file2 = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        assert!(manager.configured_domains().is_empty());
+
+        manager.load_cert(&TlsCertConfig {
+            domain: "one.com".to_string(),
+            cert_path: cert_file1.path().to_string_lossy().to_string(),
+            key_path: key_file1.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        manager.load_cert(&TlsCertConfig {
+            domain: "*.two.com".to_string(),
+            cert_path: cert_file2.path().to_string_lossy().to_string(),
+            key_path: key_file2.path().to_string_lossy().to_string(),
+            is_wildcard: true,
+        }).unwrap();
+
+        let domains = manager.configured_domains();
+        assert_eq!(domains.len(), 2);
+        assert!(domains.contains(&"one.com".to_string()));
+        assert!(domains.contains(&"two.com".to_string())); // Wildcard stored by base domain
+    }
+
+    #[test]
+    fn test_has_cert_config() {
+        let cert_file = create_temp_file(DUMMY_CERT);
+        let key_file = create_temp_file(DUMMY_KEY);
+
+        let manager = TlsManager::default();
+        assert!(!manager.has_cert_config("example.com"));
+
+        manager.load_cert(&TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        }).unwrap();
+
+        assert!(manager.has_cert_config("example.com"));
+        assert!(manager.has_cert_config("EXAMPLE.COM")); // Case insensitive
+        assert!(!manager.has_cert_config("other.com"));
+    }
+
+    #[test]
+    fn test_reload_updates_cert_content() {
+        use std::io::{Seek, SeekFrom};
+
+        let mut cert_file = NamedTempFile::new().unwrap();
+        let mut key_file = NamedTempFile::new().unwrap();
+
+        // Write initial content
+        cert_file.write_all(DUMMY_CERT.as_bytes()).unwrap();
+        key_file.write_all(DUMMY_KEY.as_bytes()).unwrap();
+
+        let manager = TlsManager::default();
+        let config = TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        };
+
+        manager.load_cert(&config).unwrap();
+
+        // Get initial cert
+        let cert1 = manager.get_cert("example.com").unwrap();
+        let initial_cert = cert1.cert_pem.clone();
+
+        // Update cert file with new content - use as_file_mut() to get mutable file handle
+        let new_cert = "-----BEGIN CERTIFICATE-----\nNEW_CERT\n-----END CERTIFICATE-----";
+        {
+            let file = cert_file.as_file_mut();
+            file.seek(SeekFrom::Start(0)).unwrap();
+            file.set_len(0).unwrap();
+        }
+        cert_file.write_all(new_cert.as_bytes()).unwrap();
+
+        // Reload
+        manager.reload_cert("example.com").unwrap();
+
+        // Verify cert was updated
+        let cert2 = manager.get_cert("example.com").unwrap();
+        assert_ne!(*initial_cert, *cert2.cert_pem);
+        assert!(cert2.cert_pem.contains("NEW_CERT"));
+    }
+
+    #[test]
+    fn test_reload_result_debug() {
+        let result = ReloadResult {
+            succeeded: 5,
+            failed: 2,
+            errors: vec![
+                ("domain1.com".to_string(), "file not found".to_string()),
+                ("domain2.com".to_string(), "permission denied".to_string()),
+            ],
+        };
+
+        let debug_output = format!("{:?}", result);
+        assert!(debug_output.contains("succeeded: 5"));
+        assert!(debug_output.contains("failed: 2"));
+        assert!(debug_output.contains("domain1.com"));
     }
 }

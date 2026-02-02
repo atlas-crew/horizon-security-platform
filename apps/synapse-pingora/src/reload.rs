@@ -224,8 +224,15 @@ impl ConfigReloader {
         }
 
         // Reload TLS certificates
-        if let Err(e) = self.tls_manager.reload_all() {
-            warn!("TLS reload warning: {}", e);
+        let tls_result = self.tls_manager.reload_all();
+        if !tls_result.is_success() {
+            warn!(
+                "TLS reload completed with errors: {} succeeded, {} failed",
+                tls_result.succeeded, tls_result.failed
+            );
+            for (domain, error) in &tls_result.errors {
+                warn!("  Failed to reload cert for {}: {}", domain, error);
+            }
         }
 
         info!(

@@ -12,6 +12,7 @@ import type { ThreatService } from '../threat-service.js';
 import type { AutomatedPlaybookTrigger } from '../warroom/automated-trigger.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
+import { ClickHouseRetryBuffer, type RetryBufferConfig } from '../../storage/clickhouse/index.js';
 
 /**
  * Signal with tenant/sensor context from sensor gateway
@@ -31,6 +32,8 @@ export interface AggregatorConfig {
   maxQueueSize?: number;
   /** Maximum retry attempts for failed batches */
   maxRetries?: number;
+  /** ClickHouse retry buffer configuration */
+  clickhouseRetry?: Partial<RetryBufferConfig>;
 }
 
 /** Result of queueSignal - indicates if signal was accepted */
@@ -50,10 +53,11 @@ export class Aggregator {
   private correlator: Correlator;
   private impossibleTravel: ImpossibleTravelService | null;
   private clickhouse: ClickHouseService | null;
+  private clickhouseRetryBuffer: ClickHouseRetryBuffer | null;
   private apiIntelligence: APIIntelligenceService | null;
   private threatService: ThreatService | null;
   private playbookTrigger: AutomatedPlaybookTrigger | null;
-  private config: Required<AggregatorConfig>;
+  private config: Required<Omit<AggregatorConfig, 'clickhouseRetry'>> & { clickhouseRetry?: Partial<RetryBufferConfig> };
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
   private isFlushing = false;
@@ -86,8 +90,17 @@ export class Aggregator {
     };
     this.startBatchTimer();
 
+    // Initialize ClickHouse retry buffer for reliable ingestion
     if (this.clickhouse?.isEnabled()) {
-      this.logger.info('ClickHouse dual-write enabled for historical data');
+      this.clickhouseRetryBuffer = new ClickHouseRetryBuffer(
+        this.clickhouse,
+        this.logger,
+        config.clickhouseRetry
+      );
+      this.clickhouseRetryBuffer.start();
+      this.logger.info('ClickHouse dual-write enabled with reliable retry buffer');
+    } else {
+      this.clickhouseRetryBuffer = null;
     }
     if (this.playbookTrigger) {
       this.logger.info('Automated playbook triggers enabled');
@@ -381,39 +394,33 @@ export class Aggregator {
   }
 
   /**
-   * Write signal to ClickHouse for historical analytics
-   * Non-blocking: logs warning on failure, doesn't affect main request
+   * Write signal to ClickHouse for historical analytics.
+   * Uses retry buffer for reliable ingestion - failed writes are automatically
+   * retried with exponential backoff.
    */
   private async writeToClickHouse(
     signal: IncomingSignal,
     anonFingerprint: string | undefined,
     timestamp: Date
   ): Promise<void> {
-    if (!this.clickhouse) return;
+    if (!this.clickhouseRetryBuffer) return;
 
-    try {
-      const row: SignalEventRow = {
-        timestamp: timestamp.toISOString(),
-        tenant_id: signal.tenantId,
-        sensor_id: signal.sensorId,
-        signal_type: signal.signalType,
-        source_ip: signal.sourceIp ?? '0.0.0.0',
-        fingerprint: signal.fingerprint ?? '',
-        anon_fingerprint: anonFingerprint ?? ''.padEnd(64, '0'),
-        severity: signal.severity,
-        confidence: signal.confidence,
-        event_count: signal.eventCount ?? 1,
-        metadata: JSON.stringify(signal.metadata ?? {}),
-      };
+    const row: SignalEventRow = {
+      timestamp: timestamp.toISOString(),
+      tenant_id: signal.tenantId,
+      sensor_id: signal.sensorId,
+      signal_type: signal.signalType,
+      source_ip: signal.sourceIp ?? '0.0.0.0',
+      fingerprint: signal.fingerprint ?? '',
+      anon_fingerprint: anonFingerprint ?? ''.padEnd(64, '0'),
+      severity: signal.severity,
+      confidence: signal.confidence,
+      event_count: signal.eventCount ?? 1,
+      metadata: JSON.stringify(signal.metadata ?? {}),
+    };
 
-      await this.clickhouse.insertSignalEvents([row]);
-    } catch (error) {
-      // Log warning but don't fail - PostgreSQL is source of truth
-      this.logger.warn(
-        { error, signalType: signal.signalType },
-        'ClickHouse write failed (non-critical)'
-      );
-    }
+    // Use retry buffer - it handles failures automatically
+    await this.clickhouseRetryBuffer.insertSignalEvents([row]);
   }
 
   /**
@@ -465,13 +472,36 @@ export class Aggregator {
   /**
    * Get current queue statistics
    */
-  getStats(): { queueSize: number; retryQueueSize: number; isFlushing: boolean; retryCount: number } {
-    return {
+  getStats(): {
+    queueSize: number;
+    retryQueueSize: number;
+    isFlushing: boolean;
+    retryCount: number;
+    clickhouseRetryBuffer?: {
+      bufferedCount: number;
+      droppedItems: number;
+      successfulRetries: number;
+      bufferUtilization: number;
+    };
+  } {
+    const stats: ReturnType<typeof this.getStats> = {
       queueSize: this.signalBatch.length,
       retryQueueSize: this.retryQueue.length,
       isFlushing: this.isFlushing,
       retryCount: this.retryCount,
     };
+
+    if (this.clickhouseRetryBuffer) {
+      const chStats = this.clickhouseRetryBuffer.getStats();
+      stats.clickhouseRetryBuffer = {
+        bufferedCount: chStats.bufferedCount,
+        droppedItems: chStats.droppedItems,
+        successfulRetries: chStats.successfulRetries,
+        bufferUtilization: chStats.bufferUtilization,
+      };
+    }
+
+    return stats;
   }
 
   async stop(): Promise<void> {
@@ -481,6 +511,14 @@ export class Aggregator {
     }
     // Flush any remaining signals
     await this.flushBatch();
+    // Flush ClickHouse retry buffer on shutdown
+    if (this.clickhouseRetryBuffer) {
+      const { succeeded, failed } = await this.clickhouseRetryBuffer.flush();
+      this.logger.info(
+        { succeeded, failed },
+        'Flushed ClickHouse retry buffer on shutdown'
+      );
+    }
     // Stop playbook trigger service
     this.playbookTrigger?.stop();
   }

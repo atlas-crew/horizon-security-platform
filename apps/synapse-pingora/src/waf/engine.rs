@@ -3,12 +3,20 @@
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
 use once_cell::sync::Lazy;
 use percent_encoding::percent_decode_str;
 use regex::{Regex, RegexBuilder};
+
+/// Default timeout for rule evaluation (prevents DoS via complex regexes).
+/// 50ms is sufficient for most requests while catching pathological cases.
+pub const DEFAULT_EVAL_TIMEOUT: Duration = Duration::from_millis(50);
+
+/// Maximum timeout allowed (prevents disabling protection).
+pub const MAX_EVAL_TIMEOUT: Duration = Duration::from_millis(500);
 
 use crate::waf::index::{
     build_rule_index, get_candidate_rule_indices, method_to_mask, CandidateCache,
@@ -469,10 +477,33 @@ impl Engine {
         self.evaluate(&ctx)
     }
 
+    /// Analyze a request with a timeout to prevent DoS via complex regexes.
+    ///
+    /// # Arguments
+    /// * `req` - The request to analyze
+    /// * `timeout` - Maximum time allowed for rule evaluation (capped at MAX_EVAL_TIMEOUT)
+    ///
+    /// # Returns
+    /// A `Verdict` with `timed_out=true` if evaluation exceeded the deadline.
+    /// Partial results (rules evaluated before timeout) are still included.
+    pub fn analyze_with_timeout(&self, req: &Request, timeout: Duration) -> Verdict {
+        let effective_timeout = timeout.min(MAX_EVAL_TIMEOUT);
+        let deadline = Instant::now() + effective_timeout;
+        let ctx = EvalContext::from_request_with_deadline(req, deadline);
+        self.evaluate(&ctx)
+    }
+
+    /// Analyze a request with the default timeout (DEFAULT_EVAL_TIMEOUT).
+    pub fn analyze_safe(&self, req: &Request) -> Verdict {
+        self.analyze_with_timeout(req, DEFAULT_EVAL_TIMEOUT)
+    }
+
     fn evaluate(&self, ctx: &EvalContext) -> Verdict {
         let mut matched_rules = Vec::new();
         let mut total_risk = 0.0;
         let mut should_block = false;
+        let mut timed_out = false;
+        let mut rules_evaluated: u32 = 0;
         let risk_contributions: Vec<RiskContribution> = Vec::new();
 
         // Get risk config
@@ -517,9 +548,17 @@ impl Engine {
             }
         };
 
-        // Evaluate each candidate rule
+        // Evaluate each candidate rule with timeout checking
         for &rule_idx in candidates.iter() {
+            // Check deadline before each rule evaluation
+            if ctx.is_deadline_exceeded() {
+                timed_out = true;
+                break;
+            }
+
             let rule = &self.rules[rule_idx];
+            rules_evaluated += 1;
+
             if self.eval_rule(rule, ctx) {
                 matched_rules.push(rule.id);
                 total_risk += rule.effective_risk();
@@ -544,6 +583,8 @@ impl Engine {
             entity_blocked: false,
             block_reason: if should_block {
                 Some("Rule-based block".to_string())
+            } else if timed_out {
+                Some("Evaluation timeout (partial result)".to_string())
             } else {
                 None
             },
@@ -553,6 +594,8 @@ impl Engine {
             anomaly_score: None,
             adjusted_threshold: None,
             anomaly_signals: Vec::new(),
+            timed_out,
+            rules_evaluated: if timed_out { Some(rules_evaluated) } else { None },
         }
     }
 
@@ -2579,5 +2622,97 @@ mod tests {
 
         assert_eq!(verdict.action, Action::Block);
         assert!(verdict.matched_rules.contains(&1));
+    }
+
+    // ============ Timeout Tests ============
+
+    #[test]
+    fn test_analyze_safe_basic() {
+        let mut engine = Engine::empty();
+        let rules = r#"[
+            {
+                "id": 1,
+                "description": "Simple match",
+                "risk": 10.0,
+                "matches": [{"type": "uri", "match": {"type": "contains", "match": "test"}}]
+            }
+        ]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let verdict = engine.analyze_safe(&Request {
+            method: "GET",
+            path: "/test",
+            ..Default::default()
+        });
+
+        // Normal requests should complete without timeout
+        assert!(!verdict.timed_out);
+        assert!(verdict.rules_evaluated.is_none());
+        assert!(verdict.matched_rules.contains(&1));
+    }
+
+    #[test]
+    fn test_analyze_with_timeout_custom() {
+        let mut engine = Engine::empty();
+        let rules = r#"[
+            {
+                "id": 1,
+                "description": "Simple match",
+                "risk": 10.0,
+                "matches": [{"type": "uri", "match": {"type": "contains", "match": "test"}}]
+            }
+        ]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let verdict = engine.analyze_with_timeout(
+            &Request {
+                method: "GET",
+                path: "/test",
+                ..Default::default()
+            },
+            Duration::from_millis(100),
+        );
+
+        // Normal request should not timeout
+        assert!(!verdict.timed_out);
+    }
+
+    #[test]
+    fn test_timeout_cap() {
+        // Verify MAX_EVAL_TIMEOUT is respected
+        assert!(MAX_EVAL_TIMEOUT >= DEFAULT_EVAL_TIMEOUT);
+        assert!(MAX_EVAL_TIMEOUT <= Duration::from_secs(1)); // Sanity check
+    }
+
+    #[test]
+    fn test_verdict_timeout_fields_default() {
+        let verdict = Verdict::default();
+        assert!(!verdict.timed_out);
+        assert!(verdict.rules_evaluated.is_none());
+    }
+
+    #[test]
+    fn test_eval_context_deadline() {
+        let req = Request {
+            method: "GET",
+            path: "/test",
+            ..Default::default()
+        };
+
+        // Without deadline
+        let ctx = EvalContext::from_request(&req);
+        assert!(ctx.deadline.is_none());
+        assert!(!ctx.is_deadline_exceeded());
+
+        // With future deadline
+        let future_deadline = Instant::now() + Duration::from_secs(10);
+        let ctx_with_deadline = EvalContext::from_request_with_deadline(&req, future_deadline);
+        assert!(ctx_with_deadline.deadline.is_some());
+        assert!(!ctx_with_deadline.is_deadline_exceeded());
+
+        // With past deadline
+        let past_deadline = Instant::now() - Duration::from_millis(1);
+        let ctx_expired = EvalContext::from_request_with_deadline(&req, past_deadline);
+        assert!(ctx_expired.is_deadline_exceeded());
     }
 }

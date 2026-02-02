@@ -66,6 +66,12 @@ pub struct Verdict {
     pub adjusted_threshold: Option<f64>,
     /// Anomaly signals detected for observability
     pub anomaly_signals: Vec<AnomalySignal>,
+
+    // Timeout fields
+    /// Whether evaluation timed out (partial result)
+    pub timed_out: bool,
+    /// Number of rules evaluated before timeout (if timed_out)
+    pub rules_evaluated: Option<u32>,
 }
 
 impl Default for Verdict {
@@ -83,6 +89,8 @@ impl Default for Verdict {
             anomaly_score: None,
             adjusted_threshold: None,
             anomaly_signals: Vec::new(),
+            timed_out: false,
+            rules_evaluated: None,
         }
     }
 }
@@ -373,6 +381,8 @@ pub struct EvalContext<'a> {
     pub raw_body: Option<&'a [u8]>,
     pub is_static: bool,
     pub json_text: Option<String>,
+    /// Deadline for rule evaluation (prevents DoS via complex regexes)
+    pub deadline: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone)]
@@ -453,7 +463,23 @@ impl<'a> EvalContext<'a> {
             raw_body: req.body,
             is_static: req.is_static,
             json_text,
+            deadline: None,
         }
+    }
+
+    /// Creates an EvalContext with a deadline for timeout protection.
+    pub fn from_request_with_deadline(req: &'a Request<'a>, deadline: std::time::Instant) -> Self {
+        let mut ctx = Self::from_request(req);
+        ctx.deadline = Some(deadline);
+        ctx
+    }
+
+    /// Checks if the evaluation deadline has been exceeded.
+    #[inline]
+    pub fn is_deadline_exceeded(&self) -> bool {
+        self.deadline
+            .map(|d| std::time::Instant::now() >= d)
+            .unwrap_or(false)
     }
 }
 

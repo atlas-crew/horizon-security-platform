@@ -75,6 +75,25 @@ impl Synapse {
         self.engine.analyze(req)
     }
 
+    /// Analyze a request with a timeout to prevent DoS via complex regexes.
+    ///
+    /// # Arguments
+    /// * `req` - The request to analyze
+    /// * `timeout` - Maximum time allowed for rule evaluation
+    ///
+    /// # Returns
+    /// A `Verdict` with `timed_out=true` if evaluation exceeded the deadline.
+    pub fn analyze_with_timeout(&self, req: &Request, timeout: std::time::Duration) -> Verdict {
+        self.engine.analyze_with_timeout(req, timeout)
+    }
+
+    /// Analyze a request with the default timeout (50ms).
+    ///
+    /// Recommended for production use to prevent DoS attacks.
+    pub fn analyze_safe(&self, req: &Request) -> Verdict {
+        self.engine.analyze_safe(req)
+    }
+
     /// Record response status code for profiling.
     ///
     /// Updates the endpoint profile with the observed status code,

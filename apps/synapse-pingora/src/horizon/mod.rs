@@ -44,6 +44,7 @@ mod client;
 mod config;
 mod error;
 mod manager;
+mod signal_buffer;
 mod types;
 
 pub use blocklist::{BlockType, BlocklistCache, BlocklistEntry, BlocklistUpdate};
@@ -51,6 +52,7 @@ pub use client::{ClientStats, HorizonClient, MetricsProvider, NoopMetricsProvide
 pub use config::HorizonConfig;
 pub use error::HorizonError;
 pub use manager::{HorizonManager, HorizonStats, HorizonStatsSnapshot};
+pub use signal_buffer::{SignalBuffer, SignalBufferConfig, SignalBufferError, SignalBufferStats};
 pub use types::{
     ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, Severity, SignalType,
     ThreatSignal,

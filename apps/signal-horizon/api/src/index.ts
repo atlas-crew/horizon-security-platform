@@ -41,6 +41,7 @@ import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.j
 import { SynapseProxyService } from './services/synapse-proxy.js';
 import { initSynapseDirectAdapter } from './services/synapse-direct.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
+import { matchUpgradePath } from './websocket/upgrade-path.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'node:crypto';
 // Security middleware
@@ -544,37 +545,44 @@ async function start() {
 
   // Route WebSocket upgrades to the correct gateway
   httpServer.on('upgrade', (req, socket, head) => {
-    const url = req.url ? new URL(req.url, 'http://localhost') : null;
-    const pathname = url?.pathname ?? '';
-    const normalize = (path: string) =>
-      path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-
-    const normalizedPath = normalize(pathname);
+    const match = matchUpgradePath(req.url, {
+      sensorPath: config.websocket.sensorPath,
+      dashboardPath: config.websocket.dashboardPath,
+    });
     // Cast socket to Socket - the upgrade event provides a net.Socket typed as Duplex for compatibility
     const netSocket = socket as Socket;
 
-    if (normalizedPath === normalize(config.websocket.sensorPath)) {
+    if (!match) {
+      socket.destroy();
+      return;
+    }
+
+    if (match.type === 'sensor') {
       sensorGateway.handleUpgrade(req, netSocket, head);
       return;
     }
 
-    if (normalizedPath === normalize(config.websocket.dashboardPath)) {
+    if (match.type === 'dashboard') {
       dashboardGateway.handleUpgrade(req, netSocket, head);
       return;
     }
 
     // Tunnel WebSocket paths: /ws/tunnel/sensor/:sensorId and /ws/tunnel/user/:sessionId
-    if (normalizedPath.startsWith('/ws/tunnel/')) {
-      // Handle sensor tunnel connections
-      if (normalizedPath.startsWith('/ws/tunnel/sensor')) {
-        tunnelWss.handleUpgrade(req, netSocket, head, (ws) => {
-          handleTunnelSensorConnection(ws, prisma, logger);
-        });
-        return;
-      }
+    if (match.type === 'tunnel-sensor') {
+      tunnelWss.handleUpgrade(req, netSocket, head, (ws) => {
+        handleTunnelSensorConnection(ws, prisma, logger);
+      });
+      return;
+    }
 
-      // User dashboard proxy connections (future)
-      logger.info({ path: normalizedPath }, 'User tunnel WebSocket not yet implemented');
+    if (match.type === 'tunnel-user') {
+      logger.info({ path: match.path }, 'User tunnel WebSocket not yet implemented');
+      socket.destroy();
+      return;
+    }
+
+    if (match.type === 'tunnel-unknown') {
+      logger.warn({ path: match.path }, 'Rejected unknown tunnel WebSocket path');
       socket.destroy();
       return;
     }

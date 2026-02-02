@@ -28,6 +28,7 @@ import {
   Info,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { parseIntSafe } from '../../utils/parseNumeric';
 import type {
   Release,
   Rollout,
@@ -739,7 +740,7 @@ export const RolloutManager = memo(function RolloutManager({
                         min="0"
                         max="600"
                         value={batchDelay}
-                        onChange={(e) => setBatchDelay(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setBatchDelay(parseIntSafe(e.target.value, batchDelay))}
                         className="w-20 px-2 py-1 text-sm bg-surface-inset border border-border-subtle rounded text-ink-primary"
                       />
                       <span className="text-sm text-ink-muted">seconds</span>

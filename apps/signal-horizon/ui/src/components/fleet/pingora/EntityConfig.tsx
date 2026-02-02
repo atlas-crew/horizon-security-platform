@@ -1,6 +1,15 @@
 import { useMemo } from 'react';
 import { Users, TrendingDown, MapPin, Plane, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+import {
+  DEFAULT_ENTITY_BLOCK_THRESHOLD,
+  DEFAULT_ENTITY_MAX_RISK,
+  DEFAULT_ENTITY_RISK_DECAY_PER_MINUTE,
+  DEFAULT_TRAVEL_MAX_SPEED_KMH,
+  DEFAULT_TRAVEL_MIN_DISTANCE_KM,
+} from './configDefaults';
+// Note: Some DEFAULT_* constants removed since parseIntSafe uses current value as fallback
+import { parseIntSafe } from '../../../utils/parseNumeric';
 
 export interface EntityConfigData {
   enabled: boolean;
@@ -85,7 +94,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 max="1000000"
                 step="1000"
                 value={entityConfig.max_entities}
-                onChange={(e) => onEntityChange({ ...entityConfig, max_entities: parseInt(e.target.value) || 100000 })}
+                onChange={(e) => onEntityChange({
+                  ...entityConfig,
+                  max_entities: parseIntSafe(e.target.value, entityConfig.max_entities),
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -99,7 +111,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 min="1"
                 max="50"
                 value={entityConfig.risk_decay_per_minute}
-                onChange={(e) => onEntityChange({ ...entityConfig, risk_decay_per_minute: parseFloat(e.target.value) || 10 })}
+                onChange={(e) => onEntityChange({
+                  ...entityConfig,
+                  risk_decay_per_minute: parseFloat(e.target.value) || DEFAULT_ENTITY_RISK_DECAY_PER_MINUTE,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -110,7 +125,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 min="50"
                 max="100"
                 value={entityConfig.block_threshold}
-                onChange={(e) => onEntityChange({ ...entityConfig, block_threshold: parseFloat(e.target.value) || 70 })}
+                onChange={(e) => onEntityChange({
+                  ...entityConfig,
+                  block_threshold: parseFloat(e.target.value) || DEFAULT_ENTITY_BLOCK_THRESHOLD,
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.block_threshold
@@ -129,7 +147,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 min="100"
                 max="1000"
                 value={entityConfig.max_risk}
-                onChange={(e) => onEntityChange({ ...entityConfig, max_risk: parseFloat(e.target.value) || 100 })}
+                onChange={(e) => onEntityChange({
+                  ...entityConfig,
+                  max_risk: parseFloat(e.target.value) || DEFAULT_ENTITY_MAX_RISK,
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_risk
@@ -148,7 +169,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 min="10"
                 max="200"
                 value={entityConfig.max_rules_per_entity}
-                onChange={(e) => onEntityChange({ ...entityConfig, max_rules_per_entity: parseInt(e.target.value) || 50 })}
+                onChange={(e) => onEntityChange({
+                  ...entityConfig,
+                  max_rules_per_entity: parseIntSafe(e.target.value, entityConfig.max_rules_per_entity),
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -178,7 +202,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
               min="100"
               max="2000"
               value={travelConfig.max_speed_kmh}
-              onChange={(e) => onTravelChange({ ...travelConfig, max_speed_kmh: parseFloat(e.target.value) || 800 })}
+              onChange={(e) => onTravelChange({
+                ...travelConfig,
+                max_speed_kmh: parseFloat(e.target.value) || DEFAULT_TRAVEL_MAX_SPEED_KMH,
+              })}
               className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
             <p className="text-xs text-ink-muted">800 km/h ≈ commercial flight</p>
@@ -190,20 +217,26 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
               min="10"
               max="1000"
               value={travelConfig.min_distance_km}
-              onChange={(e) => onTravelChange({ ...travelConfig, min_distance_km: parseFloat(e.target.value) || 100 })}
+              onChange={(e) => onTravelChange({
+                ...travelConfig,
+                min_distance_km: parseFloat(e.target.value) || DEFAULT_TRAVEL_MIN_DISTANCE_KM,
+              })}
               className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-ink-secondary">History Window (hours)</label>
-            <input
-              type="number"
-              min="1"
-              max="168"
-              value={Math.round(travelConfig.history_window_ms / 3600000)}
-              onChange={(e) => onTravelChange({ ...travelConfig, history_window_ms: (parseInt(e.target.value) || 24) * 3600000 })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
-            />
+              <input
+                type="number"
+                min="1"
+                max="168"
+                value={Math.round(travelConfig.history_window_ms / 3600000)}
+                onChange={(e) => onTravelChange({
+                  ...travelConfig,
+                  history_window_ms: parseIntSafe(e.target.value, Math.round(travelConfig.history_window_ms / 3600000)) * 3600000,
+                })}
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-ink-secondary">Max History/User</label>
@@ -212,7 +245,10 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
               min="10"
               max="500"
               value={travelConfig.max_history_per_user}
-              onChange={(e) => onTravelChange({ ...travelConfig, max_history_per_user: parseInt(e.target.value) || 100 })}
+              onChange={(e) => onTravelChange({
+                ...travelConfig,
+                max_history_per_user: parseIntSafe(e.target.value, travelConfig.max_history_per_user),
+              })}
               className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>

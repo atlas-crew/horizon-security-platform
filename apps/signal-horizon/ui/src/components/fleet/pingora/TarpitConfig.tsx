@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Timer, Hourglass, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+// Note: DEFAULT_* constants are no longer needed since parseIntSafe uses current value as fallback
+import { parseIntSafe, parseFloatSafe } from '../../../utils/parseNumeric';
 
 export interface TarpitConfigData {
   enabled: boolean;
@@ -83,7 +85,10 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
                 min="100"
                 max="10000"
                 value={config.base_delay_ms}
-                onChange={(e) => onChange({ ...config, base_delay_ms: parseInt(e.target.value) || 1000 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  base_delay_ms: parseIntSafe(e.target.value, config.base_delay_ms),
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.base_delay_ms
@@ -102,7 +107,10 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
                 min="1000"
                 max="120000"
                 value={config.max_delay_ms}
-                onChange={(e) => onChange({ ...config, max_delay_ms: parseInt(e.target.value) || 30000 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_delay_ms: parseIntSafe(e.target.value, config.max_delay_ms),
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_delay_ms
@@ -122,7 +130,10 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
                 max="3.0"
                 step="0.1"
                 value={config.progressive_multiplier}
-                onChange={(e) => onChange({ ...config, progressive_multiplier: parseFloat(e.target.value) || 1.5 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  progressive_multiplier: parseFloatSafe(e.target.value, config.progressive_multiplier),
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.progressive_multiplier
@@ -141,7 +152,10 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
                 min="100"
                 max="10000"
                 value={config.max_concurrent_tarpits}
-                onChange={(e) => onChange({ ...config, max_concurrent_tarpits: parseInt(e.target.value) || 1000 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_concurrent_tarpits: parseIntSafe(e.target.value, config.max_concurrent_tarpits),
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -152,7 +166,10 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
                 min="1"
                 max="60"
                 value={Math.round(config.decay_threshold_ms / 60000)}
-                onChange={(e) => onChange({ ...config, decay_threshold_ms: (parseInt(e.target.value) || 5) * 60000 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  decay_threshold_ms: parseIntSafe(e.target.value, Math.round(config.decay_threshold_ms / 60000)) * 60000,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>

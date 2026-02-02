@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Eye, Zap, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+// Note: DEFAULT_* constants removed since parseIntSafe uses current value as fallback
+import { parseIntSafe } from '../../../utils/parseNumeric';
 
 export interface DlpConfigData {
   enabled: boolean;
@@ -106,7 +108,10 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
                 min="1"
                 max="50"
                 value={Math.round(config.max_scan_size / (1024 * 1024))}
-                onChange={(e) => onChange({ ...config, max_scan_size: (parseInt(e.target.value) || 5) * 1024 * 1024 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_scan_size: parseIntSafe(e.target.value, Math.round(config.max_scan_size / (1024 * 1024))) * 1024 * 1024,
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_scan_size
@@ -125,7 +130,10 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
                 min="1"
                 max="64"
                 value={Math.round(config.max_body_inspection_bytes / 1024)}
-                onChange={(e) => onChange({ ...config, max_body_inspection_bytes: (parseInt(e.target.value) || 8) * 1024 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_body_inspection_bytes: parseIntSafe(e.target.value, Math.round(config.max_body_inspection_bytes / 1024)) * 1024,
+                })}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_body_inspection_bytes
@@ -144,7 +152,10 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
                 min="10"
                 max="1000"
                 value={config.max_matches}
-                onChange={(e) => onChange({ ...config, max_matches: parseInt(e.target.value) || 100 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_matches: parseIntSafe(e.target.value, config.max_matches),
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>

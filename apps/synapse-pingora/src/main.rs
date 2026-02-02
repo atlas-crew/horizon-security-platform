@@ -77,7 +77,7 @@ use synapse_pingora::dlp::{DlpScanner, DlpConfig};
 use synapse_pingora::vhost::{VhostMatcher, SiteConfig};
 use synapse_pingora::config::ConfigLoader;
 use synapse_pingora::config_manager::ConfigManager;
-use synapse_pingora::site_waf::SiteWafManager;
+use synapse_pingora::site_waf::{SiteWafManager, WafAction};
 use synapse_pingora::ratelimit::RateLimitManager;
 use synapse_pingora::access::{AccessListManager, CidrRange};
 use synapse_pingora::headers;
@@ -94,6 +94,7 @@ use synapse_pingora::actor::{ActorConfig, ActorManager};
 use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::RwLock;
 use sha2::{Sha256, Digest};
+use percent_encoding::percent_decode_str;
 
 // Phase 9: Crawler Detection
 use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
@@ -106,10 +107,11 @@ use synapse_pingora::payload::{PayloadManager, PayloadConfig};
 
 // Phase 9: Trends (signal tracking and anomaly detection)
 use synapse_pingora::trends::{TrendsManager, TrendsConfig};
+use synapse_pingora::intelligence::{SignalManager, SignalManagerConfig, SignalCategory};
 
 // Phase 10: Interrogator System (progressive challenge escalation)
 use synapse_pingora::interrogator::{
-    ChallengeResponse, ProgressionConfig, ProgressionManager,
+    ChallengeResponse, ProgressionConfig, ProgressionManager, ValidationResult,
     CookieConfig, CookieManager,
     JsChallengeConfig, JsChallengeManager,
     CaptchaConfig, CaptchaManager,
@@ -268,6 +270,16 @@ fn create_default_cookie_config() -> CookieConfig {
         http_only: true,
         same_site: "Strict".to_string(),
     }
+}
+
+/// Progression config tuned to align with 30/60/90 risk thresholds.
+fn create_progression_config() -> ProgressionConfig {
+    let mut config = ProgressionConfig::default();
+    config.risk_threshold_cookie = 0.30;
+    config.risk_threshold_js = 0.60;
+    config.risk_threshold_captcha = 0.90;
+    config.risk_threshold_block = 0.95;
+    config
 }
 
 impl Default for RateLimitConfig {
@@ -834,8 +846,14 @@ pub struct RequestContext {
     response_content_type: Option<String>,
     /// Request path for schema template mapping (stored for response phase)
     request_path: Option<String>,
+    /// Phase 5: Actor ID correlated for this request
+    actor_id: Option<String>,
+    /// Phase 5: Actor risk score snapshot for this request
+    actor_risk_score: f64,
     /// Phase 10: Challenge cookie to set in response (progressive challenge system)
     challenge_cookie: Option<String>,
+    /// Phase 10: Whether a challenge response was validated on this request
+    challenge_validated: bool,
 }
 
 impl Drop for RequestContext {
@@ -957,6 +975,8 @@ pub struct SynapseProxy {
     payload_manager: Arc<PayloadManager>,
     /// Phase 9: Trends manager for signal tracking and anomaly detection
     trends_manager: Arc<TrendsManager>,
+    /// Phase 9: Signal manager for intelligence aggregation
+    signal_manager: Arc<SignalManager>,
     /// Phase 10: Progression manager for challenge escalation
     progression_manager: Arc<ProgressionManager>,
 }
@@ -964,6 +984,8 @@ pub struct SynapseProxy {
 impl SynapseProxy {
     pub async fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
         let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+        let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+        let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
 
         Self::with_health(
             backends,
@@ -983,6 +1005,8 @@ impl SynapseProxy {
             None,
             Arc::new(crawler_detector),
             None, // No horizon_manager for simple constructor
+            trends_manager,
+            signal_manager,
         )
     }
 
@@ -1004,6 +1028,8 @@ impl SynapseProxy {
         shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
+        trends_manager: Arc<TrendsManager>,
+        signal_manager: Arc<SignalManager>,
     ) -> Self {
         // Create tarpit manager first (needed by progression manager)
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
@@ -1022,7 +1048,7 @@ impl SynapseProxy {
             js_manager,
             captcha_manager,
             tarpit_manager.clone(),
-            ProgressionConfig::default(),
+            create_progression_config(),
         ));
 
         Self {
@@ -1051,13 +1077,16 @@ impl SynapseProxy {
             crawler_detector,
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
-            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            trends_manager,
+            signal_manager,
             progression_manager,
         }
     }
 
     pub async fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
         let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
+        let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+        let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
 
         // Create tarpit manager first (needed by progression manager)
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
@@ -1075,7 +1104,7 @@ impl SynapseProxy {
             js_manager,
             captcha_manager,
             tarpit_manager.clone(),
-            ProgressionConfig::default(),
+            create_progression_config(),
         ));
 
         Self {
@@ -1104,7 +1133,8 @@ impl SynapseProxy {
             crawler_detector: Arc::new(crawler_detector),
             horizon_manager: None,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
-            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            trends_manager,
+            signal_manager,
             progression_manager,
         }
     }
@@ -1133,6 +1163,8 @@ impl SynapseProxy {
         shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
+        trends_manager: Arc<TrendsManager>,
+        signal_manager: Arc<SignalManager>,
     ) -> Self {
         // Create tarpit manager first (needed by progression manager)
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
@@ -1150,7 +1182,7 @@ impl SynapseProxy {
             js_manager,
             captcha_manager,
             tarpit_manager.clone(),
-            ProgressionConfig::default(),
+            create_progression_config(),
         ));
 
         Self {
@@ -1179,7 +1211,8 @@ impl SynapseProxy {
             crawler_detector,
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
-            trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            trends_manager,
+            signal_manager,
             progression_manager,
         }
     }
@@ -1285,6 +1318,88 @@ impl SynapseProxy {
         }
         result
     }
+
+    /// Resolve WAF action based on site config and detection result.
+    fn resolve_waf_action(&self, ctx: &RequestContext, result: &DetectionResult) -> WafAction {
+        if let (Some(ref site), Some(ref site_waf_mgr)) = (&ctx.matched_site, &self.site_waf_manager) {
+            let waf = site_waf_mgr.read();
+            let config = waf.get_config(&site.hostname);
+
+            if !config.enabled {
+                return WafAction::Allow;
+            }
+
+            let risk_score = (result.risk_score.min(u16::from(u8::MAX))) as u8;
+            let mut action = WafAction::Allow;
+            let mut triggered = false;
+
+            for rule_id in &result.matched_rules {
+                let rule_key = rule_id.to_string();
+                let threshold = config.get_rule_threshold(&rule_key);
+                if risk_score >= threshold {
+                    action = Self::combine_waf_action(action, config.get_rule_action(&rule_key));
+                    triggered = true;
+                }
+            }
+
+            if !triggered && risk_score >= config.threshold {
+                action = config.default_action;
+                triggered = true;
+            }
+
+            if triggered {
+                return action;
+            }
+        }
+
+        if result.blocked {
+            WafAction::Block
+        } else {
+            WafAction::Allow
+        }
+    }
+
+    /// Resolve combined WAF actions with priority ordering.
+    fn combine_waf_action(current: WafAction, next: WafAction) -> WafAction {
+        use WafAction::{Allow, Log, Challenge, Block};
+        match (current, next) {
+            (Block, _) | (_, Block) => Block,
+            (Challenge, _) | (_, Challenge) => Challenge,
+            (Log, _) | (_, Log) => Log,
+            _ => Allow,
+        }
+    }
+
+    /// Extract a named cookie from the Cookie header.
+    fn extract_cookie_value(cookie_header: &str, cookie_name: &str) -> Option<String> {
+        cookie_header
+            .split(';')
+            .map(|c| c.trim())
+            .find_map(|cookie| {
+                let mut parts = cookie.splitn(2, '=');
+                let name = parts.next()?.trim();
+                let value = parts.next()?.trim();
+                if name == cookie_name {
+                    Some(value.to_string())
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Extract query parameter value from a query string.
+    fn extract_query_param(query: &str, key: &str) -> Option<String> {
+        for pair in query.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            let name = parts.next()?.trim();
+            if name == key {
+                let value = parts.next().unwrap_or("");
+                let decoded = percent_decode_str(value).decode_utf8_lossy().to_string();
+                return Some(decoded);
+            }
+        }
+        None
+    }
 }
 
 #[async_trait]
@@ -1317,7 +1432,10 @@ impl ProxyHttp for SynapseProxy {
             dlp_scan_time_us: 0,
             response_content_type: None,
             request_path: None,
+            actor_id: None,
+            actor_risk_score: 0.0,
             challenge_cookie: None,
+            challenge_validated: false,
         }
     }
 
@@ -1336,6 +1454,14 @@ impl ProxyHttp for SynapseProxy {
                 warn!(
                     "Per-IP rate limit exceeded for {}, limit: {} RPS",
                     client_ip, self.per_ip_rps_limit
+                );
+
+                self.signal_manager.record_event(
+                    SignalCategory::Behavior,
+                    "rate_limit_per_ip",
+                    Some(client_ip.to_string()),
+                    Some("Per-IP rate limit exceeded".to_string()),
+                    serde_json::json!({ "limit_rps": self.per_ip_rps_limit }),
                 );
 
                 // Send 429 Too Many Requests response
@@ -1376,6 +1502,16 @@ impl ProxyHttp for SynapseProxy {
                 ctx.client_ip, count, self.rps_limit
             );
 
+            if let Some(ref client_ip) = ctx.client_ip {
+                self.signal_manager.record_event(
+                    SignalCategory::Behavior,
+                    "rate_limit_global",
+                    Some(client_ip.to_string()),
+                    Some("Global rate limit exceeded".to_string()),
+                    serde_json::json!({ "limit_rps": self.rps_limit, "count": count }),
+                );
+            }
+
             // Send 429 Too Many Requests response
             let mut resp = ResponseHeader::build(429, None)?;
             resp.insert_header("content-type", "application/json")?;
@@ -1394,6 +1530,139 @@ impl ProxyHttp for SynapseProxy {
 
             // Return error to stop further processing
             return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(429)).into_err();
+        }
+
+        // ===== Phase 10: Challenge Validation Hook =====
+        // Validate challenge responses early to avoid re-challenging valid clients.
+        if let Some(ref client_ip) = ctx.client_ip {
+            if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                // Ensure actor exists so we can validate challenge response
+                let actor_id = self.actor_manager.get_or_create_actor(ip_addr, None);
+                ctx.actor_id = Some(actor_id.clone());
+
+                let req_header = session.req_header();
+                let cookie_name = self.progression_manager.cookie_name();
+
+                // Check cookie-based challenge response
+                if let Some(cookie_header) = req_header.headers.get("cookie").and_then(|v| v.to_str().ok()) {
+                    if let Some(cookie_value) = Self::extract_cookie_value(cookie_header, cookie_name) {
+                        match self.progression_manager.validate_challenge(&actor_id, &cookie_value) {
+                            ValidationResult::Valid => {
+                                ctx.challenge_validated = true;
+                                self.actor_manager.touch_actor(&actor_id);
+                                self.signal_manager.record_event(
+                                    SignalCategory::Behavior,
+                                    "challenge_cookie_valid",
+                                    Some(actor_id.clone()),
+                                    Some("Cookie challenge validated".to_string()),
+                                    serde_json::json!({ "client_ip": client_ip }),
+                                );
+                            }
+                            ValidationResult::Invalid(reason) => {
+                                self.signal_manager.record_event(
+                                    SignalCategory::Behavior,
+                                    "challenge_cookie_invalid",
+                                    Some(actor_id.clone()),
+                                    Some(reason.clone()),
+                                    serde_json::json!({ "client_ip": client_ip }),
+                                );
+                                let resp = ResponseHeader::build(403, None)?;
+                                session.write_response_header(Box::new(resp), true).await?;
+                                session
+                                    .write_response_body(
+                                        Some(Bytes::from("{\"error\": \"challenge_failed\"}")),
+                                        true,
+                                    )
+                                    .await?;
+                                self.metrics_registry.record_blocked();
+                                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                            }
+                            ValidationResult::Expired => {
+                                self.signal_manager.record_event(
+                                    SignalCategory::Behavior,
+                                    "challenge_cookie_expired",
+                                    Some(actor_id.clone()),
+                                    Some("Challenge cookie expired".to_string()),
+                                    serde_json::json!({ "client_ip": client_ip }),
+                                );
+                                let resp = ResponseHeader::build(403, None)?;
+                                session.write_response_header(Box::new(resp), true).await?;
+                                session
+                                    .write_response_body(
+                                        Some(Bytes::from("{\"error\": \"challenge_expired\"}")),
+                                        true,
+                                    )
+                                    .await?;
+                                self.metrics_registry.record_blocked();
+                                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                            }
+                            ValidationResult::NotFound => {}
+                        }
+                    }
+                }
+
+                // Check query parameter for JS challenge response
+                if let Some(query) = req_header.uri.query() {
+                    if let Some(challenge_kind) = Self::extract_query_param(query, "synapse_challenge") {
+                        if challenge_kind == "js" {
+                            if let Some(nonce) = Self::extract_query_param(query, "synapse_nonce") {
+                                match self.progression_manager.validate_challenge(&actor_id, &nonce) {
+                                    ValidationResult::Valid => {
+                                        ctx.challenge_validated = true;
+                                        self.actor_manager.touch_actor(&actor_id);
+                                        self.signal_manager.record_event(
+                                            SignalCategory::Behavior,
+                                            "challenge_js_valid",
+                                            Some(actor_id.clone()),
+                                            Some("JS challenge validated".to_string()),
+                                            serde_json::json!({ "client_ip": client_ip }),
+                                        );
+                                    }
+                                    ValidationResult::Invalid(reason) => {
+                                        self.signal_manager.record_event(
+                                            SignalCategory::Behavior,
+                                            "challenge_js_invalid",
+                                            Some(actor_id.clone()),
+                                            Some(reason.clone()),
+                                            serde_json::json!({ "client_ip": client_ip }),
+                                        );
+                                        let resp = ResponseHeader::build(403, None)?;
+                                        session.write_response_header(Box::new(resp), true).await?;
+                                        session
+                                            .write_response_body(
+                                                Some(Bytes::from("{\"error\": \"challenge_failed\"}")),
+                                                true,
+                                            )
+                                            .await?;
+                                        self.metrics_registry.record_blocked();
+                                        return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                    }
+                                    ValidationResult::Expired => {
+                                        self.signal_manager.record_event(
+                                            SignalCategory::Behavior,
+                                            "challenge_js_expired",
+                                            Some(actor_id.clone()),
+                                            Some("JS challenge expired".to_string()),
+                                            serde_json::json!({ "client_ip": client_ip }),
+                                        );
+                                        let resp = ResponseHeader::build(403, None)?;
+                                        session.write_response_header(Box::new(resp), true).await?;
+                                        session
+                                            .write_response_body(
+                                                Some(Bytes::from("{\"error\": \"challenge_expired\"}")),
+                                                true,
+                                            )
+                                            .await?;
+                                        self.metrics_registry.record_blocked();
+                                        return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                    }
+                                    ValidationResult::NotFound => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -1468,6 +1737,14 @@ impl ProxyHttp for SynapseProxy {
         if let Some(ref horizon) = self.horizon_manager {
             if horizon.is_ip_blocked(client_ip) {
                 warn!("Horizon blocklist: {} is blocked fleet-wide", client_ip);
+
+                self.signal_manager.record_event(
+                    SignalCategory::Intelligence,
+                    "fleet_blocklist",
+                    Some(client_ip.to_string()),
+                    Some("Blocked by fleet-wide intelligence".to_string()),
+                    serde_json::json!({ "source": "signal_horizon" }),
+                );
 
                 let resp = ResponseHeader::build(403, None)?;
                 session.write_response_header(Box::new(resp), true).await?;
@@ -1668,6 +1945,21 @@ impl ProxyHttp for SynapseProxy {
         // Run detection using the Synapse WAF engine (headers only initially)
         let result = DetectionEngine::analyze(method, &uri, &headers, None, client_ip);
 
+        if !result.matched_rules.is_empty() {
+            self.signal_manager.record_event(
+                SignalCategory::Attack,
+                "waf_rule_match",
+                Some(client_ip.to_string()),
+                Some(format!("Matched {} WAF rules", result.matched_rules.len())),
+                serde_json::json!({
+                    "rules": result.matched_rules,
+                    "risk_score": result.risk_score,
+                    "method": method,
+                    "uri": uri,
+                }),
+            );
+        }
+
         // Phase 3: Entity tracking - touch entity and apply risk from matched rules
         // This tracks per-IP state for risk accumulation and blocking decisions
         if self.entity_manager.is_enabled() {
@@ -1727,6 +2019,13 @@ impl ProxyHttp for SynapseProxy {
                         "Suspicious JA4 from {}: {:?}",
                         client_ip, ja4_analysis.issues
                     );
+                    self.signal_manager.record_event(
+                        SignalCategory::Anomaly,
+                        "ja4_suspicious",
+                        Some(client_ip.to_string()),
+                        Some("Suspicious JA4 fingerprint".to_string()),
+                        serde_json::json!({ "issues": ja4_analysis.issues }),
+                    );
                     ctx.entity_risk += ja4_risk;
                     // Apply to entity for persistence
                     self.entity_manager.apply_external_risk(
@@ -1747,6 +2046,13 @@ impl ProxyHttp for SynapseProxy {
                         warn!(
                             "JA4 rapid change detected: {} changed {} times in 60s",
                             client_ip, reputation.change_count
+                        );
+                        self.signal_manager.record_event(
+                            SignalCategory::Anomaly,
+                            "ja4_rapid_change",
+                            Some(client_ip.to_string()),
+                            Some(format!("JA4 changed {} times in 60s", reputation.change_count)),
+                            serde_json::json!({ "change_count": reputation.change_count }),
                         );
                         ctx.entity_risk += change_risk;
 
@@ -1770,6 +2076,16 @@ impl ProxyHttp for SynapseProxy {
                     "Header Integrity Violation from {}: score={}, issues={:?}",
                     client_ip, integrity.suspicion_score, integrity.inconsistencies
                 );
+                self.signal_manager.record_event(
+                    SignalCategory::Anomaly,
+                    "header_integrity_violation",
+                    Some(client_ip.to_string()),
+                    Some("Header integrity violation detected".to_string()),
+                    serde_json::json!({
+                        "score": integrity.suspicion_score,
+                        "issues": integrity.inconsistencies
+                    }),
+                );
                 
                 ctx.entity_risk += integrity.suspicion_score as f64;
                 self.entity_manager.apply_external_risk(
@@ -1789,6 +2105,7 @@ impl ProxyHttp for SynapseProxy {
                 ip_addr,
                 fingerprint.ja4.as_ref().map(|j| j.raw.as_str()),
             );
+            ctx.actor_id = Some(actor_id.clone());
 
             // Record rule matches to actor's history
             for &rule_id in &result.matched_rules {
@@ -1804,6 +2121,10 @@ impl ProxyHttp for SynapseProxy {
                     "Actor {} recorded rule match: rule_{} category={} risk={:.1}",
                     actor_id, rule_id, category, risk_contribution
                 );
+            }
+
+            if let Some(actor_state) = self.actor_manager.get_actor(&actor_id) {
+                ctx.actor_risk_score = actor_state.risk_score;
             }
 
             // Check if actor is blocked based on accumulated risk
@@ -1954,12 +2275,26 @@ impl ProxyHttp for SynapseProxy {
                     "Tarpit applied: {} delay={}ms level={} hits={}",
                     client_ip, tarpit_decision.delay_ms, tarpit_decision.level, tarpit_decision.hit_count
                 );
+                self.signal_manager.record_event(
+                    SignalCategory::Behavior,
+                    "tarpit_applied",
+                    Some(client_ip.to_string()),
+                    Some(format!("Tarpit delay {}ms", tarpit_decision.delay_ms)),
+                    serde_json::json!({
+                        "delay_ms": tarpit_decision.delay_ms,
+                        "level": tarpit_decision.level,
+                        "hit_count": tarpit_decision.hit_count
+                    }),
+                );
             }
         }
 
+        let waf_action = self.resolve_waf_action(ctx, &result);
+
         info!(
-            "Detection complete: blocked={}, risk={}, entity_risk={:.1}, tarpit={}ms, rules={:?}, time={}μs, uri={}",
+            "Detection complete: blocked={}, action={:?}, risk={}, entity_risk={:.1}, tarpit={}ms, rules={:?}, time={}μs, uri={}",
             result.blocked,
+            waf_action,
             result.risk_score,
             ctx.entity_risk,
             ctx.tarpit_delay_ms,
@@ -2329,6 +2664,20 @@ impl ProxyHttp for SynapseProxy {
                             validation_result.total_score,
                             validation_result.max_severity()
                         );
+
+                        if let Some(ref ip) = ctx.client_ip {
+                            self.signal_manager.record_event(
+                                SignalCategory::Anomaly,
+                                "schema_violation",
+                                Some(ip.to_string()),
+                                Some("Request schema violation detected".to_string()),
+                                serde_json::json!({
+                                    "template": template_path,
+                                    "violation_count": validation_result.violations.len(),
+                                    "score": validation_result.total_score
+                                }),
+                            );
+                        }
 
                         // Add schema violation risk to entity
                         ctx.entity_risk += severity_score as f64;
@@ -2739,6 +3088,20 @@ impl ProxyHttp for SynapseProxy {
                             validation_result.total_score,
                             validation_result.max_severity()
                         );
+
+                        if let Some(ref ip) = ctx.client_ip {
+                            self.signal_manager.record_event(
+                                SignalCategory::Anomaly,
+                                "response_schema_violation",
+                                Some(ip.to_string()),
+                                Some("Response schema violation detected".to_string()),
+                                serde_json::json!({
+                                    "template": template_path,
+                                    "violation_count": validation_result.violations.len(),
+                                    "score": validation_result.total_score
+                                }),
+                            );
+                        }
                     }
                 }
             }
@@ -3362,6 +3725,14 @@ fn main() {
     let shared_dlp_scanner = Arc::new(DlpScanner::new(config.dlp.clone()));
     info!("DlpScanner initialized with {} patterns", shared_dlp_scanner.pattern_count());
 
+    // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting
+    let shared_trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+    info!("TrendsManager initialized with default config");
+
+    // Phase 9: Shared SignalManager for intelligence aggregation
+    let shared_signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
+    info!("SignalManager initialized with default config");
+
     // Build the API handler with ConfigManager if available
     let api_handler = Arc::new({
         let mut builder = ApiHandler::builder()
@@ -3373,6 +3744,8 @@ fn main() {
             .actor_manager(Arc::clone(&shared_actor_manager))
             .session_manager(Arc::clone(&shared_session_manager))
             .dlp_scanner(Arc::clone(&shared_dlp_scanner)) // New: pass dlp scanner
+            .trends_manager(Arc::clone(&shared_trends_manager))
+            .signal_manager(Arc::clone(&shared_signal_manager))
             .synapse_engine(Arc::clone(&SYNAPSE)); // For dry-run WAF evaluation
 
         if let Some(ref cm) = config_manager {
@@ -3498,6 +3871,8 @@ fn main() {
             shadow_mirror_manager,
             Arc::clone(&shared_crawler_detector),
             None, // HorizonManager not yet initialized in main
+            Arc::clone(&shared_trends_manager),
+            Arc::clone(&shared_signal_manager),
         )
     } else {
         SynapseProxy::with_health(
@@ -3518,6 +3893,8 @@ fn main() {
             None,
             Arc::clone(&shared_crawler_detector),
             None, // HorizonManager not yet initialized in main
+            Arc::clone(&shared_trends_manager),
+            Arc::clone(&shared_signal_manager),
         )
     };
 
@@ -3914,6 +4291,8 @@ tls:
                 .await
                 .expect("Failed to create CrawlerDetector")
         }));
+        let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+        let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
@@ -3932,6 +4311,8 @@ tls:
             None,
             crawler_detector,
             None, // No horizon_manager for test
+            trends_manager,
+            signal_manager,
         );
 
         // Verify health status is accessible through proxy

@@ -38,6 +38,7 @@ pub mod vhost;
 pub mod access;
 pub mod admin_server;
 pub mod api;
+pub mod intelligence;
 pub mod metrics;
 pub mod ratelimit;
 pub mod reload;
@@ -226,6 +227,15 @@ pub use trends::{
     Signal, SignalCategory, SignalMetadata, SignalTrend,
     Anomaly, AnomalyType, AnomalySeverity, AnomalyMetadata, AnomalyQueryOptions,
     TrendQueryOptions, TrendsSummary, TrendHistogramBucket, BucketSummary, CategorySummary,
+};
+
+// Re-export intelligence signal aggregation types
+pub use intelligence::{
+    SignalManager, SignalManagerConfig, SignalQueryOptions,
+    SignalCategory as IntelligenceSignalCategory,
+    Signal as IntelligenceSignal,
+    SignalSummary as IntelligenceSignalSummary,
+    TopSignalType as IntelligenceTopSignalType,
 };
 
 // Re-export geo/impossible travel types

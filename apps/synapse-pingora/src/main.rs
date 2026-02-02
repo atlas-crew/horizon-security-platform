@@ -46,6 +46,7 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use tokio::sync::oneshot;
 use pingora::listeners::tls::TlsSettings;
+use uuid::Uuid;
 
 // Admin API imports
 use synapse_pingora::admin_server::{start_admin_server, register_profiles_getter, register_schemas_getter, register_evaluate_callback, EvaluationResult};
@@ -799,6 +800,8 @@ pub type DlpScanResult = (usize, String, u64); // (match_count, types, scan_time
 pub struct RequestContext {
     /// Start time for the request (for logging)
     request_start: Instant,
+    /// Request correlation ID (X-Request-ID)
+    request_id: String,
     /// Detection result from request_filter
     detection: Option<DetectionResult>,
     /// Backend index for round-robin
@@ -1458,6 +1461,29 @@ impl SynapseProxy {
         }
         None
     }
+
+    /// Generate a new request correlation ID.
+    fn generate_request_id() -> String {
+        format!("req_{}", Uuid::new_v4())
+    }
+
+    /// Normalize and validate an incoming request ID header.
+    fn normalize_request_id(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.len() > 128 {
+            return None;
+        }
+        if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+            return None;
+        }
+        Some(trimmed.to_string())
+    }
+
+    /// Insert X-Request-ID header into a response.
+    fn apply_request_id_header(resp: &mut ResponseHeader, request_id: &str) -> Result<()> {
+        resp.insert_header("x-request-id", request_id)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -1467,6 +1493,7 @@ impl ProxyHttp for SynapseProxy {
     fn new_ctx(&self) -> Self::CTX {
         RequestContext {
             request_start: Instant::now(),
+            request_id: Self::generate_request_id(),
             detection: None,
             backend_idx: 0,
             matched_site: None,
@@ -1508,13 +1535,23 @@ impl ProxyHttp for SynapseProxy {
     ) -> Result<()> {
         // Extract client IP early (with trusted proxy validation)
         ctx.client_ip = self.get_client_ip(session);
+        if let Some(raw_request_id) = session
+            .req_header()
+            .headers
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+        {
+            if let Some(request_id) = Self::normalize_request_id(raw_request_id) {
+                ctx.request_id = request_id;
+            }
+        }
 
         // Per-IP rate limiting (P2-2) - prevents single client from exhausting global quota
         if let Some(ref client_ip) = ctx.client_ip {
             if !check_per_ip_rate_limit(client_ip, self.per_ip_rps_limit) {
                 warn!(
-                    "Per-IP rate limit exceeded for {}, limit: {} RPS",
-                    client_ip, self.per_ip_rps_limit
+                    "Per-IP rate limit exceeded for {}, limit: {} RPS, request_id={}",
+                    client_ip, self.per_ip_rps_limit, ctx.request_id
                 );
 
                 self.signal_manager.record_event(
@@ -1527,6 +1564,7 @@ impl ProxyHttp for SynapseProxy {
 
                 // Send 429 Too Many Requests response
                 let mut resp = ResponseHeader::build(429, None)?;
+                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("retry-after", "1")?;
 
@@ -1559,8 +1597,8 @@ impl ProxyHttp for SynapseProxy {
         // Check if over limit - block with 429
         if count > self.rps_limit {
             warn!(
-                "Rate limit exceeded for {:?}, count: {}, limit: {}",
-                ctx.client_ip, count, self.rps_limit
+                "Rate limit exceeded for {:?}, count: {}, limit: {}, request_id={}",
+                ctx.client_ip, count, self.rps_limit, ctx.request_id
             );
 
             if let Some(ref client_ip) = ctx.client_ip {
@@ -1575,6 +1613,7 @@ impl ProxyHttp for SynapseProxy {
 
             // Send 429 Too Many Requests response
             let mut resp = ResponseHeader::build(429, None)?;
+            Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
             resp.insert_header("content-type", "application/json")?;
             resp.insert_header("retry-after", "1")?;
 
@@ -1627,7 +1666,8 @@ impl ProxyHttp for SynapseProxy {
                                     Some(reason.clone()),
                                     serde_json::json!({ "client_ip": client_ip }),
                                 );
-                                let resp = ResponseHeader::build(403, None)?;
+                                let mut resp = ResponseHeader::build(403, None)?;
+                                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                                 session.write_response_header(Box::new(resp), true).await?;
                                 session
                                     .write_response_body(
@@ -1646,7 +1686,8 @@ impl ProxyHttp for SynapseProxy {
                                     Some("Challenge cookie expired".to_string()),
                                     serde_json::json!({ "client_ip": client_ip }),
                                 );
-                                let resp = ResponseHeader::build(403, None)?;
+                                let mut resp = ResponseHeader::build(403, None)?;
+                                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                                 session.write_response_header(Box::new(resp), true).await?;
                                 session
                                     .write_response_body(
@@ -1687,7 +1728,8 @@ impl ProxyHttp for SynapseProxy {
                                             Some(reason.clone()),
                                             serde_json::json!({ "client_ip": client_ip }),
                                         );
-                                        let resp = ResponseHeader::build(403, None)?;
+                                        let mut resp = ResponseHeader::build(403, None)?;
+                                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                                         session.write_response_header(Box::new(resp), true).await?;
                                         session
                                             .write_response_body(
@@ -1706,7 +1748,8 @@ impl ProxyHttp for SynapseProxy {
                                             Some("JS challenge expired".to_string()),
                                             serde_json::json!({ "client_ip": client_ip }),
                                         );
-                                        let resp = ResponseHeader::build(403, None)?;
+                                        let mut resp = ResponseHeader::build(403, None)?;
+                                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                                         session.write_response_header(Box::new(resp), true).await?;
                                         session
                                             .write_response_body(
@@ -1778,9 +1821,13 @@ impl ProxyHttp for SynapseProxy {
                     };
 
                     if is_denied {
-                        warn!("IP ACL: {} denied for site '{}'", client_ip, site.hostname);
-                        
+                        warn!(
+                            "IP ACL: {} denied for site '{}', request_id={}",
+                            client_ip, site.hostname, ctx.request_id
+                        );
+
                         let mut resp = ResponseHeader::build(403, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         resp.insert_header("content-type", "application/json")?;
                         
                         session.write_response_header(Box::new(resp), false).await?;
@@ -1797,7 +1844,10 @@ impl ProxyHttp for SynapseProxy {
         // Check if IP or fingerprint is on the fleet-wide blocklist
         if let Some(ref horizon) = self.horizon_manager {
             if horizon.is_ip_blocked(client_ip) {
-                warn!("Horizon blocklist: {} is blocked fleet-wide", client_ip);
+                warn!(
+                    "Horizon blocklist: {} is blocked fleet-wide, request_id={}",
+                    client_ip, ctx.request_id
+                );
 
                 self.signal_manager.record_event(
                     SignalCategory::Intelligence,
@@ -1807,7 +1857,8 @@ impl ProxyHttp for SynapseProxy {
                     serde_json::json!({ "source": "signal_horizon" }),
                 );
 
-                let resp = ResponseHeader::build(403, None)?;
+                let mut resp = ResponseHeader::build(403, None)?;
+                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                 session.write_response_header(Box::new(resp), true).await?;
                 session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\"}")), true).await?;
 
@@ -1852,6 +1903,7 @@ impl ProxyHttp for SynapseProxy {
                 .unwrap_or_else(|_| b"{\"status\":\"error\"}".to_vec());
 
             let mut resp = ResponseHeader::build(http_status, None)?;
+            Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
             resp.insert_header("content-type", "application/json")?;
 
             session.write_response_header(Box::new(resp), false).await?;
@@ -1862,8 +1914,10 @@ impl ProxyHttp for SynapseProxy {
                 )
                 .await?;
 
-            debug!("Health check endpoint accessed, returning {} (status: {:?})",
-                http_status, health_response.status);
+            debug!(
+                "Health check endpoint accessed, returning {} (status: {:?}), request_id={}",
+                http_status, health_response.status, ctx.request_id
+            );
             return Ok(true); // We handled this request
         }
         // ===== End Health Check Endpoint =====
@@ -1874,8 +1928,8 @@ impl ProxyHttp for SynapseProxy {
             if trap_matcher.is_trap(&uri) {
                 let trap_pattern = trap_matcher.matched_pattern(&uri).unwrap_or("unknown");
                 warn!(
-                    "TRAP HIT: {} from {} matched pattern '{}'",
-                    uri, client_ip, trap_pattern
+                    "TRAP HIT: {} from {} matched pattern '{}', request_id={}",
+                    uri, client_ip, trap_pattern, ctx.request_id
                 );
 
                 // Apply maximum risk to entity
@@ -1901,7 +1955,8 @@ impl ProxyHttp for SynapseProxy {
                 }
 
                 // Return 404 (don't reveal trap existence)
-                let resp = ResponseHeader::build(404, None)?;
+                let mut resp = ResponseHeader::build(404, None)?;
+                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                 session.write_response_header(Box::new(resp), true).await?;
                 self.metrics_registry.record_blocked();
                 return Ok(true);
@@ -1973,7 +2028,8 @@ impl ProxyHttp for SynapseProxy {
                             ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
                         ));
 
-                        let resp = ResponseHeader::build(403, None)?;
+                        let mut resp = ResponseHeader::build(403, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         session.write_response_header(Box::new(resp), true).await?;
                         // Security: Generic error message to prevent information disclosure
                         session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\"}")), true).await?;
@@ -2206,7 +2262,8 @@ impl ProxyHttp for SynapseProxy {
                     ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
                 ));
 
-                let resp = ResponseHeader::build(403, None)?;
+                let mut resp = ResponseHeader::build(403, None)?;
+                Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                 session.write_response_header(Box::new(resp), true).await?;
                 session
                     .write_response_body(
@@ -2454,12 +2511,13 @@ impl ProxyHttp for SynapseProxy {
                     ChallengeResponse::JsChallenge { html, .. } => {
                         // Present JavaScript proof-of-work challenge
                         info!(
-                            "Presenting JS challenge to actor {} (risk={})",
-                            actor_id, result.risk_score
+                            "Presenting JS challenge to actor {} (risk={}), request_id={}",
+                            actor_id, result.risk_score, ctx.request_id
                         );
                         ctx.waf_challenged = true;
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "2")?;
@@ -2472,12 +2530,13 @@ impl ProxyHttp for SynapseProxy {
                     ChallengeResponse::Captcha { html, session_id } => {
                         // Present CAPTCHA challenge
                         info!(
-                            "Presenting CAPTCHA challenge to actor {} (session={})",
-                            actor_id, session_id
+                            "Presenting CAPTCHA challenge to actor {} (session={}), request_id={}",
+                            actor_id, session_id, ctx.request_id
                         );
                         ctx.waf_challenged = true;
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "3")?;
@@ -2490,17 +2549,18 @@ impl ProxyHttp for SynapseProxy {
                     ChallengeResponse::Tarpit { delay_ms } => {
                         // Apply tarpit delay then block
                         info!(
-                            "Tarpitting actor {} for {}ms (risk={})",
-                            actor_id, delay_ms, result.risk_score
+                            "Tarpitting actor {} for {}ms (risk={}), request_id={}",
+                            actor_id, delay_ms, result.risk_score, ctx.request_id
                         );
                         detection.blocked = true;
                         warn!(
-                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}",
+                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}, request_id={}",
                             uri,
                             client_ip,
                             result.risk_score,
                             result.matched_rules,
-                            block_reason
+                            block_reason,
+                            ctx.request_id
                         );
                         self.record_waf_block_event(
                             client_ip,
@@ -2514,6 +2574,7 @@ impl ProxyHttp for SynapseProxy {
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         let block_html = self.progression_manager.config().block_page_html.clone();
                         let mut resp = ResponseHeader::build(403, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("x-challenge-level", "4")?;
                         resp.insert_header("x-challenge-type", "tarpit")?;
@@ -2525,17 +2586,18 @@ impl ProxyHttp for SynapseProxy {
                     ChallengeResponse::Block { html, status_code } => {
                         // Hard block with custom page
                         warn!(
-                            "Hard blocking actor {} (risk={})",
-                            actor_id, result.risk_score
+                            "Hard blocking actor {} (risk={}), request_id={}",
+                            actor_id, result.risk_score, ctx.request_id
                         );
                         detection.blocked = true;
                         warn!(
-                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}",
+                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}, request_id={}",
                             uri,
                             client_ip,
                             result.risk_score,
                             result.matched_rules,
-                            block_reason
+                            block_reason,
+                            ctx.request_id
                         );
                         self.record_waf_block_event(
                             client_ip,
@@ -2547,6 +2609,7 @@ impl ProxyHttp for SynapseProxy {
                         );
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(status_code, None)?;
+                        Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("x-challenge-level", "5")?;
                         resp.insert_header("x-challenge-type", "block")?;
@@ -2575,11 +2638,8 @@ impl ProxyHttp for SynapseProxy {
                     let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
                         .unwrap_or_else(|_| "synapse-default".to_string());
 
-                    // Generate a simple request ID from timestamp + counter
-                    let request_id = format!("req_{:x}_{}", std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis(), fastrand::u32(..));
+                    // Use request correlation ID for shadow mirror payload
+                    let request_id = ctx.request_id.clone();
 
                     let payload = MirrorPayload::new(
                         request_id,
@@ -2599,8 +2659,8 @@ impl ProxyHttp for SynapseProxy {
                     shadow_manager.mirror_async(payload);
 
                     info!(
-                        "Shadow mirror triggered: {} -> risk={}, rules={:?}",
-                        client_ip, result.risk_score, result.matched_rules
+                        "Shadow mirror triggered: {} -> risk={}, rules={:?}, request_id={}",
+                        client_ip, result.risk_score, result.matched_rules, ctx.request_id
                     );
                 }
             }
@@ -2711,7 +2771,8 @@ impl ProxyHttp for SynapseProxy {
 
                     // Send 403 response
                     // Security: Generic error to prevent info disclosure
-                    let resp = ResponseHeader::build(403, None)?;
+                    let mut resp = ResponseHeader::build(403, None)?;
+                    Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
                     _session.write_response_header(Box::new(resp), true).await?;
                     _session
                         .write_response_body(
@@ -2866,8 +2927,8 @@ impl ProxyHttp for SynapseProxy {
                 ctx.dlp_scan_rx = Some(rx);
 
                 debug!(
-                    "DLP: Spawned async scan for {} bytes from {:?}",
-                    ctx.body_bytes_seen, ctx.client_ip
+                    "DLP: Spawned async scan for {} bytes from {:?}, request_id={}",
+                    ctx.body_bytes_seen, ctx.client_ip, ctx.request_id
                 );
             }
         }
@@ -2877,8 +2938,8 @@ impl ProxyHttp for SynapseProxy {
             self.metrics_registry.record_request_bandwidth(ctx.body_bytes_seen as u64);
 
             info!(
-                "Request body complete: {} bytes from {:?}, DLP scan spawned",
-                ctx.body_bytes_seen, ctx.client_ip
+                "Request body complete: {} bytes from {:?}, DLP scan spawned, request_id={}",
+                ctx.body_bytes_seen, ctx.client_ip, ctx.request_id
             );
         }
 
@@ -2909,8 +2970,8 @@ impl ProxyHttp for SynapseProxy {
 
                 ctx.backend_idx = idx;
                 info!(
-                    "Multi-site: routing to site '{}' backend {}:{} (index {})",
-                    site.hostname, host, port, idx
+                    "Multi-site: routing to site '{}' backend {}:{} (index {}), request_id={}",
+                    site.hostname, host, port, idx, ctx.request_id
                 );
 
                 let tls = site.tls_enabled;
@@ -2924,7 +2985,10 @@ impl ProxyHttp for SynapseProxy {
         let (host, port, idx) = self.next_backend();
         ctx.backend_idx = idx;
 
-        info!("Routing to default backend {}:{} (index {})", host, port, idx);
+        info!(
+            "Routing to default backend {}:{} (index {}), request_id={}",
+            host, port, idx, ctx.request_id
+        );
 
         let peer = HttpPeer::new((&host as &str, port), false, String::new());
         Ok(Box::new(peer))
@@ -2955,14 +3019,14 @@ impl ProxyHttp for SynapseProxy {
 
                     if match_count > 0 {
                         debug!(
-                            "DLP async scan complete: {} matches, types={}, time={}us",
-                            match_count, ctx.request_dlp_types, scan_time_us
+                            "DLP async scan complete: {} matches, types={}, time={}us, request_id={}",
+                            match_count, ctx.request_dlp_types, scan_time_us, ctx.request_id
                         );
                     }
                 }
                 Err(_) => {
                     // Task was cancelled or panicked
-                    warn!("DLP scan task failed or was cancelled");
+                    warn!("DLP scan task failed or was cancelled, request_id={}", ctx.request_id);
                 }
             }
         }
@@ -2975,6 +3039,7 @@ impl ProxyHttp for SynapseProxy {
         }
 
         // Add Synapse headers for visibility
+        upstream_request.insert_header("X-Request-ID", ctx.request_id.as_str())?;
         upstream_request.insert_header("X-Synapse-Analyzed", "true")?;
 
         if let Some(ref detection) = ctx.detection {
@@ -3056,6 +3121,7 @@ impl ProxyHttp for SynapseProxy {
         ctx: &mut Self::CTX,
     ) -> Result<()>
     {
+        upstream_response.insert_header("X-Request-ID", ctx.request_id.as_str())?;
         // Extract Content-Type for response schema validation
         ctx.response_content_type = upstream_response
             .headers

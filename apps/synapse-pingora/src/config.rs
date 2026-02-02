@@ -361,10 +361,10 @@ pub struct ConfigFile {
 /// Errors that can occur during configuration loading.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("configuration file not found: {path}")]
+    #[error("configuration file not found: {path} (check the path or mount the file into the container)")]
     NotFound { path: String },
 
-    #[error("configuration file too large: {size} bytes (max {max} bytes)")]
+    #[error("configuration file too large: {size} bytes (max {max} bytes). Reduce size or split the configuration")]
     FileTooLarge { size: u64, max: u64 },
 
     #[error("failed to read configuration: {0}")]
@@ -376,19 +376,19 @@ pub enum ConfigError {
     #[error("validation error: {0}")]
     ValidationError(String),
 
-    #[error("TLS certificate not found: {path}")]
+    #[error("TLS certificate not found: {path} (set tls.cert_path to a valid PEM file)")]
     CertNotFound { path: String },
 
-    #[error("TLS key not found: {path}")]
+    #[error("TLS key not found: {path} (set tls.key_path to a valid PEM file)")]
     KeyNotFound { path: String },
 
-    #[error("duplicate hostname: {hostname}")]
+    #[error("duplicate hostname: {hostname} (hostnames must be unique; consider a wildcard like '*.example.com')")]
     DuplicateHostname { hostname: String },
 
-    #[error("invalid TLS version: {version} (must be 1.2 or 1.3)")]
+    #[error("invalid TLS version: {version} (set min_version to '1.2' or '1.3')")]
     InvalidTlsVersion { version: String },
 
-    #[error("path traversal detected in: {path}")]
+    #[error("path traversal detected in: {path} (remove '..' or encoded traversal sequences)")]
     PathTraversal { path: String },
 }
 
@@ -485,7 +485,7 @@ impl ConfigLoader {
             // Validate upstreams
             if site.upstreams.is_empty() {
                 return Err(ConfigError::ValidationError(format!(
-                    "site '{}' has no upstreams configured",
+                    "site '{}' has no upstreams configured; add at least one upstream with host and port",
                     site.hostname
                 )));
             }
@@ -509,14 +509,16 @@ impl ConfigLoader {
                     if threshold == 0 {
                         return Err(ConfigError::ValidationError(format!(
                             "site '{}' has WAF threshold of 0, which effectively disables protection. \
-                             Use waf.enabled: false to explicitly disable, or set threshold between 1-100",
+                             Use waf.enabled: false to disable the WAF, or set threshold between 1-100",
                             site.hostname
                         )));
                     }
                     if threshold > 100 {
                         return Err(ConfigError::ValidationError(format!(
-                            "site '{}' has invalid WAF threshold {} (must be 1-100)",
-                            site.hostname, threshold
+                            "site '{}' has invalid WAF threshold {} (must be 1-100); \
+                             use waf.enabled: false to disable or set a valid threshold",
+                            site.hostname,
+                            threshold
                         )));
                     }
                 }
@@ -526,7 +528,7 @@ impl ConfigLoader {
             if let Some(rl) = &site.rate_limit {
                 if rl.rps == 0 && rl.enabled {
                     warn!(
-                        "Site '{}' has rate limiting enabled with 0 RPS",
+                        "Site '{}' has rate limiting enabled with 0 RPS; set rps > 0 or disable rate limiting",
                         site.hostname
                     );
                 }
@@ -536,8 +538,9 @@ impl ConfigLoader {
             if let Some(shadow) = &site.shadow_mirror {
                 if let Err(e) = shadow.validate() {
                     return Err(ConfigError::ValidationError(format!(
-                        "site '{}' has invalid shadow_mirror config: {}",
-                        site.hostname, e
+                        "site '{}' has invalid shadow_mirror config: {}. Fix shadow_mirror settings or remove the block",
+                        site.hostname,
+                        e
                     )));
                 }
             }
@@ -554,12 +557,13 @@ impl ConfigLoader {
         if config.server.waf_threshold == 0 {
             return Err(ConfigError::ValidationError(
                 "global WAF threshold of 0 effectively disables protection. \
-                 Use waf_enabled: false to explicitly disable, or set threshold between 1-100".to_string()
+                 Use waf_enabled: false to disable globally, or set waf_threshold between 1-100"
+                    .to_string()
             ));
         }
         if config.server.waf_threshold > 100 {
             return Err(ConfigError::ValidationError(format!(
-                "global WAF threshold {} is invalid (must be 1-100)",
+                "global WAF threshold {} is invalid (must be 1-100); set waf_threshold between 1-100",
                 config.server.waf_threshold
             )));
         }

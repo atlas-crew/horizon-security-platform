@@ -827,13 +827,13 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
-    // Routes that are safe to expose without authentication (console shell only).
+    // Routes that are safe to expose without authentication (health check + console).
     let public_routes = Router::new()
-        .route("/console", get(admin_console_handler));
+        .route("/console", get(admin_console_handler))
+        .route("/health", get(health_handler));
 
     // All remaining admin API routes require authentication.
     let authenticated_routes = Router::new()
-        .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .route("/sites", get(sites_handler))
         .route("/sites/{hostname}", get(get_site_handler))

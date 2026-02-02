@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -283,6 +283,8 @@ async fn connection_loop(
 ) {
     let mut reconnect_delay = config.reconnect_delay_ms;
     let mut attempt = 0u32;
+    let mut consecutive_failures = 0u32;
+    let mut circuit_open_until: Option<Instant> = None;
     let mut pending_signals: Vec<ThreatSignal> = Vec::new();
 
     loop {
@@ -291,6 +293,26 @@ async fn connection_loop(
             info!("Horizon client shutdown requested");
             *state.write() = ConnectionState::Disconnected;
             return;
+        }
+
+        if let Some(until) = circuit_open_until {
+            let now = Instant::now();
+            if now < until {
+                *state.write() = ConnectionState::Degraded;
+                let remaining = until.saturating_duration_since(now);
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        info!("Horizon client shutdown requested");
+                        *state.write() = ConnectionState::Disconnected;
+                        return;
+                    }
+                    _ = tokio::time::sleep(remaining) => {}
+                }
+                continue;
+            }
+
+            circuit_open_until = None;
+            info!("Horizon circuit breaker closed; resuming connection attempts");
         }
 
         // Check max reconnect attempts
@@ -329,9 +351,31 @@ async fn connection_loop(
                 *state.write() = ConnectionState::Error;
                 return;
             }
-            ConnectionResult::Disconnected => {
-                attempt += 1;
+            ConnectionResult::Disconnected { had_connection } => {
+                if had_connection {
+                    attempt = 0;
+                    reconnect_delay = config.reconnect_delay_ms;
+                    consecutive_failures = 0;
+                }
+
+                attempt = attempt.saturating_add(1);
                 stats.reconnect_attempts.store(attempt, Ordering::Relaxed);
+                consecutive_failures = consecutive_failures.saturating_add(1);
+
+                if config.circuit_breaker_threshold > 0
+                    && consecutive_failures >= config.circuit_breaker_threshold
+                {
+                    let cooldown = Duration::from_millis(config.circuit_breaker_cooldown_ms.max(1));
+                    circuit_open_until = Some(Instant::now() + cooldown);
+                    *state.write() = ConnectionState::Degraded;
+                    warn!(
+                        "Horizon circuit breaker opened after {} consecutive failures; cooling down for {}ms",
+                        consecutive_failures, cooldown.as_millis()
+                    );
+                    consecutive_failures = 0;
+                    reconnect_delay = config.reconnect_delay_ms;
+                    continue;
+                }
 
                 // Add random jitter (±25%) to prevent thundering herd on reconnect
                 // This spreads out reconnection attempts when many clients disconnect simultaneously
@@ -362,7 +406,7 @@ async fn connection_loop(
 enum ConnectionResult {
     Shutdown,
     AuthFailed,
-    Disconnected,
+    Disconnected { had_connection: bool },
     Stopped,
 }
 
@@ -385,12 +429,14 @@ async fn connect_and_run(
     config_manager: &Option<Arc<ConfigManager>>,
     pending_signals: &mut Vec<ThreatSignal>,
 ) -> ConnectionResult {
+    let mut had_connection = false;
+
     // Connect WebSocket
     let ws_stream = match tokio_tungstenite::connect_async(&config.hub_url).await {
         Ok((stream, _)) => stream,
         Err(e) => {
             error!("WebSocket connection failed: {}", e);
-            return ConnectionResult::Disconnected;
+            return ConnectionResult::Disconnected { had_connection };
         }
     };
 
@@ -412,7 +458,7 @@ async fn connect_and_run(
         .await
     {
         error!("Failed to send auth: {}", e);
-        return ConnectionResult::Disconnected;
+        return ConnectionResult::Disconnected { had_connection };
     }
 
     // Wait for auth response
@@ -430,6 +476,7 @@ async fn connect_and_run(
                     *tenant_id.write() = Some(tid);
                     *capabilities.write() = caps;
                     *state.write() = ConnectionState::Connected;
+                    had_connection = true;
 
                     // Request initial blocklist
                     let _ = ws_tx
@@ -444,13 +491,13 @@ async fn connect_and_run(
                 }
                 _ => {
                     error!("Unexpected auth response");
-                    return ConnectionResult::Disconnected;
+                    return ConnectionResult::Disconnected { had_connection };
                 }
             }
         }
         _ => {
             error!("Auth timeout or error");
-            return ConnectionResult::Disconnected;
+            return ConnectionResult::Disconnected { had_connection };
         }
     }
 
@@ -465,7 +512,7 @@ async fn connect_and_run(
         if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
             error!("Failed to send buffered signals: {}", e);
             stash_pending(pending_signals, &mut signal_batch);
-            return ConnectionResult::Disconnected;
+            return ConnectionResult::Disconnected { had_connection };
         }
     }
 
@@ -487,7 +534,7 @@ async fn connect_and_run(
                             if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
                                 error!("Failed to send batch: {}", e);
                                 stash_pending(pending_signals, &mut signal_batch);
-                                return ConnectionResult::Disconnected;
+                                return ConnectionResult::Disconnected { had_connection };
                             }
                         }
                     }
@@ -503,7 +550,7 @@ async fn connect_and_run(
                     if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
                         error!("Failed to send batch: {}", e);
                         stash_pending(pending_signals, &mut signal_batch);
-                        return ConnectionResult::Disconnected;
+                        return ConnectionResult::Disconnected { had_connection };
                     }
                 }
             }
@@ -522,12 +569,12 @@ async fn connect_and_run(
                     Some(Ok(Message::Close(_))) | None => {
                         warn!("WebSocket closed");
                         stash_pending(pending_signals, &mut signal_batch);
-                        return ConnectionResult::Disconnected;
+                        return ConnectionResult::Disconnected { had_connection };
                     }
                     Some(Err(e)) => {
                         error!("WebSocket error: {}", e);
                         stash_pending(pending_signals, &mut signal_batch);
-                        return ConnectionResult::Disconnected;
+                        return ConnectionResult::Disconnected { had_connection };
                     }
                     _ => {}
                 }

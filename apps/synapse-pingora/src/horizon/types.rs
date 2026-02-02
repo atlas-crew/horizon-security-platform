@@ -276,6 +276,7 @@ pub enum ConnectionState {
     Authenticating,
     Connected,
     Reconnecting,
+    Degraded,
     Error,
 }
 
@@ -288,6 +289,7 @@ impl ConnectionState {
             ConnectionState::Authenticating => "authenticating",
             ConnectionState::Connected => "connected",
             ConnectionState::Reconnecting => "reconnecting",
+            ConnectionState::Degraded => "degraded",
             ConnectionState::Error => "error",
         }
     }

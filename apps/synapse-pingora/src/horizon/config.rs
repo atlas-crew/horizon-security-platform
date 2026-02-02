@@ -29,6 +29,14 @@ pub struct HorizonConfig {
     /// Maximum reconnection attempts (0 = unlimited)
     pub max_reconnect_attempts: u32,
 
+    /// Circuit breaker threshold for consecutive failures (0 = disabled)
+    #[serde(default = "default_circuit_breaker_threshold")]
+    pub circuit_breaker_threshold: u32,
+
+    /// Circuit breaker cooldown in milliseconds
+    #[serde(default = "default_circuit_breaker_cooldown_ms")]
+    pub circuit_breaker_cooldown_ms: u64,
+
     /// Signal batch size (default: 100)
     pub signal_batch_size: usize,
 
@@ -56,6 +64,8 @@ impl Default for HorizonConfig {
             version: env!("CARGO_PKG_VERSION").to_string(),
             reconnect_delay_ms: 5_000,
             max_reconnect_attempts: 0, // Unlimited
+            circuit_breaker_threshold: default_circuit_breaker_threshold(),
+            circuit_breaker_cooldown_ms: default_circuit_breaker_cooldown_ms(),
             signal_batch_size: 100,
             signal_batch_delay_ms: 1_000,
             heartbeat_interval_ms: 30_000,
@@ -136,6 +146,14 @@ impl HorizonConfig {
         }
         Ok(())
     }
+}
+
+fn default_circuit_breaker_threshold() -> u32 {
+    5
+}
+
+fn default_circuit_breaker_cooldown_ms() -> u64 {
+    300_000
 }
 
 #[cfg(test)]

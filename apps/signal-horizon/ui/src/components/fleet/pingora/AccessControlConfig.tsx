@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { Ban, X } from 'lucide-react';
 
 export interface AccessControlData {
@@ -11,7 +11,7 @@ interface AccessControlConfigProps {
   onChange: (config: AccessControlData) => void;
 }
 
-export function AccessControlConfig({ config, onChange }: AccessControlConfigProps) {
+export const AccessControlConfig = memo(function AccessControlConfig({ config, onChange }: AccessControlConfigProps) {
   const [newCidr, setNewCidr] = useState('');
   const [listType, setListType] = useState<'allow' | 'deny'>('deny');
 
@@ -104,4 +104,4 @@ export function AccessControlConfig({ config, onChange }: AccessControlConfigPro
       </div>
     </div>
   );
-}
+});

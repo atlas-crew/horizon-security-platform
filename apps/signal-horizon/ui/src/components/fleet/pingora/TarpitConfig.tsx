@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Timer, Hourglass, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 // Note: DEFAULT_* constants are no longer needed since parseIntSafe uses current value as fallback
@@ -43,7 +43,7 @@ function validateTarpitConfig(config: TarpitConfigData): ValidationErrors {
   return errors;
 }
 
-export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
+export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: TarpitConfigProps) {
   const validationErrors = useMemo(() => validateTarpitConfig(config), [config]);
   const hasErrors = Object.keys(validationErrors).length > 0;
 
@@ -188,4 +188,4 @@ export function TarpitConfig({ config, onChange }: TarpitConfigProps) {
       )}
     </div>
   );
-}
+});

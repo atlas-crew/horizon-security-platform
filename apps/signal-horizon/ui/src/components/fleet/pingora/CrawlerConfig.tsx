@@ -1,5 +1,13 @@
+import { memo } from 'react';
 import { Bot, Shield, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+import {
+  DEFAULT_CRAWLER_DNS_CACHE_TTL_SECS,
+  DEFAULT_CRAWLER_DNS_FAILURE_POLICY,
+  DEFAULT_CRAWLER_DNS_FAILURE_RISK_PENALTY,
+  DEFAULT_CRAWLER_DNS_TIMEOUT_MS,
+  DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS,
+} from './configDefaults';
 
 export interface CrawlerConfigData {
   enabled: boolean;
@@ -17,7 +25,7 @@ interface CrawlerConfigProps {
   onChange: (config: CrawlerConfigData) => void;
 }
 
-export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
+export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -74,7 +82,10 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
             <label className="text-xs font-medium text-ink-secondary">DNS Failure Policy</label>
             <select
               value={config.dns_failure_policy}
-              onChange={(e) => onChange({ ...config, dns_failure_policy: e.target.value as any })}
+              onChange={(e) => onChange({
+                ...config,
+                dns_failure_policy: (e.target.value as any) || DEFAULT_CRAWLER_DNS_FAILURE_POLICY,
+              })}
               className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
             >
               <option value="apply_risk_penalty">Apply Risk Penalty (recommended)</option>
@@ -92,7 +103,10 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
                 min="60"
                 max="3600"
                 value={config.dns_cache_ttl_secs}
-                onChange={(e) => onChange({ ...config, dns_cache_ttl_secs: parseInt(e.target.value) || 300 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  dns_cache_ttl_secs: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_CACHE_TTL_SECS,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -103,7 +117,10 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
                 min="500"
                 max="10000"
                 value={config.dns_timeout_ms}
-                onChange={(e) => onChange({ ...config, dns_timeout_ms: parseInt(e.target.value) || 2000 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  dns_timeout_ms: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_TIMEOUT_MS,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -114,7 +131,10 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
                 min="10"
                 max="500"
                 value={config.max_concurrent_dns_lookups}
-                onChange={(e) => onChange({ ...config, max_concurrent_dns_lookups: parseInt(e.target.value) || 100 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  max_concurrent_dns_lookups: parseInt(e.target.value) || DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -125,7 +145,10 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
                 min="0"
                 max="100"
                 value={config.dns_failure_risk_penalty}
-                onChange={(e) => onChange({ ...config, dns_failure_risk_penalty: parseInt(e.target.value) || 20 })}
+                onChange={(e) => onChange({
+                  ...config,
+                  dns_failure_risk_penalty: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_FAILURE_RISK_PENALTY,
+                })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
@@ -134,4 +157,4 @@ export function CrawlerConfig({ config, onChange }: CrawlerConfigProps) {
       )}
     </div>
   );
-}
+});

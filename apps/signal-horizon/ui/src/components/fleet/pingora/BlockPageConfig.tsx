@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { FileWarning } from 'lucide-react';
 
 export interface BlockPageConfigData {
@@ -16,7 +17,7 @@ interface BlockPageConfigProps {
   onChange: (config: BlockPageConfigData) => void;
 }
 
-export function BlockPageConfig({ config, onChange }: BlockPageConfigProps) {
+export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange }: BlockPageConfigProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -100,4 +101,4 @@ export function BlockPageConfig({ config, onChange }: BlockPageConfigProps) {
       </div>
     </div>
   );
-}
+});

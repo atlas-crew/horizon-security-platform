@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, memo } from 'react';
 import { Shield } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -13,7 +13,7 @@ interface WafConfigProps {
   onChange: (config: WafConfigData) => void;
 }
 
-export function WafConfig({ config, onChange }: WafConfigProps) {
+export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfigProps) {
   const handleThresholdChange = useCallback((val: number) => {
     onChange({ ...config, threshold: Math.max(0, Math.min(1, val)) });
   }, [config, onChange]);
@@ -123,4 +123,4 @@ export function WafConfig({ config, onChange }: WafConfigProps) {
       )}
     </div>
   );
-}
+});

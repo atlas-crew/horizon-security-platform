@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Users, TrendingDown, MapPin, Plane, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
@@ -50,7 +50,7 @@ function validateEntityConfig(config: EntityConfigData): ValidationErrors {
   return errors;
 }
 
-export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTravelChange }: EntityConfigProps) {
+export const EntityConfig = memo(function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTravelChange }: EntityConfigProps) {
   const validationErrors = useMemo(() => validateEntityConfig(entityConfig), [entityConfig]);
   const hasErrors = Object.keys(validationErrors).length > 0;
 
@@ -256,4 +256,4 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
       </div>
     </div>
   );
-}
+});

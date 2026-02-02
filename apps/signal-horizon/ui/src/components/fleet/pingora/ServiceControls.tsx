@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { RefreshCw, Play, RotateCw } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -6,7 +6,7 @@ interface ServiceControlsProps {
   onAction: (action: 'test' | 'reload' | 'restart') => Promise<void>;
 }
 
-export function ServiceControls({ onAction }: ServiceControlsProps) {
+export const ServiceControls = memo(function ServiceControls({ onAction }: ServiceControlsProps) {
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [lastAction, setLastAction] = useState<string | null>(null);
 
@@ -68,4 +68,4 @@ export function ServiceControls({ onAction }: ServiceControlsProps) {
       </div>
     </div>
   );
-}
+});

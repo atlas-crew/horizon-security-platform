@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, memo } from 'react';
 import { Eye, Zap, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 // Note: DEFAULT_* constants removed since parseIntSafe uses current value as fallback
@@ -35,7 +35,7 @@ function validateDlpConfig(config: DlpConfigData): ValidationErrors {
   return errors;
 }
 
-export function DlpConfig({ config, onChange }: DlpConfigProps) {
+export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfigProps) {
   const validationErrors = useMemo(() => validateDlpConfig(config), [config]);
   const hasErrors = Object.keys(validationErrors).length > 0;
 
@@ -180,4 +180,4 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
       )}
     </div>
   );
-}
+});

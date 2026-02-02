@@ -579,6 +579,20 @@ static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
     })
 });
 
+// Cached hashes for config and rules (computed at startup, used in heartbeats)
+// These are used to detect configuration drift between sensors and the hub.
+static CONFIG_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static RULES_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Compute SHA256 hash of data and return as hex string.
+fn compute_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    // Convert to hex - take first 16 chars for brevity
+    format!("{:x}", result)[..16].to_string()
+}
+
 // Thread-local buffer pool for request body handling (optimization)
 thread_local! {
     static BUFFER_POOL: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::with_capacity(128));
@@ -2757,10 +2771,10 @@ impl MetricsProvider for HorizonMetricsProvider {
         0.0
     }
     fn config_hash(&self) -> String {
-        "todo".to_string()
+        CONFIG_HASH.get().cloned().unwrap_or_default()
     }
     fn rules_hash(&self) -> String {
-        "todo".to_string()
+        RULES_HASH.get().cloned().unwrap_or_default()
     }
     fn active_connections(&self) -> Option<u32> {
         None
@@ -2914,6 +2928,29 @@ fn main() {
     // Load configuration - try multi-site first, fall back to legacy
     let config = Config::load_or_default();
     let multisite_config = try_load_multisite_config();
+
+    // Compute and cache config hash for heartbeat reporting
+    // This allows Signal Horizon to detect configuration drift between sensors
+    // We hash the raw config file bytes rather than serializing the parsed config
+    let config_paths = ["config.yaml", "config.yml", "/etc/synapse-pingora/config.yaml"];
+    for path in &config_paths {
+        if let Ok(config_bytes) = std::fs::read(path) {
+            let _ = CONFIG_HASH.set(compute_hash(&config_bytes));
+            debug!("Config hash from {}: {}", path, CONFIG_HASH.get().unwrap_or(&"none".to_string()));
+            break;
+        }
+    }
+    // If no config file exists, hash empty to indicate default config
+    if CONFIG_HASH.get().is_none() {
+        let _ = CONFIG_HASH.set(compute_hash(b"default"));
+    }
+
+    // Compute and cache rules hash
+    // This allows Signal Horizon to verify all sensors have the same rules
+    if let Some(ref rules_data) = *RULES_DATA {
+        let _ = RULES_HASH.set(compute_hash(rules_data));
+        debug!("Rules hash: {}", RULES_HASH.get().unwrap_or(&"none".to_string()));
+    }
 
     // ... (metrics init)
 

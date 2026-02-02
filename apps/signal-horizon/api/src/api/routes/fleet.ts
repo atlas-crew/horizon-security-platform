@@ -15,6 +15,7 @@ import {
   IdParamSchema,
 } from '../middleware/validation.js';
 import { getErrorMessage } from '../../utils/errors.js';
+import { rateLimiters } from '../../middleware/rate-limiter.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
@@ -809,6 +810,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/sensors/:sensorId/actions/restart',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateParams(SensorIdParamSchema),
@@ -852,6 +854,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/sensors/:sensorId/diagnostics/run',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateParams(SensorIdParamSchema),
@@ -917,6 +920,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/sensors/:sensorId/config/pingora',
+    rateLimiters.configMutation,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateParams(SensorIdParamSchema),
@@ -934,6 +938,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/sensors/:sensorId/actions/pingora',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateParams(SensorIdParamSchema),
@@ -1061,6 +1066,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/config/templates',
+    rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('operator'),
     validateBody(CreateConfigTemplateBodySchema),
@@ -1143,6 +1149,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.put(
     '/config/templates/:id',
+    rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('operator'),
     validateParams(IdParamSchema),
@@ -1185,6 +1192,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.delete(
     '/config/templates/:id',
+    rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('admin'),
     validateParams(IdParamSchema),
@@ -1216,6 +1224,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/config/push',
+    rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('operator'),
     validateBody(PushConfigBodySchema),
@@ -1318,6 +1327,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/commands',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateBody(SendCommandBodySchema),
@@ -1398,6 +1408,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/commands/:commandId/cancel',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateParams(CommandIdParamSchema),
@@ -1502,6 +1513,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/rules/push',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
     validateBody(PushRulesBodySchema),
@@ -1601,6 +1613,7 @@ const SensorLogsQuerySchema = z.object({
    */
   router.post(
     '/rules/retry/:sensorId',
+    rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {

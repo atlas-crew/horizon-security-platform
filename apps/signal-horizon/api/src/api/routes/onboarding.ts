@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
+import { rateLimiters } from '../../middleware/rate-limiter.js';
 
 // Validation schemas
 const createTokenSchema = z.object({
@@ -101,7 +102,7 @@ export function createOnboardingRoutes(
   /**
    * POST /tokens - Generate new registration token
    */
-  router.post('/tokens', requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
+  router.post('/tokens', rateLimiters.onboarding, requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
     try {
       const tenantId = req.auth!.tenantId;
       const userId = req.auth!.userId;
@@ -157,7 +158,7 @@ export function createOnboardingRoutes(
   /**
    * DELETE /tokens/:tokenId - Revoke a registration token
    */
-  router.delete('/tokens/:tokenId', requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
+  router.delete('/tokens/:tokenId', rateLimiters.onboarding, requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
     try {
       const tenantId = req.auth!.tenantId;
       const { tokenId } = req.params;
@@ -212,7 +213,8 @@ export function createOnboardingRoutes(
           publicIp: true,
           privateIp: true,
           registrationMethod: true,
-          registrationToken: true,
+          // SECURITY: Removed registrationToken from response - plaintext token should never be exposed
+          registrationTokenId: true, // Reference to hashed token instead
           createdAt: true,
           lastHeartbeat: true,
           metadata: true,
@@ -232,7 +234,7 @@ export function createOnboardingRoutes(
   /**
    * POST /pending/:sensorId - Approve or reject a pending sensor
    */
-  router.post('/pending/:sensorId', requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
+  router.post('/pending/:sensorId', rateLimiters.onboarding, requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
     try {
       const tenantId = req.auth!.tenantId;
       const userId = req.auth!.userId;
@@ -313,7 +315,7 @@ export function createOnboardingRoutes(
   /**
    * DELETE /pending/:sensorId - Remove a pending sensor entirely
    */
-  router.delete('/pending/:sensorId', requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
+  router.delete('/pending/:sensorId', rateLimiters.onboarding, requireScope('fleet:write'), async (req: Request, res: Response): Promise<void> => {
     try {
       const tenantId = req.auth!.tenantId;
       const { sensorId } = req.params;

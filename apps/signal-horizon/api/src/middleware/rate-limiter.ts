@@ -10,6 +10,118 @@
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 
+// =============================================================================
+// Failed Authentication Rate Limiter (ADMIN-01)
+// =============================================================================
+
+interface FailedAuthEntry {
+  count: number;
+  resetAt: number;
+}
+
+const failedAuthStore = new Map<string, FailedAuthEntry>();
+
+/** Max failed auth attempts before lockout */
+const MAX_FAILED_AUTH_ATTEMPTS = 5;
+/** Lockout window: 15 minutes */
+const FAILED_AUTH_WINDOW_MS = 15 * 60 * 1000;
+
+// Cleanup old failed auth entries periodically
+const failedAuthCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of failedAuthStore.entries()) {
+    if (entry.resetAt < now) {
+      failedAuthStore.delete(key);
+    }
+  }
+}, FAILED_AUTH_WINDOW_MS);
+failedAuthCleanupInterval.unref();
+
+/**
+ * Check if an IP is currently locked out due to too many failed auth attempts.
+ * Call this BEFORE checking credentials.
+ *
+ * @returns { locked: true, retryAfter } if locked out, { locked: false } otherwise
+ */
+export function checkAuthLockout(
+  clientIp: string
+): { locked: true; retryAfterSeconds: number } | { locked: false } {
+  const now = Date.now();
+  const entry = failedAuthStore.get(clientIp);
+
+  // No entry or window expired
+  if (!entry || entry.resetAt < now) {
+    return { locked: false };
+  }
+
+  // Check if locked out
+  if (entry.count >= MAX_FAILED_AUTH_ATTEMPTS) {
+    const retryAfterSeconds = Math.ceil((entry.resetAt - now) / 1000);
+    return { locked: true, retryAfterSeconds };
+  }
+
+  return { locked: false };
+}
+
+/**
+ * Record a failed authentication attempt for an IP.
+ * Call this AFTER authentication fails.
+ */
+export function recordFailedAuth(clientIp: string): void {
+  const now = Date.now();
+  let entry = failedAuthStore.get(clientIp);
+
+  // Reset if window expired
+  if (!entry || entry.resetAt < now) {
+    entry = {
+      count: 0,
+      resetAt: now + FAILED_AUTH_WINDOW_MS,
+    };
+  }
+
+  entry.count++;
+  failedAuthStore.set(clientIp, entry);
+}
+
+/**
+ * Clear failed auth attempts for an IP on successful authentication.
+ * Optional but helps prevent lockout after recovery.
+ */
+export function clearFailedAuth(clientIp: string): void {
+  failedAuthStore.delete(clientIp);
+}
+
+/**
+ * Get client IP from request, with proxy awareness.
+ * Exported for use by auth middleware.
+ */
+export function getClientIpForAuth(req: Request): string {
+  const trustedProxies = getTrustedProxies();
+  const socketIp = req.socket.remoteAddress;
+
+  // Only use forwarded headers if connection is from trusted proxy
+  if (isTrustedProxy(socketIp, trustedProxies)) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      const clientIp = forwarded.split(',')[0].trim();
+      if (clientIp) {
+        return clientIp;
+      }
+    }
+  }
+
+  // Normalize IPv6-mapped IPv4 addresses
+  if (socketIp?.startsWith('::ffff:')) {
+    return socketIp.substring(7);
+  }
+
+  return socketIp ?? 'unknown';
+}
+
+// =============================================================================
+// General Rate Limiter
+// =============================================================================
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -275,6 +387,55 @@ export const rateLimiters: Record<string, RequestHandler> = {
     maxRequests: 10,
     windowMs: 60 * 1000,
     message: 'Connectivity test rate limit exceeded. These operations are resource-intensive.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
+   * Authentication rate limiter: 5 failed attempts per 15 minutes (ADMIN-01)
+   * Protects against brute-force API key guessing attacks.
+   * Note: This tracks ALL auth attempts, not just failures - the auth middleware
+   * should only increment this counter on failure.
+   */
+  authAttempt: createRateLimiter({
+    maxRequests: 5,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    message: 'Too many authentication attempts. Please wait 15 minutes before trying again.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
+   * Configuration mutation rate limiter: 10 requests per minute (labs-ddh)
+   * Protects against configuration flooding attacks where attackers try to
+   * overwhelm the system with excessive config updates.
+   * Applied to: config templates, sensor config, rule distribution endpoints.
+   */
+  configMutation: createRateLimiter({
+    maxRequests: 10,
+    windowMs: 60 * 1000,
+    message: 'Configuration update rate limit exceeded. Please wait before making more changes.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
+   * Fleet command rate limiter: 20 commands per minute (labs-ddh)
+   * Protects against command flooding attacks against the fleet.
+   * Applied to: command dispatch, sensor actions, rule push endpoints.
+   */
+  fleetCommand: createRateLimiter({
+    maxRequests: 20,
+    windowMs: 60 * 1000,
+    message: 'Fleet command rate limit exceeded. Please wait before issuing more commands.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
+   * Onboarding rate limiter: 5 tokens per minute (labs-0f8)
+   * Protects against registration token abuse and sensor registration flooding.
+   */
+  onboarding: createRateLimiter({
+    maxRequests: 5,
+    windowMs: 60 * 1000,
+    message: 'Onboarding rate limit exceeded. Please wait before creating more tokens.',
     trustProxy: getTrustedProxies(),
   }),
 };

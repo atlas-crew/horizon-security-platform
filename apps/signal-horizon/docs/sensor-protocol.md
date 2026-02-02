@@ -185,7 +185,7 @@ Sensors can request the current blocklist snapshot:
     {
       "blockType": "FINGERPRINT",
       "indicator": "abc123hash",
-      "expiresAt": "2024-01-16T00:00:00Z",
+      "expiresAt": "2026-01-16T00:00:00Z",
       "source": "WAR_ROOM"
     }
   ],

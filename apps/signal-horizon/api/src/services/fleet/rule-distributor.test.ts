@@ -100,6 +100,63 @@ function createTestRule(overrides: Partial<Rule> = {}): Rule {
   };
 }
 
+async function advanceUntil<T>(
+  condition: () => T | undefined,
+  {
+    stepMs = 100,
+    maxSteps = 50,
+    description = 'condition',
+  }: { stepMs?: number; maxSteps?: number; description?: string } = {}
+): Promise<T> {
+  for (let i = 0; i < maxSteps; i += 1) {
+    const result = condition();
+    if (result) {
+      return result;
+    }
+    await vi.advanceTimersByTimeAsync(stepMs);
+    await Promise.resolve();
+  }
+  throw new Error(`Timeout waiting for ${description}`);
+}
+
+async function advanceUntilSettled<T>(
+  promise: Promise<T>,
+  options?: { stepMs?: number; maxSteps?: number; description?: string }
+): Promise<T> {
+  let done = false;
+  let value: T | undefined;
+  let error: unknown;
+
+  promise
+    .then((result) => {
+      done = true;
+      value = result;
+    })
+    .catch((err) => {
+      done = true;
+      error = err;
+    });
+
+  await advanceUntil(
+    () => (done ? true : undefined),
+    options
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  return value as T;
+}
+
+async function settleResult<T>(
+  promise: Promise<T>,
+  description: string,
+  options?: { stepMs?: number; maxSteps?: number }
+): Promise<T> {
+  return advanceUntilSettled(promise, { description, ...options });
+}
+
 describe('RuleDistributor', () => {
   let distributor: RuleDistributor;
   let mockPrisma: ReturnType<typeof createMockPrisma>;
@@ -157,10 +214,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance timers sufficiently for all batches and health checks
-      await vi.advanceTimersByTimeAsync(5000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (single batch)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(3);
@@ -192,10 +246,10 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance timers incrementally
-      await vi.advanceTimersByTimeAsync(1000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (health gating)', {
+        stepMs: 100,
+        maxSteps: 100,
+      });
 
       expect(result.success).toBe(true);
       // Health checks should have been performed
@@ -241,10 +295,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance timers sufficiently for health checks and deployment
-      await vi.advanceTimersByTimeAsync(5000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (rollback)');
 
       expect(result.success).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -278,10 +329,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance timers sufficiently
-      await vi.advanceTimersByTimeAsync(5000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (no rollback)');
 
       // Should complete (not abort) even with failures
       expect(result.totalTargets).toBe(3);
@@ -309,9 +357,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(2000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (batch size)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(6);
@@ -351,9 +397,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (offline)');
 
       // Should complete but with failures due to DISCONNECTED sensors
       expect(result.failureCount).toBeGreaterThan(0);
@@ -385,9 +429,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(2000);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (command failure)');
 
       expect(result.failureCount).toBeGreaterThanOrEqual(1);
       expect(result.results.some((r) => !r.success && r.error?.includes('Connection refused'))).toBe(
@@ -415,9 +457,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-
-      await resultPromise;
+      await settleResult(resultPromise, 'rolling deployment (logging)');
 
       // Verify logging calls
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -458,9 +498,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (health timeout)');
 
       // Should have recorded health check failure
       expect(result.failureCount).toBeGreaterThan(0);
@@ -486,9 +524,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rolling deployment (no sync state)');
 
       // Health check should fail due to no sync state
       expect(result.failureCount).toBeGreaterThan(0);
@@ -874,8 +910,7 @@ describe('RuleDistributor', () => {
       expect(result.results[0].error).toContain('Staging incomplete');
     }, 15000);
 
-    // TODO: Flaky with fake timers due to async while loop. Tested manually.
-    it.skip('should timeout if switch takes too long', async () => {
+    it('should timeout if switch takes too long', async () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
@@ -893,10 +928,11 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Run all timers to completion - this handles the async loop correctly
-      await vi.runAllTimersAsync();
-
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: 1000,
+        maxSteps: 10,
+        description: 'blue/green switch timeout',
+      });
 
       expect(result.success).toBe(false);
       expect(result.results[0].error).toContain('Switch timeout');
@@ -1365,8 +1401,7 @@ describe('RuleDistributor', () => {
       expect(result.totalTargets).toBe(1);
     });
 
-    // TODO: Flaky with fake timers due to async setTimeout patterns. Tested manually.
-    it.skip('should skip empty batches in canary progression', async () => {
+    it('should skip empty batches in canary progression', async () => {
       const sensorIds = ['s1', 's2'];
       const rules = [createTestRule()];
 
@@ -1383,9 +1418,11 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Run all timers to completion
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: 100,
+        maxSteps: 20,
+        description: 'canary progression',
+      });
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(2);
@@ -1397,12 +1434,10 @@ describe('RuleDistributor', () => {
   // =============================================================================
 
   describe('Scheduled Deployment Strategy', () => {
-    // TODO: Flaky with fake timers - setTimeout callback async patterns don't resolve properly.
-    // Core scheduling logic tested via 'deploy immediately if scheduled time is in the past' test.
-    it.skip('should schedule deployment for future time', async () => {
+    it('should schedule deployment for future time', async () => {
       const sensorIds = ['sensor-1', 'sensor-2'];
       const rules = [createTestRule()];
-      const futureTime = new Date(Date.now() + 5000); // 5 seconds in future (shorter for test)
+      const futureTime = new Date(Date.now() + 500); // 0.5 seconds in future
 
       const config: RolloutConfig = {
         strategy: 'scheduled',
@@ -1430,11 +1465,11 @@ describe('RuleDistributor', () => {
       // Commands should NOT be sent yet
       expect(mockFleetCommander.sendCommandToMultiple).not.toHaveBeenCalled();
 
-      // Run all timers to completion - this fires the scheduled callback and lets it complete
-      await vi.runAllTimersAsync();
-
-      // Now commands should have been sent
-      expect(mockFleetCommander.sendCommandToMultiple).toHaveBeenCalled();
+      // Advance timers until scheduled execution fires
+      await advanceUntil(
+        () => (mockFleetCommander.sendCommandToMultiple as any).mock.calls.length > 0 ? true : undefined,
+        { stepMs: 100, maxSteps: 20, description: 'scheduled deployment execution' }
+      );
     });
 
     it('should deploy immediately if scheduled time is in the past', async () => {
@@ -1473,11 +1508,10 @@ describe('RuleDistributor', () => {
       ).rejects.toThrow('Scheduled deployment requires scheduledTime');
     });
 
-    // TODO: Flaky with fake timers - setTimeout callback async patterns don't resolve properly.
-    it.skip('should handle scheduled deployment with correct delay calculation', async () => {
+    it('should handle scheduled deployment with correct delay calculation', async () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
-      const delay = 5000; // 5 seconds
+      const delay = 500; // 0.5 seconds
       const futureTime = new Date(Date.now() + delay);
 
       const config: RolloutConfig = {
@@ -1502,9 +1536,11 @@ describe('RuleDistributor', () => {
       await vi.advanceTimersByTimeAsync(2000);
       expect(mockFleetCommander.sendCommandToMultiple).not.toHaveBeenCalled();
 
-      // Run all remaining timers to fire the scheduled callback
-      await vi.runAllTimersAsync();
-      expect(mockFleetCommander.sendCommandToMultiple).toHaveBeenCalled();
+      // Advance timers until scheduled execution fires
+      await advanceUntil(
+        () => (mockFleetCommander.sendCommandToMultiple as any).mock.calls.length > 0 ? true : undefined,
+        { stepMs: 100, maxSteps: 20, description: 'scheduled deployment execution' }
+      );
     });
   });
 

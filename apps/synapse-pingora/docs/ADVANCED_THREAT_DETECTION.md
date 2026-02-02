@@ -359,7 +359,7 @@ The system analyzes fingerprints for suspicious characteristics:
 
 | Indicator | Risk Signal |
 |-----------|-------------|
-| TLS < 1.2 | Outdated client or bot |
+| TLS < 1.2 | Deprecated protocol (critical risk) |
 | Missing ALPN with TLS 1.3 | Unusual for browsers |
 | Cipher count < 5 | Likely script or bot |
 | Extension count < 5 | Likely script or bot |

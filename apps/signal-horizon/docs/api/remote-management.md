@@ -322,7 +322,7 @@ Authorization: Bearer <api-key>
 ```json
 {
   "sensorId": "sensor-prod-01",
-  "collectedAt": "2024-01-16T12:00:00.000Z",
+  "collectedAt": "2026-01-16T12:00:00.000Z",
   "collectionTimeMs": 45,
   "sections": ["health", "memory", "metrics"],
   "data": {
@@ -394,7 +394,7 @@ event: connected
 data: {"sensorId":"sensor-prod-01","interval":2000}
 
 event: diagnostics
-data: {"sensorId":"sensor-prod-01","collectedAt":"2024-01-16T12:00:00.000Z",...}
+data: {"sensorId":"sensor-prod-01","collectedAt":"2026-01-16T12:00:00.000Z",...}
 
 event: status
 data: {"type":"offline","sensorId":"sensor-prod-01","connectionState":"DISCONNECTED",...}
@@ -468,7 +468,7 @@ Execute a control command on a sensor.
 {
   "reason": "Configuration update deployment",
   "metadata": {
-    "deploymentId": "deploy-2024-01-16-001"
+    "deploymentId": "deploy-2026-01-16-001"
   }
 }
 ```
@@ -500,7 +500,7 @@ Content-Type: application/json
 ```http
 POST /api/v1/fleet-control/sensor-prod-01/control/restart
 Authorization: Bearer <api-key>
-X-Confirm-Token: confirm-restart-2024-01-16
+X-Confirm-Token: confirm-restart-2026-01-16
 Content-Type: application/json
 
 {
@@ -519,7 +519,7 @@ Content-Type: application/json
   "sensorId": "sensor-prod-01",
   "sensorName": "Production Sensor 01",
   "auditId": "550e8400-e29b-41d4-a716-446655440000",
-  "timestamp": "2024-01-16T12:00:00.000Z",
+  "timestamp": "2026-01-16T12:00:00.000Z",
   "durationMs": 150
 }
 ```
@@ -553,9 +553,9 @@ Get the current service state for a sensor.
   "isOnline": true,
   "connectionState": "CONNECTED",
   "uptime": 86400,
-  "lastHeartbeat": "2024-01-16T11:59:30.000Z",
-  "lastReload": "2024-01-15T08:00:00.000Z",
-  "timestamp": "2024-01-16T12:00:00.000Z"
+  "lastHeartbeat": "2026-01-16T11:59:30.000Z",
+  "lastReload": "2026-01-15T08:00:00.000Z",
+  "timestamp": "2026-01-16T12:00:00.000Z"
 }
 ```
 
@@ -590,7 +590,7 @@ Get control command audit log for a sensor.
   "logs": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "timestamp": "2024-01-16T12:00:00.000Z",
+      "timestamp": "2026-01-16T12:00:00.000Z",
       "command": "reload",
       "result": "success",
       "confirmed": false,
@@ -651,7 +651,7 @@ Execute a control command on multiple sensors.
     "failure": 1
   },
   "durationMs": 450,
-  "timestamp": "2024-01-16T12:00:00.000Z"
+  "timestamp": "2026-01-16T12:00:00.000Z"
 }
 ```
 
@@ -693,21 +693,21 @@ Authorization: Bearer <api-key>
       "path": "/var/log/synapse/access.log",
       "name": "access.log",
       "size": 10485760,
-      "modified": "2024-01-16T11:55:00.000Z",
+      "modified": "2026-01-16T11:55:00.000Z",
       "isDir": false
     },
     {
       "path": "/var/log/synapse/error.log",
       "name": "error.log",
       "size": 1048576,
-      "modified": "2024-01-16T11:50:00.000Z",
+      "modified": "2026-01-16T11:50:00.000Z",
       "isDir": false
     },
     {
       "path": "/var/log/synapse/archive",
       "name": "archive",
       "size": 0,
-      "modified": "2024-01-15T00:00:00.000Z",
+      "modified": "2026-01-15T00:00:00.000Z",
       "isDir": true
     }
   ],
@@ -740,7 +740,7 @@ Get information about a specific file.
     "path": "/var/log/synapse/access.log",
     "name": "access.log",
     "size": 10485760,
-    "modified": "2024-01-16T11:55:00.000Z",
+    "modified": "2026-01-16T11:55:00.000Z",
     "isDir": false,
     "checksum": "a1b2c3d4e5f6..."
   }
@@ -863,12 +863,12 @@ List all releases with pagination.
       "binaryUrl": "https://releases.example.com/synapse-0.2.0.tar.gz",
       "sha256": "a1b2c3d4e5f6...",
       "size": 52428800,
-      "createdAt": "2024-01-15T10:00:00.000Z",
+      "createdAt": "2026-01-15T10:00:00.000Z",
       "createdBy": "admin@example.com",
       "latestRollout": {
         "id": "roll-001",
         "status": "completed",
-        "startedAt": "2024-01-15T12:00:00.000Z"
+        "startedAt": "2026-01-15T12:00:00.000Z"
       }
     }
   ],
@@ -913,7 +913,7 @@ Create a new release.
   "binaryUrl": "https://releases.example.com/synapse-0.2.1.tar.gz",
   "sha256": "b2c3d4e5f6a7...",
   "size": 52500000,
-  "createdAt": "2024-01-16T10:00:00.000Z",
+  "createdAt": "2026-01-16T10:00:00.000Z",
   "createdBy": "admin@example.com"
 }
 ```
@@ -934,7 +934,7 @@ Get release details including rollout history.
   "binaryUrl": "https://releases.example.com/synapse-0.2.0.tar.gz",
   "sha256": "a1b2c3d4e5f6...",
   "size": 52428800,
-  "createdAt": "2024-01-15T10:00:00.000Z",
+  "createdAt": "2026-01-15T10:00:00.000Z",
   "createdBy": "admin@example.com",
   "rollouts": [
     {
@@ -944,8 +944,8 @@ Get release details including rollout history.
       "targetTags": ["production"],
       "batchSize": 10,
       "batchDelay": 60,
-      "startedAt": "2024-01-15T12:00:00.000Z",
-      "completedAt": "2024-01-15T14:30:00.000Z",
+      "startedAt": "2026-01-15T12:00:00.000Z",
+      "completedAt": "2026-01-15T14:30:00.000Z",
       "summary": {
         "total": 50,
         "pending": 0,
@@ -1015,7 +1015,7 @@ Get rollout status and progress.
   "targetTags": ["production"],
   "batchSize": 10,
   "batchDelay": 60,
-  "startedAt": "2024-01-16T12:00:00.000Z",
+  "startedAt": "2026-01-16T12:00:00.000Z",
   "completedAt": null,
   "summary": {
     "total": 50,
@@ -1034,7 +1034,7 @@ Get rollout status and progress.
       "currentVersion": "0.2.0",
       "status": "activated",
       "error": null,
-      "updatedAt": "2024-01-16T12:05:00.000Z"
+      "updatedAt": "2026-01-16T12:05:00.000Z"
     }
   ]
 }

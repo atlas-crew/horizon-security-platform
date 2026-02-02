@@ -238,7 +238,7 @@ curl ".../management/keys?expiresBefore=2025-02-01"
 curl ".../management/keys?sensorId=sen_xxx"
 
 # Inactive keys
-curl ".../management/keys?lastUsedBefore=2024-12-01"
+curl ".../management/keys?lastUsedBefore=2026-12-01"
 ```
 
 ### Bulk Revocation

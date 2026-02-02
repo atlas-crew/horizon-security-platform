@@ -2,43 +2,299 @@
 
 Complete reference for all configuration parameters, types, and default values.
 
-## Configuration File Structure
+## Configuration formats and precedence
 
-Synapse-Pingora uses YAML configuration files with the following top-level structure:
+Synapse-Pingora supports two YAML formats:
+
+- **Single-site (legacy):** `config.yaml` or `config.yml`
+- **Multi-site (recommended):** `config.sites.yaml` (or `config.yaml` containing a `sites` list)
+
+At startup, Synapse-Pingora loads the single-site config for shared subsystem settings,
+then attempts to load multi-site config for vhost routing. If a multi-site file with
+`sites` exists, site routing uses that configuration.
+
+## Single-site configuration (legacy `config.yaml`)
+
+### Top-level structure
 
 ```yaml
-server:     # Global server settings
-  ...
-sites:      # Per-site configurations (required)
-  - ...
-rate_limit: # Global rate limiting
-  ...
-profiler:   # Behavior learning configuration
-  ...
+server:
+upstreams:
+rate_limit:
+logging:
+detection:
+tls:
+telemetry:
+tarpit:
+dlp:
+crawler:
+horizon:
+payload:
+trends:
 ```
 
-## Global Server Settings (`server`)
+### Server settings (`server`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `listen` | string | `"0.0.0.0:6190"` | Proxy listen address |
+| `admin_listen` | string | `"0.0.0.0:6191"` | Admin API listen address |
+| `workers` | integer | `0` | Worker threads (0 = auto-detect) |
+| `admin_api_key` | string | `null` (auto-generated at startup) | Admin API key (X-Admin-Key) |
+| `trusted_proxies` | array[string] | `[]` | Trusted proxy CIDR ranges for X-Forwarded-For validation |
+
+### Upstreams (`upstreams[]`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `host` | string | `"127.0.0.1"` | Backend host |
+| `port` | integer | `8080` | Backend port |
+
+### Rate limiting (`rate_limit`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `rps` | integer | `10000` | Requests per second limit |
+| `per_ip_rps` | integer | `100` | Per-IP requests per second limit |
+| `enabled` | boolean | `true` | Enable rate limiting |
+
+### Logging (`logging`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `level` | string | `"info"` | Log level: trace, debug, info, warn, error |
+| `format` | string | `"text"` | Log format: text, json |
+| `access_log` | boolean | `true` | Enable access logs |
+
+### Detection (`detection`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sqli` | boolean | `true` | Enable SQL injection detection |
+| `xss` | boolean | `true` | Enable XSS detection |
+| `path_traversal` | boolean | `true` | Enable path traversal detection |
+| `command_injection` | boolean | `true` | Enable command injection detection |
+| `action` | string | `"block"` | Action on detection (block, log, challenge) |
+| `block_status` | integer | `403` | HTTP status for blocked requests |
+| `rules_path` | string | `"data/rules.json"` | Rules file path |
+| `anomaly_blocking` | object | (see below) | Anomaly blocking settings |
+| `risk_server_url` | string | `null` | Optional risk server URL |
+
+#### Anomaly blocking (`detection.anomaly_blocking`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable anomaly blocking |
+| `threshold` | float | `10.0` | Risk threshold for anomaly blocking |
+
+### TLS (`tls`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable TLS |
+| `cert_path` | string | `""` | Default cert path (PEM) |
+| `key_path` | string | `""` | Default key path (PEM) |
+| `per_domain_certs` | array[object] | `[]` | Per-domain certificates |
+| `min_version` | string | `"1.2"` | Minimum TLS version (1.2 or 1.3) |
+
+#### Per-domain certificates (`tls.per_domain_certs[]`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `domain` | string | (required) | Domain or wildcard (e.g., `*.example.com`) |
+| `cert_path` | string | (required) | Certificate path |
+| `key_path` | string | (required) | Private key path |
+
+### Telemetry (`telemetry`)
+
+Telemetry durations are serialized as `{ secs: <int>, nanos: <int> }`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable telemetry |
+| `endpoint` | string | `"http://localhost:8080/telemetry"` | Telemetry endpoint |
+| `api_key` | string | `null` | API key for telemetry |
+| `batch_size` | integer | `100` | Events per batch |
+| `flush_interval` | duration | `10s` | Flush interval |
+| `max_retries` | integer | `3` | Retry attempts |
+| `initial_backoff` | duration | `100ms` | Initial backoff |
+| `max_backoff` | duration | `30s` | Max backoff |
+| `max_buffer_size` | integer | `10000` | Max buffered events |
+| `circuit_breaker_threshold` | integer | `5` | Failures before opening circuit |
+| `circuit_breaker_timeout` | duration | `60s` | Circuit breaker reset timeout |
+| `enabled_events` | array[string] | `[]` (all events) | Event allowlist |
+| `instance_id` | string | `null` | Optional instance identifier |
+| `dry_run` | boolean | `false` | Skip HTTP sends (testing) |
+
+**`enabled_events` values:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`,
+`service_health`, `sensor_report`, `campaign_report`
+
+### Tarpit (`tarpit`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `base_delay_ms` | integer | `1000` | Base tarpit delay (ms) |
+| `max_delay_ms` | integer | `30000` | Max tarpit delay (ms) |
+| `progressive_multiplier` | float | `1.5` | Delay multiplier per level |
+| `enabled` | boolean | `true` | Enable tarpit |
+| `max_states` | integer | `10000` | Max tracked IP states |
+| `decay_threshold_ms` | integer | `300000` | Idle time before decay (ms) |
+| `cleanup_threshold_ms` | integer | `1800000` | Idle time before cleanup (ms) |
+| `max_concurrent_tarpits` | integer | `1000` | Max concurrent tarpits |
+
+### DLP (`dlp`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable DLP scanning |
+| `max_scan_size` | integer | `5242880` | Reject scans larger than this (bytes) |
+| `max_matches` | integer | `100` | Stop after this many matches |
+| `scan_text_only` | boolean | `true` | Scan only text-based content types |
+| `max_body_inspection_bytes` | integer | `8192` | Max bytes to inspect (bytes) |
+| `fast_mode` | boolean | `false` | Skip low-priority patterns |
+| `custom_keywords` | array[string] | `null` | Custom keywords to detect |
+| `redaction` | map[string,string] | `{}` | Per-type redaction mode |
+| `hash_salt` | string | `null` | Required if any redaction mode is `hash` |
+
+**`redaction` keys:** `credit_card`, `ssn`, `email`, `phone`, `api_key`, `password`, `iban`,
+`ip_address`, `aws_key`, `private_key`, `jwt`, `medical_record`, `custom`
+
+**Redaction modes:** `full`, `partial`, `hash`, `none`
+
+### Crawler detection (`crawler`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable crawler detection |
+| `dns_cache_ttl_secs` | integer | `300` | DNS cache TTL (s) |
+| `verification_cache_ttl_secs` | integer | `3600` | Verification cache TTL (s) |
+| `max_cache_entries` | integer | `50000` | Max DNS cache entries |
+| `dns_timeout_ms` | integer | `2000` | DNS lookup timeout (ms) |
+| `max_concurrent_dns_lookups` | integer | `100` | Max concurrent DNS lookups |
+| `verify_legitimate_crawlers` | boolean | `true` | Verify known crawlers via DNS |
+| `block_bad_bots` | boolean | `true` | Block detected bad bots |
+| `dns_failure_policy` | string | `apply_risk_penalty` | DNS failure policy |
+| `dns_failure_risk_penalty` | integer | `50` | Risk penalty on DNS failure |
+| `max_stats_entries` | integer | `1000` | Max entries in stats maps |
+
+**`dns_failure_policy` values:** `allow`, `apply_risk_penalty`, `block`
+
+### Signal Horizon (`horizon`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Horizon integration |
+| `hub_url` | string | `""` | WebSocket URL for the hub |
+| `api_key` | string | `""` | API key for authentication |
+| `sensor_id` | string | `""` | Unique sensor identifier |
+| `sensor_name` | string | `null` | Human-readable name |
+| `version` | string | (package version) | Sensor version string |
+| `reconnect_delay_ms` | integer | `5000` | Reconnect delay (ms) |
+| `max_reconnect_attempts` | integer | `0` | Max reconnect attempts (0 = unlimited) |
+| `circuit_breaker_threshold` | integer | `5` | Failures before circuit break |
+| `circuit_breaker_cooldown_ms` | integer | `300000` | Circuit breaker cooldown (ms) |
+| `signal_batch_size` | integer | `100` | Signals per batch |
+| `signal_batch_delay_ms` | integer | `1000` | Batch delay (ms) |
+| `heartbeat_interval_ms` | integer | `30000` | Heartbeat interval (ms) |
+| `max_queued_signals` | integer | `1000` | Max queued signals |
+| `blocklist_cache_ttl_secs` | integer | `3600` | Blocklist cache TTL (s) |
+
+### Payload profiling (`payload`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable payload profiling |
+| `window_duration_ms` | integer | `60000` | Window duration (ms) |
+| `max_windows` | integer | `60` | Max windows to keep |
+| `max_endpoints` | integer | `5000` | Max endpoints tracked |
+| `max_entities` | integer | `10000` | Max entities tracked |
+| `oversize_threshold` | float | `3.0` | Oversize multiplier (p99) |
+| `bandwidth_spike_threshold` | float | `5.0` | Spike multiplier (avg) |
+| `warmup_requests` | integer | `100` | Requests before detection |
+| `exfiltration_ratio_threshold` | float | `100.0` | Response/request ratio threshold |
+| `upload_ratio_threshold` | float | `100.0` | Request/response ratio threshold |
+| `min_large_payload_bytes` | integer | `100000` | Minimum large payload (bytes) |
+| `timeline_max_buckets` | integer | `1440` | Max timeline buckets |
+| `anomaly_risk` | map[string,float] | (see below) | Risk score per anomaly type |
+
+**Default `payload.anomaly_risk`:**
+
+| Anomaly type | Default risk |
+|-------------|--------------|
+| `oversized_request` | `20.0` |
+| `oversized_response` | `15.0` |
+| `bandwidth_spike` | `25.0` |
+| `exfiltration_pattern` | `40.0` |
+| `upload_pattern` | `35.0` |
+
+### Trends (`trends`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable trends tracking |
+| `bucket_size_ms` | integer | `60000` | Bucket size (ms) |
+| `retention_hours` | integer | `24` | Retention in hours |
+| `max_signals_per_bucket` | integer | `10000` | Max signals per bucket |
+| `anomaly_check_interval_ms` | integer | `60000` | Anomaly check interval (ms) |
+| `anomaly_risk` | map[string,int] | (see below) | Risk score per anomaly type |
+| `max_entities` | integer | `10000` | Max entities tracked |
+| `max_recent_signals` | integer | `100` | Max recent signals per entity |
+| `max_anomalies` | integer | `1000` | Max anomalies retained |
+
+**Default `trends.anomaly_risk`:**
+
+| Anomaly type | Default risk |
+|-------------|--------------|
+| `fingerprint_change` | `30` |
+| `session_sharing` | `50` |
+| `token_reuse` | `40` |
+| `velocity_spike` | `15` |
+| `rotation_pattern` | `35` |
+| `timing_anomaly` | `10` |
+| `impossible_travel` | `25` |
+| `ja4_rotation_pattern` | `45` |
+| `ja4_ip_cluster` | `35` |
+| `ja4_browser_spoofing` | `60` |
+| `ja4h_change` | `25` |
+| `oversized_request` | `20` |
+| `oversized_response` | `15` |
+| `bandwidth_spike` | `25` |
+| `exfiltration_pattern` | `40` |
+| `upload_pattern` | `35` |
+
+## Multi-site configuration (`config.sites.yaml`)
+
+### Top-level structure
+
+```yaml
+server:
+sites:
+rate_limit:
+profiler:
+```
+
+### Global server settings (`server`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `http_addr` | string | `"0.0.0.0:80"` | HTTP listen address |
 | `https_addr` | string | `"0.0.0.0:443"` | HTTPS listen address |
-| `workers` | integer | `0` | Number of worker threads (0 = auto-detect based on CPU cores) |
-| `shutdown_timeout_secs` | integer | `30` | Graceful shutdown timeout in seconds |
+| `workers` | integer | `0` | Number of worker threads (0 = auto-detect) |
+| `shutdown_timeout_secs` | integer | `30` | Graceful shutdown timeout (s) |
 | `waf_threshold` | integer | `70` | Global WAF risk threshold (1-100) |
 | `waf_enabled` | boolean | `true` | Global WAF enable/disable |
 | `log_level` | string | `"info"` | Log level: trace, debug, info, warn, error |
-| `admin_api_key` | string | (auto-generated) | API key for admin server (secure random if unset) |
-| `trap_config` | object | (see below) | Honeypot trap endpoint configuration |
+| `admin_api_key` | string | `null` (auto-generated at startup) | Admin API key (X-Admin-Key) |
+| `trap_config` | object | `null` | Honeypot trap configuration |
 
-### Trap Configuration (`server.trap_config`)
+### Trap configuration (`server.trap_config`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable trap endpoint detection |
-| `paths` | array[string] | (see below) | Path patterns to match as traps (glob syntax) |
-| `apply_max_risk` | boolean | `true` | Apply maximum risk score (100.0) on trap hit |
-| `extended_tarpit_ms` | integer | `5000` | Extended delay for trapped requests (ms) |
+| `paths` | array[string] | (see below) | Trap path globs |
+| `apply_max_risk` | boolean | `true` | Apply max risk score on trap hit |
+| `extended_tarpit_ms` | integer | `5000` | Optional extended tarpit delay (ms) |
 | `alert_telemetry` | boolean | `true` | Send telemetry alerts on trap hits |
 
 **Default trap paths:**
@@ -46,50 +302,36 @@ profiler:   # Behavior learning configuration
 - `/admin/backup*`, `/wp-admin/*`, `/phpmyadmin/*`
 - `/.svn/*`, `/.htaccess`, `/web.config`, `/config.php`
 
-## Rate Limiting (`rate_limit`)
+### Rate limiting (`rate_limit`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `rps` | integer | `10000` | Requests per second limit |
 | `enabled` | boolean | `true` | Enable rate limiting |
-| `burst` | integer | `rps * 2` | Burst capacity (defaults to 2x RPS) |
+| `burst` | integer | `rps * 2` | Burst capacity (2x RPS when unset) |
 
-## Profiler Configuration (`profiler`)
-
-Endpoint behavior learning and anomaly detection settings.
+### Profiler configuration (`profiler`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable behavior profiling |
-| `max_profiles` | integer | `1000` | Maximum endpoint profiles to maintain |
-| `max_schemas` | integer | `500` | Maximum learned schemas to maintain |
+| `max_profiles` | integer | `1000` | Maximum endpoint profiles |
+| `max_schemas` | integer | `500` | Maximum learned schemas |
 | `min_samples_for_validation` | integer | `100` | Samples required before validation |
-
-### Anomaly Detection Thresholds
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `payload_z_threshold` | float | `3.0` | Z-score threshold for payload size anomalies |
-| `param_z_threshold` | float | `4.0` | Z-score threshold for parameter value anomalies |
-| `response_z_threshold` | float | `4.0` | Z-score threshold for response size anomalies |
-| `min_stddev` | float | `0.01` | Minimum standard deviation (prevents div/0) |
-| `type_ratio_threshold` | float | `0.9` | Type-based anomaly threshold (90% = flag non-conforming) |
-
-### Security Controls
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `max_type_counts` | integer | `10` | Max type categories per parameter (memory protection) |
-| `redact_pii` | boolean | `true` | Redact PII values in anomaly descriptions |
+| `payload_z_threshold` | float | `3.0` | Z-score threshold for payload size |
+| `param_z_threshold` | float | `4.0` | Z-score threshold for parameter values |
+| `response_z_threshold` | float | `4.0` | Z-score threshold for response size |
+| `min_stddev` | float | `0.01` | Minimum stddev for z-score |
+| `type_ratio_threshold` | float | `0.9` | Type-based anomaly threshold |
+| `max_type_counts` | integer | `10` | Max type categories per parameter |
+| `redact_pii` | boolean | `true` | Redact PII in anomalies |
 | `freeze_after_samples` | integer | `0` | Freeze baseline after N samples (0 = disabled) |
 
-## Site Configuration (`sites[]`)
-
-Each site represents a virtual host with its own upstream backends and security settings.
+### Site configuration (`sites[]`)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `hostname` | string | Yes | Hostname or wildcard pattern (e.g., `*.example.com`) |
+| `hostname` | string | Yes | Hostname or wildcard (e.g., `*.example.com`) |
 | `upstreams` | array[object] | Yes | Backend servers |
 | `tls` | object | No | TLS configuration |
 | `waf` | object | No | Site-specific WAF settings |
@@ -98,184 +340,71 @@ Each site represents a virtual host with its own upstream backends and security 
 | `headers` | object | No | Header manipulation rules |
 | `shadow_mirror` | object | No | Shadow mirroring to honeypots |
 
-### Upstream Configuration (`sites[].upstreams[]`)
+#### Upstream configuration (`sites[].upstreams[]`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `host` | string | (required) | Backend host address |
+| `host` | string | (required) | Backend host |
 | `port` | integer | (required) | Backend port |
 | `weight` | integer | `1` | Load balancing weight |
 
-### TLS Configuration (`sites[].tls`)
+#### TLS configuration (`sites[].tls`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cert_path` | string | (required) | Path to certificate file (PEM) |
-| `key_path` | string | (required) | Path to private key file (PEM) |
-| `min_version` | string | `"1.2"` | Minimum TLS version (`1.2` or `1.3`) |
+| `cert_path` | string | (required) | Certificate path (PEM) |
+| `key_path` | string | (required) | Private key path (PEM) |
+| `min_version` | string | `"1.2"` | Minimum TLS version (1.2 or 1.3) |
 
-### Site WAF Configuration (`sites[].waf`)
+#### Site WAF configuration (`sites[].waf`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable WAF for this site |
-| `threshold` | integer | (global) | Risk threshold override (1-100) |
-| `rule_overrides` | map[string, string] | `{}` | Rule ID to action overrides |
+| `threshold` | integer | (global) | Site-specific threshold override |
+| `rule_overrides` | map[string,string] | `{}` | Rule ID to action overrides |
 
-### Access Control (`sites[].access_control`)
+#### Access control (`sites[].access_control`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `allow` | array[string] | `[]` | CIDR ranges to allow |
 | `deny` | array[string] | `[]` | CIDR ranges to deny |
-| `default_action` | string | `""` | Default action if no rule matches (`allow` or `deny`) |
+| `default_action` | string | `""` | Default action if no rule matches |
 
-### Header Configuration (`sites[].headers`)
+#### Header configuration (`sites[].headers`)
 
 ```yaml
 headers:
   request:
-    add: { "X-Custom": "value" }     # Append header
-    set: { "X-Override": "value" }   # Replace header
-    remove: ["X-Internal"]           # Remove header
+    add: { "X-Custom": "value" }
+    set: { "X-Override": "value" }
+    remove: ["X-Internal"]
   response:
     add: { "X-Frame-Options": "DENY" }
     set: {}
     remove: []
 ```
 
-### Shadow Mirroring (`sites[].shadow_mirror`)
-
-Mirror suspicious traffic to honeypot endpoints for threat intelligence.
+#### Shadow mirroring (`sites[].shadow_mirror`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `false` | Enable shadow mirroring |
 | `min_risk_score` | float | `40.0` | Minimum risk to trigger mirroring |
-| `max_risk_score` | float | `70.0` | Maximum risk (above this, block instead) |
+| `max_risk_score` | float | `70.0` | Maximum risk (above this, block) |
 | `honeypot_urls` | array[string] | `[]` | Honeypot endpoint URLs |
-| `sampling_rate` | float | `1.0` | Sampling rate 0.0-1.0 (1.0 = 100%) |
+| `sampling_rate` | float | `1.0` | Sampling rate 0.0-1.0 |
 | `per_ip_rate_limit` | integer | `10` | Per-IP requests per minute |
-| `timeout_secs` | integer | `5` | Honeypot delivery timeout |
-| `hmac_secret` | string | (none) | HMAC secret for payload signing |
-| `include_body` | boolean | `true` | Include request body in mirror |
-| `max_body_size` | integer | `1048576` | Maximum body size to mirror (1MB) |
-| `include_headers` | array[string] | (common headers) | Headers to include in mirror |
+| `timeout_secs` | integer | `5` | Honeypot delivery timeout (s) |
+| `hmac_secret` | string | `null` | HMAC secret for payload signing |
+| `include_body` | boolean | `true` | Include request body |
+| `max_body_size` | integer | `1048576` | Max body size to mirror (bytes) |
+| `include_headers` | array[string] | (see below) | Headers to include |
 
 **Default included headers:** User-Agent, Referer, Origin, Accept, Accept-Language, Accept-Encoding
 
-## Signal Horizon Integration
-
-Configure connection to Signal Horizon Hub for centralized threat intelligence.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable Horizon integration |
-| `hub_url` | string | (required if enabled) | WebSocket URL (e.g., `wss://horizon.example.com/ws`) |
-| `api_key` | string | (required if enabled) | API key for authentication |
-| `sensor_id` | string | (required if enabled) | Unique sensor identifier |
-| `sensor_name` | string | (none) | Human-readable sensor name |
-| `version` | string | (auto) | Sensor version string |
-
-### Connection Settings
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `reconnect_delay_ms` | integer | `5000` | Reconnect delay in milliseconds |
-| `max_reconnect_attempts` | integer | `0` | Max reconnect attempts (0 = unlimited) |
-| `circuit_breaker_threshold` | integer | `5` | Consecutive failures before circuit break |
-| `circuit_breaker_cooldown_ms` | integer | `300000` | Circuit breaker cooldown (5 minutes) |
-
-### Signal Batching
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `signal_batch_size` | integer | `100` | Signals per batch |
-| `signal_batch_delay_ms` | integer | `1000` | Batch delay in milliseconds |
-| `heartbeat_interval_ms` | integer | `30000` | Heartbeat interval (30 seconds) |
-| `max_queued_signals` | integer | `1000` | Max signals to queue when disconnected |
-| `blocklist_cache_ttl_secs` | integer | `3600` | Blocklist cache TTL (1 hour) |
-
-## Minimal Configuration Example
-
-```yaml
-sites:
-  - hostname: example.com
-    upstreams:
-      - host: 127.0.0.1
-        port: 8080
-```
-
-## Full Configuration Example
-
-```yaml
-server:
-  http_addr: "0.0.0.0:8080"
-  https_addr: "0.0.0.0:8443"
-  workers: 4
-  waf_threshold: 70
-  waf_enabled: true
-  log_level: info
-  trap_config:
-    enabled: true
-    apply_max_risk: true
-    extended_tarpit_ms: 5000
-
-rate_limit:
-  rps: 10000
-  enabled: true
-  burst: 20000
-
-profiler:
-  enabled: true
-  max_profiles: 1000
-  min_samples_for_validation: 100
-  payload_z_threshold: 3.0
-  redact_pii: true
-
-sites:
-  - hostname: api.example.com
-    upstreams:
-      - host: 10.0.1.10
-        port: 8080
-        weight: 2
-      - host: 10.0.1.11
-        port: 8080
-        weight: 1
-    tls:
-      cert_path: /etc/certs/api.example.com.pem
-      key_path: /etc/keys/api.example.com.key
-      min_version: "1.2"
-    waf:
-      enabled: true
-      threshold: 60
-    rate_limit:
-      rps: 5000
-      enabled: true
-    access_control:
-      allow:
-        - "10.0.0.0/8"
-      deny:
-        - "0.0.0.0/0"
-      default_action: deny
-    headers:
-      response:
-        set:
-          X-Frame-Options: "DENY"
-          X-Content-Type-Options: "nosniff"
-    shadow_mirror:
-      enabled: true
-      min_risk_score: 40
-      max_risk_score: 70
-      honeypot_urls:
-        - "https://honeypot.internal/mirror"
-      sampling_rate: 0.5
-      per_ip_rate_limit: 10
-```
-
-## Environment Variable Overrides
-
-Critical secrets should be loaded from environment variables:
+## Environment variable overrides
 
 | Environment Variable | Configuration Path | Description |
 |---------------------|-------------------|-------------|
@@ -283,24 +412,20 @@ Critical secrets should be loaded from environment variables:
 | `SYNAPSE_HORIZON_API_KEY` | `horizon.api_key` | Signal Horizon API key |
 | `SYNAPSE_HMAC_SECRET` | `sites[].shadow_mirror.hmac_secret` | Honeypot payload signing |
 
-## Validation Rules
+## Validation rules (selected)
 
-The configuration loader enforces these validation rules:
+- **Config size:** max 10MB.
+- **TLS:** certificate/key paths must exist and min_version is 1.2 or 1.3.
+- **Hostnames:** no duplicate hostnames in multi-site config.
+- **Path traversal:** TLS paths must not contain path traversal sequences.
+- **Shadow mirror:** `min_risk_score` < `max_risk_score`; sampling rate 0.0-1.0; URLs must start with http:// or https://.
+- **DLP:** `hash_salt` required if any redaction mode is `hash`; custom keywords <= 1000 and each <= 1024 chars.
+- **Crawler:** `dns_timeout_ms` > 0 and <= 30000; `max_concurrent_dns_lookups` > 0; `dns_failure_risk_penalty` <= 100.
 
-1. **File size limit**: Maximum 10MB configuration file
-2. **TLS paths**: Certificate and key files must exist, no path traversal
-3. **TLS version**: Must be `1.2` or `1.3`
-4. **Hostnames**: No duplicate hostnames across sites
-5. **WAF threshold**: Must be 1-100 (0 effectively disables protection)
-6. **Shadow mirror**: `min_risk_score` must be less than `max_risk_score`
-7. **Sampling rate**: Must be between 0.0 and 1.0
-8. **Honeypot URLs**: Must start with `http://` or `https://`
-9. **Upstreams**: Each site must have at least one upstream
+## Security considerations
 
-## Security Considerations
-
-- Store API keys and secrets in environment variables, not config files
-- Use `redact_pii: true` in profiler to prevent sensitive data logging
-- Set `waf_enabled: true` globally unless intentionally bypassing protection
-- Review trap paths to ensure they match your application's attack surface
-- Use HMAC signing for shadow mirroring to prevent honeypot spoofing
+- Store API keys and secrets in environment variables, not config files.
+- Keep `redact_pii: true` in profiler to avoid sensitive data in logs.
+- Leave `waf_enabled: true` unless you intentionally bypass protection.
+- Review trap paths to match your application attack surface.
+- Use HMAC signing for shadow mirroring to prevent honeypot spoofing.

@@ -97,6 +97,9 @@ use parking_lot::RwLock;
 use sha2::{Sha256, Digest};
 use percent_encoding::percent_decode_str;
 
+// CLI
+use clap::{Parser, Subcommand};
+
 // Phase 9: Crawler Detection
 use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
 
@@ -117,6 +120,48 @@ use synapse_pingora::interrogator::{
     JsChallengeConfig, JsChallengeManager,
     CaptchaConfig, CaptchaManager,
 };
+
+// ============================================================================
+// CLI Arguments
+// ============================================================================
+
+/// Synapse-Pingora: High-performance WAF on Cloudflare Pingora
+#[derive(Parser)]
+#[command(name = "synapse-pingora")]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Configuration file path
+    #[arg(short, long, default_value = "config.yaml")]
+    config: String,
+
+    /// Enable development mode (bypasses auth, disables rate limits)
+    #[arg(long)]
+    dev: bool,
+
+    /// Enable demo mode (resets state between requests)
+    #[arg(long)]
+    demo: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Validate configuration file without starting the server
+    CheckConfig {
+        /// Configuration file to validate
+        #[arg(default_value = "config.yaml")]
+        file: String,
+
+        /// Output validation result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Start the proxy server (default)
+    Run,
+}
 
 // ============================================================================
 // Configuration
@@ -3635,17 +3680,164 @@ fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirror
     }
 }
 
+/// Run configuration validation and exit.
+fn run_config_check(file: &str, json_output: bool) {
+    use synapse_pingora::config::ConfigLoader;
+
+    #[derive(serde::Serialize)]
+    struct ValidationResult {
+        valid: bool,
+        file: String,
+        sites: Option<usize>,
+        errors: Vec<String>,
+        warnings: Vec<String>,
+    }
+
+    let mut result = ValidationResult {
+        valid: false,
+        file: file.to_string(),
+        sites: None,
+        errors: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    // Check file exists
+    if !Path::new(file).exists() {
+        result.errors.push(format!("Configuration file not found: {}", file));
+        output_validation_result(&result, json_output);
+        std::process::exit(1);
+    }
+
+    // Try to load and validate config
+    match ConfigLoader::load(file) {
+        Ok(config) => {
+            result.valid = true;
+            result.sites = Some(config.sites.len());
+
+            // Additional validation checks
+            for site in &config.sites {
+                // Check TLS cert files exist if TLS is configured
+                if let Some(tls) = &site.tls {
+                    if !Path::new(&tls.cert_path).exists() {
+                        result.warnings.push(format!(
+                            "Site '{}': TLS cert file not found: {}",
+                            site.hostname, tls.cert_path
+                        ));
+                    }
+                    if !Path::new(&tls.key_path).exists() {
+                        result.warnings.push(format!(
+                            "Site '{}': TLS key file not found: {}",
+                            site.hostname, tls.key_path
+                        ));
+                    }
+                }
+
+                // Check shadow mirror honeypot URLs are valid
+                if let Some(shadow) = &site.shadow_mirror {
+                    if shadow.enabled && shadow.honeypot_urls.is_empty() {
+                        result.warnings.push(format!(
+                            "Site '{}': Shadow mirroring enabled but no honeypot URLs configured",
+                            site.hostname
+                        ));
+                    }
+                }
+
+                // Check upstreams are reachable (warning only)
+                if site.upstreams.is_empty() {
+                    result.errors.push(format!(
+                        "Site '{}': No upstream backends configured",
+                        site.hostname
+                    ));
+                    result.valid = false;
+                }
+            }
+
+            // Check WAF threshold
+            if config.server.waf_threshold == 0 {
+                result.warnings.push(
+                    "Global WAF threshold is 0, which may cause unexpected blocking".to_string()
+                );
+            }
+        }
+        Err(e) => {
+            result.errors.push(format!("Configuration error: {}", e));
+        }
+    }
+
+    output_validation_result(&result, json_output);
+
+    if result.valid && result.errors.is_empty() {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) {
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+    } else {
+        // Human-readable output
+        #[derive(serde::Deserialize)]
+        struct ValidationResult {
+            valid: bool,
+            file: String,
+            sites: Option<usize>,
+            errors: Vec<String>,
+            warnings: Vec<String>,
+        }
+
+        let json = serde_json::to_string(result).unwrap_or_default();
+        if let Ok(r) = serde_json::from_str::<ValidationResult>(&json) {
+            if r.valid {
+                println!("✓ Configuration valid: {}", r.file);
+                if let Some(sites) = r.sites {
+                    println!("  Sites: {}", sites);
+                }
+            } else {
+                println!("✗ Configuration invalid: {}", r.file);
+            }
+
+            if !r.errors.is_empty() {
+                println!("\nErrors:");
+                for err in &r.errors {
+                    println!("  ✗ {}", err);
+                }
+            }
+
+            if !r.warnings.is_empty() {
+                println!("\nWarnings:");
+                for warn in &r.warnings {
+                    println!("  ⚠ {}", warn);
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     // Initialize logging
     env_logger::init();
 
-    // Check for dev/demo modes via CLI flags or environment variables
-    let args: Vec<String> = std::env::args().collect();
+    // Parse CLI arguments
+    let cli = Cli::parse();
 
-    let dev_mode = args.contains(&"--dev".to_string())
+    // Handle subcommands
+    match &cli.command {
+        Some(Commands::CheckConfig { file, json }) => {
+            run_config_check(file, *json);
+            return;
+        }
+        Some(Commands::Run) | None => {
+            // Continue with normal startup
+        }
+    }
+
+    // Check for dev/demo modes via CLI flags or environment variables
+    let dev_mode = cli.dev
         || std::env::var("SYNAPSE_DEV").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
 
-    let demo_mode = args.contains(&"--demo".to_string())
+    let demo_mode = cli.demo
         || std::env::var("SYNAPSE_DEMO").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
 
     if dev_mode {

@@ -37,7 +37,11 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
           <Play className="w-4 h-4" />
           Running: {playbook.name}
         </h3>
-        <button onClick={onClose} className="text-ink-muted hover:text-ink-primary">
+        <button
+          onClick={onClose}
+          aria-label="Close playbook runner"
+          className="text-ink-muted hover:text-ink-primary"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>

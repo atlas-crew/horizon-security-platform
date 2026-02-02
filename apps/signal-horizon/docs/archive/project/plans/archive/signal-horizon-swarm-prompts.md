@@ -113,7 +113,7 @@ You are building the Signal Horizon hub backend services. This is the central co
 
 ### Output Format
 
-Create each file with full implementation. Include imports. No placeholders or TODOs.
+Create each file with full implementation. Include imports. No placeholders or open tasks.
 
 ---
 

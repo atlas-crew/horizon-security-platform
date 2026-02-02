@@ -382,8 +382,9 @@ grafana-cli dashboards install signal-horizon-queries
 # Daily backup
 pg_dump -h localhost -U postgres signal_horizon | gzip > backup-$(date +%Y%m%d).sql.gz
 
-# Restore
-gunzip -c backup-20241222.sql.gz | psql -h localhost -U postgres signal_horizon
+# Restore latest automated backup (backup-YYYYMMDD.sql.gz)
+LATEST_BACKUP=$(ls -t backup-*.sql.gz | head -n 1)
+gunzip -c "$LATEST_BACKUP" | psql -h localhost -U postgres signal_horizon
 ```
 
 ### ClickHouse Backup
@@ -392,8 +393,9 @@ gunzip -c backup-20241222.sql.gz | psql -h localhost -U postgres signal_horizon
 # Backup tables
 clickhouse-backup create signal_horizon_$(date +%Y%m%d)
 
-# Restore
-clickhouse-backup restore signal_horizon_20241222
+# Restore latest automated backup (signal_horizon_YYYYMMDD)
+LATEST_CH_BACKUP=$(clickhouse-backup list | awk 'NR>1 {print $1}' | tail -n 1)
+clickhouse-backup restore "$LATEST_CH_BACKUP"
 ```
 
 ## Security Hardening

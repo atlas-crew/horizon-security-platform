@@ -343,7 +343,7 @@ Content-Type: application/json
     "exclusions": null,
     "sensitivity": 90,
     "enabled": true,
-    "status": "draft",
+    "status": "active",
     "rolloutStrategy": "immediate",
     "rolloutConfig": null,
     "totalSensors": 0,

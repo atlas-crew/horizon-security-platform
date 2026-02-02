@@ -172,6 +172,25 @@ function App() {
                   <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
                 </span>
               </div>
+              {/* API Connection Status */}
+              <div className="flex items-center gap-2 pl-4 border-l border-white/20">
+                {connectionState === 'connected' ? (
+                  <Wifi className="w-4 h-4 text-ac-green" />
+                ) : connectionState === 'connecting' ? (
+                  <Wifi className="w-4 h-4 text-ac-orange animate-pulse" />
+                ) : (
+                  <WifiOff className="w-4 h-4 text-ac-red" />
+                )}
+                <span className="text-xs text-white/70 font-mono">
+                  <span className={clsx(
+                    'font-semibold uppercase',
+                    connectionState === 'connected' ? 'text-ac-green' :
+                    connectionState === 'connecting' ? 'text-ac-orange' : 'text-ac-red'
+                  )}>
+                    {connectionState === 'connected' ? 'HUB' : connectionState === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">

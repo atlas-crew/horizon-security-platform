@@ -356,24 +356,24 @@ DlpConfig {
 
 ### Core Features (Required for Production)
 - [x] Full detection rule parity with libsynapse (DONE - using real engine)
-- [ ] **Multi-site/vhost support** - Hostname-based routing with per-site config
-- [ ] **TLS termination** - SSL certificates, SNI support
-- [ ] **Health check endpoint** - `/_sensor/status` equivalent
-- [ ] **Per-site WAF config** - Override rules, thresholds per hostname
+- [x] **Multi-site/vhost support** - Hostname-based routing with per-site config
+- [x] **TLS termination** - SSL certificates, SNI support
+- [x] **Health check endpoint** - `/_sensor/status` equivalent
+- [x] **Per-site WAF config** - Override rules, thresholds per hostname
 
 ### Management Features (Important)
-- [ ] **Metrics endpoint** - Prometheus-compatible `/metrics`
-- [ ] **Config hot-reload API** - Update config without restart
-- [ ] **Access lists** - Allow/deny CIDRs per site
-- [ ] **Per-site rate limiting** - Hostname-aware rate limits
-- [ ] Signal Horizon telemetry integration
+- [x] **Metrics endpoint** - Prometheus-compatible `/metrics`
+- [x] **Config hot-reload API** - Update config without restart
+- [x] **Access lists** - Allow/deny CIDRs per site
+- [x] **Per-site rate limiting** - Hostname-aware rate limits
+- [x] Signal Horizon telemetry integration
 
-### Advanced Features (Nice-to-have)
+### Advanced Features
 - [x] DLP scanning in `request_body_filter` (DONE - with performance optimizations)
 - [x] Request body inspection (POST/PUT payloads) (DONE - with truncation cap)
-- [ ] Custom block pages per site
-- [ ] Dashboard UI integration (PingoraDashboard components)
-- [ ] Production hardening (security audit, fuzzing)
+- [x] Custom block pages per site
+- [x] Dashboard UI integration (Dashboard compatibility routes)
+- [x] Production hardening (security audit remediations complete)
 
 ## Files
 

@@ -9,7 +9,7 @@
  * - Discovery statistics and trends
  */
 
-import type { Prisma, PrismaClient, SignalType } from '@prisma/client';
+import { Prisma, type PrismaClient, type SignalType } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'events';
 import type {
@@ -23,6 +23,7 @@ import type {
   SchemaChangeSummary,
   EndpointDriftTrend,
 } from '../../schemas/api-intelligence.js';
+import { safeStringify } from '../../lib/safe-stringify.js';
 
 // =============================================================================
 // Service Events
@@ -56,6 +57,15 @@ interface DiscoverySignalOptions {
  */
 export class APIIntelligenceService extends EventEmitter {
   private logger: Logger;
+  private signalBuffer: Prisma.SignalCreateManyInput[] = [];
+  private schemaChangeBuffer: Prisma.EndpointSchemaChangeCreateManyInput[] = [];
+  private signalFlushInFlight = false;
+  private schemaFlushInFlight = false;
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly signalBatchSize = 200;
+  private readonly schemaChangeBatchSize = 200;
+  private readonly bufferFlushIntervalMs = 1_000;
+  private readonly maxBufferedItems = 5_000;
 
   constructor(
     private prisma: PrismaClient,
@@ -63,6 +73,21 @@ export class APIIntelligenceService extends EventEmitter {
   ) {
     super();
     this.logger = logger.child({ service: 'api-intelligence' });
+    this.flushTimer = setInterval(() => {
+      void this.flushBuffers();
+    }, this.bufferFlushIntervalMs);
+    this.flushTimer.unref?.();
+  }
+
+  public shutdown(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  public async flush(): Promise<void> {
+    await this.flushBuffers();
   }
 
   // ===========================================================================
@@ -200,25 +225,23 @@ export class APIIntelligenceService extends EventEmitter {
    * Store signal in the Signal table for history and analysis
    */
   private async storeSignal(signal: APIIntelligenceSignal, tenantId: string): Promise<void> {
-    await this.prisma.signal.create({
-      data: {
-        tenantId,
-        sensorId: signal.sensorId,
-        signalType: signal.type as SignalType,
-        sourceIp: null, // API intelligence signals don't have source IP
-        fingerprint: signal.templatePattern ?? signal.endpoint,
-        severity: signal.type === 'SCHEMA_VIOLATION' ? 'MEDIUM' : 'LOW',
-        confidence: signal.discoveryConfidence ?? 1.0,
-        eventCount: 1,
-        metadata: {
-          endpoint: signal.endpoint,
-          method: signal.method,
-          templatePattern: signal.templatePattern,
-          violationType: signal.violationType,
-          violationPath: signal.violationPath,
-          violationMessage: signal.violationMessage,
-          parameterTypes: signal.parameterTypes,
-        },
+    this.enqueueSignal({
+      tenantId,
+      sensorId: signal.sensorId,
+      signalType: signal.type as SignalType,
+      sourceIp: null, // API intelligence signals don't have source IP
+      fingerprint: signal.templatePattern ?? signal.endpoint,
+      severity: signal.type === 'SCHEMA_VIOLATION' ? 'MEDIUM' : 'LOW',
+      confidence: signal.discoveryConfidence ?? 1.0,
+      eventCount: 1,
+      metadata: {
+        endpoint: signal.endpoint,
+        method: signal.method,
+        templatePattern: signal.templatePattern,
+        violationType: signal.violationType,
+        violationPath: signal.violationPath,
+        violationMessage: signal.violationMessage,
+        parameterTypes: signal.parameterTypes,
       },
     });
   }
@@ -398,29 +421,104 @@ export class APIIntelligenceService extends EventEmitter {
       ? metadata.field
       : 'unknown';
 
-    await this.prisma.endpointSchemaChange.create({
-      data: {
-        endpointId,
-        tenantId,
-        changeType: 'violation',
-        field,
-        oldValue: this.coerceString(metadata.expectedType),
-        newValue: this.coerceString(metadata.receivedType),
-        riskLevel: 'medium',
-        detectedAt: new Date(),
-      },
+    this.enqueueSchemaChange({
+      endpointId,
+      tenantId,
+      changeType: 'violation',
+      field,
+      oldValue: this.coerceString(metadata.expectedType),
+      newValue: this.coerceString(metadata.receivedType),
+      riskLevel: 'medium',
+      detectedAt: new Date(),
     });
+  }
+
+  private enqueueSignal(data: Prisma.SignalCreateManyInput): void {
+    this.signalBuffer.push(data);
+    this.trimBuffer(this.signalBuffer, 'signals');
+    if (this.signalBuffer.length >= this.signalBatchSize) {
+      void this.flushSignalBuffer();
+    }
+  }
+
+  private enqueueSchemaChange(data: Prisma.EndpointSchemaChangeCreateManyInput): void {
+    this.schemaChangeBuffer.push(data);
+    this.trimBuffer(this.schemaChangeBuffer, 'schemaChanges');
+    if (this.schemaChangeBuffer.length >= this.schemaChangeBatchSize) {
+      void this.flushSchemaChangeBuffer();
+    }
+  }
+
+  private trimBuffer<T>(buffer: T[], label: string): void {
+    if (buffer.length <= this.maxBufferedItems) {
+      return;
+    }
+    const overflow = buffer.length - this.maxBufferedItems;
+    buffer.splice(0, overflow);
+    this.logger.warn({ overflow, label }, 'API intelligence buffer overflow, dropping oldest entries');
+  }
+
+  private async flushBuffers(): Promise<void> {
+    await Promise.all([this.flushSignalBuffer(), this.flushSchemaChangeBuffer()]);
+  }
+
+  private async flushSignalBuffer(): Promise<void> {
+    if (this.signalFlushInFlight || this.signalBuffer.length === 0) {
+      return;
+    }
+    this.signalFlushInFlight = true;
+    try {
+      while (this.signalBuffer.length > 0) {
+        const batch = this.signalBuffer.splice(0, this.signalBatchSize);
+        try {
+          await this.prisma.signal.createMany({ data: batch });
+        } catch (error) {
+          this.signalBuffer = batch.concat(this.signalBuffer);
+          this.logger.error({ error }, 'Failed to flush signal batch');
+          break;
+        }
+      }
+    } finally {
+      this.signalFlushInFlight = false;
+    }
+  }
+
+  private async flushSchemaChangeBuffer(): Promise<void> {
+    if (this.schemaFlushInFlight || this.schemaChangeBuffer.length === 0) {
+      return;
+    }
+    this.schemaFlushInFlight = true;
+    try {
+      while (this.schemaChangeBuffer.length > 0) {
+        const batch = this.schemaChangeBuffer.splice(0, this.schemaChangeBatchSize);
+        try {
+          await this.prisma.endpointSchemaChange.createMany({ data: batch });
+        } catch (error) {
+          this.schemaChangeBuffer = batch.concat(this.schemaChangeBuffer);
+          this.logger.error({ error }, 'Failed to flush schema change batch');
+          break;
+        }
+      }
+    } finally {
+      this.schemaFlushInFlight = false;
+    }
   }
 
   private coerceString(value: unknown): string | null {
     if (value == null) return null;
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
+    if (typeof value === 'string') {
+      const maxLength = 5000;
+      if (value.length > maxLength) {
+        return value.slice(0, maxLength) + '...[Truncated]';
+      }
+      return value;
     }
+    // safeStringify handles objects/arrays with depth limits and truncation
+    return safeStringify(value, {
+      maxDepth: 5,
+      maxLength: 5000, // 5KB limit for metadata fields
+      maxArrayLength: 20
+    });
   }
 
   // ===========================================================================
@@ -530,43 +628,72 @@ export class APIIntelligenceService extends EventEmitter {
     tenantId: string,
     since: Date
   ): Promise<Array<{ endpoint: string; method: string; violationCount: number }>> {
-    // Query signals grouped by endpoint path from metadata
-    const violations = await this.prisma.signal.findMany({
-      where: {
-        tenantId,
-        signalType: 'SCHEMA_VIOLATION',
-        createdAt: { gte: since },
-      },
-      select: {
-        metadata: true,
-      },
-    });
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ endpoint: string | null; method: string | null; violation_count: bigint }>
+      >(Prisma.sql`
+        SELECT
+          "metadata"->>'endpoint' AS endpoint,
+          COALESCE("metadata"->>'method', 'GET') AS method,
+          COUNT(*)::bigint AS violation_count
+        FROM "signals"
+        WHERE "tenantId" = ${tenantId}
+          AND "signalType" = 'SCHEMA_VIOLATION'
+          AND "createdAt" >= ${since}
+          AND "metadata" ? 'endpoint'
+        GROUP BY endpoint, method
+        ORDER BY violation_count DESC
+        LIMIT 10
+      `);
 
-    // Aggregate violations by endpoint
-    const endpointCounts = new Map<string, { method: string; count: number }>();
+      return rows
+        .filter((row) => row.endpoint)
+        .map((row) => ({
+          endpoint: row.endpoint ?? 'unknown',
+          method: row.method ?? 'GET',
+          violationCount: Number(row.violation_count),
+        }));
+    } catch (error) {
+      this.logger.warn({ error }, 'Falling back to in-memory violation aggregation');
 
-    for (const v of violations) {
-      const meta = v.metadata as { endpoint?: string; method?: string } | null;
-      if (meta?.endpoint) {
-        const key = `${meta.method ?? 'GET'}:${meta.endpoint}`;
-        const existing = endpointCounts.get(key);
-        if (existing) {
-          existing.count++;
-        } else {
-          endpointCounts.set(key, { method: meta.method ?? 'GET', count: 1 });
+      // Query signals grouped by endpoint path from metadata
+      const violations = await this.prisma.signal.findMany({
+        where: {
+          tenantId,
+          signalType: 'SCHEMA_VIOLATION',
+          createdAt: { gte: since },
+        },
+        select: {
+          metadata: true,
+        },
+      });
+
+      // Aggregate violations by endpoint
+      const endpointCounts = new Map<string, { method: string; count: number }>();
+
+      for (const v of violations) {
+        const meta = v.metadata as { endpoint?: string; method?: string } | null;
+        if (meta?.endpoint) {
+          const key = `${meta.method ?? 'GET'}:${meta.endpoint}`;
+          const existing = endpointCounts.get(key);
+          if (existing) {
+            existing.count++;
+          } else {
+            endpointCounts.set(key, { method: meta.method ?? 'GET', count: 1 });
+          }
         }
       }
-    }
 
-    // Sort and return top 10
-    return Array.from(endpointCounts.entries())
-      .map(([key, value]) => ({
-        endpoint: key.split(':').slice(1).join(':'),
-        method: value.method,
-        violationCount: value.count,
-      }))
-      .sort((a, b) => b.violationCount - a.violationCount)
-      .slice(0, 10);
+      // Sort and return top 10
+      return Array.from(endpointCounts.entries())
+        .map(([key, value]) => ({
+          endpoint: key.split(':').slice(1).join(':'),
+          method: value.method,
+          violationCount: value.count,
+        }))
+        .sort((a, b) => b.violationCount - a.violationCount)
+        .slice(0, 10);
+    }
   }
 
   /**
@@ -575,42 +702,70 @@ export class APIIntelligenceService extends EventEmitter {
   async getViolationTrends(tenantId: string, days: number): Promise<ViolationTrend[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const violations = await this.prisma.signal.findMany({
-      where: {
-        tenantId,
-        signalType: 'SCHEMA_VIOLATION',
-        createdAt: { gte: since },
-      },
-      select: {
-        createdAt: true,
-        metadata: true,
-      },
-    });
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ date: Date | string; type: string | null; count: bigint }>
+      >(Prisma.sql`
+        SELECT
+          date_trunc('day', "createdAt")::date AS date,
+          COALESCE("metadata"->>'violationType', 'unknown') AS type,
+          COUNT(*)::bigint AS count
+        FROM "signals"
+        WHERE "tenantId" = ${tenantId}
+          AND "signalType" = 'SCHEMA_VIOLATION'
+          AND "createdAt" >= ${since}
+        GROUP BY date, type
+        ORDER BY date ASC
+      `);
 
-    // Group by date and type
-    const trendMap = new Map<string, Map<string, number>>();
+      return rows.map((row) => {
+        const dateValue = row.date instanceof Date ? row.date : new Date(row.date);
+        return {
+          date: dateValue.toISOString().split('T')[0],
+          type: row.type ?? 'unknown',
+          count: Number(row.count),
+        };
+      });
+    } catch (error) {
+      this.logger.warn({ error }, 'Falling back to in-memory violation trends');
 
-    for (const v of violations) {
-      const date = v.createdAt.toISOString().split('T')[0];
-      const meta = v.metadata as { violationType?: string } | null;
-      const type = meta?.violationType ?? 'unknown';
+      const violations = await this.prisma.signal.findMany({
+        where: {
+          tenantId,
+          signalType: 'SCHEMA_VIOLATION',
+          createdAt: { gte: since },
+        },
+        select: {
+          createdAt: true,
+          metadata: true,
+        },
+      });
 
-      if (!trendMap.has(date)) {
-        trendMap.set(date, new Map());
+      // Group by date and type
+      const trendMap = new Map<string, Map<string, number>>();
+
+      for (const v of violations) {
+        const date = v.createdAt.toISOString().split('T')[0];
+        const meta = v.metadata as { violationType?: string } | null;
+        const type = meta?.violationType ?? 'unknown';
+
+        if (!trendMap.has(date)) {
+          trendMap.set(date, new Map());
+        }
+        const dateMap = trendMap.get(date)!;
+        dateMap.set(type, (dateMap.get(type) ?? 0) + 1);
       }
-      const dateMap = trendMap.get(date)!;
-      dateMap.set(type, (dateMap.get(type) ?? 0) + 1);
-    }
 
-    // Flatten to array
-    const trends: ViolationTrend[] = [];
-    for (const [date, types] of trendMap) {
-      for (const [type, count] of types) {
-        trends.push({ date, type, count });
+      // Flatten to array
+      const trends: ViolationTrend[] = [];
+      for (const [date, types] of trendMap) {
+        for (const [type, count] of types) {
+          trends.push({ date, type, count });
+        }
       }
-    }
 
-    return trends.sort((a, b) => a.date.localeCompare(b.date));
+      return trends.sort((a, b) => a.date.localeCompare(b.date));
+    }
   }
 
   /**

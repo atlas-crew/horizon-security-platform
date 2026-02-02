@@ -3,7 +3,7 @@
  * Comprehensive tests for signal ingestion, discovery, violations, and statistics
  */
 
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { APIIntelligenceService } from '../index.js';
 import type { PrismaClient, SignalType } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -30,6 +30,7 @@ function createMockPrisma(): {
   mocks: {
     signal: {
       create: Mock;
+      createMany: Mock;
       count: Mock;
       findMany: Mock;
     };
@@ -43,14 +44,17 @@ function createMockPrisma(): {
     };
     endpointSchemaChange: {
       create: Mock;
+      createMany: Mock;
       findMany: Mock;
       count: Mock;
     };
+    queryRaw: Mock;
   };
 } {
   const mocks = {
     signal: {
       create: vi.fn().mockResolvedValue({ id: 'signal-1' }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
       count: vi.fn().mockResolvedValue(0),
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -64,15 +68,18 @@ function createMockPrisma(): {
     },
     endpointSchemaChange: {
       create: vi.fn().mockResolvedValue({ id: 'change-1' }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
+    queryRaw: vi.fn().mockRejectedValue(new Error('queryRaw not implemented in mock')),
   };
 
   const prisma = {
     signal: mocks.signal,
     endpoint: mocks.endpoint,
     endpointSchemaChange: mocks.endpointSchemaChange,
+    $queryRaw: mocks.queryRaw,
   } as unknown as PrismaClient;
 
   return { prisma, mocks };
@@ -127,21 +134,28 @@ describe('APIIntelligenceService', () => {
     service = new APIIntelligenceService(mockPrisma.prisma, mockLogger);
   });
 
+  afterEach(() => {
+    service.shutdown();
+  });
+
   describe('Signal Ingestion', () => {
     describe('ingestSignal', () => {
       it('should ingest a TEMPLATE_DISCOVERY signal and store it', async () => {
         const signal = createTemplateDiscoverySignal();
 
         await service.ingestSignal(signal, 'tenant-1');
+        await service.flush();
 
-        expect(mockPrisma.mocks.signal.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
-            tenantId: 'tenant-1',
-            sensorId: 'sensor-1',
-            signalType: 'TEMPLATE_DISCOVERY',
-            fingerprint: '/api/users/{id}',
-            severity: 'LOW',
-          }),
+        expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              tenantId: 'tenant-1',
+              sensorId: 'sensor-1',
+              signalType: 'TEMPLATE_DISCOVERY',
+              fingerprint: '/api/users/{id}',
+              severity: 'LOW',
+            }),
+          ]),
         });
       });
 
@@ -149,14 +163,17 @@ describe('APIIntelligenceService', () => {
         const signal = createSchemaViolationSignal();
 
         await service.ingestSignal(signal, 'tenant-1');
+        await service.flush();
 
-        expect(mockPrisma.mocks.signal.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
-            tenantId: 'tenant-1',
-            sensorId: 'sensor-1',
-            signalType: 'SCHEMA_VIOLATION',
-            severity: 'MEDIUM',
-          }),
+        expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              tenantId: 'tenant-1',
+              sensorId: 'sensor-1',
+              signalType: 'SCHEMA_VIOLATION',
+              severity: 'MEDIUM',
+            }),
+          ]),
         });
       });
 
@@ -258,18 +275,13 @@ describe('APIIntelligenceService', () => {
       });
 
       it('should count rejected signals when errors occur', async () => {
-        mockPrisma.mocks.signal.create
-          .mockResolvedValueOnce({ id: 'signal-1' })
-          .mockRejectedValueOnce(new Error('DB error'))
-          .mockResolvedValueOnce({ id: 'signal-3' });
-
         const batch: SignalBatch = {
           batchId: 'batch-1',
           sensorId: 'sensor-1',
           timestamp: new Date().toISOString(),
           signals: [
             createTemplateDiscoverySignal(),
-            createTemplateDiscoverySignal({ endpoint: '/api/fail' }),
+            createTemplateDiscoverySignal({ templatePattern: undefined }),
             createTemplateDiscoverySignal({ endpoint: '/api/success' }),
           ],
         };
@@ -358,14 +370,18 @@ describe('APIIntelligenceService', () => {
           },
         });
 
-        expect(mockPrisma.mocks.endpointSchemaChange.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
-            changeType: 'violation',
-            field: '$.name',
-            oldValue: 'string',
-            newValue: 'number',
-            riskLevel: 'medium',
-          }),
+        await service.flush();
+
+        expect(mockPrisma.mocks.endpointSchemaChange.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              changeType: 'violation',
+              field: '$.name',
+              oldValue: 'string',
+              newValue: 'number',
+              riskLevel: 'medium',
+            }),
+          ]),
         });
       });
 
@@ -973,8 +989,9 @@ describe('APIIntelligenceService', () => {
       });
 
       await service.ingestSignal(signal, 'tenant-1');
+      await service.flush();
 
-      expect(mockPrisma.mocks.signal.create).toHaveBeenCalled();
+      expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalled();
     });
 
     it('should handle very long endpoint paths', async () => {
@@ -985,8 +1002,9 @@ describe('APIIntelligenceService', () => {
       });
 
       await service.ingestSignal(signal, 'tenant-1');
+      await service.flush();
 
-      expect(mockPrisma.mocks.signal.create).toHaveBeenCalled();
+      expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalled();
     });
 
     it('should handle unicode in violation messages', async () => {
@@ -995,8 +1013,9 @@ describe('APIIntelligenceService', () => {
       });
 
       await service.ingestSignal(signal, 'tenant-1');
+      await service.flush();
 
-      expect(mockPrisma.mocks.signal.create).toHaveBeenCalled();
+      expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalled();
     });
 
     it('should handle null metadata values gracefully', async () => {
@@ -1006,16 +1025,18 @@ describe('APIIntelligenceService', () => {
       });
 
       await service.ingestSignal(signal, 'tenant-1');
+      await service.flush();
 
-      expect(mockPrisma.mocks.signal.create).toHaveBeenCalled();
+      expect(mockPrisma.mocks.signal.createMany).toHaveBeenCalled();
     });
 
     it('should handle database errors gracefully', async () => {
-      mockPrisma.mocks.signal.create.mockRejectedValue(new Error('Database connection lost'));
+      mockPrisma.mocks.signal.createMany.mockRejectedValue(new Error('Database connection lost'));
 
-      await expect(
-        service.ingestSignal(createTemplateDiscoverySignal(), 'tenant-1')
-      ).rejects.toThrow('Database connection lost');
+      await service.ingestSignal(createTemplateDiscoverySignal(), 'tenant-1');
+      await service.flush();
+
+      expect(mockLogger.error).toHaveBeenCalled();
     });
   });
 });

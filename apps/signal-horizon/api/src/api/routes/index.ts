@@ -10,6 +10,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { createAuthMiddleware } from '../middleware/auth.js';
 import { contentTypeValidation } from '../../middleware/content-type.js';
+import { csrfProtection, csrfTokenHandler, ensureCsrfToken } from '../../middleware/csrf.js';
 import { createCampaignRoutes } from './campaigns.js';
 import { createThreatRoutes } from './threats.js';
 import { createBlocklistRoutes } from './blocklist.js';
@@ -75,8 +76,30 @@ export function createApiRouter(
     ],
   }));
 
+  // CSRF token endpoint (before auth - allows getting token for login flows)
+  // Double-submit cookie pattern: client sends token from cookie in X-CSRF-Token header
+  router.get('/csrf-token', csrfTokenHandler());
+
+  // Ensure CSRF cookie exists on all requests (sets cookie if missing)
+  router.use(ensureCsrfToken());
+
   // All API routes require authentication
   router.use(authMiddleware);
+
+  // CSRF protection for mutation endpoints
+  // Note: Bearer token auth is inherently CSRF-resistant, but this provides defense-in-depth
+  // Skip WebSocket-related routes and file uploads which have their own protection
+  router.use(csrfProtection({
+    skipRoutes: [
+      '/docs',                      // Documentation (read-only)
+      '/csrf-token',                // CSRF token endpoint itself
+      '/onboarding',                // Onboarding uses API keys, not cookies
+      /^\/fleet\/.*\/files/,        // File uploads use multipart + auth
+      /^\/releases\/.*\/upload/,    // Release uploads use multipart + auth
+      /^\/tunnel/,                  // Tunnel routes use WebSocket auth
+      /^\/synapse/,                 // Synapse proxy routes
+    ],
+  }));
 
   // Mount route modules
   router.use('/campaigns', createCampaignRoutes(prisma));

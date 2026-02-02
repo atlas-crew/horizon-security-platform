@@ -39,3 +39,13 @@ export {
   TimeoutPresets,
   type TimeoutOptions,
 } from './timeout.js';
+
+// CSRF protection
+export {
+  csrfProtection,
+  csrfTokenHandler,
+  ensureCsrfToken,
+  generateCsrfToken,
+  getCsrfToken,
+  type CsrfOptions,
+} from './csrf.js';

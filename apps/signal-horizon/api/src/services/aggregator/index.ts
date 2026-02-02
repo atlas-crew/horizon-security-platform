@@ -9,6 +9,7 @@ import type { Correlator } from '../correlator/index.js';
 import type { ImpossibleTravelService, LoginEvent } from '../impossible-travel.js';
 import type { APIIntelligenceService } from '../api-intelligence/index.js';
 import type { ThreatService } from '../threat-service.js';
+import type { AutomatedPlaybookTrigger } from '../warroom/automated-trigger.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 
@@ -51,6 +52,7 @@ export class Aggregator {
   private clickhouse: ClickHouseService | null;
   private apiIntelligence: APIIntelligenceService | null;
   private threatService: ThreatService | null;
+  private playbookTrigger: AutomatedPlaybookTrigger | null;
   private config: Required<AggregatorConfig>;
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
@@ -66,7 +68,8 @@ export class Aggregator {
     clickhouse?: ClickHouseService,
     impossibleTravel?: ImpossibleTravelService,
     apiIntelligenceService?: APIIntelligenceService,
-    threatService?: ThreatService
+    threatService?: ThreatService,
+    playbookTrigger?: AutomatedPlaybookTrigger
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
@@ -75,6 +78,7 @@ export class Aggregator {
     this.impossibleTravel = impossibleTravel ?? null;
     this.apiIntelligence = apiIntelligenceService ?? null;
     this.threatService = threatService ?? null;
+    this.playbookTrigger = playbookTrigger ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
@@ -84,6 +88,9 @@ export class Aggregator {
 
     if (this.clickhouse?.isEnabled()) {
       this.logger.info('ClickHouse dual-write enabled for historical data');
+    }
+    if (this.playbookTrigger) {
+      this.logger.info('Automated playbook triggers enabled');
     }
   }
 
@@ -167,6 +174,13 @@ export class Aggregator {
 
       // Forward enriched signals to correlator for campaign detection
       await this.correlator.analyzeSignals(enrichedSignals);
+
+      // Evaluate signals for automated playbook triggers (non-blocking)
+      if (this.playbookTrigger) {
+        void this.playbookTrigger.evaluateSignals(enrichedSignals).catch((err) => {
+          this.logger.warn({ error: err }, 'Automated playbook trigger evaluation failed');
+        });
+      }
 
       // SUCCESS: Now safe to clear the batch
       this.signalBatch = [];
@@ -455,5 +469,7 @@ export class Aggregator {
     }
     // Flush any remaining signals
     await this.flushBatch();
+    // Stop playbook trigger service
+    this.playbookTrigger?.stop();
   }
 }

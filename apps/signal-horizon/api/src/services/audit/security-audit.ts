@@ -25,7 +25,7 @@ import type { Request } from 'express';
 // =============================================================================
 
 /**
- * Security-relevant action types for playbook operations
+ * Security-relevant action types for playbook and configuration operations
  */
 export type SecurityAuditAction =
   // Playbook lifecycle
@@ -44,7 +44,11 @@ export type SecurityAuditAction =
   | 'PLAYBOOK_STEP_FAILED'
   // Command operations
   | 'PLAYBOOK_COMMAND_SENT'
-  | 'PLAYBOOK_COMMAND_FAILED';
+  | 'PLAYBOOK_COMMAND_FAILED'
+  // Configuration operations
+  | 'CONFIG_CREATED'
+  | 'CONFIG_UPDATED'
+  | 'CONFIG_DELETED';
 
 /**
  * Result of an audited operation
@@ -59,6 +63,8 @@ export interface RequestContext {
   userAgent: string | null;
   userId: string | null;
   tenantId: string;
+  /** Unique request ID from X-Request-ID header or generated UUID */
+  requestId: string | null;
 }
 
 /**
@@ -75,6 +81,8 @@ export interface SecurityAuditEvent {
   ipAddress: string | null;
   /** Client user agent */
   userAgent: string | null;
+  /** Unique request ID for tracing */
+  requestId: string | null;
   /** Type of action performed */
   action: SecurityAuditAction;
   /** Result of the action */
@@ -121,6 +129,7 @@ export class SecurityAuditService {
       userAgent: this.extractUserAgent(req),
       userId: auth?.userId ?? null,
       tenantId: auth?.tenantId ?? 'unknown',
+      requestId: req.id ?? null,
     };
   }
 
@@ -172,6 +181,7 @@ export class SecurityAuditService {
       tenantId: context.tenantId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
+      requestId: context.requestId,
       action: input.action,
       result: input.result,
       resourceId: input.resourceId,
@@ -234,6 +244,7 @@ export class SecurityAuditService {
           tenantId: context.tenantId,
           userId: context.userId,
           ipAddress: context.ipAddress,
+          requestId: context.requestId,
         },
         `Security audit: ${input.action} - ${input.result}`
       );
@@ -255,6 +266,9 @@ export class SecurityAuditService {
     }
     if (action.startsWith('PLAYBOOK_COMMAND')) {
       return 'sensor_command';
+    }
+    if (action.startsWith('CONFIG_')) {
+      return 'configuration';
     }
     return 'playbook';
   }
@@ -488,6 +502,158 @@ export class SecurityAuditService {
       result: 'FAILURE',
       resourceId: runId,
       details: { commandType, error },
+    });
+  }
+
+  // ===========================================================================
+  // Configuration Audit Methods
+  // ===========================================================================
+
+  /**
+   * Sensitive field patterns that should be redacted in audit logs
+   */
+  private static readonly SENSITIVE_PATTERNS = [
+    /password/i,
+    /secret/i,
+    /token/i,
+    /api[_-]?key/i,
+    /auth/i,
+    /credential/i,
+    /private[_-]?key/i,
+    /access[_-]?key/i,
+    /bearer/i,
+    /jwt/i,
+    /encryption/i,
+  ];
+
+  /**
+   * Redact sensitive values from a configuration object
+   * Returns a deep copy with sensitive fields replaced by '[REDACTED]'
+   */
+  redactSensitiveValues<T extends Record<string, unknown>>(
+    obj: T
+  ): Record<string, unknown> {
+    const redacted: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(obj)) {
+      const isSensitive = SecurityAuditService.SENSITIVE_PATTERNS.some(
+        (pattern) => pattern.test(key)
+      );
+
+      if (isSensitive) {
+        redacted[key] = '[REDACTED]';
+      } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        redacted[key] = this.redactSensitiveValues(value as Record<string, unknown>);
+      } else if (Array.isArray(value)) {
+        redacted[key] = value.map((item) =>
+          item !== null && typeof item === 'object'
+            ? this.redactSensitiveValues(item as Record<string, unknown>)
+            : item
+        );
+      } else {
+        redacted[key] = value;
+      }
+    }
+
+    return redacted;
+  }
+
+  /**
+   * Compute a diff between two configuration objects, showing only changed fields
+   * Both values are redacted for sensitive fields
+   */
+  computeConfigDiff(
+    previousConfig: Record<string, unknown>,
+    newConfig: Record<string, unknown>
+  ): { field: string; previousValue: unknown; newValue: unknown }[] {
+    const changes: { field: string; previousValue: unknown; newValue: unknown }[] = [];
+    const allKeys = new Set([...Object.keys(previousConfig), ...Object.keys(newConfig)]);
+
+    for (const key of allKeys) {
+      const prev = previousConfig[key];
+      const curr = newConfig[key];
+
+      // Simple deep equality check
+      if (JSON.stringify(prev) !== JSON.stringify(curr)) {
+        const isSensitive = SecurityAuditService.SENSITIVE_PATTERNS.some(
+          (pattern) => pattern.test(key)
+        );
+
+        changes.push({
+          field: key,
+          previousValue: isSensitive ? '[REDACTED]' : prev,
+          newValue: isSensitive ? '[REDACTED]' : curr,
+        });
+      }
+    }
+
+    return changes;
+  }
+
+  /**
+   * Log configuration creation
+   */
+  async logConfigCreated(
+    req: Request,
+    resourceType: string,
+    resourceId: string,
+    configValues: Record<string, unknown>
+  ): Promise<void> {
+    const redactedValues = this.redactSensitiveValues(configValues);
+    await this.logEvent(this.extractRequestContext(req), {
+      action: 'CONFIG_CREATED',
+      result: 'SUCCESS',
+      resourceId,
+      details: {
+        resourceType,
+        newValues: redactedValues,
+      },
+    });
+  }
+
+  /**
+   * Log configuration update with previous and new values
+   */
+  async logConfigUpdated(
+    req: Request,
+    resourceType: string,
+    resourceId: string,
+    previousValues: Record<string, unknown>,
+    newValues: Record<string, unknown>
+  ): Promise<void> {
+    const changes = this.computeConfigDiff(previousValues, newValues);
+    await this.logEvent(this.extractRequestContext(req), {
+      action: 'CONFIG_UPDATED',
+      result: 'SUCCESS',
+      resourceId,
+      details: {
+        resourceType,
+        changes,
+        changeCount: changes.length,
+      },
+    });
+  }
+
+  /**
+   * Log configuration deletion
+   */
+  async logConfigDeleted(
+    req: Request,
+    resourceType: string,
+    resourceId: string,
+    previousValues?: Record<string, unknown>
+  ): Promise<void> {
+    const redactedValues = previousValues
+      ? this.redactSensitiveValues(previousValues)
+      : undefined;
+    await this.logEvent(this.extractRequestContext(req), {
+      action: 'CONFIG_DELETED',
+      result: 'SUCCESS',
+      resourceId,
+      details: {
+        resourceType,
+        ...(redactedValues && { previousValues: redactedValues }),
+      },
     });
   }
 }

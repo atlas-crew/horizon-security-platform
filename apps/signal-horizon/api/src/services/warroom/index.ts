@@ -870,3 +870,12 @@ export class WarRoomService {
     };
   }
 }
+
+// =============================================================================
+// Re-exports
+// =============================================================================
+
+export { PlaybookService, PlaybookConcurrencyError } from './playbook-service.js';
+export type { UserInfo, PlaybookStep, StepResult, CreatePlaybookInput } from './playbook-service.js';
+export { AutomatedPlaybookTrigger } from './automated-trigger.js';
+export type { AutomatedTriggerConfig } from './automated-trigger.js';

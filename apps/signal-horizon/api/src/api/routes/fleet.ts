@@ -36,11 +36,37 @@ const ListSensorsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+/**
+ * Safe config value schema - prevents dangerous nested structures and control characters.
+ */
+const SafeConfigValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string().max(10000).refine(
+      (val) => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(val),
+      { message: 'String contains invalid control characters' }
+    ),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(SafeConfigValueSchema).max(1000),
+    z.record(SafeConfigValueSchema).refine(
+      (obj) => Object.keys(obj).length <= 100,
+      { message: 'Object has too many keys (max 100)' }
+    ),
+  ])
+);
+
 const CreateConfigTemplateBodySchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
+  name: z.string().min(1).max(255).refine(
+    (val) => !/[\x00-\x1f\x7f]/.test(val.replace(/[\n\r\t]/g, '')),
+    { message: 'Name contains invalid control characters' }
+  ),
+  description: z.string().max(5000).optional(),
   environment: z.enum(['production', 'staging', 'dev']).default('production'),
-  config: z.record(z.unknown()),
+  config: z.record(SafeConfigValueSchema).refine(
+    (obj) => Object.keys(obj).length <= 500,
+    { message: 'Config has too many top-level keys (max 500)' }
+  ),
 });
 
 const UpdateConfigTemplateBodySchema = CreateConfigTemplateBodySchema.partial();
@@ -53,10 +79,153 @@ const PushConfigBodySchema = z.object({
 /** Valid command types for fleet operations */
 const VALID_COMMAND_TYPES = ['push_config', 'push_rules', 'update', 'restart', 'sync_blocklist'] as const;
 
+/**
+ * Safe string validator function - prevents control characters.
+ * Used to sanitize all user-provided string values in command payloads.
+ */
+function isSafeString(val: string): boolean {
+  // Allow newlines/tabs but block other control characters
+  return !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(val);
+}
+
+/**
+ * Creates a safe string schema with the specified max length.
+ */
+function safeString(maxLength: number = 10000): z.ZodString {
+  return z.string().max(maxLength);
+}
+
+/**
+ * Safe string refinement - use after length validation.
+ */
+const SafeStringRefine = {
+  check: isSafeString,
+  message: 'String contains invalid control characters',
+};
+
+/**
+ * Safe URL schema - validates URL format and blocks dangerous schemes.
+ */
+const SafeUrlSchema = z.string()
+  .max(2048)
+  .url()
+  .refine(
+    (val) => {
+      try {
+        const url = new URL(val);
+        // Only allow http/https schemes for security
+        return ['http:', 'https:'].includes(url.protocol);
+      } catch {
+        return false;
+      }
+    },
+    { message: 'URL must use http or https protocol' }
+  );
+
+/**
+ * Type-specific payload schemas for fleet commands.
+ * Each command type has a strictly defined payload structure to prevent injection attacks.
+ */
+
+/** push_config: Push configuration to sensors */
+const PushConfigPayloadSchema = z.object({
+  templateId: z.string().uuid().optional(),
+  policyTemplateId: z.string().uuid().optional(),
+  policyName: safeString(255).refine(SafeStringRefine.check, SafeStringRefine.message).optional(),
+  policySeverity: z.enum(['strict', 'standard', 'permissive', 'dev']).optional(),
+  config: z.record(z.union([
+    z.string().max(10000).refine(SafeStringRefine.check, SafeStringRefine.message),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(z.union([z.string().max(1000), z.number(), z.boolean()])).max(1000),
+  ])).optional(),
+  version: z.string().max(50).regex(/^[\d.]+(-[\w.]+)?$/).optional(), // Semver-like format
+  rolloutStrategy: z.enum(['immediate', 'canary', 'scheduled', 'rolling', 'blue_green']).optional(),
+  component: z.enum(['pingora', 'waf', 'agent', 'collector']).optional(),
+  action: z.enum(['test', 'reload']).optional(),
+}).strict();
+
+/** push_rules: Push security rules to sensors */
+const PushRulesPayloadSchema = z.object({
+  rules: z.array(z.object({
+    id: z.string().uuid(),
+    name: safeString(255).refine(SafeStringRefine.check, SafeStringRefine.message),
+    enabled: z.boolean(),
+    conditions: z.record(z.unknown()).optional(),
+    actions: z.record(z.unknown()).optional(),
+    priority: z.number().int().min(0).max(10000),
+  })).max(1000).optional(),
+  ruleIds: z.array(z.string().uuid()).max(1000).optional(),
+  hash: z.string().max(128).regex(/^[a-f0-9]+$/i).optional(), // Hex hash
+  activate: z.boolean().optional(),
+  deploymentId: z.string().max(100).regex(/^[\w-]+$/).optional(),
+  abort: z.boolean().optional(),
+  retry: z.boolean().optional(),
+}).strict();
+
+/** update: Firmware/software update command */
+const UpdatePayloadSchema = z.object({
+  version: z.string().max(50).regex(/^[\d.]+(-[\w.]+)?$/), // Required semver-like format
+  changelog: safeString(50000).refine(SafeStringRefine.check, SafeStringRefine.message).optional(),
+  binary_url: SafeUrlSchema,
+  sha256: z.string().length(64).regex(/^[a-f0-9]+$/i), // 64 hex chars
+  size: z.number().int().min(0).max(1073741824), // Max 1GB
+  released_at: z.string().datetime().optional(),
+}).strict();
+
+/** restart: Restart sensor services (minimal payload) */
+const RestartPayloadSchema = z.object({
+  component: z.enum(['all', 'pingora', 'waf', 'agent', 'collector']).optional(),
+  graceful: z.boolean().optional(),
+  delay_seconds: z.number().int().min(0).max(300).optional(),
+}).strict();
+
+/** sync_blocklist: Synchronize IP/domain blocklists */
+const SyncBlocklistPayloadSchema = z.object({
+  blocklist_id: z.string().uuid().optional(),
+  blocklist_url: SafeUrlSchema.optional(),
+  force_refresh: z.boolean().optional(),
+  entries: z.array(z.object({
+    type: z.enum(['ip', 'cidr', 'domain', 'url_pattern']),
+    value: safeString(500).refine(SafeStringRefine.check, SafeStringRefine.message),
+    ttl_seconds: z.number().int().min(0).max(86400 * 365).optional(),
+  })).max(100000).optional(),
+}).strict();
+
+/**
+ * Map of command types to their payload schemas.
+ */
+const COMMAND_PAYLOAD_SCHEMAS: Record<typeof VALID_COMMAND_TYPES[number], z.ZodSchema> = {
+  push_config: PushConfigPayloadSchema,
+  push_rules: PushRulesPayloadSchema,
+  update: UpdatePayloadSchema,
+  restart: RestartPayloadSchema,
+  sync_blocklist: SyncBlocklistPayloadSchema,
+};
+
+/**
+ * Base schema for send command requests.
+ * Payload is validated separately based on commandType.
+ */
 const SendCommandBodySchema = z.object({
   commandType: z.enum(VALID_COMMAND_TYPES),
-  sensorIds: z.string().array().min(1),
-  payload: z.record(z.unknown()),
+  sensorIds: z.array(z.string().uuid()).min(1).max(1000),
+  payload: z.record(z.unknown()), // Validated below based on commandType
+}).superRefine((data, ctx) => {
+  // Validate payload against the command-specific schema
+  const payloadSchema = COMMAND_PAYLOAD_SCHEMAS[data.commandType];
+  const result = payloadSchema.safeParse(data.payload);
+
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['payload', ...issue.path],
+        message: issue.message,
+      });
+    }
+  }
 });
 
 /**

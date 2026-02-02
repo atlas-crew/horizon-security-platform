@@ -118,6 +118,7 @@ model Sensor {
   registrationMethod  RegistrationMethod @default(MANUAL)
   registrationToken   String? // The full token used (legacy)
   registrationTokenId String? // FK to RegistrationToken
+  fingerprint         String? // Unique sensor fingerprint for identity verification
   approvalStatus      ApprovalStatus     @default(APPROVED)
   approvedAt          DateTime?
   approvedBy          String?
@@ -157,6 +158,7 @@ enum RegistrationMethod {
   MANUAL
   AGENT_SCRIPT
   AUTO_DISCOVERY
+  TOKEN // Registered via registration token (secure enrollment)
 }
 
 enum ApprovalStatus {

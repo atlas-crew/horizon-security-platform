@@ -101,36 +101,19 @@ app.use(helmet({
     },
   },
   // Strict Transport Security - force HTTPS (1 year)
-  strictTransportSecurity: {
+  hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
-  // Prevent MIME type sniffing
-  xContentTypeOptions: true,
-  // Prevent clickjacking
-  xFrameOptions: { action: 'deny' },
+  // Prevent clickjacking (X-Frame-Options: DENY)
+  frameguard: { action: 'deny' },
   // Control referrer information
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-  // Disable browser features we don't need
-  permissionsPolicy: {
-    features: {
-      accelerometer: [],
-      camera: [],
-      geolocation: [],
-      gyroscope: [],
-      magnetometer: [],
-      microphone: [],
-      payment: [],
-      usb: [],
-    },
-  },
-  // Remove X-Powered-By header (Express default)
-  xPoweredBy: false,
   // Prevent DNS prefetching
-  xDnsPrefetchControl: { allow: false },
-  // Don't cache sensitive responses
-  noSniff: true,
+  dnsPrefetchControl: { allow: false },
+  // X-Content-Type-Options: nosniff (enabled by default)
+  // X-Powered-By: removed by default
 }));
 app.use(cors({
   origin: config.security.corsOrigins,
@@ -536,13 +519,25 @@ async function start() {
   commandSender.start();
   logger.info('Protocol handlers started');
 
-  // Initialize job queue workers for background processing
-  // Check for stalled rollouts from previous server restarts
-  await recoverStalledRollouts(prisma, logger);
+  // Initialize job queue workers for background processing (requires Redis)
+  const enableJobQueue = process.env.ENABLE_JOB_QUEUE !== 'false';
+  if (enableJobQueue) {
+    try {
+      // Check for stalled rollouts from previous server restarts
+      await recoverStalledRollouts(prisma, logger);
 
-  // Start the rollout worker (processes rollout jobs from the queue)
-  rolloutWorker = createRolloutWorker(prisma, logger, fleetCommander);
-  logger.info('Rollout worker started - background job processing enabled');
+      // Start the rollout worker (processes rollout jobs from the queue)
+      rolloutWorker = createRolloutWorker(prisma, logger, fleetCommander);
+      logger.info('Rollout worker started - background job processing enabled');
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Failed to start rollout worker - Redis may not be available. Set ENABLE_JOB_QUEUE=false to suppress this warning.'
+      );
+    }
+  } else {
+    logger.info('Job queue disabled (ENABLE_JOB_QUEUE=false) - rollout processing will not be available');
+  }
 
   // Wire up protocol handlers to sensor gateway for fleet operations
   sensorGateway.setProtocolHandlers(commandSender);

@@ -369,6 +369,9 @@ export class SensorGateway {
     authTimeout: NodeJS.Timeout
   ): Promise<void> {
     const { apiKey, sensorId, sensorName, version } = payload;
+    // Extract registration token and fingerprint from payload (optional fields)
+    const registrationToken = (payload as Record<string, unknown>).registrationToken as string | undefined;
+    const sensorFingerprint = (payload as Record<string, unknown>).fingerprint as string | undefined;
 
     try {
       // Validate API key
@@ -393,27 +396,117 @@ export class SensorGateway {
 
       clearTimeout(authTimeout);
 
-      // Register/update sensor
-      const sensor = await this.prisma.sensor.upsert({
+      // SECURITY: Check for existing registered sensor by name for this tenant
+      const existingSensor = await this.prisma.sensor.findUnique({
         where: {
           tenantId_name: {
             tenantId: apiKeyRecord.tenantId,
             name: sensorName || sensorId,
           },
         },
-        create: {
-          tenantId: apiKeyRecord.tenantId,
-          name: sensorName || sensorId,
-          version,
-          connectionState: 'CONNECTED',
-          lastHeartbeat: new Date(),
-        },
-        update: {
-          version,
-          connectionState: 'CONNECTED',
-          lastHeartbeat: new Date(),
-        },
       });
+
+      let sensor;
+
+      if (existingSensor) {
+        // SECURITY: Verify sensor identity for existing sensors
+        if (!this.verifySensorIdentity(existingSensor, sensorFingerprint, apiKeyRecord.tenantId)) {
+          this.logger.warn(
+            {
+              sensorName: sensorName || sensorId,
+              tenantId: apiKeyRecord.tenantId,
+              existingSensorId: existingSensor.id,
+            },
+            'Sensor identity verification failed - possible impersonation attempt'
+          );
+          this.send(conn, { type: 'auth-failed', error: 'Sensor identity verification failed' });
+          conn.ws.close(4003, 'Identity verification failed');
+          return;
+        }
+
+        // Check approval status for existing sensors
+        if (existingSensor.approvalStatus === 'REJECTED') {
+          this.send(conn, { type: 'auth-failed', error: 'Sensor has been rejected' });
+          conn.ws.close(4003, 'Sensor rejected');
+          return;
+        }
+
+        // Update existing sensor
+        sensor = await this.prisma.sensor.update({
+          where: { id: existingSensor.id },
+          data: {
+            version,
+            connectionState: 'CONNECTED',
+            lastHeartbeat: new Date(),
+            // Update fingerprint if this is the first connection with a fingerprint
+            ...(sensorFingerprint && !existingSensor.fingerprint && {
+              fingerprint: sensorFingerprint,
+            }),
+          },
+        });
+      } else {
+        // SECURITY: New sensor registration requires a valid registration token
+        if (!registrationToken) {
+          this.logger.warn(
+            {
+              sensorName: sensorName || sensorId,
+              tenantId: apiKeyRecord.tenantId,
+            },
+            'New sensor registration attempted without registration token'
+          );
+          this.send(conn, {
+            type: 'auth-failed',
+            error: 'New sensors must use a registration token. Generate one from the Fleet Management dashboard.',
+          });
+          conn.ws.close(4003, 'Registration token required');
+          return;
+        }
+
+        // Validate registration token
+        const tokenValidation = await this.validateRegistrationToken(
+          registrationToken,
+          apiKeyRecord.tenantId
+        );
+
+        if (!tokenValidation.valid) {
+          this.logger.warn(
+            {
+              sensorName: sensorName || sensorId,
+              tenantId: apiKeyRecord.tenantId,
+              reason: tokenValidation.reason,
+            },
+            'Invalid registration token for new sensor'
+          );
+          this.send(conn, { type: 'auth-failed', error: tokenValidation.reason });
+          conn.ws.close(4003, 'Invalid registration token');
+          return;
+        }
+
+        // Create new sensor in PENDING status (requires manual approval)
+        sensor = await this.prisma.sensor.create({
+          data: {
+            tenantId: apiKeyRecord.tenantId,
+            name: sensorName || sensorId,
+            version,
+            connectionState: 'CONNECTED',
+            lastHeartbeat: new Date(),
+            approvalStatus: 'PENDING',
+            registrationMethod: 'TOKEN',
+            registrationTokenId: tokenValidation.tokenId,
+            fingerprint: sensorFingerprint || null,
+            ...(tokenValidation.region && { region: tokenValidation.region }),
+          },
+        });
+
+        this.logger.info(
+          {
+            sensorId: sensor.id,
+            tenantId: apiKeyRecord.tenantId,
+            tokenId: tokenValidation.tokenId,
+          },
+          'New sensor registered via token (pending approval)'
+        );
+      }
 
       // Update connection with auth info
       conn.sensorId = sensor.id;
@@ -431,20 +524,126 @@ export class SensorGateway {
         data: { lastUsedAt: new Date() },
       });
 
+      // Determine capabilities based on approval status
+      const capabilities = sensor.approvalStatus === 'APPROVED'
+        ? ['signal', 'blocklist-sync', 'command']
+        : ['signal']; // Pending sensors can only send signals, not receive commands
+
       this.send(conn, {
         type: 'auth-success',
         sensorId: sensor.id,
         tenantId: apiKeyRecord.tenantId,
-        capabilities: ['signal', 'blocklist-sync'],
+        capabilities,
+        approvalStatus: sensor.approvalStatus,
+        ...(sensor.approvalStatus === 'PENDING' && {
+          message: 'Sensor is pending approval. Contact your administrator to approve this sensor.',
+        }),
       });
 
       this.logger.info(
-        { sensorId: sensor.id, tenantId: apiKeyRecord.tenantId },
+        {
+          sensorId: sensor.id,
+          tenantId: apiKeyRecord.tenantId,
+          approvalStatus: sensor.approvalStatus,
+        },
         'Sensor authenticated'
       );
     } catch (error) {
       this.logger.error({ error }, 'Sensor auth failed');
       this.send(conn, { type: 'auth-failed', error: 'Auth error' });
+    }
+  }
+
+  /**
+   * Verify sensor identity for existing sensors.
+   * Checks fingerprint match if the sensor has a stored fingerprint.
+   */
+  private verifySensorIdentity(
+    existingSensor: { id: string; fingerprint: string | null; tenantId: string },
+    providedFingerprint: string | undefined,
+    tenantId: string
+  ): boolean {
+    // Verify tenant ownership
+    if (existingSensor.tenantId !== tenantId) {
+      return false;
+    }
+
+    // If sensor has a stored fingerprint, verify it matches
+    if (existingSensor.fingerprint && existingSensor.fingerprint.length > 0) {
+      if (!providedFingerprint) {
+        // Sensor should provide fingerprint but didn't
+        return false;
+      }
+
+      // Use timing-safe comparison to prevent timing attacks
+      if (existingSensor.fingerprint.length !== providedFingerprint.length) {
+        return false;
+      }
+
+      let result = 0;
+      for (let i = 0; i < existingSensor.fingerprint.length; i++) {
+        result |= existingSensor.fingerprint.charCodeAt(i) ^ providedFingerprint.charCodeAt(i);
+      }
+      return result === 0;
+    }
+
+    // No fingerprint stored yet - allow connection (fingerprint will be set on first connect)
+    return true;
+  }
+
+  /**
+   * Validate a registration token for new sensor enrollment.
+   */
+  private async validateRegistrationToken(
+    token: string,
+    tenantId: string
+  ): Promise<{ valid: boolean; reason: string; tokenId?: string; region?: string }> {
+    try {
+      // Hash the token to find the record
+      const tokenHash = await this.hashApiKey(token);
+
+      const tokenRecord = await this.prisma.registrationToken.findUnique({
+        where: { tokenHash },
+        include: {
+          _count: {
+            select: { registeredSensors: true },
+          },
+        },
+      });
+
+      if (!tokenRecord) {
+        return { valid: false, reason: 'Invalid registration token' };
+      }
+
+      // Verify token belongs to the correct tenant
+      if (tokenRecord.tenantId !== tenantId) {
+        return { valid: false, reason: 'Registration token belongs to a different tenant' };
+      }
+
+      // Check if token is revoked
+      if (tokenRecord.revoked) {
+        return { valid: false, reason: 'Registration token has been revoked' };
+      }
+
+      // Check if token is expired
+      if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) < new Date()) {
+        return { valid: false, reason: 'Registration token has expired' };
+      }
+
+      // Check if token has remaining uses
+      if (tokenRecord._count.registeredSensors >= tokenRecord.maxUses) {
+        return { valid: false, reason: 'Registration token has reached maximum uses' };
+      }
+
+      return {
+        valid: true,
+        reason: 'Valid',
+        tokenId: tokenRecord.id,
+        region: tokenRecord.region || undefined,
+      };
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to validate registration token');
+      return { valid: false, reason: 'Token validation failed' };
     }
   }
 

@@ -3682,8 +3682,6 @@ fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirror
 
 /// Run configuration validation and exit.
 fn run_config_check(file: &str, json_output: bool) {
-    use synapse_pingora::config::ConfigLoader;
-
     #[derive(serde::Serialize)]
     struct ValidationResult {
         valid: bool,
@@ -3709,54 +3707,92 @@ fn run_config_check(file: &str, json_output: bool) {
     }
 
     // Try to load and validate config
-    match ConfigLoader::load(file) {
+    match Config::load(file) {
         Ok(config) => {
             result.valid = true;
-            result.sites = Some(config.sites.len());
 
-            // Additional validation checks
-            for site in &config.sites {
-                // Check TLS cert files exist if TLS is configured
-                if let Some(tls) = &site.tls {
-                    if !Path::new(&tls.cert_path).exists() {
-                        result.warnings.push(format!(
-                            "Site '{}': TLS cert file not found: {}",
-                            site.hostname, tls.cert_path
-                        ));
-                    }
-                    if !Path::new(&tls.key_path).exists() {
-                        result.warnings.push(format!(
-                            "Site '{}': TLS key file not found: {}",
-                            site.hostname, tls.key_path
-                        ));
-                    }
-                }
+            // Validate server listen addresses
+            if config.server.listen.parse::<SocketAddr>().is_err() {
+                result.errors.push(format!(
+                    "Server listen address is invalid: {}",
+                    config.server.listen
+                ));
+                result.valid = false;
+            }
+            if config.server.admin_listen.parse::<SocketAddr>().is_err() {
+                result.errors.push(format!(
+                    "Admin listen address is invalid: {}",
+                    config.server.admin_listen
+                ));
+                result.valid = false;
+            }
 
-                // Check shadow mirror honeypot URLs are valid
-                if let Some(shadow) = &site.shadow_mirror {
-                    if shadow.enabled && shadow.honeypot_urls.is_empty() {
-                        result.warnings.push(format!(
-                            "Site '{}': Shadow mirroring enabled but no honeypot URLs configured",
-                            site.hostname
-                        ));
-                    }
-                }
-
-                // Check upstreams are reachable (warning only)
-                if site.upstreams.is_empty() {
+            // Validate trusted proxies CIDR format
+            for (idx, proxy) in config.server.trusted_proxies.iter().enumerate() {
+                if proxy.parse::<CidrRange>().is_err() {
                     result.errors.push(format!(
-                        "Site '{}': No upstream backends configured",
-                        site.hostname
+                        "Trusted proxy #{} has invalid CIDR format: {}",
+                        idx + 1, proxy
                     ));
                     result.valid = false;
                 }
             }
 
-            // Check WAF threshold
-            if config.server.waf_threshold == 0 {
-                result.warnings.push(
-                    "Global WAF threshold is 0, which may cause unexpected blocking".to_string()
-                );
+            // Validate WAF rules if path is provided
+            let rules_path = &config.detection.rules_path;
+            if Path::new(rules_path).exists() {
+                match fs::read(rules_path) {
+                    Ok(rules_json) => {
+                        let mut engine = synapse_pingora::waf::Engine::empty();
+                        match engine.load_rules(&rules_json) {
+                            Ok(count) => {
+                                info!("Validated {} WAF rules from {}", count, rules_path);
+                            }
+                            Err(e) => {
+                                result.errors.push(format!(
+                                    "WAF rules validation failed for {}: {}",
+                                    rules_path, e
+                                ));
+                                result.valid = false;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        result.errors.push(format!(
+                            "Failed to read WAF rules file {}: {}",
+                            rules_path, e
+                        ));
+                        result.valid = false;
+                    }
+                }
+            } else if rules_path != "data/rules.json" {
+                // Only warn if non-default path is missing
+                result.warnings.push(format!(
+                    "WAF rules file not found: {}",
+                    rules_path
+                ));
+            }
+
+            // Additional validation checks
+            if config.upstreams.is_empty() {
+                result.errors.push("No upstream backends configured".to_string());
+                result.valid = false;
+            }
+
+            // Check TLS cert files exist if TLS is configured
+            if config.tls.enabled {
+                if !Path::new(&config.tls.cert_path).exists() {
+                    result.warnings.push(format!(
+                        "TLS cert file not found: {}",
+                        config.tls.cert_path
+                    ));
+                }
+                if !Path::new(&config.tls.key_path).exists() {
+                    result.warnings.push(format!(
+                        "TLS key file not found: {}",
+                        config.tls.key_path
+                    ));
+                }
             }
         }
         Err(e) => {
@@ -3777,41 +3813,43 @@ fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) 
     if json_output {
         println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
     } else {
-        // Human-readable output
-        #[derive(serde::Deserialize)]
-        struct ValidationResult {
-            valid: bool,
-            file: String,
-            sites: Option<usize>,
-            errors: Vec<String>,
-            warnings: Vec<String>,
+        // Human-readable output using colors and icons
+        let json = serde_json::to_value(result).unwrap_or_default();
+        let valid = json["valid"].as_bool().unwrap_or(false);
+        let file = json["file"].as_str().unwrap_or("unknown");
+        
+        println!("\nConfiguration Check: {}", file);
+        println!("--------------------------------------------------");
+        
+        if valid {
+            println!("✅ Configuration is VALID");
+        } else {
+            println!("❌ Configuration is INVALID");
         }
-
-        let json = serde_json::to_string(result).unwrap_or_default();
-        if let Ok(r) = serde_json::from_str::<ValidationResult>(&json) {
-            if r.valid {
-                println!("✓ Configuration valid: {}", r.file);
-                if let Some(sites) = r.sites {
-                    println!("  Sites: {}", sites);
-                }
-            } else {
-                println!("✗ Configuration invalid: {}", r.file);
-            }
-
-            if !r.errors.is_empty() {
+        
+        if let Some(sites) = json["sites"].as_u64() {
+            println!("Found {} site(s) configured.", sites);
+        }
+        
+        if let Some(errors) = json["errors"].as_array() {
+            if !errors.is_empty() {
                 println!("\nErrors:");
-                for err in &r.errors {
-                    println!("  ✗ {}", err);
-                }
-            }
-
-            if !r.warnings.is_empty() {
-                println!("\nWarnings:");
-                for warn in &r.warnings {
-                    println!("  ⚠ {}", warn);
+                for error in errors {
+                    println!("  • {}", error.as_str().unwrap_or_default());
                 }
             }
         }
+        
+        if let Some(warnings) = json["warnings"].as_array() {
+            if !warnings.is_empty() {
+                println!("\nWarnings:");
+                for warning in warnings {
+                    println!("  ⚠️  {}", warning.as_str().unwrap_or_default());
+                }
+            }
+        }
+        
+        println!("\nResult: {}\n", if valid { "PASSED" } else { "FAILED" });
     }
 }
 

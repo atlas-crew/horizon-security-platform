@@ -40,6 +40,43 @@ pub struct CidrRange {
 impl CidrRange {
     /// Parses a CIDR string (e.g., "192.168.1.0/24" or "10.0.0.1").
     pub fn parse(cidr: &str) -> Result<Self, AccessError> {
+        use std::str::FromStr;
+        Self::from_str(cidr)
+    }
+
+    /// Checks if an IP address is within this CIDR range.
+    pub fn contains(&self, ip: &IpAddr) -> bool {
+        match (&self.network, ip) {
+            (IpAddr::V4(net), IpAddr::V4(addr)) => {
+                let net_bits = u32::from_be_bytes(net.octets());
+                let addr_bits = u32::from_be_bytes(addr.octets());
+                let mask = if self.prefix_len == 0 {
+                    0
+                } else {
+                    !0u32 << (32 - self.prefix_len)
+                };
+                (addr_bits & mask) == (net_bits & mask)
+            }
+            (IpAddr::V6(net), IpAddr::V6(addr)) => {
+                let net_bits = u128::from_be_bytes(net.octets());
+                let addr_bits = u128::from_be_bytes(addr.octets());
+                let mask = if self.prefix_len == 0 {
+                    0
+                } else {
+                    !0u128 << (128 - self.prefix_len)
+                };
+                (addr_bits & mask) == (net_bits & mask)
+            }
+            // IPv4 and IPv6 don't match
+            _ => false,
+        }
+    }
+}
+
+impl std::str::FromStr for CidrRange {
+    type Err = AccessError;
+
+    fn from_str(cidr: &str) -> Result<Self, Self::Err> {
         let (addr_str, prefix_str) = if let Some(idx) = cidr.find('/') {
             (&cidr[..idx], Some(&cidr[idx + 1..]))
         } else {
@@ -77,34 +114,6 @@ impl CidrRange {
             network,
             prefix_len,
         })
-    }
-
-    /// Checks if an IP address is within this CIDR range.
-    pub fn contains(&self, ip: &IpAddr) -> bool {
-        match (&self.network, ip) {
-            (IpAddr::V4(net), IpAddr::V4(addr)) => {
-                let net_bits = u32::from_be_bytes(net.octets());
-                let addr_bits = u32::from_be_bytes(addr.octets());
-                let mask = if self.prefix_len == 0 {
-                    0
-                } else {
-                    !0u32 << (32 - self.prefix_len)
-                };
-                (addr_bits & mask) == (net_bits & mask)
-            }
-            (IpAddr::V6(net), IpAddr::V6(addr)) => {
-                let net_bits = u128::from_be_bytes(net.octets());
-                let addr_bits = u128::from_be_bytes(addr.octets());
-                let mask = if self.prefix_len == 0 {
-                    0
-                } else {
-                    !0u128 << (128 - self.prefix_len)
-                };
-                (addr_bits & mask) == (net_bits & mask)
-            }
-            // IPv4 and IPv6 don't match
-            _ => false,
-        }
     }
 }
 

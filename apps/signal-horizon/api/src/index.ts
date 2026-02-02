@@ -465,8 +465,9 @@ async function start() {
     maxConnections: config.websocket.maxDashboardConnections,
   });
 
-  // Wire up broadcaster to dashboard gateway
+  // Wire up broadcaster to dashboard gateway and war room service
   broadcaster.setDashboardGateway(dashboardGateway);
+  broadcaster.setWarRoomService(warRoomService);
   warRoomService.setDashboardGateway(dashboardGateway);
 
   // Start protocol handlers for fleet management

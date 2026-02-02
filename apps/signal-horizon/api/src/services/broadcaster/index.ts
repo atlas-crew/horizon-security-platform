@@ -6,6 +6,7 @@
 import type { PrismaClient, Campaign } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { DashboardGateway } from '../../websocket/dashboard-gateway.js';
+import type { WarRoomService } from '../warroom/index.js';
 import type {
   EnrichedSignal,
   BlocklistUpdate,
@@ -29,6 +30,9 @@ export class Broadcaster {
   // In-memory blocklist cache for fast lookup
   private blocklistCache: Map<string, BlocklistUpdate> = new Map();
 
+  // War room service for automatic incident creation
+  private warRoomService: WarRoomService | null = null;
+
   constructor(
     prisma: PrismaClient,
     logger: Logger,
@@ -45,8 +49,12 @@ export class Broadcaster {
     this.dashboardGateway = gateway;
   }
 
+  setWarRoomService(service: WarRoomService): void {
+    this.warRoomService = service;
+  }
+
   /**
-   * Handle campaign detection - broadcast to dashboards and create blocks
+   * Handle campaign detection - broadcast to dashboards, create blocks, and trigger war room automation
    */
   async onCampaignDetected(campaign: Campaign, signals: EnrichedSignal[]): Promise<void> {
     this.logger.info(
@@ -67,6 +75,21 @@ export class Broadcaster {
       },
       timestamp: Date.now(),
     });
+
+    // Trigger war room automation (auto-creates war room for cross-tenant or CRITICAL campaigns)
+    if (this.warRoomService) {
+      try {
+        await this.warRoomService.onCampaignDetected({
+          ...campaign,
+          severity: campaign.severity,
+        });
+      } catch (error) {
+        this.logger.warn(
+          { campaignId: campaign.id, error },
+          'Failed to trigger war room automation (non-critical)'
+        );
+      }
+    }
 
     // Auto-create blocklist entries for high-confidence threats
     if (campaign.confidence >= 0.85) {

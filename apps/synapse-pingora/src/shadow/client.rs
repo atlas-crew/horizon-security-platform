@@ -31,22 +31,25 @@ impl ShadowMirrorClient {
     /// # Arguments
     /// * `hmac_secret` - Optional secret for HMAC-SHA256 payload signing
     /// * `timeout` - Request timeout for honeypot delivery
-    pub fn new(hmac_secret: Option<String>, timeout: Duration) -> Self {
+    ///
+    /// # Errors
+    /// Returns `ShadowMirrorError::ClientCreation` if the HTTP client cannot be built.
+    pub fn new(hmac_secret: Option<String>, timeout: Duration) -> Result<Self, ShadowMirrorError> {
         let http_client = Client::builder()
             .timeout(timeout)
             .pool_max_idle_per_host(10)
             .pool_idle_timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(5))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| ShadowMirrorError::ClientCreation(e.to_string()))?;
 
-        Self {
+        Ok(Self {
             http_client,
             hmac_secret,
             successes: AtomicU64::new(0),
             failures: AtomicU64::new(0),
             bytes_sent: AtomicU64::new(0),
-        }
+        })
     }
 
     /// Sends a payload to one of the honeypot URLs.
@@ -197,9 +200,12 @@ impl ShadowClientStats {
     }
 }
 
-/// Errors that can occur during shadow mirror delivery.
+/// Errors that can occur during shadow mirror operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ShadowMirrorError {
+    #[error("failed to create HTTP client: {0}")]
+    ClientCreation(String),
+
     #[error("no honeypot URLs configured")]
     NoHoneypotUrls,
 
@@ -231,7 +237,8 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = ShadowMirrorClient::new(None, Duration::from_secs(5));
+        let client = ShadowMirrorClient::new(None, Duration::from_secs(5))
+            .expect("client creation should succeed");
         let stats = client.stats();
         assert_eq!(stats.successes, 0);
         assert_eq!(stats.failures, 0);
@@ -242,7 +249,8 @@ mod tests {
         let client = ShadowMirrorClient::new(
             Some("my-secret-key".to_string()),
             Duration::from_secs(5),
-        );
+        )
+        .expect("client creation should succeed");
         assert!(client.hmac_secret.is_some());
     }
 
@@ -251,7 +259,8 @@ mod tests {
         let client = ShadowMirrorClient::new(
             Some("test-secret".to_string()),
             Duration::from_secs(5),
-        );
+        )
+        .expect("client creation should succeed");
 
         let data = b"test payload data";
         let signature = client.compute_hmac("test-secret", data);
@@ -265,7 +274,8 @@ mod tests {
 
     #[test]
     fn test_url_selection_distribution() {
-        let client = ShadowMirrorClient::new(None, Duration::from_secs(5));
+        let client = ShadowMirrorClient::new(None, Duration::from_secs(5))
+            .expect("client creation should succeed");
         let urls = 3;
 
         let mut counts = [0u32; 3];
@@ -285,7 +295,8 @@ mod tests {
 
     #[test]
     fn test_url_selection_consistent() {
-        let client = ShadowMirrorClient::new(None, Duration::from_secs(5));
+        let client = ShadowMirrorClient::new(None, Duration::from_secs(5))
+            .expect("client creation should succeed");
 
         // Same request ID should always select same URL
         let request_id = "consistent-request-id";
@@ -296,7 +307,8 @@ mod tests {
 
     #[test]
     fn test_stats_reset() {
-        let client = ShadowMirrorClient::new(None, Duration::from_secs(5));
+        let client = ShadowMirrorClient::new(None, Duration::from_secs(5))
+            .expect("client creation should succeed");
 
         // Manually increment counters for testing
         client.successes.store(10, Ordering::Relaxed);
@@ -332,7 +344,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_empty_urls() {
-        let client = ShadowMirrorClient::new(None, Duration::from_secs(1));
+        let client = ShadowMirrorClient::new(None, Duration::from_secs(1))
+            .expect("client creation should succeed");
         let payload = create_test_payload();
 
         let result = client.send_to_honeypot(&[], payload, Duration::from_secs(1)).await;

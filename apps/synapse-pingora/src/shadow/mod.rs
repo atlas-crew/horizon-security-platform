@@ -76,7 +76,10 @@ pub struct ShadowMirrorManager {
 
 impl ShadowMirrorManager {
     /// Creates a new shadow mirror manager with default concurrency limit.
-    pub fn new(config: ShadowMirrorConfig, sensor_id: String) -> Self {
+    ///
+    /// # Errors
+    /// Returns `ShadowMirrorError::ClientCreation` if the HTTP client cannot be created.
+    pub fn new(config: ShadowMirrorConfig, sensor_id: String) -> Result<Self, ShadowMirrorError> {
         Self::with_max_concurrent(config, sensor_id, DEFAULT_MAX_CONCURRENT_MIRRORS)
     }
 
@@ -86,16 +89,19 @@ impl ShadowMirrorManager {
     /// * `config` - Shadow mirror configuration
     /// * `sensor_id` - Sensor ID for payload attribution
     /// * `max_concurrent` - Maximum concurrent mirror operations (prevents memory exhaustion)
+    ///
+    /// # Errors
+    /// Returns `ShadowMirrorError::ClientCreation` if the HTTP client cannot be created.
     pub fn with_max_concurrent(
         config: ShadowMirrorConfig,
         sensor_id: String,
         max_concurrent: usize,
-    ) -> Self {
+    ) -> Result<Self, ShadowMirrorError> {
         let rate_limiter = Arc::new(RateLimiter::new(config.per_ip_rate_limit));
         let client = Arc::new(ShadowMirrorClient::new(
             config.hmac_secret.clone(),
             config.timeout(),
-        ));
+        )?);
         let mirror_semaphore = Arc::new(Semaphore::new(max_concurrent));
 
         info!(
@@ -109,7 +115,7 @@ impl ShadowMirrorManager {
             "Shadow mirror manager initialized with bounded queue"
         );
 
-        Self {
+        Ok(Self {
             config,
             rate_limiter,
             client,
@@ -122,7 +128,7 @@ impl ShadowMirrorManager {
             skipped_rate_limit: AtomicU64::new(0),
             dropped_queue_full: AtomicU64::new(0),
             sent: AtomicU64::new(0),
-        }
+        })
     }
 
     /// Determines if a request should be mirrored based on detection result.
@@ -425,10 +431,14 @@ mod tests {
         }
     }
 
+    fn create_test_manager() -> ShadowMirrorManager {
+        ShadowMirrorManager::new(create_test_config(), "sensor-01".to_string())
+            .expect("test manager creation should succeed")
+    }
+
     #[test]
     fn test_should_mirror_in_risk_window() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         // Risk in window should mirror
         assert!(manager.should_mirror(45.0, "192.168.1.1"));
@@ -438,8 +448,7 @@ mod tests {
 
     #[test]
     fn test_should_not_mirror_below_min() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         assert!(!manager.should_mirror(10.0, "192.168.1.1"));
         assert!(!manager.should_mirror(39.9, "192.168.1.2"));
@@ -447,8 +456,7 @@ mod tests {
 
     #[test]
     fn test_should_not_mirror_above_max() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         assert!(!manager.should_mirror(70.0, "192.168.1.1"));
         assert!(!manager.should_mirror(85.0, "192.168.1.2"));
@@ -459,7 +467,8 @@ mod tests {
     fn test_should_not_mirror_when_disabled() {
         let mut config = create_test_config();
         config.enabled = false;
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
+            .expect("manager creation should succeed");
 
         assert!(!manager.should_mirror(50.0, "192.168.1.1"));
     }
@@ -468,7 +477,8 @@ mod tests {
     fn test_rate_limiting() {
         let mut config = create_test_config();
         config.per_ip_rate_limit = 3;
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
+            .expect("manager creation should succeed");
 
         let ip = "10.0.0.1";
         assert!(manager.should_mirror(50.0, ip));
@@ -482,7 +492,8 @@ mod tests {
     fn test_different_ips_independent() {
         let mut config = create_test_config();
         config.per_ip_rate_limit = 2;
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
+            .expect("manager creation should succeed");
 
         assert!(manager.should_mirror(50.0, "ip1"));
         assert!(manager.should_mirror(50.0, "ip1"));
@@ -497,7 +508,8 @@ mod tests {
     fn test_sampling_rate() {
         let mut config = create_test_config();
         config.sampling_rate = 0.0; // 0% sampling - should never mirror
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
+            .expect("manager creation should succeed");
 
         // With 0% sampling, should never mirror
         for i in 0..100 {
@@ -507,8 +519,7 @@ mod tests {
 
     #[test]
     fn test_create_payload() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         let mut headers = HashMap::new();
         headers.insert("User-Agent".to_string(), "test-agent".to_string());
@@ -541,7 +552,8 @@ mod tests {
     fn test_body_truncation() {
         let mut config = create_test_config();
         config.max_body_size = 10;
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
+            .expect("manager creation should succeed");
 
         let payload = manager.create_payload(
             "req-123".to_string(),
@@ -563,8 +575,7 @@ mod tests {
 
     #[test]
     fn test_stats() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         manager.should_mirror(50.0, "ip1");
         manager.should_mirror(50.0, "ip2");
@@ -580,8 +591,7 @@ mod tests {
 
     #[test]
     fn test_reset_stats() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         manager.should_mirror(50.0, "ip1");
         manager.should_mirror(50.0, "ip2");
@@ -595,8 +605,7 @@ mod tests {
 
     #[test]
     fn test_bounded_queue_default_concurrency() {
-        let config = create_test_config();
-        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+        let manager = create_test_manager();
 
         let stats = manager.stats();
         assert_eq!(stats.max_concurrent, DEFAULT_MAX_CONCURRENT_MIRRORS);
@@ -606,7 +615,8 @@ mod tests {
     #[test]
     fn test_bounded_queue_custom_concurrency() {
         let config = create_test_config();
-        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 50);
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 50)
+            .expect("manager creation should succeed");
 
         let stats = manager.stats();
         assert_eq!(stats.max_concurrent, 50);
@@ -617,7 +627,8 @@ mod tests {
     async fn test_bounded_queue_backpressure() {
         let config = create_test_config();
         // Create manager with very small queue to test backpressure
-        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 2);
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 2)
+            .expect("manager creation should succeed");
 
         // Create test payloads
         let payload1 = manager.create_payload(
@@ -678,7 +689,8 @@ mod tests {
     #[test]
     fn test_stats_includes_queue_metrics() {
         let config = create_test_config();
-        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 25);
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 25)
+            .expect("manager creation should succeed");
 
         let stats = manager.stats();
         assert_eq!(stats.max_concurrent, 25);

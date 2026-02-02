@@ -217,13 +217,21 @@ impl SnapshotManager {
     ///
     /// # Arguments
     /// * `fetch_snapshot` - A closure that returns the current WAF state snapshot.
-    pub fn start_background_saver<F>(self: Arc<Self>, fetch_snapshot: F)
+    ///
+    /// # Returns
+    /// `Ok(())` if the background saver started successfully, or an error if:
+    /// - Persistence is disabled (returns Ok with early return)
+    /// - Thread spawning failed
+    ///
+    /// # Errors
+    /// Returns `io::Error` if the background thread cannot be spawned.
+    pub fn start_background_saver<F>(self: Arc<Self>, fetch_snapshot: F) -> io::Result<()>
     where
         F: Fn() -> WafSnapshot + Send + Sync + 'static,
     {
         if !self.config.enabled {
             info!("Persistence disabled, skipping background saver");
-            return;
+            return Ok(());
         }
 
         let config = self.config.clone();
@@ -235,10 +243,16 @@ impl SnapshotManager {
         std::thread::Builder::new()
             .name("persistence-saver".into())
             .spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
+                let rt = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
-                    .expect("Failed to create persistence runtime");
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        error!("Failed to create persistence runtime: {}", e);
+                        return;
+                    }
+                };
 
                 rt.block_on(async move {
                     let mut interval = time::interval(Duration::from_secs(config.save_interval_secs));
@@ -275,13 +289,14 @@ impl SnapshotManager {
                         }
                     }
                 });
-            })
-            .expect("Failed to spawn persistence thread");
+            })?;
 
         info!(
             "Background persistence started (interval: {}s, dir: {:?})",
             log_interval, log_dir
         );
+
+        Ok(())
     }
 
     /// Save a unified snapshot to disk (Synchronous/Blocking).

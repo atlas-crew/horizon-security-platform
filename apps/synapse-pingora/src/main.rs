@@ -3541,7 +3541,13 @@ fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirror
     let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
         .unwrap_or_else(|_| "synapse-default".to_string());
 
-    Some(Arc::new(ShadowMirrorManager::new(config, sensor_id)))
+    match ShadowMirrorManager::new(config, sensor_id) {
+        Ok(manager) => Some(Arc::new(manager)),
+        Err(e) => {
+            error!("Failed to create shadow mirror manager: {}", e);
+            None
+        }
+    }
 }
 
 fn main() {
@@ -4044,7 +4050,7 @@ fn main() {
     let actor_mgr_for_snapshot = Arc::clone(&shared_actor_manager);
     let instance_id = config.telemetry.instance_id.clone().unwrap_or_else(|| "synapse".to_string());
 
-    snapshot_manager.clone().start_background_saver(move || {
+    if let Err(e) = snapshot_manager.clone().start_background_saver(move || {
         WafSnapshot::new(
             instance_id.clone(),
             entity_mgr_for_snapshot.snapshot(),
@@ -4052,8 +4058,11 @@ fn main() {
             actor_mgr_for_snapshot.snapshot(),
             DetectionEngine::get_profiles(), // API endpoint behavioral baselines
         )
-    });
-    info!("WAF state persistence enabled (interval: {}s)", persistence_config.save_interval_secs);
+    }) {
+        error!("Failed to start background persistence: {}", e);
+    } else {
+        info!("WAF state persistence enabled (interval: {}s)", persistence_config.save_interval_secs);
+    }
 
     server.run_forever();
 }

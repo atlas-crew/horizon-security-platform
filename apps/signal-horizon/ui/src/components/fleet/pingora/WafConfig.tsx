@@ -39,11 +39,12 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
           </div>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
-          <input 
-            type="checkbox" 
-            checked={config.enabled} 
+          <input
+            type="checkbox"
+            checked={config.enabled}
             onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
-            className="sr-only peer" 
+            className="sr-only peer"
+            aria-label="Enable WAF Protection"
           />
           <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-green"></div>
         </label>
@@ -54,19 +55,24 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
           {/* Sensitivity */}
           <div className="space-y-2">
             <div className="flex justify-between">
-              <label className="text-sm font-medium text-ink-primary">Sensitivity Threshold</label>
-              <span className="text-sm font-mono text-ink-secondary">{config.threshold.toFixed(2)}</span>
+              <label htmlFor="waf-threshold" className="text-sm font-medium text-ink-primary">Sensitivity Threshold</label>
+              <span id="waf-threshold-value" className="text-sm font-mono text-ink-secondary">{config.threshold.toFixed(2)}</span>
             </div>
             <input
+              id="waf-threshold"
               type="range"
               min="0"
               max="1"
               step="0.05"
               value={config.threshold}
               onChange={(e) => handleThresholdChange(parseFloat(e.target.value))}
+              aria-valuemin={0}
+              aria-valuemax={1}
+              aria-valuenow={config.threshold}
+              aria-valuetext={`${config.threshold.toFixed(2)} - ${config.threshold <= 0.3 ? 'Strict' : config.threshold <= 0.7 ? 'Balanced' : 'Permissive'}`}
               className="w-full h-2 bg-surface-subtle rounded-lg appearance-none cursor-pointer accent-ac-blue"
             />
-            <div className="flex justify-between text-xs text-ink-muted">
+            <div className="flex justify-between text-xs text-ink-muted" aria-hidden="true">
               <span>Strict (0.0)</span>
               <span>Balanced (0.5)</span>
               <span>Permissive (1.0)</span>

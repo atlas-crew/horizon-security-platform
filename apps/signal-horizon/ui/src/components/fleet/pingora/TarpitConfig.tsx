@@ -63,6 +63,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
             checked={config.enabled}
             onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
             className="sr-only peer"
+            aria-label="Enable Tarpit"
           />
           <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-orange"></div>
         </label>
@@ -71,7 +72,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {hasErrors && (
-            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg" role="alert">
               <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
               <span className="text-xs text-status-error">Configuration has validation errors</span>
             </div>
@@ -79,8 +80,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Base Delay (ms)</label>
+              <label htmlFor="tarpit-base-delay" className="text-xs font-medium text-ink-secondary">Base Delay (ms)</label>
               <input
+                id="tarpit-base-delay"
                 type="number"
                 min="100"
                 max="10000"
@@ -89,6 +91,8 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                   ...config,
                   base_delay_ms: parseIntSafe(e.target.value, config.base_delay_ms),
                 })}
+                aria-invalid={!!validationErrors.base_delay_ms}
+                aria-describedby={validationErrors.base_delay_ms ? 'tarpit-base-delay-error' : undefined}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.base_delay_ms
@@ -97,12 +101,13 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.base_delay_ms && (
-                <p className="text-xs text-status-error">{validationErrors.base_delay_ms}</p>
+                <p id="tarpit-base-delay-error" className="text-xs text-status-error" role="alert">{validationErrors.base_delay_ms}</p>
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Max Delay (ms)</label>
+              <label htmlFor="tarpit-max-delay" className="text-xs font-medium text-ink-secondary">Max Delay (ms)</label>
               <input
+                id="tarpit-max-delay"
                 type="number"
                 min="1000"
                 max="120000"
@@ -111,6 +116,8 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                   ...config,
                   max_delay_ms: parseIntSafe(e.target.value, config.max_delay_ms),
                 })}
+                aria-invalid={!!validationErrors.max_delay_ms}
+                aria-describedby={validationErrors.max_delay_ms ? 'tarpit-max-delay-error' : undefined}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_delay_ms
@@ -119,12 +126,13 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.max_delay_ms && (
-                <p className="text-xs text-status-error">{validationErrors.max_delay_ms}</p>
+                <p id="tarpit-max-delay-error" className="text-xs text-status-error" role="alert">{validationErrors.max_delay_ms}</p>
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Progressive Multiplier</label>
+              <label htmlFor="tarpit-multiplier" className="text-xs font-medium text-ink-secondary">Progressive Multiplier</label>
               <input
+                id="tarpit-multiplier"
                 type="number"
                 min="1.0"
                 max="3.0"
@@ -134,6 +142,8 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                   ...config,
                   progressive_multiplier: parseFloatSafe(e.target.value, config.progressive_multiplier),
                 })}
+                aria-invalid={!!validationErrors.progressive_multiplier}
+                aria-describedby={validationErrors.progressive_multiplier ? 'tarpit-multiplier-error' : undefined}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.progressive_multiplier
@@ -142,12 +152,13 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.progressive_multiplier && (
-                <p className="text-xs text-status-error">{validationErrors.progressive_multiplier}</p>
+                <p id="tarpit-multiplier-error" className="text-xs text-status-error" role="alert">{validationErrors.progressive_multiplier}</p>
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Max Concurrent</label>
+              <label htmlFor="tarpit-max-concurrent" className="text-xs font-medium text-ink-secondary">Max Concurrent</label>
               <input
+                id="tarpit-max-concurrent"
                 type="number"
                 min="100"
                 max="10000"
@@ -160,8 +171,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
               />
             </div>
             <div className="space-y-1 col-span-2">
-              <label className="text-xs font-medium text-ink-secondary">Decay Threshold (minutes)</label>
+              <label htmlFor="tarpit-decay-threshold" className="text-xs font-medium text-ink-secondary">Decay Threshold (minutes)</label>
               <input
+                id="tarpit-decay-threshold"
                 type="number"
                 min="1"
                 max="60"

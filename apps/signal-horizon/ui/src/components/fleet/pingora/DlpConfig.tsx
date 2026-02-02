@@ -60,6 +60,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
             checked={config.enabled}
             onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
             className="sr-only peer"
+            aria-label="Enable DLP Scanner"
           />
           <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-magenta"></div>
         </label>
@@ -102,8 +103,9 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
           {/* Numeric inputs */}
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Max Scan Size (MB)</label>
+              <label htmlFor="dlp-max-scan-size" className="text-xs font-medium text-ink-secondary">Max Scan Size (MB)</label>
               <input
+                id="dlp-max-scan-size"
                 type="number"
                 min="1"
                 max="50"
@@ -112,6 +114,8 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                   ...config,
                   max_scan_size: parseIntSafe(e.target.value, Math.round(config.max_scan_size / (1024 * 1024))) * 1024 * 1024,
                 })}
+                aria-invalid={!!validationErrors.max_scan_size}
+                aria-describedby={validationErrors.max_scan_size ? 'dlp-max-scan-size-error' : undefined}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_scan_size
@@ -120,12 +124,13 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 )}
               />
               {validationErrors.max_scan_size && (
-                <p className="text-xs text-status-error">{validationErrors.max_scan_size}</p>
+                <p id="dlp-max-scan-size-error" className="text-xs text-status-error" role="alert">{validationErrors.max_scan_size}</p>
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Inspect Bytes (KB)</label>
+              <label htmlFor="dlp-inspect-bytes" className="text-xs font-medium text-ink-secondary">Inspect Bytes (KB)</label>
               <input
+                id="dlp-inspect-bytes"
                 type="number"
                 min="1"
                 max="64"
@@ -134,6 +139,8 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                   ...config,
                   max_body_inspection_bytes: parseIntSafe(e.target.value, Math.round(config.max_body_inspection_bytes / 1024)) * 1024,
                 })}
+                aria-invalid={!!validationErrors.max_body_inspection_bytes}
+                aria-describedby={validationErrors.max_body_inspection_bytes ? 'dlp-inspect-bytes-error' : undefined}
                 className={clsx(
                   "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
                   validationErrors.max_body_inspection_bytes
@@ -142,12 +149,13 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 )}
               />
               {validationErrors.max_body_inspection_bytes && (
-                <p className="text-xs text-status-error">{validationErrors.max_body_inspection_bytes}</p>
+                <p id="dlp-inspect-bytes-error" className="text-xs text-status-error" role="alert">{validationErrors.max_body_inspection_bytes}</p>
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Max Matches</label>
+              <label htmlFor="dlp-max-matches" className="text-xs font-medium text-ink-secondary">Max Matches</label>
               <input
+                id="dlp-max-matches"
                 type="number"
                 min="10"
                 max="1000"
@@ -163,8 +171,9 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
 
           {/* Custom keywords */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-ink-secondary">Custom Keywords (comma-separated)</label>
+            <label htmlFor="dlp-custom-keywords" className="text-xs font-medium text-ink-secondary">Custom Keywords (comma-separated)</label>
             <input
+              id="dlp-custom-keywords"
               type="text"
               value={config.custom_keywords.join(', ')}
               onChange={(e) => handleKeywordsChange(e.target.value)}

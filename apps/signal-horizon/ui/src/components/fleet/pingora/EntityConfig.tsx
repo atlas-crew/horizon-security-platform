@@ -72,6 +72,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
               checked={entityConfig.enabled}
               onChange={(e) => onEntityChange({ ...entityConfig, enabled: e.target.checked })}
               className="sr-only peer"
+              aria-label="Enable Entity Store"
             />
             <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
           </label>
@@ -80,15 +81,16 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
         {entityConfig.enabled && (
           <div className="space-y-4 border-t border-border-subtle pt-6">
             {hasErrors && (
-              <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+              <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg" role="alert">
                 <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
                 <span className="text-xs text-status-error">Configuration has validation errors</span>
               </div>
             )}
             <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary">Max Entities</label>
+              <label htmlFor="entity-max-entities" className="text-xs font-medium text-ink-secondary">Max Entities</label>
               <input
+                id="entity-max-entities"
                 type="number"
                 min="1000"
                 max="1000000"
@@ -102,11 +104,12 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-ink-secondary flex items-center gap-1">
-                <TrendingDown className="w-3 h-3" />
+              <label htmlFor="entity-risk-decay" className="text-xs font-medium text-ink-secondary flex items-center gap-1">
+                <TrendingDown className="w-3 h-3" aria-hidden="true" />
                 Risk Decay/min
               </label>
               <input
+                id="entity-risk-decay"
                 type="number"
                 min="1"
                 max="50"

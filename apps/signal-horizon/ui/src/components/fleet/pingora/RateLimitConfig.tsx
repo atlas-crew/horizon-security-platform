@@ -25,11 +25,12 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
           </div>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
-          <input 
-            type="checkbox" 
-            checked={config.enabled} 
+          <input
+            type="checkbox"
+            checked={config.enabled}
             onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
-            className="sr-only peer" 
+            className="sr-only peer"
+            aria-label="Enable Rate Limiting"
           />
           <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
         </label>
@@ -38,8 +39,9 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
       {config.enabled && (
         <div className="grid grid-cols-2 gap-4 border-t border-border-subtle pt-6">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-ink-secondary">Requests / Sec</label>
+            <label htmlFor="rate-limit-rps" className="text-xs font-medium text-ink-secondary">Requests / Sec</label>
             <input
+              id="rate-limit-rps"
               type="number"
               min="1"
               value={config.requests_per_second}
@@ -48,8 +50,9 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-ink-secondary">Burst Capacity</label>
+            <label htmlFor="rate-limit-burst" className="text-xs font-medium text-ink-secondary">Burst Capacity</label>
             <input
+              id="rate-limit-burst"
               type="number"
               min="1"
               value={config.burst}

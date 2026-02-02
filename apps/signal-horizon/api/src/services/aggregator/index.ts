@@ -6,7 +6,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
-import type { ImpossibleTravelService } from '../impossible-travel.js';
+import type { ImpossibleTravelService, LoginEvent } from '../impossible-travel.js';
 import type { APIIntelligenceService } from '../api-intelligence/index.js';
 import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
@@ -288,22 +288,12 @@ export class Aggregator {
       void this.writeToClickHouse(signal, anonFingerprint, stored.createdAt);
     }
 
-    // 3. Optional: Trigger impossible travel check for authentication-related signals
-    if (this.impossibleTravel && signal.signalType === 'CREDENTIAL_STUFFING') {
-      const { metadata } = signal;
-      void this.impossibleTravel.processLogin({
-        userId: metadata.userId ?? 'unknown',
-        tenantId: signal.tenantId,
-        timestamp: stored.createdAt,
-        ip: signal.sourceIp || '0.0.0.0',
-        location: {
-          latitude: metadata.latitude,
-          longitude: metadata.longitude,
-          city: metadata.city,
-          countryCode: metadata.countryCode || 'XX',
-        },
-        fingerprint: signal.fingerprint,
-      });
+    // 3. Optional: Trigger impossible travel check for any signal with geolocation metadata
+    if (this.impossibleTravel) {
+      const geoEvent = this.extractGeoEvent(signal, stored.createdAt);
+      if (geoEvent) {
+        void this.impossibleTravel.processLogin(geoEvent);
+      }
     }
 
     // 4. Persist API Discovery signals to Endpoint model
@@ -371,6 +361,41 @@ export class Aggregator {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Extract geolocation event from any signal with lat/long metadata.
+   * Used for impossible travel detection across all signal types.
+   */
+  private extractGeoEvent(signal: IncomingSignal, timestamp: Date): LoginEvent | null {
+    const metadata = signal.metadata as Record<string, unknown> | undefined;
+    if (!metadata) return null;
+
+    // Check for valid geolocation data
+    const latitude = metadata.latitude;
+    const longitude = metadata.longitude;
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return null;
+    }
+
+    // Extract userId - prefer explicit userId, fall back to fingerprint or sourceIp
+    const userId = String(
+      metadata.userId ?? signal.fingerprint ?? signal.sourceIp ?? 'unknown'
+    );
+
+    return {
+      userId,
+      tenantId: signal.tenantId,
+      timestamp,
+      ip: signal.sourceIp || '0.0.0.0',
+      location: {
+        latitude,
+        longitude,
+        city: typeof metadata.city === 'string' ? metadata.city : undefined,
+        countryCode: typeof metadata.countryCode === 'string' ? metadata.countryCode : 'XX',
+      },
+      fingerprint: signal.fingerprint,
+    };
   }
 
   /**

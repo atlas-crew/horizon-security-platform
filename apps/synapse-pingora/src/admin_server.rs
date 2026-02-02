@@ -3175,25 +3175,31 @@ async fn config_import_handler(
     body: String,
 ) -> impl IntoResponse {
     // Try to parse as YAML first, then JSON
+    // SECURITY: Log internal parse errors but return sanitized message to client
     let config: serde_json::Value = match serde_yaml::from_str(&body) {
         Ok(v) => v,
-        Err(_) => match serde_json::from_str(&body) {
+        Err(yaml_err) => match serde_json::from_str(&body) {
             Ok(v) => v,
-            Err(e) => {
-                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-                    "success": false,
-                    "error": format!("Invalid configuration format: {}", e)
-                })));
+            Err(json_err) => {
+                // Log detailed errors for debugging but don't expose to client
+                tracing::warn!(
+                    "Config import parse failed - YAML: {}, JSON: {}",
+                    yaml_err, json_err
+                );
+                return validation_error(
+                    "Invalid configuration format. Expected valid YAML or JSON.",
+                    Some(&json_err),
+                );
             }
         }
     };
 
     // Validate the configuration has expected structure
     if config.get("sites").is_none() && config.get("server").is_none() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "success": false,
-            "error": "Configuration must contain 'sites' or 'server' section"
-        })));
+        return validation_error(
+            "Configuration must contain 'sites' or 'server' section",
+            None,
+        );
     }
 
     // For now, just validate - actual import would require config manager
@@ -5035,6 +5041,73 @@ mod tests {
         assert!(
             headers.get("permissions-policy").is_some(),
             "Permissions-Policy header missing"
+        );
+    }
+
+    #[test]
+    fn test_sanitized_error_does_not_leak_internal_details() {
+        // Simulate an internal error with sensitive details
+        let internal_err = std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "file '/etc/secret/key.pem' not found at line 42",
+        );
+
+        let (status, json) = sanitized_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error_codes::INTERNAL_ERROR,
+            "Configuration could not be loaded",
+            Some(&internal_err),
+        );
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        // The response should NOT contain internal details
+        let response_str = json.0.to_string();
+        assert!(
+            !response_str.contains("/etc/secret"),
+            "Response should not leak file paths"
+        );
+        assert!(
+            !response_str.contains("key.pem"),
+            "Response should not leak file names"
+        );
+        assert!(
+            !response_str.contains("line 42"),
+            "Response should not leak line numbers"
+        );
+
+        // But should contain the sanitized public message
+        assert!(
+            response_str.contains("Configuration could not be loaded"),
+            "Response should contain public message"
+        );
+        assert!(
+            response_str.contains("INTERNAL_ERROR"),
+            "Response should contain error code"
+        );
+    }
+
+    #[test]
+    fn test_validation_error_format() {
+        let (status, json) = validation_error(
+            "Invalid input provided",
+            Some(&"detailed parse error: unexpected token at position 42"),
+        );
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let response_str = json.0.to_string();
+        assert!(
+            !response_str.contains("position 42"),
+            "Should not leak parse error details"
+        );
+        assert!(
+            response_str.contains("Invalid input provided"),
+            "Should contain public message"
+        );
+        assert!(
+            response_str.contains("VALIDATION_ERROR"),
+            "Should contain error code"
         );
     }
 }

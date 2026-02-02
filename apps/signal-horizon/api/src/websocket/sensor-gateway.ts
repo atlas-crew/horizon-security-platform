@@ -42,6 +42,8 @@ interface SensorConnection {
   signalsReceived: number;
   /** Rate limiting: timestamps of recent messages */
   messageTimestamps: number[];
+  /** API key ID for periodic revalidation (WS2-002) */
+  apiKeyId: string | null;
 }
 
 interface SensorGatewayConfig {
@@ -53,6 +55,9 @@ interface SensorGatewayConfig {
   /** Rate limit window in milliseconds (default: 1000ms) */
   rateLimitWindowMs?: number;
 }
+
+/** Interval for token revalidation (WS2-002) - 5 minutes */
+const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Simple sliding window rate limiter
@@ -98,6 +103,8 @@ export class SensorGateway {
   private wss: WebSocketServer | null = null;
   private connections: Map<string, SensorConnection> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  /** Interval for checking token validity (WS2-002) */
+  private revalidateInterval: NodeJS.Timeout | null = null;
   private prisma: PrismaClient;
   private logger: Logger;
   private aggregator: Aggregator;
@@ -154,6 +161,7 @@ export class SensorGateway {
     });
 
     this.startHeartbeat();
+    this.startTokenRevalidation(); // WS2-002: Periodic token validation
     this.logger.info({ path: this.config.path }, 'Sensor gateway started');
   }
 
@@ -188,6 +196,11 @@ export class SensorGateway {
       this.heartbeatInterval = null;
     }
 
+    if (this.revalidateInterval) {
+      clearInterval(this.revalidateInterval);
+      this.revalidateInterval = null;
+    }
+
     for (const conn of this.connections.values()) {
       conn.ws.close(1000, 'Server shutting down');
     }
@@ -217,6 +230,7 @@ export class SensorGateway {
       lastHeartbeat: Date.now(),
       signalsReceived: 0,
       messageTimestamps: [], // For rate limiting
+      apiKeyId: null, // Set after auth for revalidation (WS2-002)
     };
 
     // Temporarily store pending connection
@@ -404,6 +418,7 @@ export class SensorGateway {
       // Update connection with auth info
       conn.sensorId = sensor.id;
       conn.tenantId = apiKeyRecord.tenantId;
+      conn.apiKeyId = apiKeyRecord.id; // Store for revalidation (WS2-002)
 
       // Register connection with command sender for outbound commands
       if (this.commandSender) {
@@ -617,6 +632,63 @@ export class SensorGateway {
         }
       }
     }, this.config.heartbeatIntervalMs);
+  }
+
+  /**
+   * Periodic token revalidation (WS2-002)
+   * Checks if API keys have been revoked or expired since authentication.
+   * Disconnects sensors with invalid tokens within 5 minutes.
+   */
+  private startTokenRevalidation(): void {
+    this.revalidateInterval = setInterval(async () => {
+      const authenticatedConns = Array.from(this.connections.entries())
+        .filter(([, conn]) => conn.sensorId && conn.apiKeyId);
+
+      if (authenticatedConns.length === 0) return;
+
+      // Batch fetch API key status for all authenticated connections
+      const apiKeyIds = authenticatedConns.map(([, conn]) => conn.apiKeyId!);
+
+      try {
+        const validKeys = await this.prisma.apiKey.findMany({
+          where: {
+            id: { in: apiKeyIds },
+            isRevoked: false,
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } },
+            ],
+          },
+          select: { id: true },
+        });
+
+        const validKeyIds = new Set(validKeys.map((k) => k.id));
+
+        // Disconnect connections with invalid tokens
+        for (const [id, conn] of authenticatedConns) {
+          if (!conn.apiKeyId || !validKeyIds.has(conn.apiKeyId)) {
+            this.logger.warn(
+              { connectionId: id, sensorId: conn.sensorId, apiKeyId: conn.apiKeyId },
+              'Disconnecting sensor with revoked/expired token'
+            );
+            this.send(conn, {
+              type: 'auth-revoked',
+              error: 'API key has been revoked or expired',
+            });
+            if (conn.sensorId) {
+              this.updateSensorStatus(conn.sensorId, 'DISCONNECTED');
+              if (this.commandSender) {
+                this.commandSender.unregisterConnection(conn.sensorId);
+              }
+            }
+            conn.ws.close(4001, 'Token revoked');
+            this.connections.delete(id);
+          }
+        }
+      } catch (error) {
+        this.logger.error({ error }, 'Sensor token revalidation failed');
+      }
+    }, TOKEN_REVALIDATE_INTERVAL_MS);
   }
 
   private send(conn: SensorConnection, message: Record<string, unknown>): void {

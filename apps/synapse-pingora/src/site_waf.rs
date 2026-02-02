@@ -217,10 +217,28 @@ impl SiteWafConfig {
             .as_deref()
             .unwrap_or(DEFAULT_BLOCK_PAGE);
 
+        let safe_request_id = escape_html(request_id);
+        let safe_reason = escape_html(reason);
+
         template
-            .replace("{{REQUEST_ID}}", request_id)
-            .replace("{{REASON}}", reason)
+            .replace("{{REQUEST_ID}}", &safe_request_id)
+            .replace("{{REASON}}", &safe_reason)
     }
+}
+
+fn escape_html(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 /// Manager for multiple site WAF configurations.
@@ -478,8 +496,17 @@ mod tests {
         let mut config = SiteWafConfig::default();
         config.custom_block_page = Some("Custom: {{REQUEST_ID}} - {{REASON}}".to_string());
 
-        let page = config.render_block_page("xyz789", "XSS");
-        assert_eq!(page, "Custom: xyz789 - XSS");
+        let page = config.render_block_page("xyz789", "<script>alert(1)</script>");
+        assert_eq!(page, "Custom: xyz789 - &lt;script&gt;alert(1)&lt;/script&gt;");
+    }
+
+    #[test]
+    fn test_render_block_page_escapes_html() {
+        let config = SiteWafConfig::default();
+        let page = config.render_block_page("req-1", "<img src=x onerror=alert(1)>");
+
+        assert!(!page.contains("<img"));
+        assert!(page.contains("&lt;img src=x onerror=alert(1)&gt;"));
     }
 
     #[test]

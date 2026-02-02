@@ -174,9 +174,12 @@ export function ConfigManagerPage() {
         ) : (
           <div className="divide-y divide-border-subtle">
             {templates.map((template) => (
-              <div
+              <button
                 key={template.id}
-                className={`p-6 hover:bg-surface-subtle cursor-pointer ${
+                type="button"
+                aria-pressed={selectedTemplate === template.id}
+                aria-label={`Select template: ${template.name}`}
+                className={`w-full p-6 text-left hover:bg-surface-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-inset ${
                   selectedTemplate === template.id ? 'bg-ac-blue/10' : ''
                 }`}
                 onClick={() => setSelectedTemplate(template.id)}
@@ -206,6 +209,7 @@ export function ConfigManagerPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         pushMutation.mutate({ templateId: template.id, sensorIds: [] });
@@ -215,12 +219,15 @@ export function ConfigManagerPage() {
                     >
                       {pushMutation.isPending ? 'Pushing...' : 'Push to All'}
                     </button>
-                    <button className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
+                    >
                       Edit
                     </button>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -228,9 +235,14 @@ export function ConfigManagerPage() {
 
       {/* Create Modal Placeholder */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-template-title"
+        >
           <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
-            <h2 className="text-xl font-light text-ink-primary mb-4">Create Configuration Template</h2>
+            <h2 id="create-template-title" className="text-xl font-light text-ink-primary mb-4">Create Configuration Template</h2>
             
             <div className="grid grid-cols-3 gap-6 flex-1 overflow-hidden">
               {/* Left Column: Metadata */}

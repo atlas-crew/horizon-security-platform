@@ -349,6 +349,30 @@ impl SiteWafManager {
     pub fn default_config(&self) -> &SiteWafConfig {
         &self.default_config
     }
+
+    /// Removes a site configuration.
+    pub fn remove_site(&mut self, hostname: &str) -> Option<SiteWafConfig> {
+        let normalized = hostname.to_lowercase();
+        self.configs.remove(&normalized)
+    }
+
+    /// Retains only sites matching the predicate.
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&str, &SiteWafConfig) -> bool,
+    {
+        self.configs.retain(|k, v| f(k.as_str(), v));
+    }
+
+    /// Returns all site hostnames.
+    pub fn hostnames(&self) -> Vec<String> {
+        self.configs.keys().cloned().collect()
+    }
+
+    /// Clears all site configurations, keeping only the default.
+    pub fn clear(&mut self) {
+        self.configs.clear();
+    }
 }
 
 #[cfg(test)]

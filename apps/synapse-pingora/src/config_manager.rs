@@ -633,20 +633,36 @@ impl ConfigManager {
             let mut sites = self.sites.write();
             *sites = new_config.sites.iter().map(|s| crate::vhost::SiteConfig::from(s.clone())).collect();
 
-            // 3. Update SiteWafManager
-            // We need to clear existing sites and re-add from new config
-            // Since SiteWafManager doesn't expose clear(), we iterate and overwrite
-            // Ideally SiteWafManager should have a reload/reset method.
-            // For now, we just ensure all new sites are added/updated.
-            // Old sites not in new config will remain in memory but unused by VHost matcher.
+            // 3. Update SiteWafManager with full state replacement
+            // Build set of new hostnames for efficient lookup
+            let new_hostnames: std::collections::HashSet<String> = new_config
+                .sites
+                .iter()
+                .map(|s| s.hostname.to_lowercase())
+                .collect();
+
             let mut waf = self.waf.write();
+
+            // Remove sites that are no longer in the configuration
+            let old_hostnames = waf.hostnames();
+            for old_host in old_hostnames {
+                if !new_hostnames.contains(&old_host.to_lowercase()) {
+                    waf.remove_site(&old_host);
+                    info!(
+                        hostname = %old_host,
+                        "Removed site WAF configuration (no longer in config)"
+                    );
+                }
+            }
+
+            // Add/update sites from new config
             for site in &new_config.sites {
                 if let Some(ref waf_yaml) = site.waf {
                     if let Some(threshold) = waf_yaml.threshold {
                         let waf_config = crate::site_waf::SiteWafConfig {
                             enabled: waf_yaml.enabled,
                             threshold,
-                            rule_overrides: HashMap::new(), // Lost overrides unless we preserve them?
+                            rule_overrides: HashMap::new(),
                             custom_block_page: None,
                             default_action: crate::site_waf::WafAction::Block,
                         };
@@ -658,7 +674,7 @@ impl ConfigManager {
             // 4. Update RateLimitManager
             // Similar limitation: additive updates only
             // TODO: Refactor managers to support full state replacement
-            let mut rate_limiter = self.rate_limiter.write();
+            let _rate_limiter = self.rate_limiter.write();
             // Assuming config has rate limit settings? ConfigFile doesn't explicitly store RL per site
             // except via the API-driven updates. This is a mismatch in the current architecture.
             // The ConfigFile struct tracks `sites`, and `SiteConfig` doesn't strictly have RL fields
@@ -668,8 +684,22 @@ impl ConfigManager {
             // This means `update_full_config` mainly updates sites/upstreams/tls/waf-threshold.
             // It might lose RL/AccessList state if not persisted in ConfigFile.
             
-            // 5. Update AccessListManager
+            // 5. Update AccessListManager with full state replacement
             let mut access_lists = self.access_lists.write();
+
+            // Remove sites that are no longer in the configuration
+            let old_access_sites = access_lists.list_sites();
+            for old_host in old_access_sites {
+                if !new_hostnames.contains(&old_host.to_lowercase()) {
+                    access_lists.remove_site(&old_host);
+                    info!(
+                        hostname = %old_host,
+                        "Removed site access list (no longer in config)"
+                    );
+                }
+            }
+
+            // Add/update sites from new config
             for site in &new_config.sites {
                 if let Some(ac) = &site.access_control {
                     let mut list = crate::access::AccessList::allow_all();
@@ -749,9 +779,7 @@ impl ConfigManager {
     pub fn update_waf_rules(&self, rules_json: &[u8]) -> Result<usize, ConfigManagerError> {
         // Parse the rules JSON to validate format
         let rules: Vec<serde_json::Value> = serde_json::from_slice(rules_json)
-            .map_err(|e| ConfigManagerError::ValidationError(
-                crate::validation::ValidationError::InvalidFormat(format!("Invalid rules JSON: {}", e))
-            ))?;
+            .map_err(|e| ConfigManagerError::Persistence(format!("Invalid rules JSON: {}", e)))?;
 
         let rule_count = rules.len();
 
@@ -769,7 +797,7 @@ impl ConfigManager {
         // Update all site WAF configurations with the new rule count info
         // The actual rules are applied via the SiteWafManager
         {
-            let mut waf = self.waf.write();
+            let waf = self.waf.write();
 
             // Log each rule being processed (in debug mode)
             for (i, rule) in rules.iter().enumerate() {

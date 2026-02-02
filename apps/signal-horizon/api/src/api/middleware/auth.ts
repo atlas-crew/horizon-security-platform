@@ -1,11 +1,19 @@
 /**
  * API Authentication Middleware
  * Validates API keys and extracts tenant context
+ *
+ * Security: Includes rate limiting for failed auth attempts (ADMIN-01)
  */
 
 import type { Request, Response, NextFunction } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import {
+  checkAuthLockout,
+  recordFailedAuth,
+  clearFailedAuth,
+  getClientIpForAuth,
+} from '../../middleware/rate-limiter.js';
 
 export interface AuthContext {
   tenantId: string;
@@ -33,9 +41,23 @@ export function createAuthMiddleware(prisma: PrismaClient) {
     res: Response,
     next: NextFunction
   ): Promise<void> {
+    const clientIp = getClientIpForAuth(req);
+
+    // ADMIN-01: Check for auth lockout before processing
+    const lockoutCheck = checkAuthLockout(clientIp);
+    if (lockoutCheck.locked) {
+      res.setHeader('Retry-After', lockoutCheck.retryAfterSeconds.toString());
+      res.status(429).json({
+        error: 'Too many authentication attempts',
+        retryAfter: lockoutCheck.retryAfterSeconds,
+      });
+      return;
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
+      recordFailedAuth(clientIp);
       res.status(401).json({ error: 'Authorization header required' });
       return;
     }
@@ -43,6 +65,7 @@ export function createAuthMiddleware(prisma: PrismaClient) {
     const [scheme, token] = authHeader.split(' ');
 
     if (scheme !== 'Bearer' || !token) {
+      recordFailedAuth(clientIp);
       res.status(401).json({ error: 'Invalid authorization format. Use: Bearer <api-key>' });
       return;
     }
@@ -57,19 +80,25 @@ export function createAuthMiddleware(prisma: PrismaClient) {
       });
 
       if (!apiKeyRecord) {
+        recordFailedAuth(clientIp);
         res.status(401).json({ error: 'Invalid API key' });
         return;
       }
 
       if (apiKeyRecord.isRevoked) {
+        recordFailedAuth(clientIp);
         res.status(401).json({ error: 'API key has been revoked' });
         return;
       }
 
       if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
+        recordFailedAuth(clientIp);
         res.status(401).json({ error: 'API key has expired' });
         return;
       }
+
+      // Successful authentication - clear any failed attempt tracking
+      clearFailedAuth(clientIp);
 
       // Update last used timestamp (fire and forget)
       prisma.apiKey.update({

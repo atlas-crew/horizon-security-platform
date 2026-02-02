@@ -8,6 +8,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { sendProblem } from '../../lib/problem-details.js';
 import {
   checkAuthLockout,
   recordFailedAuth,
@@ -47,9 +48,10 @@ export function createAuthMiddleware(prisma: PrismaClient) {
     const lockoutCheck = checkAuthLockout(clientIp);
     if (lockoutCheck.locked) {
       res.setHeader('Retry-After', lockoutCheck.retryAfterSeconds.toString());
-      res.status(429).json({
-        error: 'Too many authentication attempts',
-        retryAfter: lockoutCheck.retryAfterSeconds,
+      sendProblem(res, 429, 'Too many authentication attempts', {
+        code: 'AUTH_RATE_LIMITED',
+        instance: req.originalUrl,
+        retryAfterSeconds: lockoutCheck.retryAfterSeconds,
       });
       return;
     }
@@ -58,7 +60,10 @@ export function createAuthMiddleware(prisma: PrismaClient) {
 
     if (!authHeader) {
       recordFailedAuth(clientIp);
-      res.status(401).json({ error: 'Authorization header required' });
+      sendProblem(res, 401, 'Authorization header required', {
+        code: 'AUTH_REQUIRED',
+        instance: req.originalUrl,
+      });
       return;
     }
 
@@ -66,7 +71,10 @@ export function createAuthMiddleware(prisma: PrismaClient) {
 
     if (scheme !== 'Bearer' || !token) {
       recordFailedAuth(clientIp);
-      res.status(401).json({ error: 'Invalid authorization format. Use: Bearer <api-key>' });
+      sendProblem(res, 401, 'Invalid authorization format. Use: Bearer <api-key>', {
+        code: 'INVALID_AUTH_FORMAT',
+        instance: req.originalUrl,
+      });
       return;
     }
 
@@ -81,19 +89,28 @@ export function createAuthMiddleware(prisma: PrismaClient) {
 
       if (!apiKeyRecord) {
         recordFailedAuth(clientIp);
-        res.status(401).json({ error: 'Invalid API key' });
+        sendProblem(res, 401, 'Invalid API key', {
+          code: 'INVALID_API_KEY',
+          instance: req.originalUrl,
+        });
         return;
       }
 
       if (apiKeyRecord.isRevoked) {
         recordFailedAuth(clientIp);
-        res.status(401).json({ error: 'API key has been revoked' });
+        sendProblem(res, 401, 'API key has been revoked', {
+          code: 'API_KEY_REVOKED',
+          instance: req.originalUrl,
+        });
         return;
       }
 
       if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
         recordFailedAuth(clientIp);
-        res.status(401).json({ error: 'API key has expired' });
+        sendProblem(res, 401, 'API key has expired', {
+          code: 'API_KEY_EXPIRED',
+          instance: req.originalUrl,
+        });
         return;
       }
 
@@ -119,7 +136,10 @@ export function createAuthMiddleware(prisma: PrismaClient) {
       next();
     } catch (error) {
       console.error('Auth middleware error:', error);
-      res.status(500).json({ error: 'Authentication error' });
+      sendProblem(res, 500, 'Authentication error', {
+        code: 'AUTH_ERROR',
+        instance: req.originalUrl,
+      });
     }
   };
 }
@@ -134,17 +154,23 @@ export function requireScope(...requiredScopes: string[]) {
     next: NextFunction
   ): void {
     if (!req.auth) {
-      res.status(401).json({ error: 'Not authenticated' });
+      sendProblem(res, 401, 'Not authenticated', {
+        code: 'AUTH_REQUIRED',
+        instance: req.originalUrl,
+      });
       return;
     }
 
     const hasScope = requiredScopes.some((scope) => req.auth!.scopes.includes(scope));
 
     if (!hasScope) {
-      res.status(403).json({
-        error: 'Insufficient permissions',
-        required: requiredScopes,
-        granted: req.auth.scopes,
+      sendProblem(res, 403, 'Insufficient permissions', {
+        code: 'INSUFFICIENT_SCOPE',
+        instance: req.originalUrl,
+        details: {
+          required: requiredScopes,
+          granted: req.auth.scopes,
+        },
       });
       return;
     }
@@ -209,7 +235,10 @@ export function requireRole(minRole: Role) {
     next: NextFunction
   ): void {
     if (!req.auth) {
-      res.status(401).json({ error: 'Not authenticated' });
+      sendProblem(res, 401, 'Not authenticated', {
+        code: 'AUTH_REQUIRED',
+        instance: req.originalUrl,
+      });
       return;
     }
 
@@ -218,11 +247,13 @@ export function requireRole(minRole: Role) {
     const requiredLevel = ROLE_HIERARCHY[minRole];
 
     if (userLevel < requiredLevel) {
-      res.status(403).json({
-        error: `Requires ${minRole} role`,
+      sendProblem(res, 403, `Requires ${minRole} role`, {
         code: 'INSUFFICIENT_ROLE',
-        currentRole: userRole,
-        requiredRole: minRole,
+        instance: req.originalUrl,
+        details: {
+          currentRole: userRole,
+          requiredRole: minRole,
+        },
       });
       return;
     }

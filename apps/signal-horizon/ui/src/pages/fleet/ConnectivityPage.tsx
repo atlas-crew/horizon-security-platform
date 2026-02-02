@@ -125,7 +125,7 @@ export function ConnectivityPage(): React.ReactElement {
   const { data: sensorConnectivity = [] } = useQuery<SensorConnectivity[]>({
     queryKey: ['sensor-connectivity'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/connectivity`);
+      const response = await fetch(`${API_BASE}/management/connectivity`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch sensor connectivity');
       const data = await response.json();
       // Transform sensor data to connectivity format
@@ -153,7 +153,7 @@ export function ConnectivityPage(): React.ReactElement {
     mutationFn: async ({ testId, signal }: { testId: string; signal: AbortSignal }) => {
       const response = await fetch(`${API_BASE}/management/connectivity/test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ testType: testId }),
         signal,
       });

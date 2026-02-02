@@ -5,6 +5,7 @@
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { Logger } from 'pino';
+import { sendProblem } from '../../lib/problem-details.js';
 
 /**
  * Wraps an async route handler to catch promise rejections
@@ -16,16 +17,6 @@ export function asyncHandler(
   return (req: Request, res: Response, next: NextFunction): void => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
-}
-
-/**
- * Error response structure
- */
-export interface ApiError {
-  error: string;
-  message?: string;
-  code?: string;
-  details?: unknown;
 }
 
 /**
@@ -74,23 +65,22 @@ export class HttpError extends Error {
 export function createErrorHandler(logger: Logger) {
   return function errorHandler(
     err: Error | HttpError,
-    _req: Request,
+    req: Request,
     res: Response,
     _next: NextFunction
   ): void {
     // Log error
     logger.error({ err, stack: err.stack }, 'Request error');
+    const instance = req.originalUrl;
+    const isDevelopment = process.env.NODE_ENV === 'development';
 
     // Handle HttpError
     if (err instanceof HttpError) {
-      const response: ApiError = {
-        error: err.message,
+      sendProblem(res, err.statusCode, err.message, {
         code: err.code,
-      };
-      if (err.details) {
-        response.details = err.details;
-      }
-      res.status(err.statusCode).json(response);
+        details: err.details,
+        instance,
+      });
       return;
     }
 
@@ -98,30 +88,36 @@ export function createErrorHandler(logger: Logger) {
     if (err.name === 'PrismaClientKnownRequestError') {
       const prismaError = err as Error & { code: string };
       if (prismaError.code === 'P2025') {
-        res.status(404).json({ error: 'Record not found', code: 'NOT_FOUND' });
+        sendProblem(res, 404, 'Record not found', {
+          code: 'NOT_FOUND',
+          instance,
+        });
         return;
       }
       if (prismaError.code === 'P2002') {
-        res.status(409).json({ error: 'Record already exists', code: 'CONFLICT' });
+        sendProblem(res, 409, 'Record already exists', {
+          code: 'CONFLICT',
+          instance,
+        });
         return;
       }
     }
 
     // Handle validation errors
     if (err.name === 'ZodError') {
-      res.status(400).json({
-        error: 'Validation error',
+      sendProblem(res, 400, 'Validation error', {
         code: 'VALIDATION_ERROR',
         details: (err as Error & { errors: unknown[] }).errors,
+        instance,
       });
       return;
     }
 
     // Default error response
-    res.status(500).json({
-      error: 'Internal server error',
+    sendProblem(res, 500, 'Internal server error', {
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      details: isDevelopment ? { message: err.message } : undefined,
+      instance,
     });
   };
 }

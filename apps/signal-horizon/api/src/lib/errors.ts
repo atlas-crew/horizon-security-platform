@@ -8,6 +8,7 @@ import type { Response } from 'express';
 import type { Logger } from 'pino';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
+import { sendProblem } from './problem-details.js';
 
 /**
  * Structured error response format
@@ -16,6 +17,7 @@ export interface ErrorResponse {
   code: string;
   message: string;
   details?: unknown;
+  status?: number;
 }
 
 /**
@@ -57,6 +59,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
       code: ErrorCodes.VALIDATION_ERROR,
       message: 'Validation failed',
       details: isDevelopment ? error.flatten() : undefined,
+      status: 400,
     };
   }
 
@@ -78,6 +81,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
         message: mapped.message,
         // Only include error code (not target/meta) in development
         details: isDevelopment ? { prismaCode: error.code } : undefined,
+        status: mapped.status,
       };
     }
 
@@ -86,6 +90,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
       code: ErrorCodes.DATABASE_ERROR,
       message: 'A database error occurred',
       details: isDevelopment ? { prismaCode: error.code } : undefined,
+      status: 500,
     };
   }
 
@@ -95,6 +100,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
     return {
       code: ErrorCodes.VALIDATION_ERROR,
       message: 'Invalid request',
+      status: 400,
     };
   }
 
@@ -103,6 +109,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
     return {
       code: ErrorCodes.DATABASE_ERROR,
       message: 'Database connection error',
+      status: 500,
     };
   }
 
@@ -113,6 +120,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
       return {
         code: ErrorCodes.INTERNAL_ERROR,
         message: 'An internal error occurred',
+        status: 500,
       };
     }
 
@@ -124,6 +132,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
         name: error.name,
         stack: error.stack,
       },
+      status: 500,
     };
   }
 
@@ -131,6 +140,7 @@ export function sanitizeError(error: unknown): ErrorResponse {
   return {
     code: ErrorCodes.INTERNAL_ERROR,
     message: isDevelopment ? String(error) : 'An internal error occurred',
+    status: 500,
   };
 }
 
@@ -138,13 +148,17 @@ export function sanitizeError(error: unknown): ErrorResponse {
  * Handle validation error from Zod
  * PEN-005: Uses fail-safe development mode detection.
  */
-export function handleValidationError(res: Response, error: ZodError): Response {
+export function handleValidationError(
+  res: Response,
+  error: ZodError,
+  instance?: string
+): Response {
   const isDevelopment = isDevelopmentMode();
 
-  return res.status(400).json({
+  return sendProblem(res, 400, 'Validation failed', {
     code: ErrorCodes.VALIDATION_ERROR,
-    message: 'Validation failed',
     details: isDevelopment ? error.flatten() : undefined,
+    instance,
   });
 }
 
@@ -165,20 +179,29 @@ export function handleRouteError(
   const sanitized = sanitizeError(error);
 
   // Determine status code
-  let statusCode = 500;
-  if (sanitized.code === ErrorCodes.VALIDATION_ERROR) {
-    statusCode = 400;
-  } else if (sanitized.code === ErrorCodes.UNAUTHORIZED) {
-    statusCode = 401;
-  } else if (sanitized.code === ErrorCodes.FORBIDDEN) {
-    statusCode = 403;
-  } else if (sanitized.code === ErrorCodes.NOT_FOUND) {
-    statusCode = 404;
-  } else if (sanitized.code === ErrorCodes.CONFLICT) {
-    statusCode = 409;
+  let statusCode = sanitized.status ?? 500;
+  if (!sanitized.status) {
+    if (sanitized.code === ErrorCodes.VALIDATION_ERROR) {
+      statusCode = 400;
+    } else if (sanitized.code === ErrorCodes.UNAUTHORIZED) {
+      statusCode = 401;
+    } else if (sanitized.code === ErrorCodes.FORBIDDEN) {
+      statusCode = 403;
+    } else if (sanitized.code === ErrorCodes.NOT_FOUND) {
+      statusCode = 404;
+    } else if (sanitized.code === ErrorCodes.CONFLICT) {
+      statusCode = 409;
+    }
   }
 
-  return res.status(statusCode).json(sanitized);
+  const instance =
+    typeof context?.instance === 'string' ? context.instance : undefined;
+
+  return sendProblem(res, statusCode, sanitized.message, {
+    code: sanitized.code,
+    details: sanitized.details,
+    instance,
+  });
 }
 
 /**
@@ -193,6 +216,7 @@ export function asyncHandler(
       handleRouteError(res, error, req.logger || console, {
         route: req.route?.path,
         method: req.method,
+        instance: req.originalUrl,
       });
     });
   };

@@ -9,6 +9,7 @@
  */
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import { sendProblem } from '../lib/problem-details.js';
 
 export interface QueryLimitsOptions {
   /**
@@ -139,11 +140,10 @@ export function queryLimits(options: QueryLimitsOptions = {}): RequestHandler {
         config.onError(req, res, reason);
         return;
       }
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Query string too long',
+      sendProblem(res, 400, 'Query string too long', {
         code: 'QUERY_STRING_TOO_LONG',
-        limit: effectiveLimits.maxQueryLength,
+        instance: req.originalUrl,
+        details: { limit: effectiveLimits.maxQueryLength },
       });
       return;
     }
@@ -156,11 +156,10 @@ export function queryLimits(options: QueryLimitsOptions = {}): RequestHandler {
         config.onError(req, res, reason);
         return;
       }
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Too many query parameters',
+      sendProblem(res, 400, 'Too many query parameters', {
         code: 'TOO_MANY_PARAMS',
-        limit: effectiveLimits.maxParams,
+        instance: req.originalUrl,
+        details: { limit: effectiveLimits.maxParams },
       });
       return;
     }
@@ -173,12 +172,13 @@ export function queryLimits(options: QueryLimitsOptions = {}): RequestHandler {
           config.onError(req, res, reason);
           return;
         }
-        res.status(400).json({
-          error: 'Bad Request',
-          message: 'Query parameter key too long',
+        sendProblem(res, 400, 'Query parameter key too long', {
           code: 'KEY_TOO_LONG',
-          key: key.substring(0, 20) + '...',
-          limit: effectiveLimits.maxKeyLength,
+          instance: req.originalUrl,
+          details: {
+            key: key.substring(0, 20) + '...',
+            limit: effectiveLimits.maxKeyLength,
+          },
         });
         return;
       }
@@ -191,12 +191,10 @@ export function queryLimits(options: QueryLimitsOptions = {}): RequestHandler {
           config.onError(req, res, reason);
           return;
         }
-        res.status(400).json({
-          error: 'Bad Request',
-          message: `Query parameter '${key}' value too long`,
+        sendProblem(res, 400, `Query parameter '${key}' value too long`, {
           code: 'VALUE_TOO_LONG',
-          key,
-          limit: effectiveLimits.maxValueLength,
+          instance: req.originalUrl,
+          details: { key, limit: effectiveLimits.maxValueLength },
         });
         return;
       }

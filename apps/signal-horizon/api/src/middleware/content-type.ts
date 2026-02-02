@@ -9,6 +9,7 @@
  */
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import { sendProblem } from '../lib/problem-details.js';
 
 export interface ContentTypeOptions {
   /**
@@ -119,10 +120,10 @@ export function contentTypeValidation(options: ContentTypeOptions = {}): Request
         config.onError(req, res, reason);
         return;
       }
-      res.status(415).json({
-        error: 'Unsupported Media Type',
-        message: reason,
+      sendProblem(res, 415, reason, {
         code: 'MISSING_CONTENT_TYPE',
+        instance: req.originalUrl,
+        details: { expected: config.requiredType },
       });
       return;
     }
@@ -158,12 +159,13 @@ export function contentTypeValidation(options: ContentTypeOptions = {}): Request
         config.onError(req, res, reason);
         return;
       }
-      res.status(415).json({
-        error: 'Unsupported Media Type',
-        message: `Content-Type must be ${config.requiredType}`,
+      sendProblem(res, 415, `Content-Type must be ${config.requiredType}`, {
         code: 'INVALID_CONTENT_TYPE',
-        received: mediaType,
-        expected: config.requiredType,
+        instance: req.originalUrl,
+        details: {
+          received: mediaType,
+          expected: config.requiredType,
+        },
       });
       return;
     }

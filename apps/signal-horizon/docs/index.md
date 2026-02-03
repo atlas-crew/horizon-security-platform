@@ -55,6 +55,7 @@ permalink: /signal-horizon/
 | Guide | Description |
 |-------|-------------|
 | [Sensor Onboarding](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/tutorials/sensor-onboarding.md) | Connect sensors to Signal Horizon |
+| [Fleet Configuration Management](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/tutorials/fleet-configuration-management.md) | Push config templates across the fleet |
 | [Remote Shell Access](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/remote-shell.md) | Secure remote access to sensors |
 | [Firmware Updates](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/firmware-updates.md) | Manage sensor firmware lifecycle |
 | [Capacity Planning](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/capacity-planning.md) | Plan fleet capacity and scaling |

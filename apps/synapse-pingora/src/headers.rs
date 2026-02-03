@@ -7,8 +7,10 @@
 //! Sensitive header values (Authorization, Cookie, API keys, etc.) are automatically
 //! redacted in debug logs to prevent credential leakage through log aggregation systems.
 
-use crate::config::HeaderOps;
+use crate::config::{HeaderConfig, HeaderOps};
 use crate::shadow::is_sensitive_header;
+use bytes::Bytes;
+use http::header::{HeaderName, HeaderValue};
 use pingora_http::{RequestHeader, ResponseHeader};
 use tracing::debug;
 
@@ -25,61 +27,172 @@ fn redact_for_log(name: &str, value: &str) -> String {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct CompiledHeaderOps {
+    pub(crate) add: Vec<CompiledHeaderValue>,
+    pub(crate) set: Vec<CompiledHeaderValue>,
+    pub(crate) remove: Vec<HeaderName>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CompiledHeaderConfig {
+    pub(crate) request: CompiledHeaderOps,
+    pub(crate) response: CompiledHeaderOps,
+}
+
+impl CompiledHeaderConfig {
+    /// Get the request header operations
+    pub fn request(&self) -> &CompiledHeaderOps {
+        &self.request
+    }
+
+    /// Get the response header operations
+    pub fn response(&self) -> &CompiledHeaderOps {
+        &self.response
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CompiledHeaderValue {
+    name: Bytes,
+    value: HeaderValue,
+}
+
+impl CompiledHeaderOps {
+    fn with_capacity(add: usize, set: usize, remove: usize) -> Self {
+        Self {
+            add: Vec::with_capacity(add),
+            set: Vec::with_capacity(set),
+            remove: Vec::with_capacity(remove),
+        }
+    }
+}
+
+impl HeaderConfig {
+    pub fn compile(&self) -> CompiledHeaderConfig {
+        CompiledHeaderConfig {
+            request: self.request.compile(),
+            response: self.response.compile(),
+        }
+    }
+}
+
+impl HeaderOps {
+    pub fn compile(&self) -> CompiledHeaderOps {
+        let mut compiled =
+            CompiledHeaderOps::with_capacity(self.add.len(), self.set.len(), self.remove.len());
+
+        for name in &self.remove {
+            match HeaderName::from_bytes(name.as_bytes()) {
+                Ok(header_name) => compiled.remove.push(header_name),
+                Err(err) => debug!("Invalid remove header name '{}': {}", name, err),
+            }
+        }
+
+        compiled.set = compile_header_entries(&self.set, "set");
+        compiled.add = compile_header_entries(&self.add, "add");
+
+        compiled
+    }
+}
+
+fn compile_header_entries(
+    entries: &std::collections::HashMap<String, String>,
+    op: &'static str,
+) -> Vec<CompiledHeaderValue> {
+    let mut compiled = Vec::with_capacity(entries.len());
+
+    for (name, value) in entries {
+        if let Err(err) = HeaderName::from_bytes(name.as_bytes()) {
+            debug!("Invalid {} header name '{}': {}", op, name, err);
+            continue;
+        }
+
+        match HeaderValue::from_str(value) {
+            Ok(header_value) => compiled.push(CompiledHeaderValue {
+                name: Bytes::copy_from_slice(name.as_bytes()),
+                value: header_value,
+            }),
+            Err(err) => debug!("Invalid {} header value for '{}': {}", op, name, err),
+        }
+    }
+
+    compiled
+}
+
+#[inline]
+fn header_name_for_log(name: &Bytes) -> &str {
+    std::str::from_utf8(name.as_ref()).unwrap_or("<invalid>")
+}
+
+#[inline]
+fn header_value_for_log(value: &HeaderValue) -> &str {
+    value.to_str().unwrap_or("<binary>")
+}
+
 /// Apply header operations to a request header.
-pub fn apply_request_headers(header: &mut RequestHeader, ops: &HeaderOps) {
+pub fn apply_request_headers(header: &mut RequestHeader, ops: &CompiledHeaderOps) {
     // 1. Remove headers
     for name in &ops.remove {
         if header.remove_header(name).is_some() {
-            debug!("Removed request header: {}", name);
+            debug!("Removed request header: {}", name.as_str());
         }
     }
 
     // 2. Set headers (replace existing)
-    for (name, value) in &ops.set {
-        if let Err(e) = header.insert_header(name.clone(), value) {
+    for entry in &ops.set {
+        let name = header_name_for_log(&entry.name);
+        if let Err(e) = header.insert_header(entry.name.clone(), entry.value.clone()) {
             debug!("Failed to set request header {}: {}", name, e);
         } else {
             // SECURITY: Redact sensitive header values in logs
+            let value = header_value_for_log(&entry.value);
             debug!("Set request header: {} = {}", name, redact_for_log(name, value));
         }
     }
 
     // 3. Add headers (append to existing)
-    for (name, value) in &ops.add {
-        if let Err(e) = header.append_header(name.clone(), value) {
+    for entry in &ops.add {
+        let name = header_name_for_log(&entry.name);
+        if let Err(e) = header.append_header(entry.name.clone(), entry.value.clone()) {
             debug!("Failed to add request header {}: {}", name, e);
         } else {
             // SECURITY: Redact sensitive header values in logs
+            let value = header_value_for_log(&entry.value);
             debug!("Added request header: {} = {}", name, redact_for_log(name, value));
         }
     }
 }
 
 /// Apply header operations to a response header.
-pub fn apply_response_headers(header: &mut ResponseHeader, ops: &HeaderOps) {
+pub fn apply_response_headers(header: &mut ResponseHeader, ops: &CompiledHeaderOps) {
     // 1. Remove headers
     for name in &ops.remove {
         if header.remove_header(name).is_some() {
-            debug!("Removed response header: {}", name);
+            debug!("Removed response header: {}", name.as_str());
         }
     }
 
     // 2. Set headers (replace existing)
-    for (name, value) in &ops.set {
-        if let Err(e) = header.insert_header(name.clone(), value) {
+    for entry in &ops.set {
+        let name = header_name_for_log(&entry.name);
+        if let Err(e) = header.insert_header(entry.name.clone(), entry.value.clone()) {
             debug!("Failed to set response header {}: {}", name, e);
         } else {
             // SECURITY: Redact sensitive header values in logs
+            let value = header_value_for_log(&entry.value);
             debug!("Set response header: {} = {}", name, redact_for_log(name, value));
         }
     }
 
     // 3. Add headers (append to existing)
-    for (name, value) in &ops.add {
-        if let Err(e) = header.append_header(name.clone(), value) {
+    for entry in &ops.add {
+        let name = header_name_for_log(&entry.name);
+        if let Err(e) = header.append_header(entry.name.clone(), entry.value.clone()) {
             debug!("Failed to add response header {}: {}", name, e);
         } else {
             // SECURITY: Redact sensitive header values in logs
+            let value = header_value_for_log(&entry.value);
             debug!("Added response header: {} = {}", name, redact_for_log(name, value));
         }
     }
@@ -88,6 +201,7 @@ pub fn apply_response_headers(header: &mut ResponseHeader, ops: &HeaderOps) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pingora_http::RequestHeader;
 
     #[test]
     fn test_redact_sensitive_headers() {
@@ -119,5 +233,47 @@ mod tests {
         assert_eq!(redact_for_log("COOKIE", "value"), "[REDACTED]");
         assert_eq!(redact_for_log("Cookie", "value"), "[REDACTED]");
         assert_eq!(redact_for_log("cookie", "value"), "[REDACTED]");
+    }
+
+    #[test]
+    fn test_compile_header_ops_skips_invalid_entries() {
+        let mut ops = HeaderOps::default();
+        ops.add
+            .insert("Bad Header".to_string(), "value".to_string());
+        ops.set
+            .insert("X-Good".to_string(), "ok".to_string());
+        ops.remove.push("Another Bad Header".to_string());
+
+        let compiled = ops.compile();
+
+        assert_eq!(compiled.add.len(), 0);
+        assert_eq!(compiled.set.len(), 1);
+        assert_eq!(compiled.remove.len(), 0);
+    }
+
+    #[test]
+    fn test_apply_compiled_request_headers() {
+        let mut ops = HeaderOps::default();
+        ops.add
+            .insert("X-Added".to_string(), "value".to_string());
+        ops.set
+            .insert("X-Set".to_string(), "set-value".to_string());
+        ops.remove.push("X-Remove".to_string());
+
+        let compiled = ops.compile();
+        let mut header = RequestHeader::build("GET", b"/", None).unwrap();
+        header.insert_header("X-Remove", "bye").unwrap();
+
+        apply_request_headers(&mut header, &compiled);
+
+        assert!(header.headers.get("x-remove").is_none());
+        assert_eq!(
+            header.headers.get("x-added").unwrap().to_str().unwrap(),
+            "value"
+        );
+        assert_eq!(
+            header.headers.get("x-set").unwrap().to_str().unwrap(),
+            "set-value"
+        );
     }
 }

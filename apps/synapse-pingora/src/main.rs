@@ -3155,7 +3155,7 @@ impl ProxyHttp for SynapseProxy {
         // ===== Header Manipulation (Request) =====
         if let Some(ref site) = ctx.matched_site {
             if let Some(ref header_config) = site.headers {
-                headers::apply_request_headers(upstream_request, &header_config.request);
+                headers::apply_request_headers(upstream_request, header_config.request());
             }
         }
 
@@ -3259,7 +3259,7 @@ impl ProxyHttp for SynapseProxy {
         // ===== Header Manipulation (Response) =====
         if let Some(ref site) = ctx.matched_site {
             if let Some(ref header_config) = site.headers {
-                headers::apply_response_headers(upstream_response, &header_config.response);
+                headers::apply_response_headers(upstream_response, header_config.response());
             }
         }
         Ok(())
@@ -3994,7 +3994,7 @@ fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) 
 
 fn main() {
     // Initialize logging
-    env_logger::init();
+    init_logging();
 
     // Parse CLI arguments
     let cli = Cli::parse();
@@ -4598,6 +4598,40 @@ fn main() {
     }
 
     server.run_forever();
+}
+
+fn init_logging() {
+    use log::Level;
+    use std::io::Write;
+
+    let mut builder = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info")
+    );
+
+    builder.format(|buf, record| {
+        // ANSI color codes for log levels
+        let (color_start, color_end) = match record.level() {
+            Level::Error => ("\x1b[1;31m", "\x1b[0m"), // Bold red
+            Level::Warn => ("\x1b[1;33m", "\x1b[0m"),  // Bold yellow
+            Level::Info => ("\x1b[1;32m", "\x1b[0m"),  // Bold green
+            Level::Debug => ("\x1b[34m", "\x1b[0m"),   // Blue
+            Level::Trace => ("\x1b[35m", "\x1b[0m"),   // Magenta
+        };
+
+        let level = format!("{:<5}", record.level());
+        writeln!(
+            buf,
+            "{} {}{}{} [{}] {}",
+            buf.timestamp_millis(),
+            color_start,
+            level,
+            color_end,
+            record.target(),
+            record.args()
+        )
+    });
+
+    builder.init();
 }
 
 // ============================================================================

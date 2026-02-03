@@ -35,7 +35,7 @@ use pingora_core::prelude::*;
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_limits::rate::Rate;
 use pingora_proxy::{ProxyHttp, Session};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::cell::RefCell;
 use std::fs;
 use std::net::{IpAddr, SocketAddr};
@@ -218,10 +218,42 @@ impl Default for Config {
     }
 }
 
+/// Deserialize listen addresses from either a string or array of strings.
+/// Supports both legacy single-address format and new multi-address format:
+/// ```yaml
+/// # Legacy (still supported)
+/// listen: "0.0.0.0:6190"
+///
+/// # New array format (IPv4 + IPv6)
+/// listen:
+///   - "0.0.0.0:6190"
+///   - "[::]:6190"
+/// ```
+fn deserialize_listen_addrs<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        String(String),
+        Vec(Vec<String>),
+    }
+
+    match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::String(s) => Ok(vec![s]),
+        StringOrVec::Vec(v) => Ok(v),
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
-    #[serde(default = "default_listen")]
-    pub listen: String,
+    /// Listen addresses for the proxy (supports IPv4 and IPv6)
+    /// Can be a single address string or array of addresses:
+    /// - Single: "0.0.0.0:6190"
+    /// - Array: ["0.0.0.0:6190", "[::]:6190"]
+    #[serde(default = "default_listen", deserialize_with = "deserialize_listen_addrs")]
+    pub listen: Vec<String>,
     #[serde(default = "default_admin_listen")]
     pub admin_listen: String,
     #[serde(default)]
@@ -235,8 +267,8 @@ pub struct ServerConfig {
     pub trusted_proxies: Vec<String>,
 }
 
-fn default_listen() -> String {
-    "0.0.0.0:6190".to_string()
+fn default_listen() -> Vec<String> {
+    vec!["0.0.0.0:6190".to_string()]
 }
 
 fn default_admin_listen() -> String {
@@ -3836,12 +3868,18 @@ fn run_config_check(file: &str, json_output: bool) {
                 result.valid = true;
 
                 // Validate server listen addresses
-                if config.server.listen.parse::<SocketAddr>().is_err() {
-                    result.errors.push(format!(
-                        "Server listen address is invalid: {}",
-                        config.server.listen
-                    ));
+                if config.server.listen.is_empty() {
+                    result.errors.push("Server listen addresses cannot be empty".to_string());
                     result.valid = false;
+                }
+                for (idx, addr) in config.server.listen.iter().enumerate() {
+                    if addr.parse::<SocketAddr>().is_err() {
+                        result.errors.push(format!(
+                            "Server listen address [{}] is invalid: {}",
+                            idx, addr
+                        ));
+                        result.valid = false;
+                    }
                 }
                 if config.server.admin_listen.parse::<SocketAddr>().is_err() {
                     result.errors.push(format!(
@@ -4093,7 +4131,7 @@ fn main() {
 
     // ... (rest of main)
 
-    info!("Listen address: {}", config.server.listen);
+    info!("Listen addresses: {}", config.server.listen.join(", "));
     info!(
         "Upstreams: {:?}",
         config
@@ -4371,14 +4409,18 @@ fn main() {
         }
     }
 
-    let listen_addr = config.server.listen.parse::<SocketAddr>().ok();
-    let listen_is_loopback = listen_addr.map(|addr| addr.ip().is_loopback()).unwrap_or(false);
+    // Check if any listen address is loopback (for trusted_proxies warning)
+    let listen_is_loopback = config.server.listen.iter().any(|addr| {
+        addr.parse::<SocketAddr>()
+            .map(|sa| sa.ip().is_loopback())
+            .unwrap_or(false)
+    });
 
     if trusted_proxies.is_empty() {
         if !listen_is_loopback {
             warn!(
-                "No trusted proxies configured for listen address {}. X-Forwarded-For headers will be ignored; set server.trusted_proxies to explicit proxy IPs in production.",
-                config.server.listen
+                "No trusted proxies configured for listen addresses [{}]. X-Forwarded-For headers will be ignored; set server.trusted_proxies to explicit proxy IPs in production.",
+                config.server.listen.join(", ")
             );
         }
         info!("No trusted proxies configured - X-Forwarded-For headers will be ignored (secure default)");
@@ -4541,36 +4583,41 @@ fn main() {
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
 
-    // Phase 6: Enable TLS Listener
+    // Phase 6: Enable TLS Listener(s)
+    // Support multiple listen addresses (IPv4/IPv6 dual-stack)
     if config.tls.enabled && !config.tls.cert_path.is_empty() && !config.tls.key_path.is_empty() {
-        let tls_settings = match TlsSettings::intermediate(
-            &config.tls.cert_path,
-            &config.tls.key_path,
-        ) {
-            Ok(settings) => settings,
-            Err(err) => {
-                error!(
-                    "Failed to create TLS settings from configured paths: {}",
-                    err
-                );
-                std::process::exit(1);
-            }
-        };
-        
         // Note: TlsSettings::intermediate defaults to TLS 1.2+
-        
-        proxy_service.add_tls_with_settings(&config.server.listen, None, tls_settings);
-        info!("TLS listener enabled on {} (min_version: {})", config.server.listen, config.tls.min_version);
+        // TlsSettings doesn't implement Clone, so we create fresh settings for each listener
+        for addr in &config.server.listen {
+            let tls_settings = match TlsSettings::intermediate(
+                &config.tls.cert_path,
+                &config.tls.key_path,
+            ) {
+                Ok(settings) => settings,
+                Err(err) => {
+                    error!(
+                        "Failed to create TLS settings from configured paths: {}",
+                        err
+                    );
+                    std::process::exit(1);
+                }
+            };
+            proxy_service.add_tls_with_settings(addr, None, tls_settings);
+            info!("TLS listener enabled on {} (min_version: {})", addr, config.tls.min_version);
+        }
     } else {
         // Fallback to TCP if TLS is not enabled or configured
-        proxy_service.add_tcp(&config.server.listen);
-        info!("TCP (non-TLS) listener enabled on {}", config.server.listen);
+        for addr in &config.server.listen {
+            proxy_service.add_tcp(addr);
+            info!("TCP (non-TLS) listener enabled on {}", addr);
+        }
     }
 
     server.add_service(proxy_service);
 
+    let listen_addrs = config.server.listen.join(", ");
     info!("Synapse-Pingora ready");
-    info!("  Proxy:  {}", config.server.listen);
+    info!("  Proxy:  {}", listen_addrs);
     info!("  Admin:  {}", config.server.admin_listen);
     info!("  Tarpit: enabled={}, base_delay={}ms, max_delay={}ms",
         config.tarpit.enabled, config.tarpit.base_delay_ms, config.tarpit.max_delay_ms);

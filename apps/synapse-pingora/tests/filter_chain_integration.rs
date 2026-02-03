@@ -3,9 +3,11 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::UnixStream;
 
+use pingora_core::protocols::{GetSocketDigest, SocketDigest};
 use pingora_core::protocols::l4::stream::Stream;
+use std::os::unix::io::AsRawFd;
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 
@@ -66,16 +68,9 @@ fn build_proxy(per_ip_rps_limit: usize) -> synapse_main::SynapseProxy {
     )
 }
 
-async fn make_session(request: &str) -> (Session, tokio::net::TcpStream) {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind listener");
-    let addr = listener.local_addr().expect("listener addr");
-
-    let mut client = tokio::net::TcpStream::connect(addr)
-        .await
-        .expect("connect client");
-    let (server_stream, _) = listener.accept().await.expect("accept");
+async fn make_session(request: &str) -> (Session, UnixStream) {
+    let (mut client, server_stream) = UnixStream::pair().expect("unix stream pair");
+    let raw_fd = server_stream.as_raw_fd();
 
     client
         .write_all(request.as_bytes())
@@ -83,7 +78,12 @@ async fn make_session(request: &str) -> (Session, tokio::net::TcpStream) {
         .expect("write request");
     client.flush().await.expect("flush request");
 
-    let stream = Stream::from(server_stream);
+    let mut stream = Stream::from(server_stream);
+    let mut socket_digest = SocketDigest::from_raw_fd(raw_fd);
+    let fake_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().expect("fake socket addr");
+    let _ = socket_digest.peer_addr.set(Some(fake_addr.into()));
+    let _ = socket_digest.local_addr.set(Some(fake_addr.into()));
+    stream.set_socket_digest(socket_digest);
     let mut session = Session::new_h1(Box::new(stream));
     let read = session.read_request().await.expect("read request");
     assert!(read, "request should be parsed");
@@ -91,7 +91,7 @@ async fn make_session(request: &str) -> (Session, tokio::net::TcpStream) {
     (session, client)
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_filter_chain_full_flow_sets_headers_and_dlp() {
     let proxy = build_proxy(100);
     let body = r#"{"ssn":"123-45-6789"}"#;
@@ -172,17 +172,17 @@ async fn test_filter_chain_full_flow_sets_headers_and_dlp() {
         .expect("response_body_filter");
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_rate_limit_short_circuits_before_waf() {
     let proxy = build_proxy(0);
 
-    let request = "GET /search?q=' or '1'='1 HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    let request = "GET /search?q=1%20UNION%20SELECT%20*%20FROM%20users HTTP/1.1\r\nHost: example.com\r\n\r\n";
     let (mut session, mut client) = make_session(request).await;
 
     let headers = vec![("host".to_string(), "example.com".to_string())];
     let detection = synapse_main::DetectionEngine::analyze(
         "GET",
-        "/search?q=' or '1'='1",
+        "/search?q=1 UNION SELECT * FROM users",
         &headers,
         None,
         "127.0.0.1",

@@ -997,7 +997,13 @@ impl DlpScanner {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        let mut violations = self.recent_violations.blocking_write();
+        let mut violations = match self.recent_violations.try_write() {
+            Ok(guard) => guard,
+            Err(_) => {
+                // Best-effort capture. Avoid blocking in async contexts.
+                return;
+            }
+        };
         
         for m in &result.matches {
             if violations.len() >= 100 {

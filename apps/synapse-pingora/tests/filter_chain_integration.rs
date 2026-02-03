@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
+use http::header::{HeaderName, HeaderValue};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
@@ -27,6 +28,12 @@ use synapse_pingora::tarpit::TarpitConfig;
 use synapse_pingora::telemetry::{TelemetryClient, TelemetryConfig};
 use synapse_pingora::tls::TlsManager;
 use synapse_pingora::trends::{TrendsConfig, TrendsManager};
+
+fn header_snapshot(name: &str, value: &str) -> (HeaderName, HeaderValue) {
+    let header_name = HeaderName::from_bytes(name.as_bytes()).expect("valid header name");
+    let header_value = HeaderValue::from_str(value).expect("valid header value");
+    (header_name, header_value)
+}
 
 fn build_proxy(per_ip_rps_limit: usize) -> synapse_main::SynapseProxy {
     let backends = vec![("127.0.0.1".to_string(), 8080)];
@@ -179,7 +186,7 @@ async fn test_rate_limit_short_circuits_before_waf() {
     let request = "GET /search?q=1%20UNION%20SELECT%20*%20FROM%20users HTTP/1.1\r\nHost: example.com\r\n\r\n";
     let (mut session, mut client) = make_session(request).await;
 
-    let headers = vec![("host".to_string(), "example.com".to_string())];
+    let headers = vec![header_snapshot("host", "example.com")];
     let detection = synapse_main::DetectionEngine::analyze(
         "GET",
         "/search?q=1 UNION SELECT * FROM users",

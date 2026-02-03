@@ -54,18 +54,17 @@ describe('createTenantRateLimiter', () => {
     next = vi.fn();
   });
 
-  it('enforces per-tenant limits', () => {
+  it('enforces per-tenant limits', async () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 2 });
-    const req = createMockReq({ auth: { tenantId: 'tenant-a' } });
 
     const res1 = createMockRes();
-    limiter(req, res1 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res1 as Response, next);
 
     const res2 = createMockRes();
-    limiter(req, res2 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res2 as Response, next);
 
     const res3 = createMockRes();
-    limiter(req, res3 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res3 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res3.statusCode).toBe(429);
@@ -76,31 +75,31 @@ describe('createTenantRateLimiter', () => {
     expect(res3.headers['Retry-After']).toBe('1');
   });
 
-  it('isolates limits across tenants', () => {
+  it('isolates limits across tenants', async () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
 
     const res1 = createMockRes();
-    limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res1 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res1 as Response, next);
 
     const res2 = createMockRes();
-    limiter(createMockReq({ auth: { tenantId: 'tenant-b' } }), res2 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-b' } }), res2 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res1.statusCode).toBe(200);
     expect(res2.statusCode).toBe(200);
   });
 
-  it('falls back to IP when tenant ID is missing', () => {
+  it('falls back to IP when tenant ID is missing', async () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
 
     const res1 = createMockRes();
-    limiter(createMockReq({ auth: undefined, ip: '198.51.100.1' }), res1 as Response, next);
+    await limiter(createMockReq({ auth: undefined, ip: '198.51.100.1' }), res1 as Response, next);
 
     const res2 = createMockRes();
-    limiter(createMockReq({ auth: undefined, ip: '198.51.100.2' }), res2 as Response, next);
+    await limiter(createMockReq({ auth: undefined, ip: '198.51.100.2' }), res2 as Response, next);
 
     const res3 = createMockRes();
-    limiter(createMockReq({ auth: undefined, ip: '198.51.100.1' }), res3 as Response, next);
+    await limiter(createMockReq({ auth: undefined, ip: '198.51.100.1' }), res3 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res3.statusCode).toBe(429);

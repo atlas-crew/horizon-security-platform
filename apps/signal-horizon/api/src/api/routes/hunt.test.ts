@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
-import supertest from 'supertest';
+import request from '../../__tests__/test-request.js';
 import { createHuntRoutes } from './hunt.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -74,7 +74,7 @@ describe('Hunt Routes', () => {
     const startTime = new Date(Date.now() - 60_000).toISOString();
     const endTime = new Date().toISOString();
 
-    const response = await supertest(app)
+    const response = await request(app)
       .post('/api/v1/hunt/query')
       .send({
         tenantId: 'tenant-2',
@@ -118,13 +118,14 @@ describe('Hunt Routes', () => {
     const startTime = new Date(Date.now() - 3600_000).toISOString();
     const endTime = new Date().toISOString();
 
-    const response = await supertest(app)
-      .get('/api/v1/hunt/stats/hourly')
-      .query({
-        tenantId: 'tenant-2',
-        startTime,
-        endTime,
-      })
+    const query = new URLSearchParams({
+      tenantId: 'tenant-2',
+      startTime,
+      endTime,
+    }).toString();
+
+    const response = await request(app)
+      .get(`/api/v1/hunt/stats/hourly?${query}`)
       .expect(200);
 
     expect(vi.mocked(huntService.getHourlyStats)).toHaveBeenCalledWith(
@@ -165,7 +166,7 @@ describe('Hunt Routes', () => {
     vi.mocked(huntService.getSavedQuery).mockResolvedValue(savedQuery);
     vi.mocked(huntService.queryTimeline).mockResolvedValue(result);
 
-    await supertest(app)
+    await request(app)
       .post('/api/v1/hunt/saved-queries/query-1/run')
       .expect(200);
 

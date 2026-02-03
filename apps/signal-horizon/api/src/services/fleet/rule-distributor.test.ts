@@ -926,6 +926,19 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
+      // Let deployment initialize so we can mark staging complete
+      await vi.advanceTimersByTimeAsync(10);
+      await Promise.resolve();
+
+      const deployments = distributor.listActiveDeployments();
+      expect(deployments.length).toBe(1);
+      const deploymentId = deployments[0].deploymentId;
+
+      // Mark staging complete but never activate - should timeout during switch
+      for (const sensorId of sensorIds) {
+        distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
+      }
+
       const result = await advanceUntilSettled(resultPromise, {
         stepMs: 1000,
         maxSteps: 10,
@@ -1522,7 +1535,7 @@ describe('RuleDistributor', () => {
       );
 
       // Advance partway - should not deploy yet
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(200);
       expect(mockFleetCommander.sendCommandToMultiple).not.toHaveBeenCalled();
 
       // Advance timers until scheduled execution fires

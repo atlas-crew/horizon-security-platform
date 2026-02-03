@@ -25,6 +25,15 @@ const SENSOR_QUERY_TIMEOUT_MS = 10000;
 /** Maximum concurrent sensor queries */
 const MAX_CONCURRENT_QUERIES = 50;
 
+export const FleetRpcMethods = {
+  SESSIONS_SEARCH: 'sessions.search',
+  SESSIONS_REVOKE: 'sessions.revoke',
+  ACTORS_BAN: 'actors.ban',
+  SESSIONS_STATS: 'sessions.stats',
+} as const;
+
+type FleetRpcMethod = typeof FleetRpcMethods[keyof typeof FleetRpcMethods];
+
 /**
  * Result from a sensor RPC call
  */
@@ -89,11 +98,11 @@ export class FleetSessionQueryService {
    * Map RPC method and parameters to a web request payload
    */
   private mapRpcToWebRequest(
-    method: string,
+    method: FleetRpcMethod,
     params: Record<string, unknown>
   ): { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; endpoint: string; body?: unknown } {
     switch (method) {
-      case 'sessions.search': {
+      case FleetRpcMethods.SESSIONS_SEARCH: {
         const query = new URLSearchParams();
         if (params.sessionId) query.set('session_id', params.sessionId as string);
         if (params.actorId) query.set('actor_id', params.actorId as string);
@@ -109,7 +118,7 @@ export class FleetSessionQueryService {
         return { method: 'GET', endpoint: `/_sensor/sessions?${query.toString()}` };
       }
 
-      case 'sessions.revoke': {
+      case FleetRpcMethods.SESSIONS_REVOKE: {
         return {
           method: 'DELETE',
           endpoint: `/_sensor/sessions/${params.sessionId}`,
@@ -117,7 +126,7 @@ export class FleetSessionQueryService {
         };
       }
 
-      case 'actors.ban': {
+      case FleetRpcMethods.ACTORS_BAN: {
         // Map actor ban to creating a block record on the sensor
         return {
           method: 'POST',
@@ -134,7 +143,7 @@ export class FleetSessionQueryService {
         };
       }
 
-      case 'sessions.stats':
+      case FleetRpcMethods.SESSIONS_STATS:
         return { method: 'GET', endpoint: '/_sensor/sessions/stats' };
 
       default:
@@ -148,7 +157,7 @@ export class FleetSessionQueryService {
   private async callSensorWithTimeout<T>(
     sensorId: string,
     sensorName: string,
-    method: string,
+    method: FleetRpcMethod,
     params: Record<string, unknown>,
     timeoutMs?: number
   ): Promise<SensorRpcResult<T>> {
@@ -267,7 +276,7 @@ export class FleetSessionQueryService {
     // Query all sensors in parallel using Promise.allSettled
     const results = await this.batchQuerySensors<{ sessions: SensorSession[]; totalMatches: number }>(
       sensors,
-      'sessions.search',
+      FleetRpcMethods.SESSIONS_SEARCH,
       rpcParams
     );
 
@@ -331,7 +340,7 @@ export class FleetSessionQueryService {
     const result = await this.callSensorWithTimeout<{ success: boolean }>(
       sensorId,
       sensor.name,
-      'sessions.revoke',
+      FleetRpcMethods.SESSIONS_REVOKE,
       { sessionId, reason }
     );
 
@@ -382,7 +391,7 @@ export class FleetSessionQueryService {
     // Revoke on all sensors in parallel
     const results = await this.batchQuerySensors<{ success: boolean }>(
       sensors,
-      'sessions.revoke',
+      FleetRpcMethods.SESSIONS_REVOKE,
       { sessionId, reason }
     );
 
@@ -453,7 +462,7 @@ export class FleetSessionQueryService {
     // Ban actor on all sensors in parallel
     const results = await this.batchQuerySensors<{ success: boolean; sessionsTerminated: number }>(
       sensors,
-      'actors.ban',
+      FleetRpcMethods.ACTORS_BAN,
       { actorId, reason, durationSeconds }
     );
 
@@ -519,7 +528,7 @@ export class FleetSessionQueryService {
       avgRiskScore: number;
       riskTiers: { low: number; medium: number; high: number; critical: number };
       threatCategories: Array<{ category: string; count: number }>;
-    }>(sensors, 'sessions.stats', {});
+    }>(sensors, FleetRpcMethods.SESSIONS_STATS, {});
 
     // Aggregate statistics
     let totalActiveSessions = 0;

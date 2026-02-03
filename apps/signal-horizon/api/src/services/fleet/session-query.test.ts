@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { Logger } from 'pino';
 import type { PrismaClient } from '@prisma/client';
-import { FleetSessionQueryService } from './session-query.js';
+import { FleetSessionQueryService, FleetRpcMethods } from './session-query.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
 
 class MockTunnelBroker extends EventEmitter implements Partial<TunnelBroker> {
@@ -215,5 +215,12 @@ describe('FleetSessionQueryService', () => {
       expect.any(Object),
       customTimeout
     );
+  });
+
+  it('exposes rpc method constants for type-safe usage', () => {
+    expect(FleetRpcMethods.SESSIONS_SEARCH).toBe('sessions.search');
+    expect(FleetRpcMethods.SESSIONS_REVOKE).toBe('sessions.revoke');
+    expect(FleetRpcMethods.ACTORS_BAN).toBe('actors.ban');
+    expect(FleetRpcMethods.SESSIONS_STATS).toBe('sessions.stats');
   });
 });

@@ -5182,4 +5182,139 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+
+    // =========================================================================
+    // Console Endpoint Authorization Tests (labs-s8bs)
+    // =========================================================================
+
+    /// Create a test app that includes the /console route with scope-based auth.
+    fn create_test_app_with_console(scopes: Vec<String>) -> Router {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
+        let handler = Arc::new(ApiHandler::builder().build());
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_scopes: scopes,
+            admin_rate_limiter,
+            public_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        // Console route with require_admin_read middleware
+        let admin_read_routes = Router::new()
+            .route("/console", get(admin_console_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+
+        // Health remains public
+        let public_routes = Router::new()
+            .route("/health", get(health_handler));
+
+        Router::new()
+            .merge(admin_read_routes)
+            .merge(public_routes)
+            .layer(middleware::from_fn(security_headers))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_console_requires_auth() {
+        // Create app with admin:read scope
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()]);
+
+        // Request without X-Admin-Key should return 401
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "/console should return 401 without authentication"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_with_admin_read_scope() {
+        // Create app with admin:read scope
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()]);
+
+        // Request with valid key and admin:read scope should return 200
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "/console should return 200 with valid key and admin:read scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_without_admin_read_scope() {
+        // Create app with only sensor:read scope (not admin:read)
+        let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()]);
+
+        // Request with valid key but without admin:read scope should return 403
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "/console should return 403 when admin:read scope is missing"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_remains_public() {
+        // Create app with empty scopes (most restrictive)
+        let app = create_test_app_with_console(vec![]);
+
+        // Health endpoint should work without any auth
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "/health should remain public and return 200 without authentication"
+        );
+    }
 }

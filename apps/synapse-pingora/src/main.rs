@@ -4056,21 +4056,22 @@ fn main() {
         || std::env::var("SYNAPSE_DEMO").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
 
     if dev_mode {
-        // SECURITY: Prevent accidental dev mode in production
-        let is_production = std::env::var("SYNAPSE_PRODUCTION")
-            .map(|v| v == "1" || v.to_lowercase() == "true")
+        // SECURITY: Require explicit non-production environment for dev mode (secure-by-default)
+        // Dev mode bypasses authentication, so we need explicit confirmation this is not production
+        let is_explicitly_non_production = std::env::var("SYNAPSE_PRODUCTION")
+            .map(|v| matches!(v.to_lowercase().as_str(), "0" | "false" | "no"))
             .unwrap_or(false)
             || std::env::var("NODE_ENV")
-                .map(|v| v.to_lowercase() == "production")
+                .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
                 .unwrap_or(false);
 
-        if is_production {
-            tracing::error!(
-                "SECURITY: Dev mode requested but production environment detected. \
-                 Dev mode DISABLED for safety. Unset SYNAPSE_PRODUCTION/NODE_ENV to enable."
-            );
-        } else {
+        if is_explicitly_non_production {
             synapse_pingora::admin_server::enable_dev_mode();
+        } else {
+            tracing::error!(
+                "SECURITY: Dev mode requested but no explicit non-production environment detected. \
+                 Dev mode DISABLED for safety. Set SYNAPSE_PRODUCTION=0 or NODE_ENV=development to enable."
+            );
         }
     }
 

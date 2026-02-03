@@ -14,8 +14,10 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, watch};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use synapse_pingora::horizon::{HorizonClient, HorizonConfig};
-use synapse_pingora::horizon::types::{HubMessage, SensorMessage, SignalType, ThreatSignal, Severity, ConnectionState};
+use synapse_pingora::horizon::{
+    ConnectionState, HorizonClient, HorizonConfig, HubMessage, SensorMessage, Severity, SignalType,
+    ThreatSignal,
+};
 
 struct HubServer {
     addr: SocketAddr,
@@ -217,8 +219,13 @@ async fn test_hub_downtime_requeues_signals() {
     assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(3)).await);
     assert!(wait_for_received(&server_restarted.received, 2, Duration::from_secs(3)).await);
 
-    let received = server_restarted.received.lock().await;
-    let ips: Vec<String> = received.iter().filter_map(|signal| signal.source_ip.clone()).collect();
+    let ips: Vec<String> = {
+        let received = server_restarted.received.lock().await;
+        received
+            .iter()
+            .filter_map(|signal| signal.source_ip.clone())
+            .collect()
+    };
     assert!(ips.contains(&"10.0.0.2".to_string()));
     assert!(ips.contains(&"10.0.0.3".to_string()));
 
@@ -265,8 +272,13 @@ async fn test_network_partition_requeues_inflight() {
     assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(3)).await);
     assert!(wait_for_received(&server_restarted.received, 1, Duration::from_secs(3)).await);
 
-    let received = server_restarted.received.lock().await;
-    let ips: Vec<String> = received.iter().filter_map(|signal| signal.source_ip.clone()).collect();
+    let ips: Vec<String> = {
+        let received = server_restarted.received.lock().await;
+        received
+            .iter()
+            .filter_map(|signal| signal.source_ip.clone())
+            .collect()
+    };
     assert!(ips.contains(&"10.0.2.1".to_string()));
 
     client.stop().await;

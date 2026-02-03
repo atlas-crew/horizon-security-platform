@@ -5,7 +5,7 @@ use bytes::Bytes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use pingora_core::protocols::Stream;
+use pingora_core::protocols::l4::stream::Stream;
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 
@@ -84,7 +84,7 @@ async fn make_session(request: &str) -> (Session, tokio::net::TcpStream) {
     client.flush().await.expect("flush request");
 
     let stream = Stream::from(server_stream);
-    let mut session = Session::new_h1(stream);
+    let mut session = Session::new_h1(Box::new(stream));
     let read = session.read_request().await.expect("read request");
     assert!(read, "request should be parsed");
 

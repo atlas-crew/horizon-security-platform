@@ -11,38 +11,21 @@ const __dirname = path.dirname(__filename);
 const router: ReturnType<typeof Router> = Router();
 
 // Resilient path resolution:
-// In dev: ../../../../docs
-// In prod: ./docs (copied during build to dist/docs)
-const getDocsRoot = () => {
-  const prodPath = path.resolve(__dirname, '../../docs'); // From dist/api/routes/docs.js to dist/docs
-  const devPath = path.resolve(__dirname, '../../../../docs');
-  
+// In dev: ../../../../site (user-facing documentation)
+// In prod: ./site (copied during build to dist/site)
+const getSiteRoot = () => {
+  const prodPath = path.resolve(__dirname, '../../site'); // From dist/api/routes/docs.js to dist/site
+  const devPath = path.resolve(__dirname, '../../../../site');
+
   if (existsSync(prodPath)) return prodPath;
   return devPath;
 };
 
-const DOCS_ROOT = getDocsRoot();
+const SITE_ROOT = getSiteRoot();
 
-// Patterns to exclude from user-facing documentation
+// Only filter out CLAUDE.md context files (exact filename match)
 const INTERNAL_PATTERNS = [
-  /^api(\/|:|$)/i,
-  /^project(\/|:|$)/i,
-  /^architecture(\/|:|$)/i,
-  /^archive(\/|:|$)/i,
-  /(?:^|[:/])CLAUDE\.md$/i, // Filter out CLAUDE.md context files (exact filename match)
-  /gap_analysis/i,
-  /beam_backend_summary/i,
-  /beam_api_examples/i,
-  /ui-development/i,
-  /protocols/i,
-  /brand/i,
-  /openapi/i,
-  /swagger/i,
-  /README/i,
-  /fleet-api/i,
-  /hunt-api/i,
-  /sensor-protocol/i,
-  /database-schema/i,
+  /(?:^|[:/])CLAUDE\.md$/i,
 ];
 
 interface DocItem {
@@ -55,7 +38,7 @@ interface DocItem {
 /**
  * Recursively list markdown files in the docs directory
  */
-async function listDocs(dir: string, baseDir: string = DOCS_ROOT): Promise<DocItem[]> {
+async function listDocs(dir: string, baseDir: string = SITE_ROOT): Promise<DocItem[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const docs: DocItem[] = [];
 
@@ -103,7 +86,7 @@ async function listDocs(dir: string, baseDir: string = DOCS_ROOT): Promise<DocIt
  */
 router.get('/', async (_req, res) => {
   try {
-    const docs = await listDocs(DOCS_ROOT);
+    const docs = await listDocs(SITE_ROOT);
     res.json(docs);
   } catch (error) {
     logger.error({ error }, 'Failed to list documentation');
@@ -119,10 +102,10 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const relativePath = id.replace(/:/g, path.sep) + '.md';
-    const fullPath = path.join(DOCS_ROOT, relativePath);
+    const fullPath = path.join(SITE_ROOT, relativePath);
 
-    // Security check: ensure the path is within DOCS_ROOT
-    if (!fullPath.startsWith(DOCS_ROOT)) {
+    // Security check: ensure the path is within SITE_ROOT
+    if (!fullPath.startsWith(SITE_ROOT)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }

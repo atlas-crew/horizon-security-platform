@@ -2140,8 +2140,8 @@ async fn sensor_report_handler(
     signal = signal.with_metadata(serde_json::to_value(&report).unwrap_or_default());
 
     // Dispatch to Signal Horizon (Fleet Intelligence)
-    if let Some(client) = state.handler.horizon_client() {
-        client.report_signal(signal.clone());
+    if let Err(err) = state.handler.dispatch_horizon_signal(signal.clone()) {
+        warn!("Failed to dispatch signal to horizon: {}", err);
     }
 
     // Dispatch to SignalManager (Local Dashboard)

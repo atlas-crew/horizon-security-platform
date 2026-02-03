@@ -31,7 +31,7 @@ use crate::payload::{PayloadManager, EndpointSortBy};
 use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions, TopSignalType, TimeRange};
 use crate::intelligence::{SignalManager, SignalQueryOptions, Signal, SignalSummary};
 use crate::crawler::CrawlerDetector;
-use crate::horizon::HorizonClient;
+use crate::horizon::{HorizonClient, ThreatSignal};
 use crate::dlp::DlpScanner;
 use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction, TraceSink};
 
@@ -131,9 +131,15 @@ impl ApiHandler {
         self.dlp_scanner.as_ref().map(Arc::clone)
     }
 
-    /// Returns the Signal Horizon client (if configured).
-    pub fn horizon_client(&self) -> Option<Arc<HorizonClient>> {
-        self.horizon_client.as_ref().map(Arc::clone)
+    /// Dispatch a signal to Signal Horizon without exposing the client.
+    pub fn dispatch_horizon_signal(&self, signal: ThreatSignal) -> Result<(), String> {
+        match &self.horizon_client {
+            Some(client) => {
+                client.report_signal(signal);
+                Ok(())
+            }
+            None => Err("Horizon client not available".to_string()),
+        }
     }
 
     /// Handles GET /health request.

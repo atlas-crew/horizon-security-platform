@@ -34,7 +34,7 @@ use crate::intelligence::{SignalManager, SignalQueryOptions, Signal, SignalSumma
 use crate::crawler::CrawlerDetector;
 use crate::horizon::HorizonClient;
 use crate::dlp::DlpScanner;
-use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction};
+use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction, TraceSink};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -423,6 +423,47 @@ impl ApiHandler {
 
         // Run detection
         let verdict = engine.read().analyze(&request);
+        let elapsed = start.elapsed();
+
+        Some(EvaluateResult {
+            blocked: matches!(verdict.action, SynapseAction::Block),
+            risk_score: verdict.risk_score,
+            matched_rules: verdict.matched_rules.clone(),
+            block_reason: verdict.block_reason.clone(),
+            detection_time_us: elapsed.as_micros() as u64,
+        })
+    }
+
+    /// Evaluates a request against the WAF rules and streams trace events.
+    pub fn evaluate_request_trace(
+        &self,
+        method: &str,
+        uri: &str,
+        headers: &[(String, String)],
+        body: Option<&[u8]>,
+        client_ip: &str,
+        trace: &mut dyn TraceSink,
+    ) -> Option<EvaluateResult> {
+        let engine = self.synapse_engine.as_ref()?;
+
+        let start = std::time::Instant::now();
+
+        let synapse_headers: Vec<SynapseHeader> = headers
+            .iter()
+            .map(|(name, value)| SynapseHeader::new(name, value))
+            .collect();
+
+        let request = SynapseRequest {
+            method,
+            path: uri,
+            query: None,
+            headers: synapse_headers,
+            body,
+            client_ip,
+            is_static: false,
+        };
+
+        let verdict = engine.read().analyze_with_trace(&request, trace);
         let elapsed = start.elapsed();
 
         Some(EvaluateResult {

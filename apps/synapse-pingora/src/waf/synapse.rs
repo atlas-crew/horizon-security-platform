@@ -6,7 +6,7 @@
 use parking_lot::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{Engine, Request, RiskConfig, Verdict, WafError};
+use super::{Engine, Request, RiskConfig, TraceSink, Verdict, WafError};
 use crate::profiler::{EndpointProfile, ProfileStore, ProfileStoreConfig};
 
 /// Main WAF detection engine facade.
@@ -73,6 +73,11 @@ impl Synapse {
     /// Analyze a request and return a verdict.
     pub fn analyze(&self, req: &Request) -> Verdict {
         self.engine.analyze(req)
+    }
+
+    /// Analyze a request and emit evaluation trace events.
+    pub fn analyze_with_trace(&self, req: &Request, trace: &mut dyn TraceSink) -> Verdict {
+        self.engine.analyze_with_trace(req, trace)
     }
 
     /// Analyze a request with a timeout to prevent DoS via complex regexes.

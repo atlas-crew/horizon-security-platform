@@ -1738,6 +1738,90 @@
       color: var(--ac-blue);
     }
 
+    .trace-panel {
+      margin-top: 24px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-subtle);
+    }
+
+    .trace-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .trace-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .trace-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .trace-status {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-card);
+      color: var(--text-muted);
+    }
+
+    .trace-status.connected {
+      color: var(--ac-green);
+      border-color: rgba(0, 177, 64, 0.4);
+      background: rgba(0, 177, 64, 0.12);
+    }
+
+    .trace-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .trace-stream {
+      height: 220px;
+      overflow: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: #0b0f14;
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #8ee6ff;
+    }
+
+    .trace-line {
+      display: flex;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+    }
+
+    .trace-line:last-child {
+      border-bottom: none;
+    }
+
+    .trace-tag {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ac-magenta);
+      min-width: 72px;
+    }
+
+    .trace-empty {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
     /* Bot Indicators */
     .bot-indicators-grid {
       display: grid;
@@ -3300,6 +3384,23 @@ Authorization: Bearer token123"></textarea>
               <div class="result-rules" id="labMatchedRules">
                 <!-- Matched rules will be inserted here -->
               </div>
+            </div>
+          </div>
+
+          <div class="trace-panel">
+            <div class="trace-header">
+              <div>
+                <div class="trace-title">WAF Debug Trace</div>
+                <div class="trace-subtitle">Conditional-level evaluation stream</div>
+              </div>
+              <div id="traceStatus" class="trace-status">Disconnected</div>
+            </div>
+            <div class="trace-actions">
+              <button class="btn btn-secondary" onclick="startTrace()" id="traceRunBtn">Run With Trace</button>
+              <button class="btn btn-secondary" onclick="clearTrace()">Clear</button>
+            </div>
+            <div class="trace-stream" id="traceStream">
+              <div class="trace-empty">No trace events yet.</div>
             </div>
           </div>
         </div>
@@ -5247,6 +5348,9 @@ Authorization: Bearer token123"></textarea>
     // ============================================================================
 
     let labMode = 'raw';
+    let traceSocket = null;
+    let traceEventCount = 0;
+    const TRACE_UI_LIMIT = 400;
 
     const LAB_EXAMPLES = {
       sqli: `GET /api/users?id=1 OR 1=1-- HTTP/1.1
@@ -5290,25 +5394,28 @@ Content-Type: application/json
       }
     }
 
+    function buildLabRequest() {
+      if (labMode === 'raw') {
+        const raw = document.getElementById('labRawRequest').value;
+        return parseRawRequest(raw);
+      }
+
+      return {
+        method: document.getElementById('labMethod').value,
+        uri: document.getElementById('labUri').value || '/',
+        headers: parseHeaders(document.getElementById('labHeaders').value),
+        body: document.getElementById('labBody').value,
+        client_ip: document.getElementById('labClientIp').value || '127.0.0.1'
+      };
+    }
+
     async function evaluateRequest() {
       const btn = document.getElementById('labEvalBtn');
       btn.disabled = true;
       btn.textContent = 'Evaluating...';
 
       try {
-        let request;
-        if (labMode === 'raw') {
-          const raw = document.getElementById('labRawRequest').value;
-          request = parseRawRequest(raw);
-        } else {
-          request = {
-            method: document.getElementById('labMethod').value,
-            uri: document.getElementById('labUri').value || '/',
-            headers: parseHeaders(document.getElementById('labHeaders').value),
-            body: document.getElementById('labBody').value,
-            client_ip: document.getElementById('labClientIp').value || '127.0.0.1'
-          };
-        }
+        const request = buildLabRequest();
 
         const response = await fetchApi('/_sensor/evaluate', {
           method: 'POST',
@@ -5324,6 +5431,153 @@ Content-Type: application/json
         btn.disabled = false;
         btn.textContent = 'Evaluate Request';
       }
+    }
+
+    function buildWsUrl(path) {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const keyParam = apiKey ? `?admin_key=${encodeURIComponent(apiKey)}` : '';
+      return `${protocol}://${window.location.host}${path}${keyParam}`;
+    }
+
+    function setTraceStatus(text, connected) {
+      const status = document.getElementById('traceStatus');
+      status.textContent = text;
+      status.classList.toggle('connected', connected);
+    }
+
+    function clearTrace() {
+      const stream = document.getElementById('traceStream');
+      stream.innerHTML = '<div class="trace-empty">No trace events yet.</div>';
+      traceEventCount = 0;
+    }
+
+    function appendTraceEvent(event) {
+      const stream = document.getElementById('traceStream');
+      if (stream.querySelector('.trace-empty')) {
+        stream.innerHTML = '';
+      }
+
+      const line = document.createElement('div');
+      line.className = 'trace-line';
+
+      const tag = document.createElement('span');
+      tag.className = 'trace-tag';
+      tag.textContent = (event.type || 'event').replace(/_/g, ' ');
+
+      const text = document.createElement('span');
+      text.textContent = formatTraceEvent(event);
+
+      line.appendChild(tag);
+      line.appendChild(text);
+      stream.appendChild(line);
+
+      traceEventCount += 1;
+      if (traceEventCount > TRACE_UI_LIMIT) {
+        stream.removeChild(stream.firstChild);
+        traceEventCount -= 1;
+      }
+
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function formatTraceEvent(event) {
+      switch (event.type) {
+        case 'evaluation_started':
+          return `Evaluation started: ${event.method} ${event.uri} (${event.candidate_rules} candidates)`;
+        case 'rule_start':
+          return `Rule ${event.rule_id} start`;
+        case 'condition_evaluated': {
+          const parts = [
+            event.kind,
+            event.field ? `field=${event.field}` : null,
+            event.op ? `op=${event.op}` : null,
+            event.name ? `name=${event.name}` : null
+          ].filter(Boolean).join(' ');
+          return `Rule ${event.rule_id} condition ${parts} -> ${event.matched ? 'match' : 'no match'}`;
+        }
+        case 'rule_end':
+          return `Rule ${event.rule_id} ${event.matched ? 'matched' : 'missed'} (risk ${event.risk})`;
+        case 'evaluation_finished':
+          return `Finished: ${event.verdict} risk=${event.risk_score} matched=${event.matched_rules?.length || 0} time=${event.detection_time_us}us`;
+        case 'truncated':
+          return `Trace truncated at ${event.limit} events`;
+        default:
+          return JSON.stringify(event);
+      }
+    }
+
+    async function startTrace() {
+      const btn = document.getElementById('traceRunBtn');
+      btn.disabled = true;
+      btn.textContent = 'Tracing...';
+
+      clearTrace();
+      setTraceStatus('Connecting...', false);
+
+      let request;
+      try {
+        request = buildLabRequest();
+      } catch (error) {
+        showToast('Failed to build request: ' + error.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Run With Trace';
+        setTraceStatus('Disconnected', false);
+        return;
+      }
+
+      if (traceSocket) {
+        traceSocket.close();
+        traceSocket = null;
+      }
+
+      const wsUrl = buildWsUrl('/_sensor/debugger/ws');
+      const traceId = `trace_${Date.now()}`;
+      traceSocket = new WebSocket(wsUrl);
+
+      traceSocket.onopen = () => {
+        setTraceStatus('Connected', true);
+        traceSocket.send(JSON.stringify({
+          type: 'evaluate',
+          id: traceId,
+          request,
+          options: { max_events: 2000 }
+        }));
+      };
+
+      traceSocket.onmessage = (event) => {
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (err) {
+          return;
+        }
+
+        if (payload.type === 'event') {
+          appendTraceEvent(payload.event);
+        } else if (payload.type === 'done') {
+          if (payload.result) {
+            displayLabResult(payload.result);
+          }
+          setTraceStatus('Complete', true);
+          traceSocket.close();
+        } else if (payload.type === 'error') {
+          showToast(payload.message || 'Trace error', 'error');
+          setTraceStatus('Error', false);
+          traceSocket.close();
+        }
+      };
+
+      traceSocket.onerror = () => {
+        setTraceStatus('Error', false);
+      };
+
+      traceSocket.onclose = () => {
+        btn.disabled = false;
+        btn.textContent = 'Run With Trace';
+        if (document.getElementById('traceStatus').textContent === 'Connecting...') {
+          setTraceStatus('Disconnected', false);
+        }
+      };
     }
 
     function parseRawRequest(raw) {
@@ -5402,7 +5656,8 @@ Content-Type: application/json
       verdict.className = 'result-verdict ' + (result.blocked ? 'blocked' : 'allowed');
       score.textContent = 'Risk: ' + (result.risk_score || 0);
       score.className = 'result-score badge ' + (result.blocked ? 'badge-danger' : 'badge-success');
-      action.textContent = result.action?.toUpperCase() || '';
+      const actionValue = result.action || result.verdict || '';
+      action.textContent = actionValue ? actionValue.toUpperCase() : '';
       action.className = 'badge ' + (result.blocked ? 'badge-danger' : 'badge-success');
 
       if (result.matched_rules?.length > 0) {

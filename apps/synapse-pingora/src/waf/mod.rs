@@ -41,6 +41,7 @@ mod index;
 mod rule;
 mod state;
 mod synapse;
+mod trace;
 mod types;
 
 pub use engine::Engine;
@@ -55,6 +56,7 @@ pub use index::{
 };
 pub use rule::{boolean_operands, MatchCondition, MatchValue, WafRule};
 pub use state::{now_ms, StateStore};
+pub use trace::{TraceEvent, TraceSink, TraceState};
 pub use types::{
     Action, AnomalyContribution, AnomalySignal, AnomalySignalType, AnomalyType, ArgEntry,
     BlockingMode, EvalContext, Header, repeat_multiplier, Request, RiskConfig, RiskContribution, Verdict,

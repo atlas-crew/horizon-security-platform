@@ -11,7 +11,7 @@
 //! - GET /stats - Runtime statistics
 //! - GET /waf/stats - WAF statistics
 
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Instant;
@@ -361,19 +361,24 @@ pub fn record_log(level: &str, message: String) {
 use axum::{
     body::Body,
     extract::{Path, Query, Request, State},
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::{header, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde::Deserialize;
+use futures_util::{SinkExt, StreamExt};
+use percent_encoding::percent_decode_str;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
 use subtle::ConstantTimeEq;
 
 use crate::api::{ApiHandler, ApiResponse};
+use crate::waf::{TraceEvent, TraceSink};
 
 // =============================================================================
 // Scope Constants (WS2-004)
@@ -583,30 +588,56 @@ async fn require_auth(
         return Ok(next.run(request).await);
     }
 
-    // Extract client IP for rate limiting
     let client_ip = extract_client_ip(&request);
-
-    // Check X-Admin-Key header
     let provided_key = request
         .headers()
         .get("X-Admin-Key")
         .and_then(|v| v.to_str().ok());
 
+    match validate_admin_key(&state, client_ip, provided_key) {
+        Ok(()) => Ok(next.run(request).await),
+        Err(response) => Err(response),
+    }
+}
+
+/// Record a failed authentication attempt and check if rate limit exceeded.
+///
+/// SECURITY: Returns 429 Too Many Requests if the client has exceeded the
+/// allowed number of authentication failures (5 per minute by default).
+fn record_auth_failure(
+    state: &AdminState,
+    client_ip: IpAddr,
+) -> Result<(), std::time::Duration> {
+    match state.auth_failure_limiter.check_key(&client_ip) {
+        Ok(_) => Ok(()), // Within rate limit
+        Err(not_until) => {
+            warn!(
+                client_ip = %client_ip,
+                "Auth rate limit exceeded: too many failed authentication attempts"
+            );
+            Err(not_until.wait_time_from(governor::clock::Clock::now(
+                &governor::clock::DefaultClock::default(),
+            )))
+        }
+    }
+}
+
+fn validate_admin_key(
+    state: &AdminState,
+    client_ip: IpAddr,
+    provided_key: Option<&str>,
+) -> Result<(), Response> {
     match provided_key {
         Some(key) => {
-            // Security: Use constant-time comparison to prevent timing attacks
-            // An attacker could otherwise measure response times to incrementally
-            // guess the API key byte-by-byte
             let key_bytes = key.as_bytes();
             let expected_bytes = state.admin_api_key.as_bytes();
             let is_valid = key_bytes.len() == expected_bytes.len()
                 && bool::from(key_bytes.ct_eq(expected_bytes));
 
             if is_valid {
-                Ok(next.run(request).await)
+                Ok(())
             } else {
-                // SECURITY: Track failed auth attempt and check rate limit
-                match record_auth_failure(&state, client_ip) {
+                match record_auth_failure(state, client_ip) {
                     Ok(()) => {
                         warn!(client_ip = %client_ip, "Admin auth failed: invalid API key");
                         let mut problem = ProblemDetails::new(
@@ -634,57 +665,72 @@ async fn require_auth(
                 }
             }
         }
-        None => {
-            // SECURITY: Track failed auth attempt (missing header counts as failure)
-            match record_auth_failure(&state, client_ip) {
-                Ok(()) => {
-                    warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
-                    let mut problem = ProblemDetails::new(
-                        StatusCode::UNAUTHORIZED,
-                        "Missing X-Admin-Key header",
-                    );
-                    problem.code = Some(error_codes::UNAUTHORIZED.to_string());
-                    Err((StatusCode::UNAUTHORIZED, Json(problem)).into_response())
-                }
-                Err(retry_after) => {
-                    warn!(client_ip = %client_ip, "Admin auth failed: too many attempts");
-                    let mut problem = ProblemDetails::new(
-                        StatusCode::TOO_MANY_REQUESTS,
-                        "Too many failed authentication attempts",
-                    );
-                    problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
-                    problem.retry_after_secs = Some(retry_after.as_secs());
-                    Err((
-                        StatusCode::TOO_MANY_REQUESTS,
-                        [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
-                        Json(problem),
-                    )
-                        .into_response())
-                }
+        None => match record_auth_failure(state, client_ip) {
+            Ok(()) => {
+                warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
+                let mut problem = ProblemDetails::new(
+                    StatusCode::UNAUTHORIZED,
+                    "Missing X-Admin-Key header",
+                );
+                problem.code = Some(error_codes::UNAUTHORIZED.to_string());
+                Err((StatusCode::UNAUTHORIZED, Json(problem)).into_response())
             }
-        }
+            Err(retry_after) => {
+                warn!(client_ip = %client_ip, "Admin auth failed: too many attempts");
+                let mut problem = ProblemDetails::new(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "Too many failed authentication attempts",
+                );
+                problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+                problem.retry_after_secs = Some(retry_after.as_secs());
+                Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
+                    Json(problem),
+                )
+                    .into_response())
+            }
+        },
     }
 }
 
-/// Record a failed authentication attempt and check if rate limit exceeded.
-///
-/// SECURITY: Returns 429 Too Many Requests if the client has exceeded the
-/// allowed number of authentication failures (5 per minute by default).
-fn record_auth_failure(
-    state: &AdminState,
-    client_ip: IpAddr,
-) -> Result<(), std::time::Duration> {
-    match state.auth_failure_limiter.check_key(&client_ip) {
-        Ok(_) => Ok(()), // Within rate limit
-        Err(not_until) => {
-            warn!(
-                client_ip = %client_ip,
-                "Auth rate limit exceeded: too many failed authentication attempts"
-            );
-            Err(not_until.wait_time_from(governor::clock::Clock::now(
-                &governor::clock::DefaultClock::default(),
-            )))
+/// Extract admin key from query string (admin_key).
+fn extract_admin_key_from_query(request: &Request) -> Option<String> {
+    let query = request.uri().query()?;
+    for pair in query.split('&') {
+        let mut iter = pair.splitn(2, '=');
+        let key = iter.next().unwrap_or_default();
+        if key != "admin_key" {
+            continue;
         }
+        let raw = iter.next().unwrap_or_default();
+        let decoded = percent_decode_str(raw).decode_utf8().ok()?;
+        return Some(decoded.into_owned());
+    }
+    None
+}
+
+/// Authentication middleware for WebSocket endpoints.
+async fn require_ws_auth(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    if is_dev_mode() {
+        return Ok(next.run(request).await);
+    }
+
+    let client_ip = extract_client_ip(&request);
+    let header_key = request
+        .headers()
+        .get("X-Admin-Key")
+        .and_then(|v| v.to_str().ok());
+    let query_key = extract_admin_key_from_query(&request);
+    let provided_key = header_key.or_else(|| query_key.as_deref());
+
+    match validate_admin_key(&state, client_ip, provided_key) {
+        Ok(()) => Ok(next.run(request).await),
+        Err(response) => Err(response),
     }
 }
 
@@ -1085,6 +1131,12 @@ pub async fn start_admin_server(
     let public_routes = Router::new()
         .route("/health", get(health_handler));
 
+    // WebSocket debugger routes with query/header auth support.
+    let debugger_routes = Router::new()
+        .route("/_sensor/debugger/ws", get(waf_debugger_ws_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_ws_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+
     // All remaining admin API routes require authentication.
     let authenticated_routes = Router::new()
         .route("/metrics", get(metrics_handler))
@@ -1104,6 +1156,7 @@ pub async fn start_admin_server(
         .route("/_sensor/blocks", get(sensor_blocks_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/signals", get(sensor_signals_handler))
+        .route("/_sensor/report", post(sensor_report_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
         .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
@@ -1163,6 +1216,7 @@ pub async fn start_admin_server(
         .merge(service_manage_routes)
         .merge(sensor_read_routes)
         .merge(admin_read_routes)
+        .merge(debugger_routes)
         .merge(authenticated_routes)
         .merge(public_routes)
         .layer(middleware::from_fn(security_headers))
@@ -1777,6 +1831,96 @@ async fn sensor_signals_handler(
             "top_signal_types": []
         }
     })))
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct ApparatusReport {
+    #[serde(rename = "sensorId")]
+    pub sensor_id: String,
+    pub timestamp: String,
+    pub actor: ApparatusActor,
+    pub signal: ApparatusSignal,
+    pub request: Option<ApparatusRequest>,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct ApparatusActor {
+    pub ip: String,
+    pub fingerprint: Option<String>,
+    #[serde(rename = "sessionId")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct ApparatusSignal {
+    #[serde(rename = "type")]
+    pub signal_type: String,
+    pub severity: String,
+    pub details: serde_json::Value,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct ApparatusRequest {
+    pub method: String,
+    pub path: String,
+    pub headers: Option<HashMap<String, String>>,
+}
+
+/// POST /_sensor/report - Ingest external threat signals (e.g. from Apparatus/Cutlass)
+async fn sensor_report_handler(
+    State(state): State<AdminState>,
+    Json(report): Json<ApparatusReport>,
+) -> impl IntoResponse {
+    use crate::horizon::{ThreatSignal, SignalType, Severity};
+
+    // Map external signal type to internal SignalType
+    let signal_type = match report.signal.signal_type.as_str() {
+        "honeypot_hit" => SignalType::IpThreat, // Treat as generic threat for now
+        "trap_trigger" => SignalType::BotSignature, // High confidence bot
+        "protocol_probe" => SignalType::TemplateDiscovery, // Probing
+        "dlp_match" => SignalType::SchemaViolation, // Abuse
+        _ => SignalType::IpThreat,
+    };
+
+    // Map severity
+    let severity = match report.signal.severity.to_lowercase().as_str() {
+        "low" => Severity::Low,
+        "medium" => Severity::Medium,
+        "high" => Severity::High,
+        "critical" => Severity::Critical,
+        _ => Severity::Medium,
+    };
+
+    // Create threat signal
+    let mut signal = ThreatSignal::new(signal_type, severity)
+        .with_source_ip(&report.actor.ip)
+        .with_confidence(1.0); // External ground truth is high confidence
+
+    if let Some(ref fp) = report.actor.fingerprint {
+        signal = signal.with_fingerprint(fp);
+    }
+
+    // Embed full report as metadata
+    signal = signal.with_metadata(serde_json::to_value(&report).unwrap_or_default());
+
+    // Dispatch to SignalManager
+    if let Some(manager) = state.handler.signal_manager() {
+        manager.record_signal(signal);
+        
+        info!("Received external threat report from {}: {} ({})", 
+            report.sensor_id, report.signal.signal_type, report.actor.ip);
+
+        (StatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "id": uuid::Uuid::new_v4().to_string()
+        })))
+    } else {
+        warn!("Signal manager not available for external report from {}", report.sensor_id);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "success": false,
+            "error": "Signal manager not configured"
+        })))
+    }
 }
 
 /// GET /_sensor/anomalies - Returns real anomaly events from TrendsManager
@@ -4049,6 +4193,254 @@ fn default_client_ip() -> String {
     "127.0.0.1".to_string()
 }
 
+const DEFAULT_TRACE_MAX_EVENTS: usize = 2000;
+
+fn default_trace_max_events() -> usize {
+    DEFAULT_TRACE_MAX_EVENTS
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct DebuggerOptions {
+    #[serde(default = "default_trace_max_events")]
+    max_events: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum DebuggerCommand {
+    Evaluate {
+        id: Option<String>,
+        request: EvaluateRequest,
+        options: Option<DebuggerOptions>,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum DebuggerMessage {
+    Event {
+        id: String,
+        event: TraceEvent,
+    },
+    Done {
+        id: String,
+        result: DebuggerDonePayload,
+    },
+    Error {
+        id: Option<String>,
+        message: String,
+    },
+}
+
+#[derive(Debug, Serialize)]
+struct DebuggerDonePayload {
+    blocked: bool,
+    risk_score: u16,
+    matched_rules: Vec<u32>,
+    block_reason: Option<String>,
+    detection_time_us: u64,
+    action: String,
+    verdict: String,
+}
+
+struct ChannelTraceSink {
+    sender: mpsc::UnboundedSender<TraceEvent>,
+    max_events: usize,
+    emitted: usize,
+    truncated: bool,
+}
+
+impl ChannelTraceSink {
+    fn new(sender: mpsc::UnboundedSender<TraceEvent>, max_events: usize) -> Self {
+        Self {
+            sender,
+            max_events: max_events.max(1),
+            emitted: 0,
+            truncated: false,
+        }
+    }
+}
+
+impl TraceSink for ChannelTraceSink {
+    fn record(&mut self, event: TraceEvent) {
+        let is_terminal = matches!(event, TraceEvent::EvaluationFinished { .. });
+
+        if self.emitted >= self.max_events && !is_terminal {
+            if !self.truncated {
+                self.truncated = true;
+                let _ = self.sender.send(TraceEvent::Truncated {
+                    limit: self.max_events,
+                });
+            }
+            return;
+        }
+
+        self.emitted += 1;
+        let _ = self.sender.send(event);
+    }
+}
+
+async fn waf_debugger_ws_handler(
+    State(state): State<AdminState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_waf_debugger_socket(state, socket))
+}
+
+async fn handle_waf_debugger_socket(state: AdminState, socket: WebSocket) {
+    let (mut sender, mut receiver) = socket.split();
+
+    while let Some(message) = receiver.next().await {
+        let message = match message {
+            Ok(msg) => msg,
+            Err(_) => break,
+        };
+
+        match message {
+            Message::Text(text) => {
+                let command: DebuggerCommand = match serde_json::from_str(&text) {
+                    Ok(cmd) => cmd,
+                    Err(err) => {
+                        let _ = send_debugger_message(
+                            &mut sender,
+                            DebuggerMessage::Error {
+                                id: None,
+                                message: format!("Invalid command: {err}"),
+                            },
+                        )
+                        .await;
+                        continue;
+                    }
+                };
+
+                match command {
+                    DebuggerCommand::Evaluate { id, request, options } => {
+                        let request_id =
+                            id.unwrap_or_else(|| format!("trace_{}", fastrand::u64(..)));
+                        let max_events = options
+                            .map(|opts| opts.max_events)
+                            .unwrap_or(DEFAULT_TRACE_MAX_EVENTS);
+
+                        if run_trace_session(&state, &mut sender, request_id, request, max_events)
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            Message::Ping(payload) => {
+                let _ = sender.send(Message::Pong(payload)).await;
+            }
+            Message::Close(_) => break,
+            _ => {}
+        }
+    }
+}
+
+async fn run_trace_session(
+    state: &AdminState,
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    request_id: String,
+    request: EvaluateRequest,
+    max_events: usize,
+) -> Result<(), ()> {
+    let body_bytes = decode_evaluate_body(request.body.as_deref());
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let handler = Arc::clone(&state.handler);
+    let method = request.method.clone();
+    let uri = request.uri.clone();
+    let headers = request.headers.clone();
+    let client_ip = request.client_ip.clone();
+
+    let mut handle = tokio::task::spawn_blocking(move || {
+        let mut sink = ChannelTraceSink::new(event_tx, max_events);
+        handler.evaluate_request_trace(
+            &method,
+            &uri,
+            &headers,
+            body_bytes.as_deref(),
+            &client_ip,
+            &mut sink,
+        )
+    });
+
+    loop {
+        tokio::select! {
+            event = event_rx.recv() => {
+                if let Some(event) = event {
+                    send_debugger_message(sender, DebuggerMessage::Event {
+                        id: request_id.clone(),
+                        event,
+                    }).await.map_err(|_| ())?;
+                }
+            }
+            result = &mut handle => {
+                let result = match result {
+                    Ok(result) => result,
+                    Err(err) => {
+                        send_debugger_message(sender, DebuggerMessage::Error {
+                            id: Some(request_id.clone()),
+                            message: format!("Evaluation failed: {err}"),
+                        }).await.map_err(|_| ())?;
+                        return Ok(());
+                    }
+                };
+
+                while let Ok(event) = event_rx.try_recv() {
+                    send_debugger_message(sender, DebuggerMessage::Event {
+                        id: request_id.clone(),
+                        event,
+                    }).await.map_err(|_| ())?;
+                }
+
+                let Some(result) = result else {
+                    send_debugger_message(sender, DebuggerMessage::Error {
+                        id: Some(request_id.clone()),
+                        message: "WAF evaluation unavailable".to_string(),
+                    }).await.map_err(|_| ())?;
+                    return Ok(());
+                };
+
+                let verdict = if result.blocked {
+                    "block"
+                } else if result.risk_score > 50 {
+                    "warn"
+                } else {
+                    "pass"
+                };
+
+                let done = DebuggerDonePayload {
+                    blocked: result.blocked,
+                    risk_score: result.risk_score,
+                    matched_rules: result.matched_rules,
+                    block_reason: result.block_reason,
+                    detection_time_us: result.detection_time_us,
+                    action: verdict.to_string(),
+                    verdict: verdict.to_string(),
+                };
+
+                send_debugger_message(sender, DebuggerMessage::Done {
+                    id: request_id,
+                    result: done,
+                }).await.map_err(|_| ())?;
+
+                return Ok(());
+            }
+        }
+    }
+}
+
+async fn send_debugger_message(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    message: DebuggerMessage,
+) -> Result<(), ()> {
+    let payload = serde_json::to_string(&message).map_err(|_| ())?;
+    sender.send(Message::Text(payload)).await.map_err(|_| ())
+}
+
 /// POST /_sensor/evaluate - Dry-run WAF evaluation
 ///
 /// Evaluates a request against the WAF rules without actually processing it.
@@ -4080,14 +4472,7 @@ async fn sensor_evaluate_handler(
     State(state): State<AdminState>,
     Json(request): Json<EvaluateRequest>,
 ) -> impl IntoResponse {
-    // Parse body if provided
-    let body_bytes: Option<Vec<u8>> = request.body.as_ref().map(|b| {
-        // Try to decode as base64, fall back to raw UTF-8 bytes
-        match base64_decode(b) {
-            Ok(decoded) => decoded,
-            Err(_) => b.as_bytes().to_vec(),
-        }
-    });
+    let body_bytes = decode_evaluate_body(request.body.as_deref());
 
     // Run detection using the ApiHandler's synapse engine
     match state.handler.evaluate_request(
@@ -4128,6 +4513,13 @@ async fn sensor_evaluate_handler(
             service_unavailable("WAF evaluation")
         }
     }
+}
+
+fn decode_evaluate_body(body: Option<&str>) -> Option<Vec<u8>> {
+    body.map(|value| match base64_decode(value) {
+        Ok(decoded) => decoded,
+        Err(_) => value.as_bytes().to_vec(),
+    })
 }
 
 /// Simple base64 decode helper (uses standard base64)

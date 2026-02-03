@@ -5265,9 +5265,19 @@ async fn config_kernel_put_handler(
 
         match write_sysctl_value(&key, &value) {
             Ok(()) => {
+                record_log_with_source(
+                    "info",
+                    LogSource::System,
+                    format!("Kernel parameter {} set to {}", key, value),
+                );
                 applied.insert(key, value);
             }
             Err(err) => {
+                record_log_with_source(
+                    "warn",
+                    LogSource::System,
+                    format!("Kernel parameter {} update failed: {}", key, err),
+                );
                 failed.insert(key, err);
             }
         }

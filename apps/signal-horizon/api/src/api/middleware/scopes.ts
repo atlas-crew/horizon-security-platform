@@ -4,7 +4,13 @@
  * Defines all API permission scopes and backward-compatible aliases.
  * Aliases allow existing API keys with broad scopes to access new
  * specific endpoints without requiring key rotation.
+ *
+ * Security: Alias expansion includes cycle detection to prevent DoS
+ * via infinite recursion if circular references are accidentally introduced.
  */
+
+/** Maximum depth for recursive alias expansion (prevents DoS) */
+const MAX_ALIAS_DEPTH = 10;
 
 /**
  * All available permission scopes with descriptions.
@@ -160,19 +166,35 @@ export const SCOPE_ALIASES: Record<string, readonly string[]> = {
  * Expand scopes by including all scopes that aliases grant.
  * Used by requireScope() to check if user has access through aliases.
  *
+ * Security: Includes cycle detection and depth limiting to prevent DoS
+ * via infinite recursion if circular alias references are introduced.
+ *
  * @param scopes - The scopes from the API key
  * @returns Expanded set of scopes including aliased scopes
  */
 export function expandScopes(scopes: string[]): Set<string> {
   const expanded = new Set<string>(scopes);
+  const visited = new Set<string>();
 
-  for (const scope of scopes) {
+  function expandRecursive(scope: string, depth: number): void {
+    // Prevent cycles and excessive depth
+    if (visited.has(scope) || depth > MAX_ALIAS_DEPTH) {
+      return;
+    }
+    visited.add(scope);
+
     const aliases = SCOPE_ALIASES[scope];
     if (aliases) {
       for (const aliasedScope of aliases) {
         expanded.add(aliasedScope);
+        // Recursively expand in case aliases reference other aliases
+        expandRecursive(aliasedScope, depth + 1);
       }
     }
+  }
+
+  for (const scope of scopes) {
+    expandRecursive(scope, 0);
   }
 
   return expanded;

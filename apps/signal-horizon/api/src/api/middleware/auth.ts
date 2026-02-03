@@ -115,6 +115,16 @@ export function createAuthMiddleware(prisma: PrismaClient) {
         return;
       }
 
+      // Validate tenant association exists (defensive check)
+      if (!apiKeyRecord.tenant) {
+        console.error(`API key ${apiKeyRecord.id} has invalid tenant association`);
+        sendProblem(res, 401, 'Invalid API key configuration', {
+          code: 'INVALID_TENANT_ASSOCIATION',
+          instance: req.originalUrl,
+        });
+        return;
+      }
+
       // Successful authentication - clear any failed attempt tracking
       clearFailedAuth(clientIp);
 

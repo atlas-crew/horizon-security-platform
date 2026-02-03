@@ -24,6 +24,7 @@ function createMockReq(overrides: Partial<Request & { contentType?: string | und
 interface MockResponse extends Partial<Response> {
   statusCode: number;
   body: unknown;
+  contentType?: string;
 }
 
 function createMockRes(): MockResponse {
@@ -36,6 +37,10 @@ function createMockRes(): MockResponse {
     }),
     json: vi.fn(function (this: MockResponse, data: unknown) {
       this.body = data;
+      return this as Response;
+    }),
+    type: vi.fn(function (this: MockResponse, value: string) {
+      this.contentType = value;
       return this as Response;
     }),
   };
@@ -196,8 +201,11 @@ describe('contentTypeValidation', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(415);
       expect(res.body).toMatchObject({
-        error: 'Unsupported Media Type',
+        title: 'Unsupported Media Type',
+        status: 415,
+        detail: 'Missing Content-Type header for request with body',
         code: 'MISSING_CONTENT_TYPE',
+        details: { expected: 'application/json' },
       });
     });
 
@@ -211,10 +219,14 @@ describe('contentTypeValidation', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(415);
       expect(res.body).toMatchObject({
-        error: 'Unsupported Media Type',
+        title: 'Unsupported Media Type',
+        status: 415,
+        detail: 'Content-Type must be application/json',
         code: 'INVALID_CONTENT_TYPE',
-        received: 'text/plain',
-        expected: 'application/json',
+        details: {
+          received: 'text/plain',
+          expected: 'application/json',
+        },
       });
     });
 

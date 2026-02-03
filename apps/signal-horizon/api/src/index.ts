@@ -281,11 +281,12 @@ function handleTunnelSensorConnection(
       // Hash the API key for lookup
       const keyHash = createHash('sha256').update(apiKey).digest('hex');
 
-      // Validate API key against database
-      const apiKeyRecord = await db.apiKey.findFirst({
+      // Validate sensor API key against database (must be scoped to this sensor)
+      const sensorKeyRecord = await db.sensorApiKey.findFirst({
         where: {
           keyHash,
-          isRevoked: false,
+          status: 'ACTIVE',
+          sensorId,
           OR: [
             { expiresAt: null },
             { expiresAt: { gt: new Date() } },
@@ -293,44 +294,31 @@ function handleTunnelSensorConnection(
         },
         select: {
           id: true,
-          tenantId: true,
           name: true,
-          scopes: true,
+          sensor: {
+            select: {
+              id: true,
+              name: true,
+              tenantId: true,
+            },
+          },
         },
       });
 
-      if (!apiKeyRecord) {
-        log.warn({ sensorId }, 'Invalid or expired API key for tunnel');
+      if (!sensorKeyRecord || !sensorKeyRecord.sensor) {
+        log.warn({ sensorId }, 'Invalid or expired sensor API key for tunnel');
         ws.send(JSON.stringify({
           type: 'auth-error',
-          payload: { error: 'Invalid or expired API key' },
+          payload: { error: 'Invalid or expired sensor API key' },
           timestamp: new Date().toISOString(),
         }));
-        ws.close(4004, 'Invalid API key');
+        ws.close(4004, 'Invalid sensor API key');
         clearTimeout(authTimeout);
         return;
       }
 
-      // Verify sensor belongs to this tenant
-      const sensor = await db.sensor.findFirst({
-        where: {
-          id: sensorId,
-          tenantId: apiKeyRecord.tenantId,
-        },
-        select: { id: true, name: true },
-      });
-
-      if (!sensor) {
-        log.warn({ sensorId, tenantId: apiKeyRecord.tenantId }, 'Sensor not found or tenant mismatch');
-        ws.send(JSON.stringify({
-          type: 'auth-error',
-          payload: { error: 'Sensor not found' },
-          timestamp: new Date().toISOString(),
-        }));
-        ws.close(4005, 'Sensor not found');
-        clearTimeout(authTimeout);
-        return;
-      }
+      const sensor = sensorKeyRecord.sensor;
+      const tenantId = sensor.tenantId;
 
       // Authentication successful
       authenticated = true;
@@ -342,7 +330,7 @@ function handleTunnelSensorConnection(
         payload: {
           sensorId: sensor.id,
           sensorName: sensor.name,
-          tenantId: apiKeyRecord.tenantId,
+          tenantId,
         },
         timestamp: new Date().toISOString(),
       }));
@@ -350,14 +338,20 @@ function handleTunnelSensorConnection(
       // Hand off to TunnelBroker for connection management
       tunnelBroker.handleSensorConnect(
         ws,
-        sensorId,
-        apiKeyRecord.tenantId,
+        sensor.id,
+        tenantId,
         capabilities,
         metadata
       );
 
+      // Update sensor key last used
+      await db.sensorApiKey.update({
+        where: { id: sensorKeyRecord.id },
+        data: { lastUsedAt: new Date() },
+      });
+
       log.info(
-        { sensorId, tenantId: apiKeyRecord.tenantId, capabilities },
+        { sensorId: sensor.id, tenantId, capabilities },
         'Sensor tunnel authenticated and connected'
       );
     } catch (error) {

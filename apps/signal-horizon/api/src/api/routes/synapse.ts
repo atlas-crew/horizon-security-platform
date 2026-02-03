@@ -13,6 +13,7 @@ import { sendProblem } from '../../lib/problem-details.js';
 import {
   SynapseProxyService,
   SynapseProxyError,
+  SensorError,
   type Block,
   type Rule,
   type EvalRequest,
@@ -145,12 +146,19 @@ export function createSynapseRoutes(
    * Uses the enhanced SynapseProxyError.toJSON() for structured responses
    */
   function handleError(req: Request, res: Response, error: unknown, context: string): void {
+    if (error instanceof SensorError) {
+      const problem = error.toProblemDetails();
+      res.status(problem.status).type('application/problem+json').json(problem);
+      return;
+    }
+
     if (error instanceof SynapseProxyError) {
       const statusMap: Record<string, number> = {
         TUNNEL_NOT_FOUND: 503,
         FORBIDDEN: 403,
         TIMEOUT: 504,
         SEND_FAILED: 503,
+        SENSOR_DISCONNECTED: 503,
         SENSOR_ERROR: 502,
         HTTP_ERROR: error.status || 502,
         SHUTDOWN: 503,

@@ -19,6 +19,7 @@ function createMockReq(overrides: Partial<Request & { query: Record<string, unkn
 interface MockResponse extends Partial<Response> {
   statusCode: number;
   body: unknown;
+  contentType?: string;
 }
 
 function createMockRes(): MockResponse {
@@ -31,6 +32,10 @@ function createMockRes(): MockResponse {
     }),
     json: vi.fn(function (this: MockResponse, data: unknown) {
       this.body = data;
+      return this as Response;
+    }),
+    type: vi.fn(function (this: MockResponse, value: string) {
+      this.contentType = value;
       return this as Response;
     }),
   };
@@ -99,9 +104,11 @@ describe('queryLimits', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(400);
       expect(res.body).toMatchObject({
-        error: 'Bad Request',
+        title: 'Bad Request',
+        status: 400,
+        detail: 'Too many query parameters',
         code: 'TOO_MANY_PARAMS',
-        limit: 2,
+        details: { limit: 2 },
       });
     });
   });
@@ -121,9 +128,11 @@ describe('queryLimits', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(400);
       expect(res.body).toMatchObject({
-        error: 'Bad Request',
+        title: 'Bad Request',
+        status: 400,
+        detail: 'Query string too long',
         code: 'QUERY_STRING_TOO_LONG',
-        limit: 100,
+        details: { limit: 100 },
       });
     });
   });
@@ -143,9 +152,14 @@ describe('queryLimits', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(400);
       expect(res.body).toMatchObject({
-        error: 'Bad Request',
+        title: 'Bad Request',
+        status: 400,
+        detail: 'Query parameter key too long',
         code: 'KEY_TOO_LONG',
-        limit: 100,
+        details: {
+          limit: 100,
+          key: expect.any(String),
+        },
       });
     });
   });
@@ -165,10 +179,14 @@ describe('queryLimits', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(400);
       expect(res.body).toMatchObject({
-        error: 'Bad Request',
+        title: 'Bad Request',
+        status: 400,
+        detail: "Query parameter 'param' value too long",
         code: 'VALUE_TOO_LONG',
-        key: 'param',
-        limit: 512,
+        details: {
+          key: 'param',
+          limit: 512,
+        },
       });
     });
 

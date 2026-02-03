@@ -243,6 +243,51 @@ fn default_admin_listen() -> String {
     "0.0.0.0:6191".to_string()
 }
 
+fn parse_cidr_prefix(cidr: &str) -> Option<(IpAddr, u8, u8)> {
+    let (addr_str, prefix_str) = if let Some(idx) = cidr.find('/') {
+        (&cidr[..idx], Some(&cidr[idx + 1..]))
+    } else {
+        (cidr, None)
+    };
+
+    let ip: IpAddr = addr_str.parse().ok()?;
+    let max_prefix = match ip {
+        IpAddr::V4(_) => 32,
+        IpAddr::V6(_) => 128,
+    };
+    let prefix = match prefix_str {
+        Some(prefix_raw) => prefix_raw.parse::<u8>().ok()?,
+        None => max_prefix,
+    };
+
+    if prefix > max_prefix {
+        return None;
+    }
+
+    Some((ip, prefix, max_prefix))
+}
+
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_private(),
+        IpAddr::V6(v6) => v6.is_unique_local(),
+    }
+}
+
+fn is_broad_private_cidr(cidr: &str) -> bool {
+    let (ip, prefix, max_prefix) = match parse_cidr_prefix(cidr) {
+        Some(parts) => parts,
+        None => return false,
+    };
+    is_private_ip(&ip) && prefix < max_prefix
+}
+
+fn is_wildcard_cidr(cidr: &str) -> bool {
+    parse_cidr_prefix(cidr)
+        .map(|(_, prefix, _)| prefix == 0)
+        .unwrap_or(false)
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -679,6 +724,11 @@ static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
 static CONFIG_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static RULES_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+// WAF regex evaluation timeout in microseconds (prevents ReDoS attacks).
+// Default: 100ms. Configurable via server.waf_regex_timeout_ms.
+// Using AtomicU64 for lock-free access in hot path.
+static WAF_REGEX_TIMEOUT_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(100_000); // 100ms default
+
 /// Compute SHA256 hash of data and return as hex string.
 fn compute_hash(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -783,8 +833,11 @@ static RULE_COUNT: Lazy<usize> = Lazy::new(|| {
 pub struct DetectionEngine;
 
 impl DetectionEngine {
-    /// Analyze a request using the Synapse WAF engine.
+    /// Analyze a request using the Synapse WAF engine with timeout protection.
     /// Returns a DetectionResult with timing information.
+    ///
+    /// The timeout is configurable via `server.waf_regex_timeout_ms` in the config file.
+    /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
     #[inline]
     pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
         let start = Instant::now();
@@ -805,8 +858,12 @@ impl DetectionEngine {
             is_static: false,
         };
 
-        // Run the real detection engine (Shared state)
-        let verdict = SYNAPSE.read().analyze(&request);
+        // Get configured timeout (atomic load for lock-free access in hot path)
+        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
+        let timeout = Duration::from_micros(timeout_us);
+
+        // Run the real detection engine with timeout protection (prevents ReDoS)
+        let verdict = SYNAPSE.read().analyze_with_timeout(&request, timeout);
 
         let elapsed = start.elapsed();
 
@@ -3565,6 +3622,14 @@ fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)>
                         path,
                         sites.len()
                     );
+
+                    // Initialize WAF regex timeout from config (ReDoS prevention)
+                    // Cap at 500ms maximum to prevent disabling protection
+                    let timeout_ms = config_file.server.waf_regex_timeout_ms.min(500);
+                    let timeout_us = timeout_ms * 1000;
+                    WAF_REGEX_TIMEOUT_US.store(timeout_us, std::sync::atomic::Ordering::Relaxed);
+                    info!("WAF regex timeout configured: {}ms (ReDoS protection)", timeout_ms);
+
                     return Some((config_file, sites));
                 }
             }
@@ -4306,9 +4371,48 @@ fn main() {
         }
     }
 
+    let listen_addr = config.server.listen.parse::<SocketAddr>().ok();
+    let listen_is_loopback = listen_addr.map(|addr| addr.ip().is_loopback()).unwrap_or(false);
+
     if trusted_proxies.is_empty() {
+        if !listen_is_loopback {
+            warn!(
+                "No trusted proxies configured for listen address {}. X-Forwarded-For headers will be ignored; set server.trusted_proxies to explicit proxy IPs in production.",
+                config.server.listen
+            );
+        }
         info!("No trusted proxies configured - X-Forwarded-For headers will be ignored (secure default)");
     } else {
+        if !listen_is_loopback {
+            let broad_private: Vec<String> = config
+                .server
+                .trusted_proxies
+                .iter()
+                .filter(|cidr| is_broad_private_cidr(cidr))
+                .cloned()
+                .collect();
+            if !broad_private.is_empty() {
+                warn!(
+                    "Trusted proxies include broad private ranges: {}. Consider narrowing to explicit proxy IPs to prevent XFF spoofing.",
+                    broad_private.join(", ")
+                );
+            }
+
+            let wildcard: Vec<String> = config
+                .server
+                .trusted_proxies
+                .iter()
+                .filter(|cidr| is_wildcard_cidr(cidr))
+                .cloned()
+                .collect();
+            if !wildcard.is_empty() {
+                warn!(
+                    "Trusted proxies include wildcard ranges: {}. This allows any proxy to set X-Forwarded-For.",
+                    wildcard.join(", ")
+                );
+            }
+        }
+
         info!("Trusted proxies configured: {} CIDR ranges", trusted_proxies.len());
         for cidr in &config.server.trusted_proxies {
             debug!("  Trusted: {}", cidr);

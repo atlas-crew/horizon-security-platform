@@ -45,6 +45,14 @@ pub struct GlobalConfig {
     /// Honeypot trap endpoint configuration
     #[serde(default)]
     pub trap_config: Option<TrapConfig>,
+    /// WAF regex evaluation timeout in milliseconds (prevents ReDoS attacks).
+    /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
+    #[serde(default = "default_waf_regex_timeout_ms")]
+    pub waf_regex_timeout_ms: u64,
+}
+
+fn default_waf_regex_timeout_ms() -> u64 {
+    100 // 100ms default, matching issue requirement
 }
 
 fn default_http_addr() -> String {
@@ -83,6 +91,7 @@ impl Default for GlobalConfig {
             log_level: default_log_level(),
             admin_api_key: None,
             trap_config: None,
+            waf_regex_timeout_ms: default_waf_regex_timeout_ms(),
         }
     }
 }
@@ -760,6 +769,38 @@ sites:
         assert_eq!(config.https_addr, "0.0.0.0:443");
         assert_eq!(config.waf_threshold, 70);
         assert!(config.waf_enabled);
+        assert_eq!(config.waf_regex_timeout_ms, 100); // Default 100ms
+    }
+
+    #[test]
+    fn test_waf_regex_timeout_config() {
+        let yaml = r#"
+server:
+  waf_regex_timeout_ms: 200
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+"#;
+        let file = create_temp_config(yaml);
+        let config = ConfigLoader::load(file.path()).unwrap();
+        assert_eq!(config.server.waf_regex_timeout_ms, 200);
+    }
+
+    #[test]
+    fn test_waf_regex_timeout_default() {
+        let yaml = r#"
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+"#;
+        let file = create_temp_config(yaml);
+        let config = ConfigLoader::load(file.path()).unwrap();
+        // Should use default of 100ms when not specified
+        assert_eq!(config.server.waf_regex_timeout_ms, 100);
     }
 
     #[test]

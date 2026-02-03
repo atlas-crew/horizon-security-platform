@@ -58,7 +58,7 @@ impl BlockLog {
     }
 
     pub fn record(&self, event: BlockEvent) {
-        let mut events = self.events.write().unwrap();
+        let mut events = self.events.write().expect("BlockLog lock poisoned");
         if events.len() >= self.max_size {
             events.pop_front();
         }
@@ -66,13 +66,13 @@ impl BlockLog {
     }
 
     pub fn recent(&self, limit: usize) -> Vec<BlockEvent> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().expect("BlockLog lock poisoned");
         let take = limit.min(events.len());
         events.iter().rev().take(take).cloned().collect()
     }
 
     pub fn len(&self) -> usize {
-        self.events.read().unwrap().len()
+        self.events.read().expect("BlockLog lock poisoned").len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -81,7 +81,7 @@ impl BlockLog {
 
     /// Clear all events
     pub fn clear(&self) {
-        self.events.write().unwrap().clear();
+        self.events.write().expect("BlockLog lock poisoned").clear();
     }
 }
 

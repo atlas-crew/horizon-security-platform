@@ -1073,16 +1073,19 @@ impl DlpScanner {
                 if *is_custom {
                     // Direct match for custom keyword
                     if matches.len() < self.config.max_matches {
-                        let _keyword = &self.config.custom_keywords.as_ref().unwrap()[*idx];
-                        matches.push(DlpMatch {
-                            pattern_name: "Custom Keyword",
-                            data_type: SensitiveDataType::Custom,
-                            severity: PatternSeverity::High,
-                            masked_value: "***".to_string(), // Simple mask for custom keywords
-                            start: ac_match.start(),
-                            end: ac_match.end(),
-                            stream_offset: None,
-                        });
+                        if let Some(keywords) = self.config.custom_keywords.as_ref() {
+                            if let Some(_keyword) = keywords.get(*idx) {
+                                matches.push(DlpMatch {
+                                    pattern_name: "Custom Keyword",
+                                    data_type: SensitiveDataType::Custom,
+                                    severity: PatternSeverity::High,
+                                    masked_value: "***".to_string(), // Simple mask for custom keywords
+                                    start: ac_match.start(),
+                                    end: ac_match.end(),
+                                    stream_offset: None,
+                                });
+                            }
+                        }
                     }
                 } else {
                     // Candidate for standard pattern

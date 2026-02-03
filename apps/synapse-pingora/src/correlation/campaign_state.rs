@@ -624,7 +624,7 @@ impl CampaignStore {
         for entry in self.campaigns.iter() {
             let campaign = entry.value();
             if campaign.status == status {
-                if oldest_time.is_none() || campaign.last_activity < oldest_time.unwrap() {
+                if oldest_time.map_or(true, |t| campaign.last_activity < t) {
                     oldest_id = Some(entry.key().clone());
                     oldest_time = Some(campaign.last_activity);
                 }

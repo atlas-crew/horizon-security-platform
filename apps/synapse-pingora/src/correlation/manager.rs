@@ -123,7 +123,7 @@ impl MitigationRateLimiter {
 
     /// Resets the window if it has expired.
     fn maybe_reset_window(&self) {
-        let mut start = self.window_start.lock().unwrap();
+        let mut start = self.window_start.lock().expect("MitigationRateLimiter lock poisoned");
         if start.elapsed() >= self.window_duration {
             *start = Instant::now();
             self.bans_in_window.store(0, Ordering::SeqCst);

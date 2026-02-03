@@ -27,6 +27,7 @@
 //! - [`dlp`] - Data Loss Prevention with 23 sensitive data patterns
 
 // Phase 1: Core Features
+pub mod utils;
 pub mod config;
 pub mod config_manager;
 pub mod health;
@@ -58,6 +59,7 @@ pub mod persistence;
 
 // Phase 3: Telemetry (Alerting)
 pub mod telemetry;
+pub mod signals;
 
 // Phase 3: Honeypot Trap Detection
 pub mod trap;

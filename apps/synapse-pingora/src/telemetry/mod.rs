@@ -11,6 +11,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::sync::{broadcast, Mutex, Notify};
 use tracing::{debug, info, warn};
+use async_trait::async_trait;
+
+use crate::signals::auth_coverage::AuthCoverageSummary;
+
+pub mod auth_coverage_aggregator;
 
 /// Telemetry-specific errors.
 #[derive(Debug, Error)]
@@ -44,6 +49,7 @@ pub enum EventType {
     ServiceHealth,
     SensorReport,
     CampaignReport,
+    AuthCoverage,
 }
 
 /// Telemetry event payload.
@@ -97,6 +103,7 @@ pub enum TelemetryEvent {
         correlation_reasons: Vec<String>,
         timestamp_ms: u64,
     },
+    AuthCoverage(AuthCoverageSummary),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +138,7 @@ impl TelemetryEvent {
             Self::ServiceHealth { .. } => EventType::ServiceHealth,
             Self::SensorReport { .. } => EventType::SensorReport,
             Self::CampaignReport { .. } => EventType::CampaignReport,
+            Self::AuthCoverage(_) => EventType::AuthCoverage,
         }
     }
 }
@@ -421,6 +429,7 @@ impl TelemetryConfig {
 }
 
 /// Telemetry client for sending events to Signal Horizon.
+#[derive(Clone)] // Derived Clone to support Fire-and-Forget emitting
 pub struct TelemetryClient {
     config: TelemetryConfig,
     buffer: Arc<TelemetryBuffer>,
@@ -444,6 +453,16 @@ impl TelemetryClient {
             circuit_breaker,
             stats: Arc::new(TelemetryStats::default()),
             shutdown,
+        }
+    }
+
+    fn apply_auth_headers(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if let Some(ref key) = self.config.api_key {
+            request
+                .bearer_auth(key)
+                .header("X-API-Key", key)
+        } else {
+            request
         }
     }
 
@@ -513,9 +532,11 @@ impl TelemetryClient {
         };
 
         let client = reqwest::Client::new();
-        let response = client.post(&self.config.endpoint)
+        let request = client
+            .post(&self.config.endpoint)
             .json(&payload)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(2));
+        let response = self.apply_auth_headers(request)
             .send()
             .await
             .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
@@ -592,7 +613,8 @@ impl TelemetryClient {
 
         let response = client
             .post(&self.config.endpoint)
-            .json(&payload)
+            .json(&payload);
+        let response = self.apply_auth_headers(response)
             .send()
             .await
             .map_err(|e| {
@@ -678,9 +700,23 @@ impl TelemetryClient {
     }
 }
 
-impl Default for TelemetryClient {
-    fn default() -> Self {
-        Self::new(TelemetryConfig::default())
+/// Trait for emitting arbitrary signals.
+#[async_trait]
+pub trait SignalEmitter: Send + Sync {
+    async fn emit(&self, signal_type: &str, payload: serde_json::Value);
+}
+
+#[async_trait]
+impl SignalEmitter for TelemetryClient {
+    async fn emit(&self, signal_type: &str, payload: serde_json::Value) {
+        if signal_type == "auth_coverage_summary" {
+             if let Ok(summary) = serde_json::from_value::<AuthCoverageSummary>(payload) {
+                 // Clone self is cheap because it just increments ref counts of Arcs
+                 // Wait, TelemetryClient struct fields are Arc except config.
+                 // So cloning TelemetryClient is cheap.
+                 let _ = self.record(TelemetryEvent::AuthCoverage(summary)).await;
+             }
+        }
     }
 }
 

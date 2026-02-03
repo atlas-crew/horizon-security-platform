@@ -5,6 +5,7 @@
 --   signal_events      - Time-series signal data with bloom filters
 --   campaign_history   - Campaign state change snapshots
 --   blocklist_history  - Blocklist entry change log
+--   http_transactions  - Raw HTTP transaction telemetry (per-request)
 --
 -- Materialized Views:
 --   signal_hourly_mv   - Hourly rollups by tenant/type
@@ -14,6 +15,7 @@
 --   signal_events: 90 days (hot)
 --   campaign_history: 180 days
 --   blocklist_history: 365 days
+--   http_transactions: 30 days
 
 -- =============================================================================
 -- Signal Events (time-series with bloom filters)
@@ -114,6 +116,30 @@ PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, block_type, timestamp)
 TTL timestamp + INTERVAL 365 DAY
 SETTINGS index_granularity = 4096;
+
+
+-- =============================================================================
+-- HTTP Transactions (raw per-request telemetry)
+-- =============================================================================
+-- Captures request/response metadata for hunting and dashboards.
+-- High-volume table with short retention to control storage growth.
+
+CREATE TABLE IF NOT EXISTS http_transactions (
+    timestamp DateTime64(3) CODEC(Delta, ZSTD),
+    tenant_id LowCardinality(String),
+    sensor_id LowCardinality(String),
+    site LowCardinality(String),
+    method LowCardinality(String),
+    path String CODEC(ZSTD),
+    status_code UInt16,
+    latency_ms UInt32,
+    waf_action Nullable(String)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (tenant_id, timestamp, sensor_id)
+TTL timestamp + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192;
 
 
 -- =============================================================================

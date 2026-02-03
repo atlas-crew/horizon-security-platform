@@ -3489,6 +3489,40 @@ impl ProxyHttp for SynapseProxy {
         // Record metrics
         let total_time_us = total_time.as_micros() as u64;
         self.metrics_registry.record_request(status, total_time_us);
+
+        // Phase 3: Record per-request telemetry for HTTP transaction history
+        if self.telemetry_client.is_enabled() {
+            let site = ctx.matched_site.as_ref()
+                .map(|s| s.hostname.clone())
+                .unwrap_or_else(|| "_default".to_string());
+            let method = session.req_header().method.to_string();
+            let path = session.req_header().uri.path().to_string();
+            let waf_action = if blocked {
+                Some("block".to_string())
+            } else if ctx.waf_challenged {
+                Some("challenge".to_string())
+            } else if ctx.waf_logged {
+                Some("log".to_string())
+            } else {
+                Some("allow".to_string())
+            };
+
+            let event = synapse_pingora::telemetry::TelemetryEvent::RequestProcessed {
+                latency_ms: total_time.as_millis() as u64,
+                status_code: status,
+                waf_action,
+                site,
+                method,
+                path,
+            };
+
+            let client = Arc::clone(&self.telemetry_client);
+            tokio::spawn(async move {
+                if let Err(e) = client.record(event).await {
+                    debug!("Failed to record request telemetry: {}", e);
+                }
+            });
+        }
         
         if let Some(ref detection) = ctx.detection {
             let blocked = detection.blocked;
@@ -4252,6 +4286,7 @@ fn main() {
         TelemetryConfig {
             enabled: true,
             endpoint: format!("{}/_sensor/report", url),
+            api_key: config.telemetry.api_key.clone(),
             ..TelemetryConfig::default()
         }
     } else {

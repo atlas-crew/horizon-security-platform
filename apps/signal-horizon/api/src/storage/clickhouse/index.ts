@@ -9,6 +9,7 @@ export {
   type SignalEventRow,
   type CampaignHistoryRow,
   type BlocklistHistoryRow,
+  type HttpTransactionRow,
 } from './client.js';
 
 export {

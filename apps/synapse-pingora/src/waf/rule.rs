@@ -1,9 +1,9 @@
 //! Rule definitions and deserialization.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// WAF rule definition.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct WafRule {
     pub id: u32,
     #[allow(dead_code)]
@@ -35,7 +35,7 @@ impl WafRule {
 }
 
 /// Match condition for rule evaluation.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct MatchCondition {
     #[serde(rename = "type")]
     pub kind: String,
@@ -64,7 +64,7 @@ pub struct MatchCondition {
 }
 
 /// Match value variants.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum MatchValue {
     Str(String),

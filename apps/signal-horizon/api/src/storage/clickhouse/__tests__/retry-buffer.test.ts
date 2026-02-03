@@ -9,6 +9,7 @@ const createMockClickhouse = (): ClickHouseService => ({
   insertSignalEvents: vi.fn().mockResolvedValue(undefined),
   insertCampaignEvent: vi.fn().mockResolvedValue(undefined),
   insertBlocklistEvents: vi.fn().mockResolvedValue(undefined),
+  insertHttpTransactions: vi.fn().mockResolvedValue(undefined),
   ping: vi.fn().mockResolvedValue(true),
   close: vi.fn().mockResolvedValue(undefined),
 } as unknown as ClickHouseService);

@@ -22,7 +22,7 @@ import { Broadcaster } from './services/broadcaster/index.js';
 import { HuntService } from './services/hunt/index.js';
 import { APIIntelligenceService } from './services/api-intelligence/index.js';
 import { createApiRouter } from './api/routes/index.js';
-import { ClickHouseService } from './storage/clickhouse/index.js';
+import { ClickHouseService, ClickHouseRetryBuffer } from './storage/clickhouse/index.js';
 // Fleet management services
 import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
 import { AutomatedPlaybookTrigger } from './services/warroom/automated-trigger.js';
@@ -51,6 +51,7 @@ import { createHash } from 'node:crypto';
 // Security middleware
 import { jsonDepthLimit } from './middleware/json-depth.js';
 import { requestId } from './middleware/request-id.js';
+import { createTelemetryRouter } from './api/telemetry.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -201,6 +202,7 @@ app.get('/api/v1/status', (_req, res) => {
 
 // Initialize services
 let clickhouse: ClickHouseService | null = null;
+let telemetryRetryBuffer: ClickHouseRetryBuffer | null = null;
 let huntService: HuntService;
 let aggregator: Aggregator;
 let correlator: Correlator;
@@ -403,6 +405,18 @@ async function start() {
   } else {
     logger.info('ClickHouse disabled - using PostgreSQL only (demo mode)');
   }
+
+  // Initialize telemetry ingestion routes (requires ClickHouse)
+  if (clickhouse?.isEnabled()) {
+    telemetryRetryBuffer = new ClickHouseRetryBuffer(clickhouse, logger);
+    telemetryRetryBuffer.start();
+  }
+  const telemetryRouter = createTelemetryRouter(logger, {
+    clickhouse,
+    retryBuffer: telemetryRetryBuffer,
+  });
+  app.use(telemetryRouter);
+  logger.info('Telemetry routes mounted at /telemetry and /_sensor/report');
 
   // Initialize Synapse Direct adapter for synapse-pingora connection (if configured)
   if (config.synapseDirect.enabled && config.synapseDirect.url) {
@@ -676,6 +690,9 @@ async function shutdown(signal: string) {
   logger.info('Fleet services stopped');
 
   // Close ClickHouse connection
+  if (telemetryRetryBuffer) {
+    await telemetryRetryBuffer.flush();
+  }
   if (clickhouse) {
     await clickhouse.close();
     logger.info('ClickHouse connection closed');

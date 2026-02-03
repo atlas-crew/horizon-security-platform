@@ -6,7 +6,13 @@
  */
 
 import type { Logger } from 'pino';
-import type { ClickHouseService, SignalEventRow, CampaignHistoryRow, BlocklistHistoryRow } from './client.js';
+import type {
+  ClickHouseService,
+  SignalEventRow,
+  CampaignHistoryRow,
+  BlocklistHistoryRow,
+  HttpTransactionRow,
+} from './client.js';
 
 /** Configuration for the retry buffer */
 export interface RetryBufferConfig {
@@ -34,7 +40,7 @@ export const DEFAULT_RETRY_CONFIG: RetryBufferConfig = {
 };
 
 /** Types of buffered items */
-type BufferItemType = 'signal' | 'campaign' | 'blocklist';
+type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction';
 
 /** Buffered item with retry metadata */
 interface BufferedItem<T> {
@@ -175,6 +181,25 @@ export class ClickHouseRetryBuffer {
   }
 
   /**
+   * Insert HTTP transaction events with automatic retry on failure.
+   */
+  async insertHttpTransactions(events: HttpTransactionRow[]): Promise<boolean> {
+    if (events.length === 0) return true;
+
+    try {
+      await this.clickhouse.insertHttpTransactions(events);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        { error, count: events.length },
+        'HTTP transaction write failed, buffering for retry'
+      );
+      this.bufferForRetry('transaction', events);
+      return false;
+    }
+  }
+
+  /**
    * Buffer an item for retry
    */
   private bufferForRetry<T>(type: BufferItemType, data: T): void {
@@ -283,6 +308,9 @@ export class ClickHouseRetryBuffer {
         break;
       case 'blocklist':
         await this.clickhouse.insertBlocklistEvents(item.data as BlocklistHistoryRow[]);
+        break;
+      case 'transaction':
+        await this.clickhouse.insertHttpTransactions(item.data as HttpTransactionRow[]);
         break;
     }
   }

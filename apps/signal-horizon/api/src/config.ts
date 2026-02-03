@@ -50,6 +50,7 @@ const envSchema = z.object({
 
   // Security
   API_KEY_HEADER: z.string().min(1).default('X-API-Key'),
+  TELEMETRY_API_KEY: z.string().min(1).optional(),
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:4200,http://localhost:5180,http://127.0.0.1:5180'),
@@ -143,6 +144,10 @@ function loadConfig() {
       corsOrigins: env.CORS_ORIGINS === '*'
         ? '*'
         : env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+    },
+
+    telemetry: {
+      apiKey: env.TELEMETRY_API_KEY,
     },
 
     logging: {

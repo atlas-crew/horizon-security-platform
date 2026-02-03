@@ -122,6 +122,11 @@ impl ApiHandler {
         self.dlp_scanner.as_ref().map(Arc::clone)
     }
 
+    /// Returns the Signal Horizon client (if configured).
+    pub fn horizon_client(&self) -> Option<Arc<HorizonClient>> {
+        self.horizon_client.as_ref().map(Arc::clone)
+    }
+
     /// Handles GET /health request.
     pub fn handle_health(&self) -> ApiResponse<HealthResponse> {
         ApiResponse::ok(self.health.check())

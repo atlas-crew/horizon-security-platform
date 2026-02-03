@@ -77,6 +77,21 @@ export interface BlocklistHistoryRow {
   expires_at: string | null;
 }
 
+/**
+ * HTTP transaction row for http_transactions table
+ */
+export interface HttpTransactionRow {
+  timestamp: string; // ISO 8601
+  tenant_id: string;
+  sensor_id: string;
+  site: string;
+  method: string;
+  path: string;
+  status_code: number;
+  latency_ms: number;
+  waf_action: string | null;
+}
+
 // =============================================================================
 // ClickHouse Service
 // =============================================================================
@@ -249,6 +264,26 @@ export class ClickHouseService {
       this.logger.debug({ count: events.length }, 'Inserted blocklist history events');
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to insert blocklist events');
+      throw error;
+    }
+  }
+
+  /**
+   * Insert HTTP transaction events
+   * High-volume telemetry for request/response metadata
+   */
+  async insertHttpTransactions(events: HttpTransactionRow[]): Promise<void> {
+    if (!this.enabled || !this.client || events.length === 0) return;
+
+    try {
+      await this.client.insert({
+        table: 'http_transactions',
+        values: events,
+        format: 'JSONEachRow',
+      });
+      this.logger.debug({ count: events.length }, 'Inserted HTTP transaction events');
+    } catch (error) {
+      this.logger.error({ error, count: events.length }, 'Failed to insert HTTP transaction events');
       throw error;
     }
   }

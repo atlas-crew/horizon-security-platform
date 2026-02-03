@@ -2734,4 +2734,32 @@ mod tests {
         let ctx_expired = EvalContext::from_request_with_deadline(&req, past_deadline);
         assert!(ctx_expired.is_deadline_exceeded());
     }
+
+    #[test]
+    fn test_load_rules_regex_error() {
+        let mut engine = Engine::empty();
+        // Invalid regex (missing closing bracket)
+        let rules = r#"[
+            {
+                "id": 1,
+                "description": "Invalid regex",
+                "risk": 10.0,
+                "matches": [
+                    {
+                        "type": "uri",
+                        "match": {
+                            "type": "regex",
+                            "match": "["
+                        }
+                    }
+                ]
+            }
+        ]"#;
+        let result = engine.load_rules(rules.as_bytes());
+        assert!(result.is_err());
+        match result {
+            Err(WafError::RegexError(msg)) => assert!(msg.contains("[")),
+            _ => panic!("Expected RegexError, got {:?}", result),
+        }
+    }
 }

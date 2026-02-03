@@ -114,13 +114,13 @@ criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
 serial_test = "3"
 
-# [[bench]]
-# name = "detection"
-# harness = false
+[[bench]]
+name = "detection"
+harness = false
 
-# [[bench]]
-# name = "goblins"
-# harness = false
+[[bench]]
+name = "goblins"
+harness = false
 
 [profile.release]
 lto = "thin"  # Changed from "fat" to reduce memory usage during linking

@@ -13,7 +13,8 @@ if (cluster.isPrimary) {
   }
 
   cluster.on('exit', (worker, code, signal) => {
-    console.log(`worker ${worker.process.pid} died`);
+    console.log(`worker ${worker.process.pid} died. Respawning...`);
+    cluster.fork();
   });
 } else {
   // Workers can share any TCP connection

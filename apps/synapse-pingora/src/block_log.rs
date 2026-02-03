@@ -214,4 +214,34 @@ mod tests {
         log.clear();
         assert!(log.is_empty());
     }
+
+    #[test]
+    fn test_block_log_poisoned_lock() {
+        use std::sync::Arc;
+        let log = Arc::new(BlockLog::new(10));
+
+        // Poison the lock by panicking in a thread while holding it
+        let log_clone = log.clone();
+        let _ = std::thread::spawn(move || {
+            let _lock = log_clone.events.write().unwrap();
+            panic!("Poisoning lock intentionally for test");
+        })
+        .join();
+
+        assert!(log.events.is_poisoned());
+
+        // Should still be able to record and read thanks to unwrap_or_else handling
+        let event = BlockEvent::new(
+            "1.1.1.1".to_string(),
+            "GET".to_string(),
+            "/".to_string(),
+            10,
+            vec![],
+            "test".to_string(),
+            None,
+        );
+        log.record(event);
+        assert_eq!(log.len(), 1);
+        assert_eq!(log.recent(1)[0].client_ip, "1.1.1.1");
+    }
 }

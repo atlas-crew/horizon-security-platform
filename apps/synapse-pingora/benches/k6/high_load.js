@@ -12,6 +12,11 @@ export const options = {
       maxVUs: 200,
     },
   },
+  thresholds: {
+    http_req_duration: ['p(95)<100', 'p(99)<200'],
+    http_req_failed: ['rate<0.01'],
+    http_reqs: ['rate>1000'],
+  },
 };
 
 const BASE_URL = __ENV.TARGET_URL || 'http://localhost:6190';

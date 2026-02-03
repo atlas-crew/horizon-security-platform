@@ -11,6 +11,8 @@ export { DiagnosticsPanel } from './DiagnosticsPanel';
 export { FileBrowser } from './FileBrowser';
 export { RolloutManager } from './RolloutManager';
 export { SessionSearchResults } from './SessionSearchResults';
+export { SynapseConfigEditor, getDefaultConfigYaml } from './SynapseConfigEditor';
+export type { SynapseConfig } from './SynapseConfigEditor';
 export type { WebTerminalProps } from './WebTerminal';
 export type { EmbeddedDashboardProps } from './EmbeddedDashboard';
 export type { RemoteShellProps } from './RemoteShell';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
-import { CodeEditor } from '../../components/ctrlx/CodeEditor';
+import { SynapseConfigEditor, getDefaultConfigYaml } from '../../components/fleet/SynapseConfigEditor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 
@@ -60,47 +60,7 @@ export function ConfigManagerPage() {
   const [newName, setNewName] = useState('');
   const [newEnv, setNewEnv] = useState('production');
   const [newDesc, setNewDesc] = useState('');
-  const [newConfig, setNewConfig] = useState(`# Synapse Sensor Configuration
-server:
-  listen: "0.0.0.0:6190"
-  admin_listen: "0.0.0.0:6191"
-  workers: 0  # 0 = auto-detect CPU count
-
-upstreams:
-  - host: "127.0.0.1"
-    port: 8080
-
-rate_limit:
-  enabled: true
-  rps: 10000
-  per_ip_rps: 100
-
-logging:
-  level: "info"
-  format: "json"
-  access_log: true
-
-detection:
-  sqli: true
-  xss: true
-  path_traversal: true
-  command_injection: true
-  action: "block"
-  block_status: 403
-
-tls:
-  enabled: false
-  min_version: "1.2"
-
-tarpit:
-  enabled: true
-  base_delay_ms: 1000
-  max_delay_ms: 30000
-
-dlp:
-  enabled: true
-  max_scan_size: 5242880
-`);
+  const [newConfig, setNewConfig] = useState(getDefaultConfigYaml);
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['fleet', 'config', 'templates', isDemoMode ? scenario : 'live'],
@@ -321,16 +281,13 @@ dlp:
                 </div>
               </div>
 
-              {/* Right Column: YAML Editor */}
-              <div className="col-span-2 flex flex-col h-full">
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Configuration (YAML)</label>
-                <div className="flex-1 border border-border-subtle">
-                  <CodeEditor
+              {/* Right Column: Config Editor */}
+              <div className="col-span-2 flex flex-col h-full overflow-hidden">
+                <label className="block text-sm font-medium text-ink-secondary mb-2">Sensor Configuration</label>
+                <div className="flex-1 overflow-hidden">
+                  <SynapseConfigEditor
                     value={newConfig}
                     onChange={setNewConfig}
-                    language="yaml"
-                    height="100%"
-                    className="h-full"
                   />
                 </div>
               </div>

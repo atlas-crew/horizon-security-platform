@@ -371,10 +371,9 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use subtle::ConstantTimeEq;
 
 use crate::api::{ApiHandler, ApiResponse};
@@ -1903,9 +1902,22 @@ async fn sensor_report_handler(
     // Embed full report as metadata
     signal = signal.with_metadata(serde_json::to_value(&report).unwrap_or_default());
 
-    // Dispatch to SignalManager
+    // Dispatch to Signal Horizon (Fleet Intelligence)
+    if let Some(client) = state.handler.horizon_client() {
+        client.report_signal(signal.clone());
+    }
+
+    // Dispatch to SignalManager (Local Dashboard)
     if let Some(manager) = state.handler.signal_manager() {
-        manager.record_signal(signal);
+        use crate::intelligence::SignalCategory;
+        
+        manager.record_event(
+            SignalCategory::Intelligence, 
+            report.signal.signal_type.clone(),
+            Some(report.actor.ip.clone()),
+            Some(format!("External threat reported by {}", report.sensor_id)),
+            serde_json::to_value(&report).unwrap_or_default()
+        );
         
         info!("Received external threat report from {}: {} ({})", 
             report.sensor_id, report.signal.signal_type, report.actor.ip);

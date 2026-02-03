@@ -1,18 +1,25 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { sql } from '@codemirror/lang-sql';
+import { yaml } from '@codemirror/lang-yaml';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { clsx } from 'clsx';
 
 export interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
-  language?: 'json' | 'sql';
+  language?: 'json' | 'sql' | 'yaml';
   height?: string;
   className?: string;
   readOnly?: boolean;
   placeholder?: string;
 }
+
+const languageExtensions = {
+  json: json,
+  sql: sql,
+  yaml: yaml,
+};
 
 export function CodeEditor({
   value,
@@ -23,12 +30,10 @@ export function CodeEditor({
   readOnly = false,
   placeholder,
 }: CodeEditorProps) {
-  const extensions = [
-    language === 'json' ? json() : sql()
-  ];
+  const extensions = [languageExtensions[language]()];
 
   return (
-    <div className={clsx('border border-border-subtle overflow-hidden rounded-sm', className)}>
+    <div className={clsx('border border-border-subtle rounded-sm', className)}>
       <CodeMirror
         value={value}
         height={height}

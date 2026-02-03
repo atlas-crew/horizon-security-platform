@@ -370,18 +370,19 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
       </div>
 
       {mode === 'yaml' ? (
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {yamlError && (
-            <div className="mb-2 p-2 bg-ac-red/10 border border-ac-red/30 rounded text-sm text-ac-red">
+            <div className="mb-2 p-2 bg-ac-red/10 border border-ac-red/30 rounded text-sm text-ac-red flex-shrink-0">
               {yamlError}
             </div>
           )}
-          <div className="flex-1 border border-border-subtle rounded-lg overflow-hidden">
+          <div className="flex-1 min-h-0 [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-auto">
             <CodeEditor
               value={value}
               onChange={handleYamlChange}
               language="yaml"
               height="100%"
+              className="h-full"
             />
           </div>
         </div>

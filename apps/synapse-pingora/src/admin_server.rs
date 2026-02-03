@@ -456,7 +456,7 @@ fn sanitized_error(
     code: &str,
     public_message: &str,
     internal_error: Option<&dyn std::fmt::Display>,
-) -> (StatusCode, Json<ProblemDetails>) {
+) -> Response {
     // Log internal details if provided
     if let Some(err) = internal_error {
         tracing::warn!(
@@ -470,17 +470,14 @@ fn sanitized_error(
     let mut problem = ProblemDetails::new(status, public_message.to_string());
     problem.code = Some(code.to_string());
 
-    (
-        status,
-        Json(problem),
-    )
+    (status, Json(problem)).into_response()
 }
 
 /// Create a validation error response (400 Bad Request).
 fn validation_error(
     public_message: &str,
     internal_error: Option<&dyn std::fmt::Display>,
-) -> (StatusCode, Json<ProblemDetails>) {
+) -> Response {
     sanitized_error(
         StatusCode::BAD_REQUEST,
         error_codes::VALIDATION_ERROR,
@@ -493,7 +490,7 @@ fn validation_error(
 fn internal_error(
     public_message: &str,
     internal_error: Option<&dyn std::fmt::Display>,
-) -> (StatusCode, Json<ProblemDetails>) {
+) -> Response {
     sanitized_error(
         StatusCode::INTERNAL_SERVER_ERROR,
         error_codes::INTERNAL_ERROR,
@@ -504,7 +501,7 @@ fn internal_error(
 
 /// Create a not found error response (404).
 #[allow(dead_code)]
-fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json<ProblemDetails>) {
+fn not_found_error(resource_type: &str, _resource_id: &str) -> Response {
     // Note: We don't include the resource_id in the response to avoid enumeration attacks
     sanitized_error(
         StatusCode::NOT_FOUND,
@@ -515,7 +512,7 @@ fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json
 }
 
 /// Create a service unavailable error response (503).
-fn service_unavailable(service_name: &str) -> (StatusCode, Json<ProblemDetails>) {
+fn service_unavailable(service_name: &str) -> Response {
     sanitized_error(
         StatusCode::SERVICE_UNAVAILABLE,
         error_codes::SERVICE_UNAVAILABLE,
@@ -1410,7 +1407,7 @@ async fn get_site_shadow_handler(
                             "shadow_mirror": shadow_config
                         }
                     }))
-                );
+                ).into_response();
             }
             Err(_) => {}
         }
@@ -1495,7 +1492,7 @@ async fn update_site_shadow_handler(
                     "shadow_mirror": shadow_config
                 }
             }))
-        );
+        ).into_response();
     }
 
     // SECURITY: Use generic service unavailable message
@@ -1627,7 +1624,7 @@ async fn sensor_release_entity_handler(
             (StatusCode::OK, Json(serde_json::json!({
                 "success": true,
                 "message": format!("Entity {} released", ip)
-            })))
+            }))).into_response()
         } else {
             not_found_error("Entity", &ip)
         }
@@ -1647,7 +1644,7 @@ async fn sensor_release_all_handler(
             "success": true,
             "released": count,
             "message": format!("Released {} entities", count)
-        })))
+        }))).into_response()
     } else {
         service_unavailable("Entity tracking")
     }
@@ -1855,7 +1852,7 @@ async fn sensor_campaign_detail_handler(
                             })
                         }).collect::<Vec<_>>()
                     });
-                    (StatusCode::OK, Json(serde_json::json!({ "data": data })))
+                    (StatusCode::OK, Json(serde_json::json!({ "data": data }))).into_response()
                 }
                 None => not_found_error("Campaign", &id),
             }
@@ -1985,7 +1982,7 @@ async fn _sensor_campaign_detail_handler_mock(Path(id): Path<String>) -> impl In
     };
 
     match campaign_data {
-        Some(data) => (StatusCode::OK, Json(serde_json::json!({ "data": data }))),
+        Some(data) => (StatusCode::OK, Json(serde_json::json!({ "data": data }))).into_response(),
         None => not_found_error("Campaign", &id),
     }
 }
@@ -2064,7 +2061,7 @@ async fn sensor_campaign_graph_handler(
                     "hasMore": graph.has_more
                 },
                 "snapshotVersion": graph.snapshot_version
-            })))
+            }))).into_response()
         }
         None => service_unavailable("Campaign correlation"),
     }
@@ -2313,9 +2310,9 @@ async fn sensor_actors_handler(
                     "totalCreated": stats.total_created.load(std::sync::atomic::Ordering::Relaxed),
                     "totalRuleMatches": stats.total_rule_matches.load(std::sync::atomic::Ordering::Relaxed)
                 }
-            })))
+            }))).into_response()
         }
-        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [], "stats": null })))
+        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [], "stats": null }))).into_response()
     }
 }
 
@@ -2326,7 +2323,7 @@ async fn sensor_actor_detail_handler(
 ) -> impl IntoResponse {
     match state.handler.actor_manager() {
         Some(manager) => match manager.get_actor(&actor_id) {
-            Some(actor) => (StatusCode::OK, Json(serde_json::json!({ "actor": actor_to_json(&actor) }))),
+            Some(actor) => (StatusCode::OK, Json(serde_json::json!({ "actor": actor_to_json(&actor) }))).into_response(),
             None => not_found_error("Actor", &actor_id),
         },
         None => service_unavailable("Actor tracking"),
@@ -2437,7 +2434,7 @@ async fn sensor_actor_timeline_handler(
     (StatusCode::OK, Json(serde_json::json!({
         "actorId": actor_id,
         "events": events
-    })))
+    }))).into_response()
 }
 
 /// Query parameters for sessions endpoint
@@ -2509,7 +2506,7 @@ async fn sensor_session_detail_handler(
             Some(session) => (
                 StatusCode::OK,
                 Json(serde_json::json!({ "session": session_to_json(&session, true) })),
-            ),
+            ).into_response(),
             None => not_found_error("Session", &session_id),
         },
         None => service_unavailable("Session tracking"),
@@ -3302,7 +3299,7 @@ async fn config_import_handler(
                         "persisted": result.persisted,
                         "rebuild_required": result.rebuild_required,
                         "warnings": result.warnings
-                    })))
+                    }))).into_response()
                 }
                 Err(e) => {
                     tracing::warn!("Config import application failed: {}", e);
@@ -3340,7 +3337,7 @@ async fn sensor_dlp_stats_handler(State(state): State<AdminState>) -> impl IntoR
                 "totalMatches": stats.total_matches,
                 "matchBucket": match_bucket,
                 "patternCount": scanner.pattern_count(),
-            })))
+            }))).into_response()
         }
         None => {
             let mut problem = ProblemDetails::new(
@@ -3349,7 +3346,7 @@ async fn sensor_dlp_stats_handler(State(state): State<AdminState>) -> impl IntoR
             );
             problem.code = Some(error_codes::NOT_FOUND.to_string());
             problem.instance = Some("/_sensor/dlp/stats".to_string());
-            (StatusCode::NOT_FOUND, Json(problem))
+            (StatusCode::NOT_FOUND, Json(problem)).into_response()
         }
     }
 }
@@ -3401,7 +3398,7 @@ async fn sensor_dlp_violations_handler(
                     "nextCursor": next_cursor,
                     "hasMore": total > query.limit
                 }
-            })))
+            }))).into_response()
         }
         None => {
             let mut problem = ProblemDetails::new(
@@ -3410,7 +3407,7 @@ async fn sensor_dlp_violations_handler(
             );
             problem.code = Some(error_codes::NOT_FOUND.to_string());
             problem.instance = Some("/_sensor/dlp/violations".to_string());
-            (StatusCode::NOT_FOUND, Json(problem))
+            (StatusCode::NOT_FOUND, Json(problem)).into_response()
         }
     }
 }
@@ -4103,7 +4100,7 @@ async fn sensor_evaluate_handler(
                     "bodyLength": body_bytes.as_ref().map(|b| b.len()).unwrap_or(0),
                     "clientIp": request.client_ip
                 }
-            })))
+            }))).into_response()
         }
         None => {
             // Synapse engine not configured
@@ -4253,7 +4250,7 @@ async fn api_profiles_detail_handler(
                     }
                 }
             })),
-        ),
+        ).into_response(),
         None => not_found_error("Profile", &decoded_template),
     }
 }
@@ -4324,7 +4321,7 @@ async fn api_schemas_detail_handler(
                     }).collect::<serde_json::Map<String, serde_json::Value>>()
                 }
             })),
-        ),
+        ).into_response(),
         None => not_found_error("Schema", &decoded_template),
     }
 }

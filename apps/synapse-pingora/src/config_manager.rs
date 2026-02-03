@@ -4,6 +4,7 @@
 //! across VhostMatcher, SiteWafManager, RateLimitManager, and AccessListManager.
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -17,6 +18,14 @@ use crate::ratelimit::RateLimitManager;
 use crate::site_waf::SiteWafManager;
 use crate::validation::{validate_hostname, validate_upstream, validate_cidr, validate_waf_threshold, validate_rate_limit, ValidationError};
 use crate::vhost::{SiteConfig, VhostMatcher};
+use crate::waf::Synapse;
+
+#[path = "rules.rs"]
+mod rules;
+pub use rules::{
+    CustomRuleAction, CustomRuleCondition, CustomRuleInput, CustomRuleUpdate,
+    RuleMetadata, RuleView, StoredRule,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request Types
@@ -178,6 +187,12 @@ pub enum ConfigManagerError {
 
     #[error("at least one upstream is required")]
     NoUpstreams,
+
+    #[error("rule not found: {0}")]
+    RuleNotFound(String),
+
+    #[error("rule already exists: {0}")]
+    RuleExists(String),
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -193,6 +208,10 @@ pub struct ConfigManager {
     rate_limiter: Arc<RwLock<RateLimitManager>>,
     access_lists: Arc<RwLock<AccessListManager>>,
     config_path: Option<PathBuf>,
+    rules_store: Arc<RwLock<Vec<StoredRule>>>,
+    rules_engine: Option<Arc<RwLock<Synapse>>>,
+    rules_path: Option<PathBuf>,
+    rules_hash: Option<Arc<RwLock<String>>>,
 }
 
 impl ConfigManager {
@@ -213,12 +232,34 @@ impl ConfigManager {
             rate_limiter,
             access_lists,
             config_path: None,
+            rules_store: Arc::new(RwLock::new(Vec::new())),
+            rules_engine: None,
+            rules_path: None,
+            rules_hash: None,
         }
     }
 
     /// Enables configuration persistence to the specified file path.
     pub fn with_persistence(mut self, path: impl AsRef<std::path::Path>) -> Self {
         self.config_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Enable rule management with a shared Synapse engine and optional persistence.
+    pub fn with_rules(
+        mut self,
+        engine: Arc<RwLock<Synapse>>,
+        rules_path: Option<PathBuf>,
+        rules_hash: Option<Arc<RwLock<String>>>,
+    ) -> Self {
+        self.rules_engine = Some(engine);
+        self.rules_path = rules_path;
+        self.rules_hash = rules_hash;
+
+        if let Err(err) = self.load_rules_from_disk() {
+            warn!("Failed to load rules from disk: {}", err);
+        }
+
         self
     }
 
@@ -849,22 +890,81 @@ impl ConfigManager {
         })
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Rules Management
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// List all rules currently stored on the sensor.
+    pub fn list_rules(&self) -> Vec<StoredRule> {
+        self.rules_store.read().clone()
+    }
+
+    /// Create a new rule and apply it to the WAF engine.
+    pub fn create_rule(&self, rule: StoredRule) -> Result<StoredRule, ConfigManagerError> {
+        let mut rules = self.rules_store.read().clone();
+        let rule_id = rules::rule_identifier(&rule);
+
+        if rules.iter().any(|existing| rules::matches_rule_id(existing, &rule_id)) {
+            return Err(ConfigManagerError::RuleExists(rule_id));
+        }
+
+        rules.push(rule.clone());
+        self.apply_rules(rules, true, None)?;
+        Ok(rule)
+    }
+
+    /// Update an existing rule and apply changes to the WAF engine.
+    pub fn update_rule(&self, rule_id: &str, update: CustomRuleUpdate) -> Result<StoredRule, ConfigManagerError> {
+        let mut rules = self.rules_store.read().clone();
+        let Some(index) = rules.iter().position(|rule| rules::matches_rule_id(rule, rule_id)) else {
+            return Err(ConfigManagerError::RuleNotFound(rule_id.to_string()));
+        };
+
+        let updated = rules::merge_rule_update(&rules[index], update)
+            .map_err(|err| ConfigManagerError::Persistence(err))?;
+        rules[index] = updated.clone();
+        self.apply_rules(rules, true, None)?;
+        Ok(updated)
+    }
+
+    /// Delete a rule by ID and apply changes to the WAF engine.
+    pub fn delete_rule(&self, rule_id: &str) -> Result<(), ConfigManagerError> {
+        let mut rules = self.rules_store.read().clone();
+        let original_len = rules.len();
+        rules.retain(|rule| !rules::matches_rule_id(rule, rule_id));
+
+        if rules.len() == original_len {
+            return Err(ConfigManagerError::RuleNotFound(rule_id.to_string()));
+        }
+
+        self.apply_rules(rules, true, None)?;
+        Ok(())
+    }
+
+    /// Replace all rules with a new set and apply to the WAF engine.
+    pub fn replace_rules(&self, rules: Vec<StoredRule>, hash_override: Option<String>) -> Result<usize, ConfigManagerError> {
+        self.apply_rules(rules, true, hash_override)
+    }
+
     /// Updates WAF rules from JSON bytes received from Horizon Hub.
     ///
-    /// This method is called when the sensor receives a RulesUpdate message
-    /// from the Signal Horizon Hub via WebSocket. The rules are parsed and
+    /// This method is called when the sensor receives a RulesUpdate or PushRules
+    /// message from the Signal Horizon Hub via WebSocket. The rules are parsed and
     /// applied to the WAF engine.
     ///
     /// # Arguments
-    /// * `rules_json` - JSON bytes containing an array of WAF rule definitions
+    /// * `rules_json` - JSON bytes containing an array of rule definitions
+    /// * `hash_override` - Optional hash provided by Signal Horizon
     ///
     /// # Returns
-    /// * `Ok(count)` - Number of rules successfully loaded
+    /// * `Ok(count)` - Number of rules received (including disabled rules)
     /// * `Err` - If rules parsing or application fails
-    pub fn update_waf_rules(&self, rules_json: &[u8]) -> Result<usize, ConfigManagerError> {
-        // Parse the rules JSON to validate format
-        let rules: Vec<serde_json::Value> = serde_json::from_slice(rules_json)
+    pub fn update_waf_rules(&self, rules_json: &[u8], hash_override: Option<&str>) -> Result<usize, ConfigManagerError> {
+        let value: serde_json::Value = serde_json::from_slice(rules_json)
             .map_err(|e| ConfigManagerError::Persistence(format!("Invalid rules JSON: {}", e)))?;
+
+        let rules = rules::parse_rules_payload(value)
+            .map_err(ConfigManagerError::Persistence)?;
 
         let rule_count = rules.len();
 
@@ -873,36 +973,16 @@ impl ConfigManager {
             return Ok(0);
         }
 
-        // Log the rules update for audit purposes
+        info!(rule_count, "Received WAF rules update from Horizon Hub");
+
+        let applied = self.apply_rules(rules, true, hash_override.map(|s| s.to_string()))?;
+
         info!(
-            rule_count = rule_count,
-            "Received WAF rules update from Horizon Hub"
+            rules_received = rule_count,
+            rules_applied = applied,
+            sites_affected = self.waf.read().site_count(),
+            "WAF rules synchronized from Horizon Hub"
         );
-
-        // Update all site WAF configurations with the new rule count info
-        // The actual rules are applied via the SiteWafManager
-        {
-            let waf = self.waf.write();
-
-            // Log each rule being processed (in debug mode)
-            for (i, rule) in rules.iter().enumerate() {
-                if let Some(id) = rule.get("id") {
-                    debug!(
-                        rule_index = i,
-                        rule_id = %id,
-                        "Processing WAF rule from Horizon"
-                    );
-                }
-            }
-
-            // Mark that rules have been updated
-            // Individual site WAF configs will pick up the changes on next request
-            info!(
-                rule_count = rule_count,
-                sites_affected = waf.site_count(),
-                "WAF rules synchronized from Horizon Hub"
-            );
-        }
 
         Ok(rule_count)
     }
@@ -910,6 +990,97 @@ impl ConfigManager {
     // ─────────────────────────────────────────────────────────────────────────
     // Internal Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    fn load_rules_from_disk(&self) -> Result<usize, ConfigManagerError> {
+        let Some(path) = self.rules_path.clone() else {
+            return Ok(0);
+        };
+
+        if !path.exists() {
+            return Ok(0);
+        }
+
+        let rules_json = fs::read(&path)
+            .map_err(|e| ConfigManagerError::Persistence(format!("failed to read rules: {}", e)))?;
+        let value: serde_json::Value = serde_json::from_slice(&rules_json)
+            .map_err(|e| ConfigManagerError::Persistence(format!("invalid rules JSON: {}", e)))?;
+        let rules = rules::parse_rules_payload(value)
+            .map_err(ConfigManagerError::Persistence)?;
+
+        if rules.is_empty() {
+            return Ok(0);
+        }
+
+        self.apply_rules(rules, false, None)
+    }
+
+    fn apply_rules(
+        &self,
+        rules: Vec<StoredRule>,
+        persist: bool,
+        hash_override: Option<String>,
+    ) -> Result<usize, ConfigManagerError> {
+        let engine = self.rules_engine.as_ref()
+            .ok_or_else(|| ConfigManagerError::Persistence("rules engine not configured".to_string()))?;
+
+        let mut active_rules: Vec<&StoredRule> = rules
+            .iter()
+            .filter(|rule| rule.meta.enabled.unwrap_or(true))
+            .collect();
+
+        active_rules.sort_by(|a, b| {
+            let a_priority = a.meta.priority.unwrap_or(100);
+            let b_priority = b.meta.priority.unwrap_or(100);
+            a_priority.cmp(&b_priority).then_with(|| a.rule.id.cmp(&b.rule.id))
+        });
+
+        let waf_rules: Vec<_> = active_rules.iter().map(|rule| rule.rule.clone()).collect();
+        let waf_json = serde_json::to_vec(&waf_rules)
+            .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize waf rules: {}", e)))?;
+
+        let applied = engine.write()
+            .load_rules(&waf_json)
+            .map_err(|e| ConfigManagerError::Persistence(format!("failed to load waf rules: {}", e)))?;
+
+        *self.rules_store.write() = rules.clone();
+
+        if persist {
+            self.persist_rules(&rules)?;
+        }
+
+        self.update_rules_hash(hash_override.unwrap_or_else(|| rules::rules_hash(&rules)));
+
+        Ok(applied)
+    }
+
+    fn persist_rules(&self, rules: &[StoredRule]) -> Result<(), ConfigManagerError> {
+        let Some(path) = self.rules_path.clone() else {
+            return Ok(());
+        };
+
+        if let Some(parent) = path.parent() {
+            if let Err(err) = fs::create_dir_all(parent) {
+                return Err(ConfigManagerError::Persistence(format!(
+                    "failed to create rules directory: {}",
+                    err
+                )));
+            }
+        }
+
+        let payload = serde_json::to_vec_pretty(rules)
+            .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize rules: {}", e)))?;
+        fs::write(&path, payload)
+            .map_err(|e| ConfigManagerError::Persistence(format!("failed to write rules: {}", e)))?;
+
+        info!(path = %path.display(), "persisted rules");
+        Ok(())
+    }
+
+    fn update_rules_hash(&self, value: String) {
+        if let Some(hash_lock) = self.rules_hash.as_ref() {
+            *hash_lock.write() = value;
+        }
+    }
 
     fn rebuild_vhost(&self) -> Result<(), ConfigManagerError> {
         let sites = self.sites.read();

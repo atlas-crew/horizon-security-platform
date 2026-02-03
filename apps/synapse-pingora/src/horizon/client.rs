@@ -828,11 +828,12 @@ async fn handle_hub_message<S>(
 
             let result = if let Some(manager) = config_manager {
                 let rules_value = payload.get("rules").unwrap_or(&payload);
+                let rules_hash = payload.get("hash").and_then(|value| value.as_str());
                 if !rules_value.is_array() {
                     Err("push_rules payload missing rules array".to_string())
                 } else {
                     match serde_json::to_vec(rules_value) {
-                        Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes) {
+                        Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes, rules_hash) {
                             Ok(count) => {
                                 info!("Applied push_rules: {} rules loaded", count);
                                 Ok(Some(serde_json::json!({ "rules_loaded": count })))
@@ -908,7 +909,7 @@ async fn handle_hub_message<S>(
                 // Convert rules JSON to bytes for the WAF engine
                 match serde_json::to_vec(&rules) {
                     Ok(rules_bytes) => {
-                        match manager.update_waf_rules(&rules_bytes) {
+                        match manager.update_waf_rules(&rules_bytes, None) {
                             Ok(count) => {
                                 info!("Applied rules update v{}: {} rules loaded", version, count);
                                 Ok(())

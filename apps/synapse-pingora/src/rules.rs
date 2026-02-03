@@ -78,6 +78,28 @@ pub struct CustomRuleUpdate {
     pub ttl: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleView {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub rule_type: String,
+    pub enabled: bool,
+    pub priority: u32,
+    pub conditions: Vec<CustomRuleCondition>,
+    pub actions: Vec<CustomRuleAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttl: Option<u64>,
+    #[serde(rename = "hitCount")]
+    pub hit_count: u64,
+    #[serde(rename = "lastHit", skip_serializing_if = "Option::is_none")]
+    pub last_hit: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
 fn default_enabled() -> bool {
     true
 }
@@ -96,6 +118,69 @@ fn derive_rule_id(external_id: &str) -> u32 {
     let digest = hasher.finalize();
     let value = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]);
     if value == 0 { 1 } else { value }
+}
+
+pub fn rule_identifier(rule: &StoredRule) -> String {
+    rule.meta
+        .external_id
+        .clone()
+        .unwrap_or_else(|| rule.rule.id.to_string())
+}
+
+pub fn matches_rule_id(rule: &StoredRule, rule_id: &str) -> bool {
+    if let Some(external) = rule.meta.external_id.as_deref() {
+        return external == rule_id;
+    }
+    rule.rule.id.to_string() == rule_id
+}
+
+fn normalize_rule_type(rule_type: &str) -> String {
+    rule_type.trim().to_ascii_uppercase()
+}
+
+fn default_rule_type(rule: &WafRule) -> String {
+    if rule.blocking.unwrap_or(false) {
+        "BLOCK".to_string()
+    } else {
+        "MONITOR".to_string()
+    }
+}
+
+fn default_actions(rule: &WafRule) -> Vec<CustomRuleAction> {
+    vec![CustomRuleAction {
+        action_type: if rule.blocking.unwrap_or(false) {
+            "block".to_string()
+        } else {
+            "log".to_string()
+        },
+        params: None,
+    }]
+}
+
+fn apply_meta_overrides(meta: &mut RuleMetadata, value: &serde_json::Value) {
+    if let Some(created_at) = value.get("createdAt").and_then(|v| v.as_str()) {
+        meta.created_at = Some(created_at.to_string());
+    } else if let Some(created_at) = value.get("created_at").and_then(|v| v.as_str()) {
+        meta.created_at = Some(created_at.to_string());
+    }
+
+    if let Some(updated_at) = value.get("updatedAt").and_then(|v| v.as_str()) {
+        meta.updated_at = Some(updated_at.to_string());
+    } else if let Some(updated_at) = value.get("updated_at").and_then(|v| v.as_str()) {
+        meta.updated_at = Some(updated_at.to_string());
+    }
+
+    if let Some(hit_count) = value.get("hitCount").and_then(|v| v.as_u64()) {
+        meta.hit_count = Some(hit_count);
+    } else if let Some(hit_count) = value.get("hit_count").and_then(|v| v.as_u64()) {
+        meta.hit_count = Some(hit_count);
+    }
+
+    if let Some(last_hit) = value.get("lastHit").and_then(|v| v.as_str()) {
+        meta.last_hit = Some(last_hit.to_string());
+    } else if let Some(last_hit) = value.get("last_hit").and_then(|v| v.as_str()) {
+        meta.last_hit = Some(last_hit.to_string());
+    }
 }
 
 fn risk_for_type(rule_type: &str, actions: &[CustomRuleAction]) -> f64 {
@@ -164,6 +249,22 @@ fn base_match_condition(kind: &str, match_value: Option<MatchValue>) -> MatchCon
     }
 }
 
+fn negate_condition(condition: MatchCondition) -> MatchCondition {
+    MatchCondition {
+        kind: "boolean".to_string(),
+        match_value: Some(MatchValue::Arr(vec![MatchValue::Cond(Box::new(condition))])),
+        op: Some("not".to_string()),
+        field: None,
+        direction: None,
+        field_type: None,
+        name: None,
+        selector: None,
+        cleanup_after: None,
+        count: None,
+        timeframe: None,
+    }
+}
+
 fn operator_condition(operator: &str, value: &serde_json::Value) -> Result<MatchCondition, String> {
     match operator {
         "eq" => {
@@ -209,7 +310,7 @@ fn operator_condition(operator: &str, value: &serde_json::Value) -> Result<Match
             if converted.is_empty() {
                 return Err("in operator requires non-empty array".to_string());
             }
-            Ok(base_match_condition("multiple_contains", Some(MatchValue::Arr(converted))))
+            Ok(base_match_condition("hashset", Some(MatchValue::Arr(converted))))
         }
         "ne" => Err("ne operator not supported for WAF rules".to_string()),
         other => Err(format!("Unsupported operator: {}", other)),
@@ -217,6 +318,11 @@ fn operator_condition(operator: &str, value: &serde_json::Value) -> Result<Match
 }
 
 fn field_condition(field: &str, operator: &str, value: &serde_json::Value) -> Result<MatchCondition, String> {
+    if operator == "ne" {
+        let condition = field_condition(field, "eq", value)?;
+        return Ok(negate_condition(condition));
+    }
+
     let field_lower = field.to_lowercase();
     let op_condition = operator_condition(operator, value)?;
 
@@ -337,22 +443,71 @@ impl StoredRule {
     }
 }
 
+impl RuleView {
+    pub fn from_stored(rule: &StoredRule) -> Self {
+        let meta = &rule.meta;
+        let id = rule_identifier(rule);
+        let name = meta
+            .name
+            .clone()
+            .unwrap_or_else(|| rule.rule.description.clone());
+        let rule_type = meta
+            .rule_type
+            .as_deref()
+            .map(normalize_rule_type)
+            .unwrap_or_else(|| default_rule_type(&rule.rule));
+        let enabled = meta.enabled.unwrap_or(true);
+        let priority = meta.priority.unwrap_or(100);
+        let conditions = meta.conditions.clone().unwrap_or_default();
+        let actions = meta
+            .actions
+            .clone()
+            .filter(|items| !items.is_empty())
+            .unwrap_or_else(|| default_actions(&rule.rule));
+        let ttl = meta.ttl;
+        let hit_count = meta.hit_count.unwrap_or(0);
+        let last_hit = meta.last_hit.clone();
+        let created_at = meta.created_at.clone().unwrap_or_else(now_rfc3339);
+        let updated_at = meta.updated_at.clone().unwrap_or_else(|| created_at.clone());
+
+        Self {
+            id,
+            name,
+            rule_type,
+            enabled,
+            priority,
+            conditions,
+            actions,
+            ttl,
+            hit_count,
+            last_hit,
+            created_at,
+            updated_at,
+        }
+    }
+}
+
 pub fn parse_rule_value(value: serde_json::Value) -> Result<StoredRule, String> {
     if value.get("matches").is_some() {
         let rule: WafRule = serde_json::from_value(value.clone())
             .map_err(|err| format!("invalid waf rule: {}", err))?;
         let mut meta = RuleMetadata::default();
+        meta.external_id = Some(rule.id.to_string());
         meta.name = Some(rule.description.clone());
-        meta.rule_type = Some(if rule.blocking.unwrap_or(false) { "BLOCK" } else { "MONITOR" }.to_string());
+        meta.rule_type = Some(default_rule_type(&rule));
         meta.enabled = Some(true);
         meta.priority = Some(100);
+        meta.actions = Some(default_actions(&rule));
         meta.created_at = Some(now_rfc3339());
         meta.updated_at = Some(now_rfc3339());
+        apply_meta_overrides(&mut meta, &value);
         Ok(StoredRule { rule, meta })
     } else {
-        let custom: CustomRuleInput = serde_json::from_value(value)
+        let custom: CustomRuleInput = serde_json::from_value(value.clone())
             .map_err(|err| format!("invalid custom rule: {}", err))?;
-        StoredRule::from_custom(custom)
+        let mut stored = StoredRule::from_custom(custom)?;
+        apply_meta_overrides(&mut stored.meta, &value);
+        Ok(stored)
     }
 }
 
@@ -397,38 +552,81 @@ pub fn merge_rule_update(existing: &StoredRule, update: CustomRuleUpdate) -> Res
         meta.ttl = Some(ttl);
     }
 
-    let external_id = meta
-        .external_id
-        .clone()
-        .unwrap_or_else(|| existing.rule.id.to_string());
-    let name = meta
-        .name
-        .clone()
-        .unwrap_or_else(|| existing.rule.description.clone());
+    let has_conditions = meta
+        .conditions
+        .as_ref()
+        .map(|items| !items.is_empty())
+        .unwrap_or(false);
+
+    if has_conditions {
+        let external_id = meta
+            .external_id
+            .clone()
+            .unwrap_or_else(|| existing.rule.id.to_string());
+        let name = meta
+            .name
+            .clone()
+            .unwrap_or_else(|| existing.rule.description.clone());
+        let rule_type = meta
+            .rule_type
+            .clone()
+            .unwrap_or_else(|| default_rule_type(&existing.rule));
+        let enabled = meta.enabled.unwrap_or(true);
+        let priority = meta.priority.unwrap_or(100);
+        let conditions = meta.conditions.clone().unwrap_or_default();
+        let actions = meta
+            .actions
+            .clone()
+            .filter(|items| !items.is_empty())
+            .unwrap_or_else(|| default_actions(&existing.rule));
+
+        let custom = CustomRuleInput {
+            id: external_id,
+            name,
+            rule_type,
+            enabled,
+            priority,
+            conditions,
+            actions,
+            ttl: meta.ttl,
+        };
+
+        let mut stored = StoredRule::from_custom(custom)?;
+        stored.meta.created_at = meta.created_at.clone();
+        stored.meta.updated_at = meta.updated_at.clone();
+        stored.meta.hit_count = meta.hit_count;
+        stored.meta.last_hit = meta.last_hit.clone();
+        return Ok(stored);
+    }
+
     let rule_type = meta
         .rule_type
         .clone()
-        .unwrap_or_else(|| if existing.rule.blocking.unwrap_or(false) { "BLOCK" } else { "MONITOR" }.to_string());
-    let enabled = meta.enabled.unwrap_or(true);
-    let priority = meta.priority.unwrap_or(100);
-    let conditions = meta.conditions.clone().unwrap_or_default();
-    let actions = meta.actions.clone().unwrap_or_default();
+        .unwrap_or_else(|| default_rule_type(&existing.rule));
+    let actions = meta
+        .actions
+        .clone()
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| default_actions(&existing.rule));
 
-    let custom = CustomRuleInput {
-        id: external_id,
-        name,
-        rule_type,
-        enabled,
-        priority,
-        conditions,
-        actions,
-        ttl: meta.ttl,
-    };
+    let mut stored = existing.clone();
+    stored.meta = meta.clone();
+    stored.rule.description = meta
+        .name
+        .clone()
+        .unwrap_or_else(|| existing.rule.description.clone());
+    stored.rule.risk = Some(risk_for_type(&rule_type, &actions));
+    stored.rule.blocking = Some(blocking_for_rule(&rule_type, &actions));
 
-    let mut stored = StoredRule::from_custom(custom)?;
-    stored.meta.created_at = meta.created_at.clone();
-    stored.meta.updated_at = meta.updated_at.clone();
-    stored.meta.hit_count = meta.hit_count;
-    stored.meta.last_hit = meta.last_hit.clone();
     Ok(stored)
+}
+
+pub fn rules_hash(rules: &[StoredRule]) -> String {
+    let mut views: Vec<RuleView> = rules.iter().map(RuleView::from_stored).collect();
+    views.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let payload = serde_json::to_string(&views).unwrap_or_default();
+    let mut hasher = Sha256::new();
+    hasher.update(payload.as_bytes());
+    format!("{:x}", hasher.finalize())
 }

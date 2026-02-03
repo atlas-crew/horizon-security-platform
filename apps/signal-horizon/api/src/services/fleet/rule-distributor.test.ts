@@ -934,6 +934,12 @@ describe('RuleDistributor', () => {
       expect(deployments.length).toBe(1);
       const deploymentId = deployments[0].deploymentId;
 
+      // Wait for sensor status to initialize before marking staging complete
+      await advanceUntil(
+        () => distributor.getDeploymentStatus(deploymentId)?.sensorStatus.get(sensorIds[0]),
+        { stepMs: 10, maxSteps: 50, description: 'sensor status initialization' }
+      );
+
       // Mark staging complete but never activate - should timeout during switch
       for (const sensorId of sensorIds) {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);

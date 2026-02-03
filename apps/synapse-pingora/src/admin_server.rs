@@ -535,6 +535,7 @@ fn service_unavailable(service_name: &str) -> Response {
 use crate::config_manager::{
     CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
     RateLimitRequest, AccessListRequest,
+    ConfigManagerError, CustomRuleAction, CustomRuleCondition, CustomRuleInput, CustomRuleUpdate, RuleView, StoredRule,
 };
 
 /// GET /config - Retrieve full configuration
@@ -1155,6 +1156,8 @@ pub async fn start_admin_server(
         .route("/_sensor/entities/:ip", delete(sensor_release_entity_handler))
         .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
+        .route("/_sensor/rules", get(sensor_rules_handler).post(sensor_rules_create_handler))
+        .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/signals", get(sensor_signals_handler))
         .route("/_sensor/report", post(sensor_report_handler))
@@ -1746,6 +1749,53 @@ struct BlocksQuery {
     limit: Option<usize>,
 }
 
+/// Query parameters for rules endpoint
+#[derive(Debug, Deserialize)]
+struct RulesQuery {
+    enabled: Option<bool>,
+    #[serde(rename = "type")]
+    rule_type: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+fn default_rule_enabled() -> bool {
+    true
+}
+
+fn default_rule_priority() -> u32 {
+    100
+}
+
+#[derive(Debug, Deserialize)]
+struct RuleCreateRequest {
+    name: String,
+    #[serde(rename = "type")]
+    rule_type: String,
+    #[serde(default = "default_rule_enabled")]
+    enabled: bool,
+    #[serde(default = "default_rule_priority")]
+    priority: u32,
+    #[serde(default)]
+    conditions: Vec<CustomRuleCondition>,
+    #[serde(default)]
+    actions: Vec<CustomRuleAction>,
+    #[serde(default)]
+    ttl: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RuleUpdateRequest {
+    name: Option<String>,
+    #[serde(rename = "type")]
+    rule_type: Option<String>,
+    enabled: Option<bool>,
+    priority: Option<u32>,
+    conditions: Option<Vec<CustomRuleCondition>>,
+    actions: Option<Vec<CustomRuleAction>>,
+    ttl: Option<u64>,
+}
+
 /// Query parameters for signals endpoint
 #[derive(Debug, Deserialize)]
 struct SignalsQuery {
@@ -1762,6 +1812,123 @@ async fn sensor_blocks_handler(
     let limit = params.limit.unwrap_or(100);
     let blocks = state.handler.handle_list_blocks(limit);
     (StatusCode::OK, Json(serde_json::json!({ "blocks": blocks })))
+}
+
+/// GET /_sensor/rules - Returns active rules with optional filtering
+async fn sensor_rules_handler(
+    Query(params): Query<RulesQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let Some(config_mgr) = state.handler.config_manager() else {
+        return service_unavailable("ConfigManager");
+    };
+
+    let rules = config_mgr.list_rules();
+    let mut views: Vec<RuleView> = rules.iter().map(RuleView::from_stored).collect();
+
+    if let Some(enabled) = params.enabled {
+        views.retain(|rule| rule.enabled == enabled);
+    }
+    if let Some(rule_type) = params.rule_type {
+        let target = rule_type.to_ascii_uppercase();
+        views.retain(|rule| rule.rule_type.eq_ignore_ascii_case(&target));
+    }
+
+    let total = views.len();
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(100);
+    let rules_page: Vec<RuleView> = views.into_iter().skip(offset).take(limit).collect();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "rules": rules_page,
+        "total": total
+    })))
+}
+
+/// POST /_sensor/rules - Create a new rule
+async fn sensor_rules_create_handler(
+    State(state): State<AdminState>,
+    Json(payload): Json<RuleCreateRequest>,
+) -> impl IntoResponse {
+    if payload.conditions.is_empty() {
+        return validation_error("Rule must include at least one condition", None);
+    }
+    if payload.actions.is_empty() {
+        return validation_error("Rule must include at least one action", None);
+    }
+
+    let Some(config_mgr) = state.handler.config_manager() else {
+        return service_unavailable("ConfigManager");
+    };
+
+    let rule_id = format!("rule_{}", uuid::Uuid::new_v4());
+    let custom = CustomRuleInput {
+        id: rule_id,
+        name: payload.name,
+        rule_type: payload.rule_type.to_ascii_uppercase(),
+        enabled: payload.enabled,
+        priority: payload.priority,
+        conditions: payload.conditions,
+        actions: payload.actions,
+        ttl: payload.ttl,
+    };
+
+    let stored = match StoredRule::from_custom(custom) {
+        Ok(rule) => rule,
+        Err(err) => return validation_error("Invalid rule definition", Some(&err)),
+    };
+
+    match config_mgr.create_rule(stored) {
+        Ok(created) => (StatusCode::CREATED, Json(RuleView::from_stored(&created))).into_response(),
+        Err(ConfigManagerError::RuleExists(_)) => validation_error("Rule already exists", None),
+        Err(err) => internal_error("Failed to create rule", Some(&err)),
+    }
+}
+
+/// PUT /_sensor/rules/{rule_id} - Update an existing rule
+async fn sensor_rules_update_handler(
+    Path(rule_id): Path<String>,
+    State(state): State<AdminState>,
+    Json(payload): Json<RuleUpdateRequest>,
+) -> impl IntoResponse {
+    let Some(config_mgr) = state.handler.config_manager() else {
+        return service_unavailable("ConfigManager");
+    };
+
+    let update = CustomRuleUpdate {
+        name: payload.name,
+        rule_type: payload.rule_type.map(|value| value.to_ascii_uppercase()),
+        enabled: payload.enabled,
+        priority: payload.priority,
+        conditions: payload.conditions,
+        actions: payload.actions,
+        ttl: payload.ttl,
+    };
+
+    match config_mgr.update_rule(&rule_id, update) {
+        Ok(updated) => (StatusCode::OK, Json(RuleView::from_stored(&updated))).into_response(),
+        Err(ConfigManagerError::RuleNotFound(_)) => not_found_error("Rule", &rule_id),
+        Err(err) => internal_error("Failed to update rule", Some(&err)),
+    }
+}
+
+/// DELETE /_sensor/rules/{rule_id} - Delete a rule
+async fn sensor_rules_delete_handler(
+    Path(rule_id): Path<String>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let Some(config_mgr) = state.handler.config_manager() else {
+        return service_unavailable("ConfigManager");
+    };
+
+    match config_mgr.delete_rule(&rule_id) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "message": "Rule deleted"
+        }))).into_response(),
+        Err(ConfigManagerError::RuleNotFound(_)) => not_found_error("Rule", &rule_id),
+        Err(err) => internal_error("Failed to delete rule", Some(&err)),
+    }
 }
 
 /// GET /_sensor/trends - Returns real trends data from TrendsManager

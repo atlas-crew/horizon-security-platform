@@ -29,7 +29,7 @@ const mockLogger: Logger = {
 
 const injectAuth = (tenantId: string) => {
   return (req: Request, _res: Response, next: NextFunction) => {
-    req.auth = { tenantId, scopes: ['hunt:read'] } as unknown as typeof req.auth;
+    req.auth = { tenantId, scopes: ['hunt:read', 'hunt:execute'] } as unknown as typeof req.auth;
     next();
   };
 };

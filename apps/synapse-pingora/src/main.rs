@@ -755,7 +755,7 @@ static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
 // Cached hashes for config and rules (computed at startup, used in heartbeats)
 // These are used to detect configuration drift between sensors and the hub.
 static CONFIG_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-static RULES_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static RULES_HASH: Lazy<Arc<RwLock<String>>> = Lazy::new(|| Arc::new(RwLock::new(String::new())));
 
 // WAF regex evaluation timeout in microseconds (prevents ReDoS attacks).
 // Default: 100ms. Configurable via server.waf_regex_timeout_ms.
@@ -3683,7 +3683,7 @@ impl MetricsProvider for HorizonMetricsProvider {
         CONFIG_HASH.get().cloned().unwrap_or_default()
     }
     fn rules_hash(&self) -> String {
-        RULES_HASH.get().cloned().unwrap_or_default()
+        RULES_HASH.read().clone()
     }
     fn active_connections(&self) -> Option<u32> {
         None
@@ -4149,6 +4149,11 @@ fn main() {
     // Load configuration - try multi-site first, fall back to legacy
     let config = Config::load_or_default();
     let multisite_config = try_load_multisite_config();
+    let rules_path = if config.detection.rules_path.trim().is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(config.detection.rules_path.clone()))
+    };
 
     // Compute and cache config hash for heartbeat reporting
     // This allows Signal Horizon to detect configuration drift between sensors
@@ -4169,8 +4174,8 @@ fn main() {
     // Compute and cache rules hash
     // This allows Signal Horizon to verify all sensors have the same rules
     if let Some(ref rules_data) = *RULES_DATA {
-        let _ = RULES_HASH.set(compute_hash(rules_data));
-        debug!("Rules hash: {}", RULES_HASH.get().unwrap_or(&"none".to_string()));
+        *RULES_HASH.write() = compute_hash(rules_data);
+        debug!("Rules hash: {}", RULES_HASH.read());
     }
 
     // ... (metrics init)
@@ -4323,6 +4328,11 @@ fn main() {
             Arc::clone(&site_waf_mgr),
             Arc::clone(&rate_limit_mgr),
             Arc::clone(&access_list_mgr),
+        )
+        .with_rules(
+            Arc::clone(&SYNAPSE),
+            rules_path.clone(),
+            Some(Arc::clone(&RULES_HASH)),
         );
 
         info!(
@@ -4610,14 +4620,21 @@ fn main() {
         let sites_arc = Arc::new(RwLock::new(sites.clone()));
         let config_arc = Arc::new(RwLock::new(config_file.clone()));
 
-        let config_manager_for_proxy = Arc::new(ConfigManager::new(
-            config_arc,
-            sites_arc,
-            Arc::clone(&vhost_matcher),
-            Arc::clone(&site_waf_mgr),
-            Arc::clone(&rate_limit_mgr),
-            Arc::clone(&access_list_mgr),
-        ));
+        let config_manager_for_proxy = Arc::new(
+            ConfigManager::new(
+                config_arc,
+                sites_arc,
+                Arc::clone(&vhost_matcher),
+                Arc::clone(&site_waf_mgr),
+                Arc::clone(&rate_limit_mgr),
+                Arc::clone(&access_list_mgr),
+            )
+            .with_rules(
+                Arc::clone(&SYNAPSE),
+                rules_path.clone(),
+                Some(Arc::clone(&RULES_HASH)),
+            ),
+        );
 
         let shadow_mirror_manager = create_shadow_mirror_manager(sites);
 

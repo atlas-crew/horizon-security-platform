@@ -595,7 +595,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject rollingBatchSize below minimum (1)', async () => {
@@ -609,7 +609,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject rollingBatchSize above maximum (100)', async () => {
@@ -623,7 +623,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject healthCheckTimeout below minimum (5000)', async () => {
@@ -637,7 +637,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject healthCheckTimeout above maximum (300000)', async () => {
@@ -651,7 +651,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject stagingTimeout below minimum (10000)', async () => {
@@ -665,7 +665,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject stagingTimeout above maximum (600000)', async () => {
@@ -679,7 +679,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject cleanupDelayMs below minimum (60000)', async () => {
@@ -693,7 +693,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject cleanupDelayMs above maximum (3600000)', async () => {
@@ -707,7 +707,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject minStagedPercentage below minimum (1)', async () => {
@@ -721,7 +721,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject minStagedPercentage above maximum (100)', async () => {
@@ -735,7 +735,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject empty ruleIds array', async () => {
@@ -748,7 +748,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject empty sensorIds array', async () => {
@@ -761,7 +761,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject invalid scheduledTime format', async () => {
@@ -775,7 +775,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject canaryPercentage below minimum (1)', async () => {
@@ -789,7 +789,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
 
     it('should reject canaryPercentage above maximum (100)', async () => {
@@ -803,7 +803,7 @@ describe('Fleet Routes - Strategy Validation', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('error');
+      expect(res.body).toHaveProperty('detail');
     });
   });
 

@@ -154,8 +154,13 @@ describe('createValidationMiddleware', () => {
     const res = {
       statusCode: 200,
       body: null as unknown,
+      contentType: null as string | null,
       status: vi.fn(function (this: typeof res, code: number) {
         this.statusCode = code;
+        return this;
+      }),
+      type: vi.fn(function (this: typeof res, value: string) {
+        this.contentType = value;
         return this;
       }),
       json: vi.fn(function (this: typeof res, data: unknown) {
@@ -215,7 +220,7 @@ describe('createValidationMiddleware', () => {
 
     middleware(req as Request, res as unknown as Response, next);
 
-    expect(res.body).toEqual({ error: 'Validation failed' });
+    expect(res.body).toHaveProperty('detail', 'Validation failed');
   });
 
   it('validates query parameters', () => {
@@ -278,8 +283,13 @@ describe('createCombinedValidation', () => {
     const res = {
       statusCode: 200,
       body: null as unknown,
+      contentType: null as string | null,
       status: vi.fn(function (this: typeof res, code: number) {
         this.statusCode = code;
+        return this;
+      }),
+      type: vi.fn(function (this: typeof res, value: string) {
+        this.contentType = value;
         return this;
       }),
       json: vi.fn(function (this: typeof res, data: unknown) {
@@ -341,7 +351,7 @@ describe('createCombinedValidation', () => {
 
     middleware(req as Request, res as unknown as Response, next);
 
-    expect(res.body).toEqual({ error: 'Validation failed' });
+    expect(res.body).toHaveProperty('detail', 'Validation failed');
   });
 });
 

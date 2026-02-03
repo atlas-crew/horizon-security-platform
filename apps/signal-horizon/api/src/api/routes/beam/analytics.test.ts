@@ -45,7 +45,11 @@ describe('Beam Analytics Route', () => {
         const response = await request(app).get('/analytics');
 
         expect(response.status).toBe(401);
-        expect(response.body).toHaveProperty('error', 'Not authenticated');
+        expect(response.body).toMatchObject({
+          status: 401,
+          detail: 'Not authenticated',
+          code: 'AUTH_REQUIRED',
+        });
       });
 
       it('should return 401 with proper error message', async () => {
@@ -53,7 +57,11 @@ describe('Beam Analytics Route', () => {
 
         const response = await request(app).get('/analytics');
 
-        expect(response.body).toEqual({ error: 'Not authenticated' });
+        expect(response.body).toMatchObject({
+          status: 401,
+          detail: 'Not authenticated',
+          code: 'AUTH_REQUIRED',
+        });
       });
     });
 

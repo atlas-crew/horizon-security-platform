@@ -75,6 +75,19 @@ describe('Tunnel Routes', () => {
     app.use((req, _res, next) => {
       req.headers['x-org-id'] = 'tenant-1';
       req.headers['x-user-id'] = 'user-1';
+      (req as any).auth = {
+        tenantId: 'tenant-1',
+        apiKeyId: 'test-key',
+        scopes: [
+          'tunnel:read',
+          'tunnel:shell',
+          'tunnel:dashboard',
+          'tunnel:manage',
+          'command:execute',
+        ],
+        isFleetAdmin: false,
+        userId: 'user-1',
+      };
       next();
     });
     app.use('/tunnel', createTunnelRoutes(mockPrisma as PrismaClient, mockLogger));
@@ -257,6 +270,19 @@ describe('Tunnel Routes', () => {
       otherTenantApp.use(express.json());
       otherTenantApp.use((req, _res, next) => {
         req.headers['x-org-id'] = 'tenant-2'; // Different tenant
+        (req as any).auth = {
+          tenantId: 'tenant-2',
+          apiKeyId: 'test-key',
+          scopes: [
+            'tunnel:read',
+            'tunnel:shell',
+            'tunnel:dashboard',
+            'tunnel:manage',
+            'command:execute',
+          ],
+          isFleetAdmin: false,
+          userId: 'user-2',
+        };
         next();
       });
       otherTenantApp.use('/tunnel', createTunnelRoutes(mockPrisma as PrismaClient, mockLogger));

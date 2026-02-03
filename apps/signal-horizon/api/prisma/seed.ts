@@ -75,7 +75,7 @@ async function main() {
       tenantId: 'tenant-acme', // Associated with Acme but has fleet:admin
       keyHash: await hashApiKey('dev-dashboard-key'),
       name: 'Development Dashboard',
-      scopes: ['dashboard:read', 'dashboard:write', 'fleet:admin', 'fleet:read'],
+      scopes: ['dashboard:read', 'dashboard:write', 'fleet:admin', 'fleet:read', 'fleet:write'],
       rateLimit: 1000,
     },
   });

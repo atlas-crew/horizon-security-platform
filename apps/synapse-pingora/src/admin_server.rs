@@ -130,6 +130,10 @@ static DEMO_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool:
 /// Enable dev mode for live reloading of admin console
 pub fn enable_dev_mode() {
     DEV_MODE.store(true, std::sync::atomic::Ordering::SeqCst);
+    tracing::warn!("================================================");
+    tracing::warn!("!! DEV MODE ENABLED - AUTHENTICATION BYPASSED !!");
+    tracing::warn!("!! DO NOT USE IN PRODUCTION                   !!");
+    tracing::warn!("================================================");
     tracing::info!("Dev mode enabled - admin console will be served from disk");
 }
 
@@ -748,6 +752,15 @@ async fn require_sensor_read(
     check_scope(&state, scopes::SENSOR_READ, request, next).await
 }
 
+/// Scope-checking middleware for admin:read scope.
+async fn require_admin_read(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::ADMIN_READ, request, next).await
+}
+
 /// Internal helper to check if a required scope is granted.
 async fn check_scope(
     state: &AdminState,
@@ -1061,9 +1074,15 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
-    // Routes that are safe to expose without authentication (health check + console).
-    let public_routes = Router::new()
+    // Routes requiring admin:read scope (console access)
+    let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+
+    // Routes that are safe to expose without authentication (health check only).
+    let public_routes = Router::new()
         .route("/health", get(health_handler));
 
     // All remaining admin API routes require authentication.
@@ -1143,6 +1162,7 @@ pub async fn start_admin_server(
         .merge(config_write_routes)
         .merge(service_manage_routes)
         .merge(sensor_read_routes)
+        .merge(admin_read_routes)
         .merge(authenticated_routes)
         .merge(public_routes)
         .layer(middleware::from_fn(security_headers))

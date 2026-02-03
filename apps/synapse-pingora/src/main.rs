@@ -4056,7 +4056,22 @@ fn main() {
         || std::env::var("SYNAPSE_DEMO").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
 
     if dev_mode {
-        synapse_pingora::admin_server::enable_dev_mode();
+        // SECURITY: Prevent accidental dev mode in production
+        let is_production = std::env::var("SYNAPSE_PRODUCTION")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false)
+            || std::env::var("NODE_ENV")
+                .map(|v| v.to_lowercase() == "production")
+                .unwrap_or(false);
+
+        if is_production {
+            tracing::error!(
+                "SECURITY: Dev mode requested but production environment detected. \
+                 Dev mode DISABLED for safety. Unset SYNAPSE_PRODUCTION/NODE_ENV to enable."
+            );
+        } else {
+            synapse_pingora::admin_server::enable_dev_mode();
+        }
     }
 
     if demo_mode {

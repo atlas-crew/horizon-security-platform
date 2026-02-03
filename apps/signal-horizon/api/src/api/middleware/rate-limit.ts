@@ -46,10 +46,28 @@ export const PlaybookRateLimits = {
 /**
  * Extract tenant ID from authenticated request for rate limit keying
  */
+const TENANT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+
+function normalizeTenantId(value?: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (!TENANT_ID_PATTERN.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
 function getTenantKey(req: Request): string {
   // Use tenant ID from auth context if available
-  if (req.auth?.tenantId) {
-    return req.auth.tenantId;
+  const tenantId = normalizeTenantId(req.auth?.tenantId);
+  if (tenantId) {
+    return tenantId;
   }
   // Fall back to IP if not authenticated (shouldn't happen with proper middleware ordering)
   return req.ip || req.socket.remoteAddress || 'unknown';

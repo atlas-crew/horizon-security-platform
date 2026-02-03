@@ -9,7 +9,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { HuntService, HuntQuery } from '../../services/hunt/index.js';
 import { rateLimiters } from '../../middleware/index.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireScope } from '../middleware/auth.js';
 
 // =============================================================================
 // Validation Schemas
@@ -68,8 +68,10 @@ export function createHuntRoutes(
   /**
    * GET /api/v1/hunt/status
    * Check if historical hunting is available
+   *
+   * Security: Requires hunt:read scope
    */
-  router.get('/status', (_req: Request, res: Response) => {
+  router.get('/status', requireScope('hunt:read'), (_req: Request, res: Response) => {
     res.json({
       historical: huntService.isHistoricalEnabled(),
       routingThreshold: '24h',
@@ -141,8 +143,10 @@ export function createHuntRoutes(
   /**
    * GET /api/v1/hunt/timeline/:campaignId
    * Get campaign event timeline
+   *
+   * Security: Requires hunt:read scope
    */
-  router.get('/timeline/:campaignId', rateLimiters.hunt, async (req: Request, res: Response) => {
+  router.get('/timeline/:campaignId', requireScope('hunt:read'), rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       const { campaignId } = req.params;
       const parsed = TimeRangeSchema.safeParse(req.query);
@@ -292,8 +296,10 @@ export function createHuntRoutes(
   /**
    * GET /api/v1/hunt/saved-queries
    * List saved queries
+   *
+   * Security: Requires hunt:read scope
    */
-  router.get('/saved-queries', rateLimiters.savedQueries, async (req: Request, res: Response) => {
+  router.get('/saved-queries', requireScope('hunt:read'), rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const createdBy = req.query.createdBy as string | undefined;
       const queries = await huntService.getSavedQueries(createdBy);
@@ -317,8 +323,10 @@ export function createHuntRoutes(
   /**
    * POST /api/v1/hunt/saved-queries
    * Create a saved query
+   *
+   * Security: Requires hunt:write scope (WRITE operation)
    */
-  router.post('/saved-queries', rateLimiters.savedQueries, async (req: Request, res: Response) => {
+  router.post('/saved-queries', requireScope('hunt:write'), rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const parsed = SavedQuerySchema.safeParse(req.body);
 
@@ -351,8 +359,10 @@ export function createHuntRoutes(
   /**
    * GET /api/v1/hunt/saved-queries/:id
    * Get a saved query by ID
+   *
+   * Security: Requires hunt:read scope
    */
-  router.get('/saved-queries/:id', async (req: Request, res: Response) => {
+  router.get('/saved-queries/:id', requireScope('hunt:read'), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const query = await huntService.getSavedQuery(id);
@@ -381,17 +391,13 @@ export function createHuntRoutes(
    * POST /api/v1/hunt/saved-queries/:id/run
    * Execute a saved query
    *
-   * Security: Tenant isolation enforced - saved queries are executed with
+   * Security: Requires hunt:execute scope.
+   * Tenant isolation enforced - saved queries are executed with
    * the authenticated tenant's context, not the original query's tenantId.
    */
-  router.post('/saved-queries/:id/run', rateLimiters.hunt, async (req: Request, res: Response) => {
+  router.post('/saved-queries/:id/run', requireScope('hunt:execute'), rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
-      // Require authentication
-      if (!req.auth?.tenantId) {
-        res.status(401).json({ error: 'Authentication required' });
-        return;
-      }
-
+      // Authentication already verified by requireScope middleware
       const { id } = req.params;
 
       // Get the saved query first to check ownership
@@ -435,8 +441,10 @@ export function createHuntRoutes(
   /**
    * DELETE /api/v1/hunt/saved-queries/:id
    * Delete a saved query
+   *
+   * Security: Requires hunt:write scope AND operator role (DESTRUCTIVE operation)
    */
-  router.delete('/saved-queries/:id', async (req: Request, res: Response) => {
+  router.delete('/saved-queries/:id', requireScope('hunt:write'), requireRole('operator'), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const deleted = await huntService.deleteSavedQuery(id);

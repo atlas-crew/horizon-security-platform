@@ -12,6 +12,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import type { Logger } from 'pino';
 import { config } from '../../config.js';
 import { getSynapseDirectAdapter } from '../../services/synapse-direct.js';
+import { requireScope } from '../middleware/auth.js';
 import type {
   BeamAnalyticsResponse,
   BandwidthAnalytics,
@@ -273,8 +274,10 @@ export function createBeamRoutes(logger: Logger): Router {
   /**
    * GET /api/v1/beam/analytics
    * Returns combined analytics data from synapse-pingora or risk-server with demo fallbacks
+   *
+   * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
-  router.get('/analytics', async (_req: Request, res: Response, _next: NextFunction) => {
+  router.get('/analytics', requireScope('analytics:read'), async (_req: Request, res: Response, _next: NextFunction) => {
     log.debug('Fetching beam analytics data');
 
     // Check for synapse direct adapter first
@@ -344,8 +347,10 @@ export function createBeamRoutes(logger: Logger): Router {
   /**
    * GET /api/v1/beam/traffic
    * Returns just traffic overview data
+   *
+   * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
-  router.get('/traffic', async (_req: Request, res: Response, _next: NextFunction) => {
+  router.get('/traffic', requireScope('analytics:read'), async (_req: Request, res: Response, _next: NextFunction) => {
     const synapseAdapter = getSynapseDirectAdapter();
 
     let sensor: SensorMetrics;
@@ -378,8 +383,10 @@ export function createBeamRoutes(logger: Logger): Router {
   /**
    * GET /api/v1/beam/threats
    * Returns threat/anomaly summary
+   *
+   * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
-  router.get('/threats', async (_req: Request, res: Response, _next: NextFunction) => {
+  router.get('/threats', requireScope('analytics:read'), async (_req: Request, res: Response, _next: NextFunction) => {
     const synapseAdapter = getSynapseDirectAdapter();
 
     let threats: ThreatSummary;
@@ -401,8 +408,10 @@ export function createBeamRoutes(logger: Logger): Router {
   /**
    * GET /api/v1/beam/endpoints
    * Returns top endpoints by traffic
+   *
+   * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
-  router.get('/endpoints', async (_req: Request, res: Response, _next: NextFunction) => {
+  router.get('/endpoints', requireScope('analytics:read'), async (_req: Request, res: Response, _next: NextFunction) => {
     const bandwidthData = await fetchFromRiskServer('/_sensor/payload/bandwidth', log);
     const bandwidth = transformBandwidthData(bandwidthData);
     const topEndpoints = transformTopEndpoints(bandwidth);
@@ -416,8 +425,10 @@ export function createBeamRoutes(logger: Logger): Router {
   /**
    * GET /api/v1/beam/health
    * Check synapse-pingora or risk-server connectivity
+   *
+   * Security: Requires analytics:health scope (or dashboard:read via alias)
    */
-  router.get('/health', async (_req: Request, res: Response, _next: NextFunction) => {
+  router.get('/health', requireScope('analytics:health'), async (_req: Request, res: Response, _next: NextFunction) => {
     const synapseAdapter = getSynapseDirectAdapter();
 
     if (synapseAdapter) {

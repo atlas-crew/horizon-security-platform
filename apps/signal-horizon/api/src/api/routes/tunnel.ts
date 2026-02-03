@@ -3,13 +3,17 @@
  *
  * REST endpoints for managing WebSocket tunnel sessions between
  * Signal Horizon and remote sensors.
+ *
+ * Security: All endpoints require authentication. Shell and dashboard
+ * creation require operator role due to sensitive nature of remote access.
  */
 
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'crypto';
+import { requireScope, requireRole } from '../middleware/auth.js';
 
 // ============================================================================
 // Zod Schemas
@@ -39,10 +43,12 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * GET /tunnel/status/:sensorId
    * Check tunnel availability for a sensor
+   *
+   * Security: Requires tunnel:read scope
    */
-  router.get('/status/:sensorId', async (req, res): Promise<Response | void> => {
+  router.get('/status/:sensorId', requireScope('tunnel:read'), async (req: Request, res): Promise<Response | void> => {
     const { sensorId } = req.params;
-    const tenantId = req.headers['x-org-id'] as string;
+    const tenantId = req.auth!.tenantId;
 
     try {
       // Verify sensor exists and belongs to tenant
@@ -75,11 +81,13 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * POST /tunnel/shell/:sensorId
    * Request a new shell session to a sensor
+   *
+   * Security: Requires tunnel:shell scope AND operator role (SHELL ACCESS - highly sensitive)
    */
-  router.post('/shell/:sensorId', async (req, res): Promise<Response | void> => {
+  router.post('/shell/:sensorId', requireScope('tunnel:shell'), requireRole('operator'), async (req: Request, res): Promise<Response | void> => {
     const { sensorId } = req.params;
-    const tenantId = req.headers['x-org-id'] as string;
-    const userId = (req.headers['x-user-id'] as string) || 'anonymous';
+    const tenantId = req.auth!.tenantId;
+    const userId = req.auth!.userId ?? req.auth!.apiKeyId;
 
     try {
       // Verify sensor exists and belongs to tenant
@@ -135,11 +143,13 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * POST /tunnel/dashboard/:sensorId
    * Request a new dashboard proxy session to a sensor
+   *
+   * Security: Requires tunnel:dashboard scope AND operator role (remote access)
    */
-  router.post('/dashboard/:sensorId', async (req, res): Promise<Response | void> => {
+  router.post('/dashboard/:sensorId', requireScope('tunnel:dashboard'), requireRole('operator'), async (req: Request, res): Promise<Response | void> => {
     const { sensorId } = req.params;
-    const tenantId = req.headers['x-org-id'] as string;
-    const userId = (req.headers['x-user-id'] as string) || 'anonymous';
+    const tenantId = req.auth!.tenantId;
+    const userId = req.auth!.userId ?? req.auth!.apiKeyId;
 
     try {
       // Verify sensor exists and belongs to tenant
@@ -196,10 +206,12 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * GET /tunnel/session/:sessionId
    * Get session status
+   *
+   * Security: Requires tunnel:read scope
    */
-  router.get('/session/:sessionId', (req, res): Response => {
+  router.get('/session/:sessionId', requireScope('tunnel:read'), (req: Request, res): Response => {
     const { sessionId } = req.params;
-    const tenantId = req.headers['x-org-id'] as string;
+    const tenantId = req.auth!.tenantId;
 
     const session = sessions.get(sessionId);
 
@@ -218,10 +230,12 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * DELETE /tunnel/session/:sessionId
    * Terminate a session
+   *
+   * Security: Requires tunnel:manage scope
    */
-  router.delete('/session/:sessionId', (req, res): Response => {
+  router.delete('/session/:sessionId', requireScope('tunnel:manage'), (req: Request, res): Response => {
     const { sessionId } = req.params;
-    const tenantId = req.headers['x-org-id'] as string;
+    const tenantId = req.auth!.tenantId;
 
     const session = sessions.get(sessionId);
 
@@ -243,9 +257,11 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   /**
    * GET /tunnel/sessions
    * List active sessions for the tenant
+   *
+   * Security: Requires tunnel:read scope
    */
-  router.get('/sessions', (req, res): Response => {
-    const tenantId = req.headers['x-org-id'] as string;
+  router.get('/sessions', requireScope('tunnel:read'), (req: Request, res): Response => {
+    const tenantId = req.auth!.tenantId;
 
     const tenantSessions = Array.from(sessions.values())
       .filter(s => s.tenantId === tenantId)

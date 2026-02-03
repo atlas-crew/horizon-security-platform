@@ -15,6 +15,7 @@ import {
   clearFailedAuth,
   getClientIpForAuth,
 } from '../../middleware/rate-limiter.js';
+import { hasScope } from './scopes.js';
 
 export interface AuthContext {
   tenantId: string;
@@ -145,7 +146,12 @@ export function createAuthMiddleware(prisma: PrismaClient) {
 }
 
 /**
- * Require specific scope(s) for a route
+ * Require specific scope(s) for a route.
+ *
+ * Checks both direct scope matches AND alias expansions. For example,
+ * an API key with 'dashboard:read' will satisfy 'analytics:read'.
+ *
+ * @param requiredScopes - One or more scopes; user needs at least ONE
  */
 export function requireScope(...requiredScopes: string[]) {
   return function scopeMiddleware(
@@ -161,9 +167,12 @@ export function requireScope(...requiredScopes: string[]) {
       return;
     }
 
-    const hasScope = requiredScopes.some((scope) => req.auth!.scopes.includes(scope));
+    // Check if any required scope is satisfied (directly or via aliases)
+    const hasScopeMatch = requiredScopes.some((scope) =>
+      hasScope(req.auth!.scopes, scope)
+    );
 
-    if (!hasScope) {
+    if (!hasScopeMatch) {
       sendProblem(res, 403, 'Insufficient permissions', {
         code: 'INSUFFICIENT_SCOPE',
         instance: req.originalUrl,

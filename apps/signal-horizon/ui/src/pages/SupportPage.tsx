@@ -43,6 +43,13 @@ export function SupportPage() {
 
   const [selectedDocId, setSelectedDocId] = useState<string>('README');
 
+  const priorityDocs: DocItem[] = [
+    { id: 'tutorials:sensor-onboarding', title: 'Sensor Onboarding', category: 'Tutorials', path: '/docs/tutorials/sensor-onboarding' },
+    { id: 'tutorials:synapse-rules', title: 'Rule Authoring (Synapse Rules)', category: 'Tutorials', path: '/docs/tutorials/synapse-rules' },
+    { id: 'guides:rule-authoring-flow', title: 'Rule Authoring Flow', category: 'Guides', path: '/docs/guides/rule-authoring-flow' },
+    { id: 'api:reference', title: 'API Reference', category: 'API Reference', path: '/docs/api' },
+  ];
+
 
 
   // Demo docs fallback when API unavailable
@@ -51,12 +58,15 @@ export function SupportPage() {
     { id: 'architecture', title: 'Architecture', category: 'Getting Started', path: '/docs/architecture' },
     { id: 'deployment', title: 'Deployment', category: 'Getting Started', path: '/docs/deployment' },
     { id: 'tutorials:sensor-onboarding', title: 'Sensor Onboarding', category: 'Tutorials', path: '/docs/tutorials/sensor-onboarding' },
+    { id: 'tutorials:synapse-rules', title: 'Rule Authoring (Synapse Rules)', category: 'Tutorials', path: '/docs/tutorials/synapse-rules' },
+    { id: 'guides:rule-authoring-flow', title: 'Rule Authoring Flow', category: 'Guides', path: '/docs/guides/rule-authoring-flow' },
     { id: 'guides:api-intelligence', title: 'API Intelligence', category: 'Guides', path: '/docs/guides/api-intelligence' },
     { id: 'guides:capacity-planning', title: 'Capacity Planning', category: 'Guides', path: '/docs/guides/capacity-planning' },
+    { id: 'api:reference', title: 'API Reference', category: 'API Reference', path: '/docs/api' },
   ];
 
   // Fetch doc index
-  const { data: docs = demoDocs } = useQuery<DocItem[]>({
+  const { data: docsFromApi } = useQuery<DocItem[]>({
     queryKey: ['docs', 'index'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/docs`, { headers: authHeaders });
@@ -67,6 +77,14 @@ export function SupportPage() {
     staleTime: 60000,
   });
 
+  const docs = useMemo(() => {
+    const merged = new Map<string, DocItem>();
+    const baseDocs = docsFromApi ?? demoDocs;
+    [...priorityDocs, ...baseDocs].forEach((doc) => {
+      if (!merged.has(doc.id)) merged.set(doc.id, doc);
+    });
+    return Array.from(merged.values());
+  }, [docsFromApi]);
 
 
   return (
@@ -364,6 +382,58 @@ curl -sSL https://your-hub.com/api/v1/fleet/onboarding/script | \\
 - **Connection Timeout**: Check firewall allows outbound HTTPS (443)
 - **Auth Failed**: Verify sensor ID and API key are correct`,
 
+    'tutorials:synapse-rules': `# Rule Authoring (Synapse Rules)
+
+Craft custom WAF rules tailored to your traffic and risk profile.
+
+## Quick Workflow
+
+1. Draft rule with minimal scope (narrow regex, specific path).
+2. Run in \`log_only\` to observe matches.
+3. Review false positives in the dashboard.
+4. Promote to blocking once clean.
+
+## Example Rule
+
+\`\`\`json
+{
+  "id": 942100,
+  "description": "SQL Injection - UNION SELECT",
+  "risk": 90.0,
+  "blocking": true,
+  "matches": [
+    { "type": "uri", "match": { "type": "regex", "match": "(?i)union\\s+select" } }
+  ]
+}
+\`\`\`
+
+## Tips
+
+- Use \`risk\` to tune escalation, not just blocking.
+- Prefer anchored patterns to avoid noisy matches.`,
+
+    'guides:rule-authoring-flow': `# Rule Authoring Flow
+
+Use this checklist when promoting new rules:
+
+1. Draft the rule with a narrow match target.
+2. Enable in \`log_only\`.
+3. Validate against real traffic samples.
+4. Tune and re-run for 24 hours.
+5. Promote to blocking and monitor.`,
+
+    'api:reference': `# API Reference
+
+Core endpoints and protocols:
+
+- \`/api/v1/status\` — Hub status
+- \`/api/v1/fleet/onboarding/tokens\` — Sensor onboarding tokens
+- \`/api/v1/fleet/sensors\` — Fleet inventory
+- \`/api/v1/signals\` — Signal ingestion/query
+- WebSocket gateway for live telemetry and remote management
+
+See the full REST & WebSocket API reference in docs.`,
+
     'guides:api-intelligence': `# API Intelligence & Schema Security
 
 Learn how Signal Horizon automatically discovers your API surface area and protects against schema violations.
@@ -543,7 +613,8 @@ Track these metrics:
                 prose-h4:text-[24px]
                 prose-strong:font-bold prose-strong:text-ac-blue
                 prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm
-                prose-pre:bg-ac-navy prose-pre:text-white prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20
+                prose-pre:bg-ac-navy prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20 prose-pre:p-6
+                [&_pre_code]:bg-transparent [&_pre_code]:text-slate-100 [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-relaxed
                 prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline
                 prose-li:my-2
                 prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider

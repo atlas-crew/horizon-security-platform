@@ -364,8 +364,9 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
-use tower_http::cors::{Any, CorsLayer};
-use tracing::{info, warn};
+use std::time::Duration;
+use tower_http::cors::CorsLayer;
+use tracing::{error, info, warn};
 use subtle::ConstantTimeEq;
 
 use crate::api::{ApiHandler, ApiResponse};
@@ -851,7 +852,7 @@ async fn audit_log(request: Request, next: Next) -> Response {
     if matches!(method, Method::POST | Method::PUT | Method::DELETE | Method::PATCH) {
         let status = response.status();
         let duration_ms = start.elapsed().as_millis();
-        let actor = "admin_api_key";
+        let actor = client_ip.to_string();
 
         tracing::info!(
             target: "audit",

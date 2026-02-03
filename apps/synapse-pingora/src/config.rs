@@ -6,6 +6,7 @@
 use crate::shadow::ShadowMirrorConfig;
 use crate::trap::TrapConfig;
 use crate::vhost::SiteConfig;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
@@ -16,7 +17,7 @@ use tracing::{debug, info, warn};
 const MAX_CONFIG_SIZE: u64 = 10 * 1024 * 1024;
 
 /// Global server configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GlobalConfig {
     /// HTTP listen address (default: 0.0.0.0:80)
     #[serde(default = "default_http_addr")]
@@ -97,7 +98,7 @@ impl Default for GlobalConfig {
 }
 
 /// Rate limiting configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RateLimitConfig {
     /// Requests per second limit
     pub rps: u32,
@@ -119,7 +120,7 @@ impl Default for RateLimitConfig {
 }
 
 /// Upstream backend configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct UpstreamConfig {
     /// Backend host
     pub host: String,
@@ -138,7 +139,7 @@ fn default_weight() -> u32 {
 }
 
 /// TLS configuration for a site.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TlsConfig {
     /// Path to certificate file (PEM format)
     pub cert_path: String,
@@ -154,7 +155,7 @@ fn default_min_tls() -> String {
 }
 
 /// Access control configuration for a site.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 pub struct AccessControlConfig {
     /// List of CIDR ranges to allow
     #[serde(default)]
@@ -168,7 +169,7 @@ pub struct AccessControlConfig {
 }
 
 /// Header manipulation configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 pub struct HeaderConfig {
     /// Headers to add/set/remove on the request
     #[serde(default)]
@@ -179,7 +180,7 @@ pub struct HeaderConfig {
 }
 
 /// Header operations (add, set, remove).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 pub struct HeaderOps {
     /// Headers to add (appends if already exists)
     #[serde(default)]
@@ -193,7 +194,7 @@ pub struct HeaderOps {
 }
 
 /// Site-specific WAF configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SiteWafConfig {
     /// Whether WAF is enabled for this site
     #[serde(default = "default_true")]
@@ -216,7 +217,7 @@ impl Default for SiteWafConfig {
 }
 
 /// Site configuration from YAML.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SiteYamlConfig {
     /// Hostname or wildcard pattern
     pub hostname: String,
@@ -238,7 +239,7 @@ pub struct SiteYamlConfig {
 }
 
 /// Profiler configuration for endpoint behavior learning.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ProfilerConfig {
     /// Whether profiling is enabled
     #[serde(default = "default_true")]
@@ -352,7 +353,7 @@ impl Default for ProfilerConfig {
 }
 
 /// Complete configuration file structure.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ConfigFile {
     /// Global server settings
     #[serde(default)]

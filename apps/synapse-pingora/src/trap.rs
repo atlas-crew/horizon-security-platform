@@ -4,10 +4,11 @@
 //! Any IP accessing a trap path receives immediate maximum risk score.
 
 use regex::{Regex, RegexSet};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for honeypot trap endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TrapConfig {
     /// Whether trap detection is enabled.
     #[serde(default = "default_enabled")]

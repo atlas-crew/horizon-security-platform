@@ -2,11 +2,12 @@
 //!
 //! Defines the `ShadowMirrorConfig` struct for per-site shadow mirroring settings.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// Configuration for shadow mirroring suspicious traffic to honeypots.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ShadowMirrorConfig {
     /// Enable shadow mirroring for this site
     #[serde(default)]

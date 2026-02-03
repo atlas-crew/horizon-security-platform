@@ -1,0 +1,650 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigFile",
+  "description": "Complete configuration file structure.",
+  "type": "object",
+  "required": [
+    "sites"
+  ],
+  "properties": {
+    "profiler": {
+      "description": "Profiler configuration",
+      "default": {
+        "enabled": true,
+        "freeze_after_samples": 0,
+        "max_profiles": 1000,
+        "max_schemas": 500,
+        "max_type_counts": 10,
+        "min_samples_for_validation": 100,
+        "min_stddev": 0.01,
+        "param_z_threshold": 4.0,
+        "payload_z_threshold": 3.0,
+        "redact_pii": true,
+        "response_z_threshold": 4.0,
+        "type_ratio_threshold": 0.9
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/ProfilerConfig"
+        }
+      ]
+    },
+    "rate_limit": {
+      "description": "Global rate limiting",
+      "default": {
+        "burst": null,
+        "enabled": true,
+        "rps": 10000
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/RateLimitConfig"
+        }
+      ]
+    },
+    "server": {
+      "description": "Global server settings",
+      "default": {
+        "admin_api_key": null,
+        "http_addr": "0.0.0.0:80",
+        "https_addr": "0.0.0.0:443",
+        "log_level": "info",
+        "shutdown_timeout_secs": 30,
+        "trap_config": null,
+        "waf_enabled": true,
+        "waf_regex_timeout_ms": 100,
+        "waf_threshold": 70,
+        "workers": 0
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/GlobalConfig"
+        }
+      ]
+    },
+    "sites": {
+      "description": "Site configurations",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SiteYamlConfig"
+      }
+    }
+  },
+  "definitions": {
+    "AccessControlConfig": {
+      "description": "Access control configuration for a site.",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "List of CIDR ranges to allow",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "default_action": {
+          "description": "Default action if no rule matches (allow or deny)",
+          "default": "",
+          "type": "string"
+        },
+        "deny": {
+          "description": "List of CIDR ranges to deny",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "GlobalConfig": {
+      "description": "Global server configuration.",
+      "type": "object",
+      "properties": {
+        "admin_api_key": {
+          "description": "API key for the admin server (if unset, a secure random key is generated at startup)",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "http_addr": {
+          "description": "HTTP listen address (default: 0.0.0.0:80)",
+          "default": "0.0.0.0:80",
+          "type": "string"
+        },
+        "https_addr": {
+          "description": "HTTPS listen address (default: 0.0.0.0:443)",
+          "default": "0.0.0.0:443",
+          "type": "string"
+        },
+        "log_level": {
+          "description": "Log level (trace, debug, info, warn, error)",
+          "default": "info",
+          "type": "string"
+        },
+        "shutdown_timeout_secs": {
+          "description": "Graceful shutdown timeout in seconds",
+          "default": 30,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "trap_config": {
+          "description": "Honeypot trap endpoint configuration",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TrapConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "waf_enabled": {
+          "description": "Whether WAF is globally enabled",
+          "default": true,
+          "type": "boolean"
+        },
+        "waf_regex_timeout_ms": {
+          "description": "WAF regex evaluation timeout in milliseconds (prevents ReDoS attacks). Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "waf_threshold": {
+          "description": "Global WAF threshold (0-100)",
+          "default": 70,
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "workers": {
+          "description": "Number of worker threads (0 = auto-detect)",
+          "default": 0,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "HeaderConfig": {
+      "description": "Header manipulation configuration.",
+      "type": "object",
+      "properties": {
+        "request": {
+          "description": "Headers to add/set/remove on the request",
+          "default": {
+            "add": {},
+            "remove": [],
+            "set": {}
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/HeaderOps"
+            }
+          ]
+        },
+        "response": {
+          "description": "Headers to add/set/remove on the response",
+          "default": {
+            "add": {},
+            "remove": [],
+            "set": {}
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/HeaderOps"
+            }
+          ]
+        }
+      }
+    },
+    "HeaderOps": {
+      "description": "Header operations (add, set, remove).",
+      "type": "object",
+      "properties": {
+        "add": {
+          "description": "Headers to add (appends if already exists)",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "remove": {
+          "description": "Headers to remove",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "set": {
+          "description": "Headers to set (replaces if already exists)",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ProfilerConfig": {
+      "description": "Profiler configuration for endpoint behavior learning.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Whether profiling is enabled",
+          "default": true,
+          "type": "boolean"
+        },
+        "freeze_after_samples": {
+          "description": "Freeze baseline after this many samples (prevents model poisoning) Set to 0 to disable (continuous learning). Default: 0 (disabled)",
+          "default": 0,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_profiles": {
+          "description": "Maximum number of endpoint profiles to maintain",
+          "default": 1000,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_schemas": {
+          "description": "Maximum number of learned schemas to maintain",
+          "default": 500,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_type_counts": {
+          "description": "Maximum number of type categories per parameter (prevents memory exhaustion)",
+          "default": 10,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "min_samples_for_validation": {
+          "description": "Minimum samples required before validating against profile",
+          "default": 100,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "min_stddev": {
+          "description": "Minimum standard deviation for z-score calculation (avoids div/0) (default: 0.01)",
+          "default": 0.01,
+          "type": "number",
+          "format": "double"
+        },
+        "param_z_threshold": {
+          "description": "Z-score threshold for parameter value anomaly detection (default: 4.0)",
+          "default": 4.0,
+          "type": "number",
+          "format": "double"
+        },
+        "payload_z_threshold": {
+          "description": "Z-score threshold for payload size anomaly detection (default: 3.0)",
+          "default": 3.0,
+          "type": "number",
+          "format": "double"
+        },
+        "redact_pii": {
+          "description": "Redact PII values in anomaly descriptions (default: true)",
+          "default": true,
+          "type": "boolean"
+        },
+        "response_z_threshold": {
+          "description": "Z-score threshold for response size anomaly detection (default: 4.0)",
+          "default": 4.0,
+          "type": "number",
+          "format": "double"
+        },
+        "type_ratio_threshold": {
+          "description": "Ratio threshold for type-based anomaly detection (default: 0.9) If >90% of values are numeric, flag non-numeric as anomaly",
+          "default": 0.9,
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "RateLimitConfig": {
+      "description": "Rate limiting configuration.",
+      "type": "object",
+      "required": [
+        "rps"
+      ],
+      "properties": {
+        "burst": {
+          "description": "Burst capacity (defaults to rps * 2)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "enabled": {
+          "description": "Whether rate limiting is enabled",
+          "default": true,
+          "type": "boolean"
+        },
+        "rps": {
+          "description": "Requests per second limit",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ShadowMirrorConfig": {
+      "description": "Configuration for shadow mirroring suspicious traffic to honeypots.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable shadow mirroring for this site",
+          "default": false,
+          "type": "boolean"
+        },
+        "hmac_secret": {
+          "description": "HMAC secret for payload signing (prevents honeypot spoofing) Load from environment variable for security",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "honeypot_urls": {
+          "description": "Honeypot/canary endpoint URLs (load balanced)",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include_body": {
+          "description": "Include request body in mirror (default: true)",
+          "default": true,
+          "type": "boolean"
+        },
+        "include_headers": {
+          "description": "Additional headers to include in mirror",
+          "default": [
+            "User-Agent",
+            "Referer",
+            "Origin",
+            "Accept",
+            "Accept-Language",
+            "Accept-Encoding"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_body_size": {
+          "description": "Maximum body size to mirror in bytes (default: 1MB)",
+          "default": 1048576,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_risk_score": {
+          "description": "Maximum risk score - above this we block, no need to mirror (default: 70)",
+          "default": 70.0,
+          "type": "number",
+          "format": "float"
+        },
+        "min_risk_score": {
+          "description": "Minimum risk score to trigger mirroring (default: 40)",
+          "default": 40.0,
+          "type": "number",
+          "format": "float"
+        },
+        "per_ip_rate_limit": {
+          "description": "Per-IP rate limit (requests per minute)",
+          "default": 10,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "sampling_rate": {
+          "description": "Sampling rate 0.0-1.0 (default: 1.0 = 100%)",
+          "default": 1.0,
+          "type": "number",
+          "format": "float"
+        },
+        "timeout_secs": {
+          "description": "Request timeout for honeypot delivery in seconds (default: 5s)",
+          "default": 5,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SiteWafConfig": {
+      "description": "Site-specific WAF configuration.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Whether WAF is enabled for this site",
+          "default": true,
+          "type": "boolean"
+        },
+        "rule_overrides": {
+          "description": "Rule overrides (rule_id -> action)",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "threshold": {
+          "description": "Risk threshold (0-100)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SiteYamlConfig": {
+      "description": "Site configuration from YAML.",
+      "type": "object",
+      "required": [
+        "hostname",
+        "upstreams"
+      ],
+      "properties": {
+        "access_control": {
+          "description": "Access control (optional)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AccessControlConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "description": "Header manipulation (optional)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HeaderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hostname": {
+          "description": "Hostname or wildcard pattern",
+          "type": "string"
+        },
+        "rate_limit": {
+          "description": "Rate limiting configuration (optional)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RateLimitConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shadow_mirror": {
+          "description": "Shadow mirroring configuration (optional)",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ShadowMirrorConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "TLS configuration (optional)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TlsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upstreams": {
+          "description": "Upstream backends",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UpstreamConfig"
+          }
+        },
+        "waf": {
+          "description": "WAF configuration (optional)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SiteWafConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TlsConfig": {
+      "description": "TLS configuration for a site.",
+      "type": "object",
+      "required": [
+        "cert_path",
+        "key_path"
+      ],
+      "properties": {
+        "cert_path": {
+          "description": "Path to certificate file (PEM format)",
+          "type": "string"
+        },
+        "key_path": {
+          "description": "Path to private key file (PEM format)",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Minimum TLS version (1.2 or 1.3)",
+          "default": "1.2",
+          "type": "string"
+        }
+      }
+    },
+    "TrapConfig": {
+      "description": "Configuration for honeypot trap endpoints.",
+      "type": "object",
+      "properties": {
+        "alert_telemetry": {
+          "description": "Whether to send telemetry alerts on trap hits.",
+          "default": true,
+          "type": "boolean"
+        },
+        "apply_max_risk": {
+          "description": "Whether to apply maximum risk (100.0) on trap hit.",
+          "default": true,
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "Whether trap detection is enabled.",
+          "default": true,
+          "type": "boolean"
+        },
+        "extended_tarpit_ms": {
+          "description": "Optional extended tarpitting delay in milliseconds.",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "paths": {
+          "description": "Path patterns to match as traps (glob syntax: * matches anything).",
+          "default": [
+            "/.git/*",
+            "/.env",
+            "/.env.*",
+            "/admin/backup*",
+            "/wp-admin/*",
+            "/phpmyadmin/*",
+            "/.svn/*",
+            "/.htaccess",
+            "/web.config",
+            "/config.php"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "UpstreamConfig": {
+      "description": "Upstream backend configuration.",
+      "type": "object",
+      "required": [
+        "host",
+        "port"
+      ],
+      "properties": {
+        "host": {
+          "description": "Backend host",
+          "type": "string"
+        },
+        "port": {
+          "description": "Backend port",
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "weight": {
+          "description": "Weight for load balancing (default: 1)",
+          "default": 1,
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

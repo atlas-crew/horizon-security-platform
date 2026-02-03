@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useHorizonStore } from '../stores/horizonStore';
+import { apiFetch } from '../lib/api';
 import {
   StatsGridSkeleton,
   CampaignListSkeleton,
@@ -56,11 +57,28 @@ const fallbackFingerprints = [
 
 const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 
+type ThreatFeedbackResponse = {
+  success: boolean;
+  threat: {
+    id: string;
+    riskScore: number;
+    fleetRiskScore?: number | null;
+  };
+};
+
+function getRiskBadge(score: number): string {
+  if (score >= 80) return 'text-ac-red bg-ac-red/15 border-ac-red/40';
+  if (score >= 60) return 'text-ac-orange bg-ac-orange/20 border-ac-orange/40';
+  if (score >= 40) return 'text-ac-orange bg-ac-orange/10 border-ac-orange/30';
+  return 'text-ac-blue bg-ac-blue/10 border-ac-blue/30';
+}
+
 export default function OverviewPage() {
-  const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
+  const { campaigns, threats, alerts, stats, isLoading: isStoreLoading, updateThreat } = useHorizonStore();
   const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
+  const [feedbackState, setFeedbackState] = useState<Record<string, 'idle' | 'pending' | 'success' | 'error'>>({});
 
   const filteredMapPoints = useMemo(() => {
     if (activeFilter === 'Top Bots (1h)') {
@@ -109,6 +127,53 @@ export default function OverviewPage() {
       .slice(0, 5)
       .map((threat) => ({ label: threat.indicator, value: threat.hitCount }));
   }, [threats]);
+
+  const recentThreats = useMemo(() => {
+    if (threats.length === 0) return [];
+    return [...threats]
+      .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())
+      .slice(0, 5);
+  }, [threats]);
+
+  const submitFalsePositive = async (threatId: string) => {
+    setFeedbackState((prev) => ({ ...prev, [threatId]: 'pending' }));
+
+    try {
+      const response = await apiFetch<ThreatFeedbackResponse>(`/threats/${threatId}/feedback`, {
+        method: 'POST',
+        body: {
+          action: 'false_positive',
+          impact: 'moderate',
+        },
+      });
+
+      updateThreat(threatId, {
+        riskScore: response.threat.riskScore,
+        fleetRiskScore: response.threat.fleetRiskScore ?? undefined,
+      });
+
+      setFeedbackState((prev) => ({ ...prev, [threatId]: 'success' }));
+      window.setTimeout(() => {
+        setFeedbackState((prev) => {
+          if (prev[threatId] !== 'success') return prev;
+          const next = { ...prev };
+          delete next[threatId];
+          return next;
+        });
+      }, 2500);
+    } catch (error) {
+      console.error('Failed to submit false-positive feedback', error);
+      setFeedbackState((prev) => ({ ...prev, [threatId]: 'error' }));
+      window.setTimeout(() => {
+        setFeedbackState((prev) => {
+          if (prev[threatId] !== 'error') return prev;
+          const next = { ...prev };
+          delete next[threatId];
+          return next;
+        });
+      }, 3500);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -337,6 +402,59 @@ export default function OverviewPage() {
         </section>
 
         <div className="space-y-6">
+          {/* Recent Threats */}
+          <section className="card" aria-labelledby="recent-threats-heading">
+            <div className="card-header flex items-center justify-between">
+              <h2 id="recent-threats-heading" className="font-medium text-ink-primary">Recent Threats</h2>
+              <span className="text-xs text-ink-muted">{threats.length} total</span>
+            </div>
+            <div className="card-body space-y-3">
+              {recentThreats.length === 0 ? (
+                <div className="text-sm text-ink-muted">No recent threats</div>
+              ) : (
+                recentThreats.map((threat) => {
+                  const status = feedbackState[threat.id] ?? 'idle';
+                  const isPending = status === 'pending';
+                  const isSuccess = status === 'success';
+                  const isError = status === 'error';
+
+                  return (
+                    <div key={threat.id} className="flex items-center justify-between gap-3 text-sm">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-ink-primary font-medium">{threat.indicator}</span>
+                          <span className={clsx('px-2 py-0.5 text-xs border', getRiskBadge(threat.riskScore))}>
+                            {Math.round(threat.riskScore)}
+                          </span>
+                          {threat.isFleetThreat && (
+                            <span className="px-2 py-0.5 text-xs border border-ac-purple/30 text-ac-purple">
+                              Fleet
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-ink-muted">{threat.threatType}</div>
+                      </div>
+                      <button
+                        className={clsx(
+                          'btn-ghost text-xs py-1',
+                          isSuccess && 'text-ac-green',
+                          isError && 'text-ac-orange'
+                        )}
+                        onClick={() => submitFalsePositive(threat.id)}
+                        disabled={isPending}
+                      >
+                        {isPending && 'Sending...'}
+                        {isSuccess && 'De-scored'}
+                        {isError && 'Retry'}
+                        {status === 'idle' && 'Mark False Positive'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
           {/* Top Attackers */}
           <section className="card" aria-labelledby="attackers-heading">
             <div className="card-header">

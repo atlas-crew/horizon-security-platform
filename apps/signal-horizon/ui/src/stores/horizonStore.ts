@@ -92,6 +92,7 @@ interface HorizonState {
   addCampaign: (campaign: Campaign) => void;
   updateCampaign: (id: string, updates: Partial<Campaign>) => void;
   addThreat: (threat: Threat) => void;
+  updateThreat: (id: string, updates: Partial<Threat>) => void;
   addAlert: (alert: ThreatAlert) => void;
   clearAlerts: () => void;
   updateStats: (stats: Partial<HorizonState['stats']>) => void;
@@ -180,6 +181,11 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
         },
       };
     }),
+
+  updateThreat: (id, updates) =>
+    set((state) => ({
+      threats: state.threats.map((threat) => (threat.id === id ? { ...threat, ...updates } : threat)),
+    })),
 
   addAlert: (alert) =>
     set((state) => ({

@@ -7,7 +7,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { requireScope } from '../middleware/auth.js';
-import { validateParams, validateQuery, IdParamSchema } from '../middleware/validation.js';
+import { validateBody, validateParams, validateQuery, IdParamSchema } from '../middleware/validation.js';
 import { getErrorMessage } from '../../utils/errors.js';
 
 // Validation schemas
@@ -25,6 +25,29 @@ const SearchThreatsQuerySchema = z.object({
   type: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+
+const ThreatFeedbackSchema = z.object({
+  action: z.enum(['false_positive']),
+  impact: z.enum(['minor', 'moderate', 'major']).optional().default('moderate'),
+  reason: z.string().max(500).optional(),
+});
+
+const FEEDBACK_DELTAS = {
+  minor: 5,
+  moderate: 15,
+  major: 30,
+} as const;
+
+function clampRiskScore(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function normalizeMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {};
+  }
+  return metadata as Record<string, unknown>;
+}
 
 export function createThreatRoutes(prisma: PrismaClient): Router {
   const router = Router();
@@ -160,6 +183,86 @@ export function createThreatRoutes(prisma: PrismaClient): Router {
       } catch (error) {
         console.error('Failed to get threat:', error);
         res.status(500).json({ error: 'Failed to get threat', message: getErrorMessage(error) });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/threats/:id/feedback
+   * Apply operator feedback to tune threat risk scores.
+   */
+  router.post(
+    '/:id/feedback',
+    requireScope('dashboard:write'),
+    validateParams(IdParamSchema),
+    validateBody(ThreatFeedbackSchema),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const auth = req.auth!;
+        const feedback = req.body as z.infer<typeof ThreatFeedbackSchema>;
+
+        const threat = await prisma.threat.findUnique({ where: { id } });
+
+        if (!threat) {
+          res.status(404).json({ error: 'Threat not found' });
+          return;
+        }
+
+        if (!auth.isFleetAdmin) {
+          if (threat.isFleetThreat || (threat.tenantId && threat.tenantId !== auth.tenantId)) {
+            res.status(403).json({ error: 'Access denied' });
+            return;
+          }
+        }
+
+        const baseDelta = FEEDBACK_DELTAS[feedback.impact];
+        const delta = feedback.action === 'false_positive' ? -baseDelta : baseDelta;
+
+        const metadata = normalizeMetadata(threat.metadata);
+        const existingFeedback = normalizeMetadata(metadata.feedback);
+        const falsePositiveCount =
+          (typeof existingFeedback.falsePositiveCount === 'number'
+            ? existingFeedback.falsePositiveCount
+            : 0) + 1;
+        const totalDelta =
+          (typeof existingFeedback.totalDelta === 'number'
+            ? existingFeedback.totalDelta
+            : 0) + delta;
+
+        const updatedFeedback = {
+          ...existingFeedback,
+          falsePositiveCount,
+          totalDelta,
+          lastFeedbackAt: new Date().toISOString(),
+          lastFeedbackBy: auth.userName ?? auth.userId ?? auth.apiKeyId,
+          lastFeedbackReason: feedback.reason ?? null,
+          lastFeedbackDelta: delta,
+          lastFeedbackImpact: feedback.impact,
+        };
+
+        const updatedThreat = await prisma.threat.update({
+          where: { id },
+          data: {
+            riskScore: clampRiskScore(threat.riskScore + delta),
+            ...(threat.fleetRiskScore !== null && threat.fleetRiskScore !== undefined
+              ? { fleetRiskScore: clampRiskScore(threat.fleetRiskScore + delta) }
+              : {}),
+            metadata: {
+              ...metadata,
+              feedback: updatedFeedback,
+            },
+          },
+        });
+
+        res.json({
+          success: true,
+          threat: updatedThreat,
+          feedback: updatedFeedback,
+        });
+      } catch (error) {
+        console.error('Failed to apply threat feedback:', error);
+        res.status(500).json({ error: 'Failed to apply feedback', message: getErrorMessage(error) });
       }
     }
   );

@@ -7,6 +7,7 @@ This guide covers the complete lifecycle of sensor API keys in Signal Horizon's 
 Signal Array uses API keys for:
 
 - **Sensor Authentication**: Sensors authenticate to Signal Horizon using API keys
+- **Tunnel Access**: Sensor tunnel connections require sensor-scoped keys tied to a specific sensorId
 - **API Access**: External systems integrate via API keys
 - **Service-to-Service**: Internal services communicate securely
 

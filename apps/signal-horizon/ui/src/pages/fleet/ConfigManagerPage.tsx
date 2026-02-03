@@ -60,7 +60,47 @@ export function ConfigManagerPage() {
   const [newName, setNewName] = useState('');
   const [newEnv, setNewEnv] = useState('production');
   const [newDesc, setNewDesc] = useState('');
-  const [newConfig, setNewConfig] = useState('{\n  "version": "1.0.0",\n  "settings": {\n    "logLevel": "info"\n  }\n}');
+  const [newConfig, setNewConfig] = useState(`# Synapse Sensor Configuration
+server:
+  listen: "0.0.0.0:6190"
+  admin_listen: "0.0.0.0:6191"
+  workers: 0  # 0 = auto-detect CPU count
+
+upstreams:
+  - host: "127.0.0.1"
+    port: 8080
+
+rate_limit:
+  enabled: true
+  rps: 10000
+  per_ip_rps: 100
+
+logging:
+  level: "info"
+  format: "json"
+  access_log: true
+
+detection:
+  sqli: true
+  xss: true
+  path_traversal: true
+  command_injection: true
+  action: "block"
+  block_status: 403
+
+tls:
+  enabled: false
+  min_version: "1.2"
+
+tarpit:
+  enabled: true
+  base_delay_ms: 1000
+  max_delay_ms: 30000
+
+dlp:
+  enabled: true
+  max_scan_size: 5242880
+`);
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['fleet', 'config', 'templates', isDemoMode ? scenario : 'live'],
@@ -281,14 +321,14 @@ export function ConfigManagerPage() {
                 </div>
               </div>
 
-              {/* Right Column: JSON Editor */}
+              {/* Right Column: YAML Editor */}
               <div className="col-span-2 flex flex-col h-full">
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Configuration (JSON)</label>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">Configuration (YAML)</label>
                 <div className="flex-1 border border-border-subtle">
                   <CodeEditor
                     value={newConfig}
                     onChange={setNewConfig}
-                    language="json"
+                    language="yaml"
                     height="100%"
                     className="h-full"
                   />

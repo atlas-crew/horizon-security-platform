@@ -29,6 +29,7 @@ const INTERNAL_PATTERNS = [
   /^project(\/|:|$)/i,
   /^architecture(\/|:|$)/i,
   /^archive(\/|:|$)/i,
+  /CLAUDE/i, // Filter out CLAUDE.md context files
   /gap_analysis/i,
   /beam_backend_summary/i,
   /beam_api_examples/i,

@@ -4,9 +4,12 @@ use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use sysinfo::System;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -580,6 +583,7 @@ async fn connect_and_run(
                                 hub_msg,
                                 blocklist,
                                 stats,
+                                metrics_provider,
                                 config_manager,
                                 inflight_signals,
                                 &mut ws_tx,
@@ -708,10 +712,190 @@ async fn send_command_ack<S>(
     }
 }
 
+fn sanitize_filename_component(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn stage_update_payload(
+    command_id: &str,
+    payload: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let update_dir =
+        std::env::var("SYNAPSE_UPDATE_DIR").unwrap_or_else(|_| "/tmp/synapse-updates".to_string());
+
+    fs::create_dir_all(&update_dir)
+        .map_err(|e| format!("Failed to create update dir {}: {}", update_dir, e))?;
+
+    let safe_id = sanitize_filename_component(command_id);
+    let file_name = format!(
+        "update-{}-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S"),
+        safe_id
+    );
+    let path = PathBuf::from(&update_dir).join(file_name);
+
+    let body = serde_json::to_string_pretty(payload)
+        .map_err(|e| format!("Failed to serialize update payload: {}", e))?;
+    fs::write(&path, body.as_bytes())
+        .map_err(|e| format!("Failed to stage update payload: {}", e))?;
+
+    Ok(serde_json::json!({
+        "staged": true,
+        "path": path.to_string_lossy(),
+        "bytes": body.len(),
+        "update_dir": update_dir,
+        "payload_version": payload.get("version").and_then(|value| value.as_str()),
+    }))
+}
+
+fn soft_restart(config_manager: &Option<Arc<ConfigManager>>) -> Result<serde_json::Value, String> {
+    let manager = config_manager
+        .as_ref()
+        .ok_or_else(|| "ConfigManager not available".to_string())?;
+
+    let config = manager.get_full_config();
+    let mutation = manager
+        .update_full_config(config)
+        .map_err(|e| e.to_string())?;
+
+    let rules = manager.list_rules();
+    let rules_count = rules.len();
+    let rules_loaded = manager
+        .replace_rules(rules, None)
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "restart_mode": "soft",
+        "config_reloaded": true,
+        "rules_loaded": rules_loaded,
+        "rules_count": rules_count,
+        "applied": mutation.applied,
+        "persisted": mutation.persisted,
+        "rebuild_required": mutation.rebuild_required,
+        "warnings": mutation.warnings,
+    }))
+}
+
+fn collect_diagnostics(
+    metrics_provider: &Arc<dyn MetricsProvider>,
+    config_manager: &Option<Arc<ConfigManager>>,
+    blocklist: &Arc<BlocklistCache>,
+    stats: &Arc<InternalStats>,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let include_config = payload
+        .get("include_config")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let include_sites = payload
+        .get("include_sites")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    let include_rules = payload
+        .get("include_rules")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let system_info = serde_json::json!({
+        "hostname": System::host_name().unwrap_or_default(),
+        "os": System::name().unwrap_or_default(),
+        "os_version": System::os_version().unwrap_or_default(),
+        "kernel_version": System::kernel_version().unwrap_or_default(),
+        "cpu_count": sys.cpus().len(),
+        "total_memory_mb": sys.total_memory() / 1024 / 1024,
+        "used_memory_mb": sys.used_memory() / 1024 / 1024,
+        "uptime_secs": System::uptime(),
+    });
+
+    let mut config_summary = serde_json::Map::new();
+    let mut rules_summary = serde_json::Map::new();
+
+    if let Some(manager) = config_manager {
+        let config = manager.get_full_config();
+        let site_count = config.sites.len();
+        let tls_sites = config.sites.iter().filter(|site| site.tls.is_some()).count();
+        let waf_sites = config
+            .sites
+            .iter()
+            .filter(|site| site.waf.as_ref().map(|waf| waf.enabled).unwrap_or(false))
+            .count();
+        config_summary.insert("available".to_string(), serde_json::json!(true));
+        config_summary.insert("site_count".to_string(), serde_json::json!(site_count));
+        config_summary.insert("tls_site_count".to_string(), serde_json::json!(tls_sites));
+        config_summary.insert(
+            "waf_enabled_sites".to_string(),
+            serde_json::json!(waf_sites),
+        );
+        if include_sites {
+            let site_hostnames = config
+                .sites
+                .iter()
+                .map(|site| site.hostname.clone())
+                .collect::<Vec<_>>();
+            config_summary.insert(
+                "site_hostnames".to_string(),
+                serde_json::json!(site_hostnames),
+            );
+        }
+        if include_config {
+            if let Ok(value) = serde_json::to_value(&config) {
+                config_summary.insert("config".to_string(), value);
+            }
+        }
+
+        let rules = manager.list_rules();
+        rules_summary.insert("count".to_string(), serde_json::json!(rules.len()));
+        if include_rules {
+            if let Ok(value) = serde_json::to_value(&rules) {
+                rules_summary.insert("rules".to_string(), value);
+            }
+        }
+    } else {
+        config_summary.insert("available".to_string(), serde_json::json!(false));
+        rules_summary.insert("count".to_string(), serde_json::json!(0));
+    }
+
+    let stats_value =
+        serde_json::to_value(ClientStats::from(stats)).unwrap_or_else(|_| serde_json::json!({}));
+
+    serde_json::json!({
+        "generated_at": chrono::Utc::now().to_rfc3339(),
+        "version": env!("CARGO_PKG_VERSION"),
+        "system": system_info,
+        "metrics": {
+            "cpu": metrics_provider.cpu_usage(),
+            "memory": metrics_provider.memory_usage(),
+            "disk": metrics_provider.disk_usage(),
+            "requests_last_minute": metrics_provider.requests_last_minute(),
+            "avg_latency_ms": metrics_provider.avg_latency_ms(),
+            "active_connections": metrics_provider.active_connections(),
+            "config_hash": metrics_provider.config_hash(),
+            "rules_hash": metrics_provider.rules_hash(),
+        },
+        "blocklist": { "size": blocklist.size() },
+        "client_stats": stats_value,
+        "config": serde_json::Value::Object(config_summary),
+        "rules": serde_json::Value::Object(rules_summary),
+    })
+}
+
 async fn handle_hub_message<S>(
     msg: HubMessage,
     blocklist: &Arc<BlocklistCache>,
     stats: &Arc<InternalStats>,
+    metrics_provider: &Arc<dyn MetricsProvider>,
     config_manager: &Option<Arc<ConfigManager>>,
     inflight_signals: &mut VecDeque<ThreatSignal>,
     ws_tx: &mut futures_util::stream::SplitSink<S, Message>,
@@ -853,35 +1037,48 @@ async fn handle_hub_message<S>(
 
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::Restart { command_id, payload: _ } => {
-            warn!("Restart command not supported via hub (id: {})", command_id);
-            send_command_ack(
-                ws_tx,
-                command_id,
-                Err("restart not supported via hub".to_string()),
-            )
-            .await;
+        HubMessage::Restart { command_id, payload } => {
+            info!("Received Restart command (id: {})", command_id);
+            let requested_mode = payload
+                .get("mode")
+                .and_then(|value| value.as_str())
+                .unwrap_or("soft");
+
+            let result = match soft_restart(config_manager) {
+                Ok(mut value) => {
+                    if let Some(obj) = value.as_object_mut() {
+                        obj.insert(
+                            "requested_mode".to_string(),
+                            serde_json::json!(requested_mode),
+                        );
+                    }
+                    Ok(Some(value))
+                }
+                Err(e) => Err(e),
+            };
+
+            send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::CollectDiagnostics { command_id, payload: _ } => {
-            warn!(
-                "CollectDiagnostics command not supported via hub (id: {})",
+        HubMessage::CollectDiagnostics { command_id, payload } => {
+            info!(
+                "Received CollectDiagnostics command (id: {})",
                 command_id
             );
-            send_command_ack(
-                ws_tx,
-                command_id,
-                Err("collect_diagnostics not supported via hub".to_string()),
-            )
-            .await;
+            let result = Ok(Some(collect_diagnostics(
+                metrics_provider,
+                config_manager,
+                blocklist,
+                stats,
+                &payload,
+            )));
+            send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::Update { command_id, payload: _ } => {
-            warn!("Update command not supported via hub (id: {})", command_id);
-            send_command_ack(
-                ws_tx,
-                command_id,
-                Err("update not supported via hub".to_string()),
-            )
-            .await;
+        HubMessage::Update { command_id, payload } => {
+            info!("Received Update command (id: {})", command_id);
+            let result = stage_update_payload(&command_id, &payload)
+                .map(Some)
+                .map_err(|e| e.to_string());
+            send_command_ack(ws_tx, command_id, result).await;
         }
         HubMessage::SyncBlocklist { command_id, payload: _ } => {
             info!("Received SyncBlocklist command (id: {})", command_id);

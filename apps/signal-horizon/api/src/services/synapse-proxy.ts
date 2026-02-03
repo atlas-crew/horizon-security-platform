@@ -14,6 +14,7 @@
 
 import type { Logger } from 'pino';
 import type { TunnelBroker, LegacyTunnelMessage } from '../websocket/tunnel-broker.js';
+import type { ProblemDetails } from '../lib/problem-details.js';
 
 // Alias for backward compatibility
 type TunnelMessage = LegacyTunnelMessage;
@@ -288,6 +289,7 @@ export interface SynapseProxyRequest {
   endpoint: string;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 export interface SynapseProxyResponse {
@@ -308,6 +310,7 @@ interface PendingRequest {
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
   createdAt: number;
+  sensorId: string;
 }
 
 // ============================================================================
@@ -499,7 +502,8 @@ export class SynapseProxyService extends EventEmitter {
     tenantId: string,
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
-    body?: unknown
+    body?: unknown,
+    headers?: Record<string, string>
   ): Promise<T> {
     this.totalRequests++;
 
@@ -528,7 +532,7 @@ export class SynapseProxyService extends EventEmitter {
     await this.concurrencyLimit.acquire();
 
     try {
-      return await this.executeRequest<T>(sensorId, endpoint, method, body);
+      return await this.executeRequest<T>(sensorId, endpoint, method, body, headers);
     } finally {
       this.concurrencyLimit.release();
     }
@@ -568,7 +572,8 @@ export class SynapseProxyService extends EventEmitter {
     sensorId: string,
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    body?: unknown
+    body?: unknown,
+    headers?: Record<string, string>
   ): Promise<T> {
     const requestId = this.generateRequestId();
 
@@ -583,6 +588,7 @@ export class SynapseProxyService extends EventEmitter {
         reject,
         timeout,
         createdAt: Date.now(),
+        sensorId,
       });
 
       const message: TunnelMessage = {
@@ -593,11 +599,20 @@ export class SynapseProxyService extends EventEmitter {
           endpoint,
           method,
           body,
+          headers,
         } as SynapseProxyRequest,
         timestamp: new Date().toISOString(),
       };
 
-      const sent = this.tunnelBroker.sendToSensor(sensorId, message);
+      let sent = false;
+      try {
+        sent = this.tunnelBroker.sendToSensor(sensorId, message);
+      } catch (error) {
+        this.pendingRequests.delete(requestId);
+        clearTimeout(timeout);
+        reject(new SynapseProxyError('Failed to send request', 'SEND_FAILED'));
+        return;
+      }
       if (!sent) {
         this.pendingRequests.delete(requestId);
         clearTimeout(timeout);
@@ -1123,14 +1138,19 @@ export class SynapseProxyService extends EventEmitter {
 
   private setupTunnelListener(): void {
     // Listen for dashboard-response messages from sensors
-    this.tunnelBroker.on('tunnel:message', (_sensorId: string, message: TunnelMessage) => {
+    this.tunnelBroker.on('tunnel:message', (sensorId: string, message: TunnelMessage) => {
       if (message.type === 'dashboard-response' && message.sessionId) {
-        this.handleResponse(message.sessionId, message.payload as SynapseProxyResponse);
+        this.handleResponse(sensorId, message.sessionId, message.payload as SynapseProxyResponse);
       }
+    });
+
+    // Fail fast when a sensor tunnel disconnects
+    this.tunnelBroker.on('tunnel:disconnected', (sensorId: string) => {
+      this.rejectPendingForSensor(sensorId, 'Sensor disconnected');
     });
   }
 
-  private handleResponse(requestId: string, response: SynapseProxyResponse): void {
+  private handleResponse(sensorId: string, requestId: string, response: SynapseProxyResponse): void {
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
       this.logger.warn({ requestId }, 'Received response for unknown request');
@@ -1143,13 +1163,28 @@ export class SynapseProxyService extends EventEmitter {
     if (response.error) {
       pending.reject(new SynapseProxyError(response.error, 'SENSOR_ERROR'));
     } else if (response.status >= 400) {
-      pending.reject(new SynapseProxyError(
-        `Sensor returned status ${response.status}`,
-        'HTTP_ERROR',
-        response.status
-      ));
+      if (isProblemDetails(response.data)) {
+        pending.reject(new SensorError(response.data, sensorId));
+      } else {
+        pending.reject(new SynapseProxyError(
+          `Sensor returned status ${response.status}`,
+          'HTTP_ERROR',
+          response.status
+        ));
+      }
     } else {
       pending.resolve(response.data);
+    }
+  }
+
+  private rejectPendingForSensor(sensorId: string, reason: string): void {
+    for (const [requestId, pending] of this.pendingRequests) {
+      if (pending.sensorId !== sensorId) {
+        continue;
+      }
+      clearTimeout(pending.timeout);
+      pending.reject(new SynapseProxyError(reason, 'SENSOR_DISCONNECTED'));
+      this.pendingRequests.delete(requestId);
     }
   }
 
@@ -1316,12 +1351,34 @@ export type SynapseErrorCode =
   | 'TIMEOUT'
   | 'SEND_FAILED'
   | 'SENSOR_ERROR'
+  | 'SENSOR_DISCONNECTED'
   | 'HTTP_ERROR'
   | 'SHUTDOWN'
   | 'INVALID_SENSOR_ID'
   | 'INVALID_ENDPOINT'
   | 'ENDPOINT_NOT_ALLOWED'
   | 'STALE_REQUEST';
+
+export class SensorError extends Error {
+  constructor(
+    public readonly sensorProblem: ProblemDetails,
+    public readonly sensorId: string
+  ) {
+    super(`Sensor ${sensorId}: ${sensorProblem.title}`);
+    this.name = 'SensorError';
+  }
+
+  toProblemDetails(): ProblemDetails {
+    return {
+      type: 'tag:signal-horizon.atlascrew.io,2025:error/sensor-error',
+      title: 'Sensor Error',
+      status: this.sensorProblem.status,
+      detail: this.sensorProblem.detail,
+      instance: `/sensors/${this.sensorId}`,
+      cause: this.sensorProblem,
+    };
+  }
+}
 
 export class SynapseProxyError extends Error {
   readonly code: SynapseErrorCode;
@@ -1345,6 +1402,7 @@ export class SynapseProxyError extends Error {
       'TIMEOUT',
       'SEND_FAILED',
       'STALE_REQUEST',
+      'SENSOR_DISCONNECTED',
     ].includes(code);
   }
 
@@ -1362,6 +1420,7 @@ export class SynapseProxyError extends Error {
       TUNNEL_NOT_FOUND: 'Verify sensor is online and connected',
       TIMEOUT: 'Retry the request or check sensor connectivity',
       SEND_FAILED: 'Check tunnel connection and retry',
+      SENSOR_DISCONNECTED: 'Wait for sensor to reconnect and retry',
       FORBIDDEN: 'Verify you have access to this sensor',
       INVALID_SENSOR_ID: 'Sensor ID must be alphanumeric with hyphens/underscores, max 64 chars',
       ENDPOINT_NOT_ALLOWED: 'The requested endpoint is not available through the proxy',
@@ -1375,4 +1434,13 @@ export class SynapseProxyError extends Error {
       suggestion: suggestions[this.code],
     };
   }
+}
+
+function isProblemDetails(data: unknown): data is ProblemDetails {
+  if (!data || typeof data !== 'object') return false;
+  const record = data as Record<string, unknown>;
+  return typeof record.type === 'string'
+    && typeof record.title === 'string'
+    && typeof record.status === 'number'
+    && typeof record.detail === 'string';
 }

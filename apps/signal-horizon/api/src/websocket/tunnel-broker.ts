@@ -1115,9 +1115,15 @@ export class TunnelBroker extends EventEmitter {
     capabilities: TunnelCapability[],
     metadata?: TunnelSession['metadata']
   ): void {
-    // Close existing tunnel if reconnecting
-    if (this.legacyTunnels.has(sensorId)) {
-      this.logger.warn({ sensorId, tenantId }, 'Sensor reconnecting, closing old tunnel');
+    // Reject new connection if a tunnel is already active (prevents DoS via hijack)
+    const existingTunnel = this.legacyTunnels.get(sensorId);
+    if (existingTunnel) {
+      if (existingTunnel.socket.readyState === WebSocket.OPEN) {
+        this.logger.warn({ sensorId, tenantId }, 'Sensor already connected, rejecting new tunnel');
+        ws.close(4009, 'Sensor already connected');
+        return;
+      }
+      this.logger.warn({ sensorId, tenantId }, 'Sensor reconnecting, cleaning up stale tunnel');
       this.handleSensorDisconnect(sensorId, 'reconnection');
     }
 
@@ -1474,6 +1480,7 @@ export class TunnelBroker extends EventEmitter {
       reject: (error: Error) => void;
       timeout: NodeJS.Timeout;
       sensorId: string;
+      claimed: boolean;
     }
   >();
 
@@ -1520,6 +1527,11 @@ export class TunnelBroker extends EventEmitter {
     return new Promise((resolve, reject) => {
       // Set up timeout
       const timeout = setTimeout(() => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending || pending.claimed) {
+          return;
+        }
+        pending.claimed = true;
         this.pendingRequests.delete(requestId);
         reject(new Error('Request timeout'));
       }, timeoutMs);
@@ -1530,6 +1542,7 @@ export class TunnelBroker extends EventEmitter {
         reject,
         timeout,
         sensorId,
+        claimed: false,
       });
 
       // Send request to sensor
@@ -1546,8 +1559,12 @@ export class TunnelBroker extends EventEmitter {
         tunnel.socket.send(JSON.stringify(message));
         this.logger.debug({ sensorId, requestId, type: request.type }, 'Sent request to sensor');
       } catch (error) {
-        this.pendingRequests.delete(requestId);
-        clearTimeout(timeout);
+        const pending = this.pendingRequests.get(requestId);
+        if (pending && !pending.claimed) {
+          pending.claimed = true;
+          this.pendingRequests.delete(requestId);
+          clearTimeout(pending.timeout);
+        }
         reject(error instanceof Error ? error : new Error('Failed to send request'));
       }
     });
@@ -1569,11 +1586,12 @@ export class TunnelBroker extends EventEmitter {
     }
 
     const pending = this.pendingRequests.get(correlationId);
-    if (!pending || pending.sensorId !== sensorId) {
+    if (!pending || pending.sensorId !== sensorId || pending.claimed) {
       return false;
     }
 
     // Clear timeout and remove from pending
+    pending.claimed = true;
     clearTimeout(pending.timeout);
     this.pendingRequests.delete(correlationId);
 

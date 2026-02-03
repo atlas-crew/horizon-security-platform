@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { Logger } from 'pino';
-import { SynapseProxyService, SynapseProxyError, type SynapseStatus } from './synapse-proxy.js';
+import { SynapseProxyService, SynapseProxyError, SensorError, type SynapseStatus } from './synapse-proxy.js';
 import type { TunnelBroker, LegacyTunnelMessage } from '../websocket/tunnel-broker.js';
 
 class MockTunnelBroker extends EventEmitter implements Partial<TunnelBroker> {
@@ -102,6 +102,25 @@ describe('SynapseProxyService', () => {
     ).resolves.toEqual({ ok: true });
   });
 
+  it('forwards headers in proxy requests', async () => {
+    const headers = { 'x-test': '1', 'x-trace': 'abc' };
+    broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+      expect(message.payload.headers).toEqual(headers);
+      const response: LegacyTunnelMessage = {
+        type: 'dashboard-response',
+        sessionId: message.sessionId!,
+        payload: { status: 200, data: { ok: true } },
+        timestamp: new Date().toISOString(),
+      };
+      process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+      return true;
+    });
+
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status', 'GET', undefined, headers)
+    ).resolves.toEqual({ ok: true });
+  });
+
   it('caches status responses and clears cache by sensor', async () => {
     broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
       if (message.type === 'dashboard-request' && message.sessionId) {
@@ -137,6 +156,19 @@ describe('SynapseProxyService', () => {
     await expect(
       service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
     ).rejects.toMatchObject({ code: 'SEND_FAILED' });
+  });
+
+  it('handles sendToSensor exceptions without leaking pending requests', async () => {
+    broker.sendToSensor.mockImplementation(() => {
+      throw new Error('network down');
+    });
+
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
+    ).rejects.toMatchObject({ code: 'SEND_FAILED' });
+
+    const stats = service.getStats();
+    expect(stats.pendingRequests).toBe(0);
   });
 
   it('marks sensor errors as non-retryable', async () => {
@@ -181,6 +213,64 @@ describe('SynapseProxyService', () => {
     await expect(
       service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
     ).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 404 });
+  });
+
+  it('rejects HTTP errors without sensor error field', async () => {
+    broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+      if (message.type === 'dashboard-request' && message.sessionId) {
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId,
+          payload: {
+            status: 503,
+            data: { message: 'Service unavailable' },
+          },
+          timestamp: new Date().toISOString(),
+        };
+        broker.emit('tunnel:message', sensorId, response);
+      }
+      return true;
+    });
+
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
+    ).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 503 });
+  });
+
+  it('wraps sensor problem details in SensorError', async () => {
+    const problem = {
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: 'Invalid filter',
+    };
+
+    broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+      if (message.type === 'dashboard-request' && message.sessionId) {
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId,
+          payload: {
+            status: 400,
+            data: problem,
+          },
+          timestamp: new Date().toISOString(),
+        };
+        broker.emit('tunnel:message', sensorId, response);
+      }
+      return true;
+    });
+
+    let caught: unknown;
+    try {
+      await service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(SensorError);
+    expect((caught as SensorError).sensorProblem).toEqual(problem);
+    expect((caught as SensorError).sensorId).toBe('sensor-1');
   });
 
   it('rejects invalid endpoints before tunnel access', async () => {
@@ -285,6 +375,7 @@ describe('SynapseProxyService', () => {
 
     it('getSensorConfigSection fetches correctly', async () => {
       broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe('/_sensor/config/dlp');
         const response: LegacyTunnelMessage = {
           type: 'dashboard-response',
           sessionId: message.sessionId!,
@@ -297,6 +388,24 @@ describe('SynapseProxyService', () => {
 
       const config = await service.getSensorConfigSection(sensorId, tenantId, 'dlp');
       expect(config).toEqual({ enabled: true });
+    });
+
+    it('updateSensorConfig forwards PUT body', async () => {
+      const updatePayload = { enabled: false };
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.method).toBe('PUT');
+        expect(message.payload.body).toEqual(updatePayload);
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { ok: true } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      await service.updateSensorConfig(sensorId, tenantId, 'dlp', updatePayload);
     });
 
     it('updateSensorConfig invalidates cache', async () => {
@@ -340,6 +449,25 @@ describe('SynapseProxyService', () => {
       await service.listEntities(sensorId, tenantId, { type: 'IP', limit: 10 });
     });
 
+    it('listBlocks builds query parameters', async () => {
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toContain('/_sensor/blocks?');
+        expect(message.payload.endpoint).toContain('type=IP');
+        expect(message.payload.endpoint).toContain('limit=5');
+        expect(message.payload.endpoint).toContain('offset=10');
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { blocks: [], total: 0 } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      await service.listBlocks(sensorId, tenantId, { type: 'IP', limit: 5, offset: 10 });
+    });
+
     it('evaluateRequest performs POST', async () => {
       const evalData = { method: 'GET', path: '/', headers: {}, clientIp: '1.1.1.1' };
       broker.sendToSensor.mockImplementation((_id, message) => {
@@ -358,6 +486,23 @@ describe('SynapseProxyService', () => {
       const result = await service.evaluateRequest(sensorId, tenantId, evalData as any);
       expect(result.decision).toBe('allow');
     });
+
+    it('passes through binary response payloads', async () => {
+      const binary = Buffer.from('binary-data');
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: binary },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const result = await service.proxyRequest<Buffer>(sensorId, tenantId, '/_sensor/status');
+      expect(result).toEqual(binary);
+    });
   });
 
   describe('Lifecycle', () => {
@@ -372,6 +517,19 @@ describe('SynapseProxyService', () => {
       await service.shutdown();
 
       await expect(request).rejects.toMatchObject({ code: 'SHUTDOWN' });
+    });
+
+    it('rejects pending requests on sensor disconnect', async () => {
+      broker.sendToSensor.mockReturnValue(true);
+
+      const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+
+      // Let acquire() settle
+      await vi.advanceTimersByTimeAsync(0);
+
+      broker.emit('tunnel:disconnected', 'sensor-1', 'tenant-1');
+
+      await expect(request).rejects.toMatchObject({ code: 'SENSOR_DISCONNECTED' });
     });
   });
 });

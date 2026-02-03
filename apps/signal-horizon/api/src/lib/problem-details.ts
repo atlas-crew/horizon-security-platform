@@ -9,6 +9,7 @@ export interface ProblemDetails {
   instance?: string;
   code?: string;
   details?: unknown;
+  cause?: unknown;
   retryAfterSeconds?: number;
 }
 
@@ -18,6 +19,7 @@ export interface ProblemDetailsOptions {
   instance?: string;
   code?: string;
   details?: unknown;
+  cause?: unknown;
   retryAfterSeconds?: number;
 }
 
@@ -36,6 +38,7 @@ export function buildProblemDetails(
     instance: options.instance,
     code: options.code,
     details: options.details,
+    cause: options.cause,
     retryAfterSeconds: options.retryAfterSeconds,
   };
 }

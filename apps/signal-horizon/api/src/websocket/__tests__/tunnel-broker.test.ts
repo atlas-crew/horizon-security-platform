@@ -217,6 +217,17 @@ describe('TunnelBroker', () => {
       expect(connected).toHaveBeenCalled();
     });
 
+    it('rejects new legacy tunnel when sensor is already connected', () => {
+      const primaryWs = new MockWebSocket();
+      const secondaryWs = new MockWebSocket();
+
+      broker.handleSensorConnect(primaryWs as unknown as WebSocket, 'sensor-1', 'tenant-1', ['shell']);
+      broker.handleSensorConnect(secondaryWs as unknown as WebSocket, 'sensor-1', 'tenant-1', ['shell']);
+
+      expect(secondaryWs.readyState).toBe(WebSocket.CLOSED);
+      expect(broker.getTunnelStatus('sensor-1')?.socket).toBe(primaryWs);
+    });
+
     it('starts legacy shell session', () => {
       const sensorWs = new MockWebSocket();
       broker.handleSensorConnect(sensorWs as unknown as WebSocket, 'sensor-1', 'tenant-1', ['shell']);

@@ -41,7 +41,7 @@ trends:
 | `admin_listen` | string | `"0.0.0.0:6191"` | Admin API listen address |
 | `workers` | integer | `0` | Worker threads (0 = auto-detect) |
 | `admin_api_key` | string | `null` (auto-generated at startup) | Admin API key (X-Admin-Key) |
-| `trusted_proxies` | array[string] | `[]` | Trusted proxy CIDR ranges for X-Forwarded-For validation |
+| `trusted_proxies` | array[string] | `[]` | Trusted proxy CIDR ranges for X-Forwarded-For validation (empty = ignore XFF). In production, set explicit proxy IPs and avoid broad private ranges. |
 
 ### Upstreams (`upstreams[]`)
 

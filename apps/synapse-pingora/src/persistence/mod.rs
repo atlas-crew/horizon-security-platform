@@ -434,4 +434,28 @@ mod tests {
         );
         assert!(snapshot.is_empty());
     }
+
+    #[test]
+    fn test_snapshot_persists_profiles() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("test_profiles.json");
+
+        let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
+        profile.update(128, &[("name", "alice")], Some("application/json"), 2000);
+
+        let snapshot = WafSnapshot::new(
+            "test-sensor".to_string(),
+            vec![],
+            vec![],
+            vec![],
+            vec![profile.clone()],
+        );
+
+        SnapshotManager::save_snapshot(&snapshot, &path).unwrap();
+        let loaded = SnapshotManager::load_snapshot(&path).unwrap().unwrap();
+
+        assert_eq!(loaded.profiles.len(), 1);
+        assert_eq!(loaded.profiles[0].template, profile.template);
+        assert_eq!(loaded.profiles[0].sample_count, profile.sample_count);
+    }
 }

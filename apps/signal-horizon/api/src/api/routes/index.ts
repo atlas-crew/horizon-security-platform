@@ -30,6 +30,7 @@ import { createFleetReleasesRoutes } from './fleet-releases.js';
 import { createFleetPolicyRoutes } from './fleet-policy.js';
 import { createFleetSessionsRoutes } from './fleet-sessions.js';
 import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
+import { createFleetIntelRoutes } from './fleet-intel.js';
 import { createPlaybookRoutes } from './playbooks.js';
 import docsRouter from './docs.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
@@ -195,6 +196,10 @@ export function createApiRouter(
     sessionQueryService: options.sessionQueryService,
   }));
   logger.info('Fleet Sessions routes mounted at /api/v1/fleet/sessions');
+
+  // Mount Fleet Intel routes for aggregated sensor intelligence
+  router.use('/fleet/intel', createFleetIntelRoutes(prisma, logger));
+  logger.info('Fleet Intel routes mounted at /api/v1/fleet/intel');
 
   // Mount Fleet Bandwidth routes for bandwidth metrics and billing
   router.use('/fleet/bandwidth', createFleetBandwidthRoutes(prisma, logger, {

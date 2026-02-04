@@ -43,6 +43,7 @@ import type { RolloutJobData } from './jobs/queue.js';
 // Tunnel broker for remote access
 import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
 import { SynapseProxyService } from './services/synapse-proxy.js';
+import { FleetIntelIngestionService } from './services/fleet-intel/ingestion-service.js';
 import { initSynapseDirectAdapter } from './services/synapse-direct.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { matchUpgradePath } from './websocket/upgrade-path.js';
@@ -223,6 +224,7 @@ let ruleDistributor: RuleDistributor;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
+let fleetIntelIngestion: FleetIntelIngestionService;
 let sessionQueryService: FleetSessionQueryService;
 let warRoomService: WarRoomService;
 let securityAuditService: SecurityAuditService;
@@ -552,6 +554,10 @@ async function start() {
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
   tunnelBroker = new TunnelBroker(logger);
   synapseProxy = new SynapseProxyService(tunnelBroker, logger);
+
+  // Start fleet intel ingestion (polls connected sensors)
+  fleetIntelIngestion = new FleetIntelIngestionService(prisma, synapseProxy, logger);
+  fleetIntelIngestion.start();
   sessionQueryService = new FleetSessionQueryService({ prisma, logger, tunnelBroker });
   
   // Default War Room config
@@ -758,6 +764,7 @@ async function shutdown(signal: string) {
   aggregator?.stop();
   broadcaster?.stop();
   fleetAggregator?.stop?.();
+  fleetIntelIngestion?.stop();
   await synapseProxy?.shutdown?.();
   await tunnelBroker?.shutdown?.();
   tunnelWss?.close();

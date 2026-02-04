@@ -4,6 +4,7 @@
 //! browser (HTML) and API (JSON) clients.
 
 use serde::{Deserialize, Serialize};
+use html_escape::encode_text;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -316,7 +317,8 @@ impl BlockPageRenderer {
         // Then substitute variables: {{var}}
         for (key, value) in vars {
             let pattern = format!("{{{{{}}}}}", key);
-            result = result.replace(&pattern, value);
+            let escaped = encode_text(value);
+            result = result.replace(&pattern, escaped.as_ref());
         }
 
         result
@@ -627,6 +629,24 @@ mod tests {
         assert!(html.contains("403"));
         assert!(html.contains("req-123"));
         assert!(html.contains("Request blocked by security rules"));
+    }
+
+    #[test]
+    fn test_render_html_escapes_variables() {
+        let renderer = BlockPageRenderer::default();
+        let ctx = BlockContext::new(
+            BlockReason::WafRule,
+            "<script>alert(1)</script>",
+            "192.168.1.1",
+        )
+        .with_message("<img src=x onerror=alert(1)>");
+
+        let html = renderer.render_html(&ctx);
+
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+        assert!(!html.contains("<img src=x onerror=alert(1)>"));
     }
 
     #[test]

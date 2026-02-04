@@ -104,6 +104,12 @@ function loadConfig() {
   }
 
   const env = parsed.data;
+  const corsOriginsRaw = env.CORS_ORIGINS
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const hasCorsWildcard = corsOriginsRaw.includes('*');
+  const corsOrigins = corsOriginsRaw.filter((origin) => origin !== '*');
 
   // Build validated config object
   const config = {
@@ -141,9 +147,7 @@ function loadConfig() {
 
     security: {
       apiKeyHeader: env.API_KEY_HEADER,
-      corsOrigins: env.CORS_ORIGINS === '*'
-        ? '*'
-        : env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+      corsOrigins,
     },
 
     telemetry: {
@@ -198,6 +202,12 @@ function loadConfig() {
     console.log(`   Synapse Direct: ${config.synapseDirect.enabled ? config.synapseDirect.url : 'disabled'}`);
     console.log(`   Sensor Bridge: ${config.sensorBridge.enabled ? `${config.sensorBridge.sensorId} (${config.sensorBridge.sensorName})` : 'disabled'}`);
     console.log(`   ClickHouse: ${config.clickhouse.enabled ? `${config.clickhouse.host}:${config.clickhouse.port}` : 'disabled'}`);
+  }
+
+  if (hasCorsWildcard) {
+    console.warn(
+      '⚠️  CORS_ORIGINS contains "*" which is not allowed. Provide explicit trusted origins.'
+    );
   }
 
   return config;

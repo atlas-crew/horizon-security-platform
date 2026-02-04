@@ -78,7 +78,7 @@ trends:
 | `block_status` | integer | `403` | HTTP status for blocked requests |
 | `rules_path` | string | `"data/rules.json"` | Rules file path |
 | `anomaly_blocking` | object | (see below) | Anomaly blocking settings |
-| `risk_server_url` | string | `null` | Optional risk server URL |
+| `risk_server_url` | string | `null` | Deprecated (use `telemetry.endpoint`) |
 
 #### Anomaly blocking (`detection.anomaly_blocking`)
 
@@ -112,7 +112,7 @@ Telemetry durations are serialized as `{ secs: <int>, nanos: <int> }`.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable telemetry |
-| `endpoint` | string | `"http://localhost:8080/telemetry"` | Telemetry endpoint |
+| `endpoint` | string | `"http://localhost:3100/_sensor/report"` | Telemetry endpoint |
 | `api_key` | string | `null` | API key for telemetry |
 | `batch_size` | integer | `100` | Events per batch |
 | `flush_interval` | duration | `10s` | Flush interval |
@@ -127,7 +127,7 @@ Telemetry durations are serialized as `{ secs: <int>, nanos: <int> }`.
 | `dry_run` | boolean | `false` | Skip HTTP sends (testing) |
 
 **`enabled_events` values:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`,
-`service_health`, `sensor_report`, `campaign_report`
+`service_health`, `sensor_report`, `campaign_report`, `auth_coverage`, `log_entry`
 
 ### Tarpit (`tarpit`)
 

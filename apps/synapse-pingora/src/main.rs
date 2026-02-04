@@ -511,7 +511,7 @@ pub struct DetectionConfig {
     /// Anomaly blocking settings (Phase 2)
     #[serde(default)]
     pub anomaly_blocking: AnomalyBlockingConfig,
-    /// Risk Server URL for telemetry (Phase 3)
+    /// Deprecated telemetry URL (use telemetry.endpoint instead)
     pub risk_server_url: Option<String>,
 }
 
@@ -4392,17 +4392,33 @@ fn main() {
     let metrics_registry = Arc::new(MetricsRegistry::new());
 
     // Initialize Telemetry (Signal Horizon)
-    let telemetry_config = if let Some(url) = &config.detection.risk_server_url {
-        info!("Telemetry enabled, reporting to {}", url);
-        let mut telemetry_config = config.telemetry.clone();
+    let mut telemetry_config = config.telemetry.clone();
+    let risk_server_url = config
+        .detection
+        .risk_server_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if telemetry_config.enabled {
+        if telemetry_config.endpoint.trim().is_empty() {
+            if let Some(url) = risk_server_url {
+                warn!("detection.risk_server_url is deprecated; use telemetry.endpoint instead");
+                telemetry_config.endpoint = format!("{}/_sensor/report", url);
+            } else {
+                telemetry_config.enabled = false;
+                warn!("Telemetry enabled but endpoint is empty; disabling telemetry");
+            }
+        }
+    } else if let Some(url) = risk_server_url {
+        warn!("detection.risk_server_url is deprecated; use telemetry.endpoint instead");
         telemetry_config.enabled = true;
         telemetry_config.endpoint = format!("{}/_sensor/report", url);
-        telemetry_config
-    } else {
-        let mut telemetry_config = config.telemetry.clone();
-        telemetry_config.enabled = false;
-        telemetry_config
-    };
+    }
+
+    if telemetry_config.enabled {
+        info!("Telemetry enabled, reporting to {}", telemetry_config.endpoint);
+    }
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {
         telemetry_client.start_background_flush();
@@ -4783,7 +4799,7 @@ fn main() {
     server.bootstrap();
 
     // Create proxy service - use multi-site if available, otherwise legacy
-    // Note: telemetry_client from line 1902 is used (configured from risk_server_url)
+    // Note: telemetry_client is configured from telemetry.endpoint (risk_server_url is deprecated)
     let proxy = if let Some((ref config_file, ref sites)) = multisite_config {
         let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
             create_multisite_managers(config_file, sites);

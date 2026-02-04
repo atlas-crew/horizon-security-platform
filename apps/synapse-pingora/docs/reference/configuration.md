@@ -264,7 +264,7 @@ Event reporting to external collectors.
 ```yaml
 telemetry:
   enabled: false
-  endpoint: "http://localhost:8080/telemetry"
+  endpoint: "http://localhost:3100/_sensor/report"
   api_key: ""
   batch_size: 100
   flush_interval_secs: 10
@@ -280,7 +280,7 @@ telemetry:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | boolean | `false` | Enable telemetry |
-| `endpoint` | string | `"http://localhost:8080/telemetry"` | Telemetry endpoint URL |
+| `endpoint` | string | `"http://localhost:3100/_sensor/report"` | Telemetry endpoint URL |
 | `api_key` | string | `""` | API key for authentication |
 | `batch_size` | integer | `100` | Events per batch |
 | `flush_interval_secs` | integer | `10` | Flush interval in seconds |
@@ -292,7 +292,7 @@ telemetry:
 | `dry_run` | boolean | `false` | Skip HTTP sending (for testing) |
 | `enabled_events` | string[] | `[]` | Event types to send (empty = all) |
 
-**Event types:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`, `service_health`, `sensor_report`, `campaign_report`
+**Event types:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`, `service_health`, `sensor_report`, `campaign_report`, `auth_coverage`, `log_entry`
 
 ---
 

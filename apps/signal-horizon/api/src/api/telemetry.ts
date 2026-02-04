@@ -293,6 +293,7 @@ export function createTelemetryRouter(
   };
 
   router.post('/telemetry', handleTelemetry);
+  router.post('/api/v1/telemetry', handleTelemetry);
   router.post('/_sensor/report', handleTelemetry);
 
   return router;

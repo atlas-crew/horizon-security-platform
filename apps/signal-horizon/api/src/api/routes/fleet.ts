@@ -77,7 +77,15 @@ const PushConfigBodySchema = z.object({
 });
 
 /** Valid command types for fleet operations */
-const VALID_COMMAND_TYPES = ['push_config', 'push_rules', 'update', 'restart', 'sync_blocklist'] as const;
+const VALID_COMMAND_TYPES = [
+  'push_config',
+  'push_rules',
+  'update',
+  'restart',
+  'sync_blocklist',
+  'toggle_chaos',
+  'toggle_mtd'
+] as const;
 
 /**
  * Safe string validator function - prevents control characters.
@@ -193,6 +201,18 @@ const SyncBlocklistPayloadSchema = z.object({
   })).max(100000).optional(),
 }).strict();
 
+/** toggle_chaos: Trigger chaos spikes on sensors */
+const ToggleChaosPayloadSchema = z.object({
+  command: z.literal('toggle_chaos'),
+  durationMs: z.number().int().min(1000).max(60000).optional(),
+}).strict();
+
+/** toggle_mtd: Set Moving Target Defense prefix */
+const ToggleMtdPayloadSchema = z.object({
+  command: z.literal('toggle_mtd'),
+  prefix: z.string().max(32).optional(),
+}).strict();
+
 /**
  * Map of command types to their payload schemas.
  */
@@ -202,6 +222,8 @@ const COMMAND_PAYLOAD_SCHEMAS: Record<typeof VALID_COMMAND_TYPES[number], z.ZodS
   update: UpdatePayloadSchema,
   restart: RestartPayloadSchema,
   sync_blocklist: SyncBlocklistPayloadSchema,
+  toggle_chaos: ToggleChaosPayloadSchema,
+  toggle_mtd: ToggleMtdPayloadSchema,
 };
 
 /**

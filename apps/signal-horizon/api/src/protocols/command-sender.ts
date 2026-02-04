@@ -9,7 +9,7 @@
 import { EventEmitter } from 'events';
 import type WebSocket from 'ws';
 
-export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics' | 'update';
+export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics' | 'update' | 'toggle_chaos' | 'toggle_mtd';
 export type CommandStatus = 'pending' | 'sent' | 'success' | 'failed' | 'timeout';
 
 /** Configuration for command queue limits */
@@ -236,6 +236,8 @@ export class CommandSender extends EventEmitter {
       push_config: 30000,
       push_rules: 30000,
       update: 300000, // 5 minutes for download/install
+      toggle_chaos: 10000,
+      toggle_mtd: 10000,
     };
     return timeouts[type];
   }

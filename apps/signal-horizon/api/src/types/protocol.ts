@@ -315,7 +315,9 @@ export type HubCommandType =
   | 'restart'
   | 'collect_diagnostics'
   | 'update'
-  | 'sync_blocklist';
+  | 'sync_blocklist'
+  | 'toggle_chaos'
+  | 'toggle_mtd';
 
 export interface HubCommandMessage {
   type: HubCommandType;

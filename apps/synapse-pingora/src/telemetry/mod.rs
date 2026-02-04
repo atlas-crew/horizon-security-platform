@@ -15,6 +15,8 @@ use async_trait::async_trait;
 
 use crate::signals::auth_coverage::AuthCoverageSummary;
 
+use crate::utils::circuit_breaker::CircuitBreaker;
+
 pub mod auth_coverage_aggregator;
 
 /// Telemetry-specific errors.
@@ -185,83 +187,6 @@ impl TelemetryBatch {
 
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
-    }
-}
-
-/// Circuit breaker state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CircuitState {
-    #[default]
-    Closed,
-    Open,
-    HalfOpen,
-}
-
-/// Circuit breaker for resilient telemetry delivery.
-#[derive(Debug)]
-pub struct CircuitBreaker {
-    state: Mutex<CircuitState>,
-    failure_count: AtomicU64,
-    failure_threshold: u64,
-    reset_timeout: Duration,
-    last_failure: Mutex<Option<std::time::Instant>>,
-}
-
-impl CircuitBreaker {
-    pub fn new(failure_threshold: u64, reset_timeout: Duration) -> Self {
-        Self {
-            state: Mutex::new(CircuitState::Closed),
-            failure_count: AtomicU64::new(0),
-            failure_threshold,
-            reset_timeout,
-            last_failure: Mutex::new(None),
-        }
-    }
-
-    pub async fn state(&self) -> CircuitState {
-        let mut state = self.state.lock().await;
-        if *state == CircuitState::Open {
-            if let Some(last) = *self.last_failure.lock().await {
-                if last.elapsed() >= self.reset_timeout {
-                    *state = CircuitState::HalfOpen;
-                    debug!("Circuit breaker transitioning to half-open");
-                }
-            }
-        }
-        *state
-    }
-
-    pub async fn record_success(&self) {
-        let mut state = self.state.lock().await;
-        self.failure_count.store(0, Ordering::SeqCst);
-        if *state == CircuitState::HalfOpen {
-            *state = CircuitState::Closed;
-            debug!("Circuit breaker closed after successful request");
-        }
-    }
-
-    pub async fn record_failure(&self) {
-        let count = self.failure_count.fetch_add(1, Ordering::SeqCst) + 1;
-        *self.last_failure.lock().await = Some(std::time::Instant::now());
-
-        if count >= self.failure_threshold {
-            let mut state = self.state.lock().await;
-            if *state != CircuitState::Open {
-                *state = CircuitState::Open;
-                warn!("Circuit breaker opened after {} failures", count);
-            }
-        }
-    }
-
-    pub async fn allow_request(&self) -> bool {
-        let state = self.state().await;
-        matches!(state, CircuitState::Closed | CircuitState::HalfOpen)
-    }
-}
-
-impl Default for CircuitBreaker {
-    fn default() -> Self {
-        Self::new(5, Duration::from_secs(60))
     }
 }
 
@@ -637,41 +562,22 @@ impl TelemetryClient {
 
     /// Starts the background flush task.
     pub fn start_background_flush(&self) -> tokio::task::JoinHandle<()> {
-        let buffer = self.buffer.clone();
-        let circuit_breaker = self.circuit_breaker.clone();
-        let stats = self.stats.clone();
-        let config = self.config.clone();
-        let mut shutdown = self.shutdown.subscribe();
+        let client = self.clone();
+        let mut shutdown = client.shutdown.subscribe();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(config.flush_interval);
+            let mut interval = tokio::time::interval(client.config.flush_interval);
 
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        if !circuit_breaker.allow_request().await {
-                            debug!("Skipping flush, circuit breaker open");
-                            continue;
+                        if let Err(err) = client.flush().await {
+                            debug!("Background telemetry flush failed: {}", err);
                         }
-
-                        let events = buffer.drain().await;
-                        if events.is_empty() {
-                            continue;
-                        }
-
-                        let batch = TelemetryBatch::new(events);
-                        info!(batch_id = %batch.batch_id, count = batch.len(), "Background flush");
-
-                        // In production, this would actually send
-                        stats.events_sent.fetch_add(batch.len() as u64, Ordering::SeqCst);
-                        stats.batches_sent.fetch_add(1, Ordering::SeqCst);
                     }
                     _ = shutdown.recv() => {
-                        // Final flush on shutdown
-                        let events = buffer.drain().await;
-                        if !events.is_empty() {
-                            info!(count = events.len(), "Final flush on shutdown");
-                            stats.events_sent.fetch_add(events.len() as u64, Ordering::SeqCst);
+                        if let Err(err) = client.flush().await {
+                            debug!("Final telemetry flush failed: {}", err);
                         }
                         break;
                     }

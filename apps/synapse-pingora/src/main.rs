@@ -4393,14 +4393,14 @@ fn main() {
     // Initialize Telemetry (Signal Horizon)
     let telemetry_config = if let Some(url) = &config.detection.risk_server_url {
         info!("Telemetry enabled, reporting to {}", url);
-        TelemetryConfig {
-            enabled: true,
-            endpoint: format!("{}/_sensor/report", url),
-            api_key: config.telemetry.api_key.clone(),
-            ..TelemetryConfig::default()
-        }
+        let mut telemetry_config = config.telemetry.clone();
+        telemetry_config.enabled = true;
+        telemetry_config.endpoint = format!("{}/_sensor/report", url);
+        telemetry_config
     } else {
-        TelemetryConfig { enabled: false, ..TelemetryConfig::default() }
+        let mut telemetry_config = config.telemetry.clone();
+        telemetry_config.enabled = false;
+        telemetry_config
     };
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {

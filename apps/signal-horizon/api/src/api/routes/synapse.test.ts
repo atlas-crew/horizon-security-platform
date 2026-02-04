@@ -157,6 +157,19 @@ describe('Synapse Rules RBAC', () => {
     });
   });
 
+  it('rejects POST /synapse/:sensorId/rules without fleet:write scope', async () => {
+    const adminNoWriteApp = buildApp(['fleet:admin']);
+
+    const res = await request(adminNoWriteApp)
+      .post('/synapse/sensor-1/rules')
+      .send(baseRulePayload)
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_SCOPE',
+    });
+  });
+
   it('allows POST /synapse/:sensorId/rules for admin role', async () => {
     const adminApp = buildApp(['fleet:write', 'fleet:admin']);
 
@@ -187,6 +200,19 @@ describe('Synapse Rules RBAC', () => {
     });
   });
 
+  it('rejects PUT /synapse/:sensorId/rules/:ruleId without fleet:write scope', async () => {
+    const adminNoWriteApp = buildApp(['fleet:admin']);
+
+    const res = await request(adminNoWriteApp)
+      .put('/synapse/sensor-1/rules/rule-1')
+      .send({ name: 'Updated Rule' })
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_SCOPE',
+    });
+  });
+
   it('allows PUT /synapse/:sensorId/rules/:ruleId for admin role', async () => {
     const adminApp = buildApp(['fleet:write', 'fleet:admin']);
 
@@ -213,6 +239,18 @@ describe('Synapse Rules RBAC', () => {
 
     expect(res.body).toMatchObject({
       code: 'INSUFFICIENT_ROLE',
+    });
+  });
+
+  it('rejects DELETE /synapse/:sensorId/rules/:ruleId without fleet:write scope', async () => {
+    const adminNoWriteApp = buildApp(['fleet:admin']);
+
+    const res = await request(adminNoWriteApp)
+      .delete('/synapse/sensor-1/rules/rule-1')
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_SCOPE',
     });
   });
 

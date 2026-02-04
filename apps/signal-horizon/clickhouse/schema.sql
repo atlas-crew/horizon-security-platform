@@ -6,6 +6,7 @@
 --   campaign_history   - Campaign state change snapshots
 --   blocklist_history  - Blocklist entry change log
 --   http_transactions  - Raw HTTP transaction telemetry (per-request)
+--   sensor_logs        - Raw sensor log entries (kernel/syslog/access/waf)
 --
 -- Materialized Views:
 --   signal_hourly_mv   - Hourly rollups by tenant/type
@@ -16,6 +17,7 @@
 --   campaign_history: 180 days
 --   blocklist_history: 365 days
 --   http_transactions: 30 days
+--   sensor_logs: 30 days
 
 -- =============================================================================
 -- Signal Events (time-series with bloom filters)
@@ -138,6 +140,34 @@ CREATE TABLE IF NOT EXISTS http_transactions (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, timestamp, sensor_id)
+TTL timestamp + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192;
+
+-- =============================================================================
+-- Sensor Logs (raw log entries)
+-- =============================================================================
+-- Captures kernel/syslog/access/WAF logs for fleet diagnostics and hunting.
+-- Stored as raw entries with JSON fields for flexible querying.
+
+CREATE TABLE IF NOT EXISTS sensor_logs (
+    timestamp DateTime64(3) CODEC(Delta, ZSTD),
+    tenant_id LowCardinality(String),
+    sensor_id LowCardinality(String),
+    log_id String,
+    source LowCardinality(String),
+    level LowCardinality(String),
+    message String CODEC(ZSTD),
+    fields Nullable(String),
+    method LowCardinality(Nullable(String)),
+    path Nullable(String),
+    status_code Nullable(UInt16),
+    latency_ms Nullable(Float64),
+    client_ip Nullable(String),
+    rule_id Nullable(String)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (tenant_id, timestamp, sensor_id, source)
 TTL timestamp + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 

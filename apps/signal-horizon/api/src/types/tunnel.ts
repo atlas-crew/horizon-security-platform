@@ -181,7 +181,8 @@ export type LogSource =
   | 'access'     // HTTP access logs
   | 'error'      // Error logs
   | 'audit'      // Audit trail logs
-  | 'security';  // Security event logs
+  | 'security'   // Security event logs
+  | 'waf';       // WAF rule and block events
 
 /**
  * Log severity levels.

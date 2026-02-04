@@ -22,6 +22,7 @@ import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 import { SensorConfigService } from '../../services/sensorConfigService.js';
 import { SensorConfigController } from '../../controllers/sensorConfigController.js';
+import type { ClickHouseService } from '../../storage/clickhouse/index.js';
 
 // ======================== Validation Schemas ========================
 
@@ -326,10 +327,11 @@ export function createFleetRoutes(
     configManager?: ConfigManager;
     fleetCommander?: FleetCommander;
     ruleDistributor?: RuleDistributor;
+    clickhouse?: ClickHouseService | null;
   }
 ): Router {
   const router = Router();
-  const { fleetAggregator, configManager, fleetCommander, ruleDistributor } =
+  const { fleetAggregator, configManager, fleetCommander, ruleDistributor, clickhouse } =
     options;
 
   // Initialize Sensor Config Controller
@@ -914,7 +916,7 @@ export function createFleetRoutes(
   );
 
 const SensorLogsQuerySchema = z.object({
-  type: z.enum(['access', 'error', 'system']).default('access'),
+  type: z.enum(['access', 'error', 'system', 'waf']).default('access'),
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
@@ -944,46 +946,84 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
-        const logCount = limit;
+        if (!clickhouse || !clickhouse.isEnabled()) {
+          res.status(503).json({ error: 'clickhouse_disabled' });
+          return;
+        }
 
-        // Generate mock log entries based on type
-        const logs = Array.from({ length: logCount }, (_, i) => {
-          const timestamp = new Date(Date.now() - i * 1000).toISOString();
-          if (type === 'access') {
-            return {
-              timestamp,
-              method: ['GET', 'POST', 'PUT', 'DELETE'][Math.floor(Math.random() * 4)],
-              path: ['/api/users', '/api/orders', '/api/products', '/health'][Math.floor(Math.random() * 4)],
-              status: [200, 201, 204, 400, 401, 404, 500][Math.floor(Math.random() * 7)],
-              size: Math.floor(Math.random() * 10000),
-              duration: Math.random() * 100,
-              ip: `203.0.113.${Math.floor(Math.random() * 255)}`,
-            };
-          } else if (type === 'error') {
-            return {
-              timestamp,
-              level: ['ERROR', 'WARN', 'CRIT'][Math.floor(Math.random() * 3)],
-              message: ['Connection timeout', 'Database error', 'Memory limit exceeded', 'SSL handshake failed'][
-                Math.floor(Math.random() * 4)
-              ],
-              source: ['synapse-pingora', 'atlascrew-agent', 'postgresql'][Math.floor(Math.random() * 3)],
-            };
-          } else {
-            return {
-              timestamp,
-              level: ['INFO', 'DEBUG', 'WARN'][Math.floor(Math.random() * 3)],
-              message: ['Service started', 'Config reloaded', 'Health check passed', 'Cache cleared'][
-                Math.floor(Math.random() * 4)
-              ],
-              source: 'system',
-            };
+        type LogRow = {
+          timestamp: string;
+          log_id: string;
+          source: string;
+          level: string;
+          message: string;
+          fields: string | null;
+          method: string | null;
+          path: string | null;
+          status_code: number | null;
+          latency_ms: number | null;
+          client_ip: string | null;
+          rule_id: string | null;
+        };
+
+        const whereClauses: string[] = [
+          'tenant_id = {tenantId:String}',
+          'sensor_id = {sensorId:String}',
+        ];
+        const params: Record<string, unknown> = {
+          tenantId: auth.tenantId,
+          sensorId,
+          limit,
+        };
+
+        if (type === 'error') {
+          whereClauses.push('level IN {levels:Array(String)}');
+          params.levels = ['error', 'fatal'];
+        } else {
+          whereClauses.push('source IN {sources:Array(String)}');
+          params.sources = [type];
+        }
+
+        const sql = `
+          SELECT timestamp, log_id, source, level, message, fields, method, path,
+            status_code, latency_ms, client_ip, rule_id
+          FROM sensor_logs
+          WHERE ${whereClauses.join(' AND ')}
+          ORDER BY timestamp DESC
+          LIMIT {limit:UInt32}
+        `;
+
+        const rows = await clickhouse.queryWithParams<LogRow>(sql, params);
+        const logs = rows.map((row) => {
+          let parsedFields: Record<string, unknown> | undefined;
+          if (row.fields) {
+            try {
+              parsedFields = JSON.parse(row.fields) as Record<string, unknown>;
+            } catch {
+              parsedFields = undefined;
+            }
           }
+
+          return {
+            id: row.log_id,
+            timestamp: row.timestamp,
+            source: row.source,
+            level: row.level,
+            message: row.message,
+            fields: parsedFields,
+            method: row.method ?? undefined,
+            path: row.path ?? undefined,
+            statusCode: row.status_code ?? undefined,
+            latencyMs: row.latency_ms ?? undefined,
+            clientIp: row.client_ip ?? undefined,
+            ruleId: row.rule_id ?? undefined,
+          };
         });
 
         res.json({
           type,
           logs,
-          total: logCount,
+          total: logs.length,
         });
       } catch (error) {
         logger.error({ error }, 'Failed to get sensor logs');

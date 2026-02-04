@@ -42,6 +42,7 @@ import type { SynapseProxyService } from '../../services/synapse-proxy.js';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
 import type { WarRoomService } from '../../services/warroom/index.js';
 import type { APIIntelligenceService } from '../../services/api-intelligence/index.js';
+import type { ClickHouseService } from '../../storage/clickhouse/index.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -49,6 +50,7 @@ export interface ApiRouterOptions {
   configManager?: ConfigManager;
   fleetCommander?: FleetCommander;
   ruleDistributor?: RuleDistributor;
+  clickhouse?: ClickHouseService | null;
   synapseProxy?: SynapseProxyService;
   tunnelBroker?: TunnelBroker;
   sessionQueryService?: FleetSessionQueryService;

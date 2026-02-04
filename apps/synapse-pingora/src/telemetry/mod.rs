@@ -15,7 +15,7 @@ use async_trait::async_trait;
 
 use crate::signals::auth_coverage::AuthCoverageSummary;
 
-use crate::utils::circuit_breaker::CircuitBreaker;
+use crate::utils::circuit_breaker::{CircuitBreaker, CircuitState};
 
 pub mod auth_coverage_aggregator;
 
@@ -52,6 +52,7 @@ pub enum EventType {
     SensorReport,
     CampaignReport,
     AuthCoverage,
+    LogEntry,
 }
 
 /// Telemetry event payload.
@@ -65,6 +66,20 @@ pub enum TelemetryEvent {
         site: String,
         method: String,
         path: String,
+    },
+    LogEntry {
+        id: String,
+        source: String,
+        level: String,
+        message: String,
+        log_timestamp_ms: u64,
+        fields: Option<serde_json::Value>,
+        method: Option<String>,
+        path: Option<String>,
+        status_code: Option<u16>,
+        latency_ms: Option<f64>,
+        client_ip: Option<String>,
+        rule_id: Option<String>,
     },
     WafBlock {
         rule_id: String,
@@ -141,6 +156,7 @@ impl TelemetryEvent {
             Self::SensorReport { .. } => EventType::SensorReport,
             Self::CampaignReport { .. } => EventType::CampaignReport,
             Self::AuthCoverage(_) => EventType::AuthCoverage,
+            Self::LogEntry { .. } => EventType::LogEntry,
         }
     }
 }
@@ -705,6 +721,22 @@ mod tests {
 
         let event = waf_block("rule-1".into(), "high".into(), "1.2.3.4".into(), "site".into(), "/".into());
         assert_eq!(event.event_type(), EventType::WafBlock);
+
+        let event = TelemetryEvent::LogEntry {
+            id: "log-1".into(),
+            source: "access".into(),
+            level: "info".into(),
+            message: "GET /".into(),
+            log_timestamp_ms: 1234,
+            fields: None,
+            method: Some("GET".into()),
+            path: Some("/".into()),
+            status_code: Some(200),
+            latency_ms: Some(12.5),
+            client_ip: Some("203.0.113.1".into()),
+            rule_id: None,
+        };
+        assert_eq!(event.event_type(), EventType::LogEntry);
 
         let event = rate_limit_hit("1.2.3.4".into(), 100, 60, "site".into());
         assert_eq!(event.event_type(), EventType::RateLimitHit);

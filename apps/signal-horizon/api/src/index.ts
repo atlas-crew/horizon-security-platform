@@ -588,6 +588,7 @@ async function start() {
     configManager,
     fleetCommander,
     ruleDistributor,
+    clickhouse,
     synapseProxy,
     tunnelBroker,
     sessionQueryService,

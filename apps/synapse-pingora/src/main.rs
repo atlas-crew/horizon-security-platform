@@ -113,6 +113,7 @@ use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, Sign
 use synapse_pingora::tunnel::{
     publish_access_log,
     publish_waf_log,
+    LogTelemetryService,
     TunnelClient,
     TunnelConfig,
     TunnelDiagService,
@@ -4405,6 +4406,25 @@ fn main() {
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {
         telemetry_client.start_background_flush();
+
+        let telemetry_for_logs = Arc::clone(&telemetry_client);
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    error!("Failed to create telemetry runtime: {}", err);
+                    return;
+                }
+            };
+
+            rt.block_on(async move {
+                tokio::spawn(LogTelemetryService::new(telemetry_for_logs).run());
+                std::future::pending::<()>().await;
+            });
+        });
     }
 
     // Create shared CampaignManager for threat correlation (mutable for initialization)

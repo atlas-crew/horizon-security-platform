@@ -16,7 +16,7 @@ pub use config::TunnelConfig;
 pub use error::TunnelError;
 pub use diag::TunnelDiagService;
 pub use logs::{
-    publish_access_log, publish_internal_log, publish_waf_log, TunnelLogService,
+    publish_access_log, publish_internal_log, publish_waf_log, LogTelemetryService, TunnelLogService,
 };
 pub use shell::TunnelShellService;
 pub use types::{

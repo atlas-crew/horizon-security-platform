@@ -7,7 +7,12 @@ import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
 import { config } from '../config.js';
 import { safeCompare } from '../lib/safe-compare.js';
-import type { ClickHouseRetryBuffer, ClickHouseService, HttpTransactionRow } from '../storage/clickhouse/index.js';
+import type {
+  ClickHouseRetryBuffer,
+  ClickHouseService,
+  HttpTransactionRow,
+  LogEntryRow,
+} from '../storage/clickhouse/index.js';
 
 export interface TelemetryRouterOptions {
   clickhouse?: ClickHouseService | null;
@@ -24,6 +29,7 @@ type TelemetryEventEntry = {
 
 interface ParsedTelemetry {
   rows: HttpTransactionRow[];
+  logRows: LogEntryRow[];
   received: number;
   ignored: number;
 }
@@ -73,6 +79,17 @@ function normalizeOptionalString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function normalizeEventPayload(entry: TelemetryEventEntry): TelemetryEventPayload | null {
   if (entry && typeof entry === 'object') {
     if (entry.event && typeof entry.event === 'object') {
@@ -110,6 +127,7 @@ function parseTelemetryPayload(
 ): ParsedTelemetry {
   const entries = extractTelemetryEntries(payload);
   const rows: HttpTransactionRow[] = [];
+  const logRows: LogEntryRow[] = [];
 
   for (const entry of entries) {
     const eventPayload = normalizeEventPayload(entry);
@@ -119,41 +137,91 @@ function parseTelemetryPayload(
       ? eventPayload.event_type.toLowerCase()
       : undefined;
 
-    if (eventType !== 'request_processed') {
-      continue;
-    }
-
     const data = (eventPayload.data && typeof eventPayload.data === 'object')
       ? (eventPayload.data as Record<string, unknown>)
       : eventPayload;
 
-    const timestampMs = normalizeNumber(
-      entry.timestamp_ms ?? data.timestamp_ms,
-      Date.now()
-    );
+    if (eventType === 'request_processed') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
 
-    const instanceId = normalizeString(
-      entry.instance_id ?? data.instance_id,
-      defaultSensorId
-    );
+      const instanceId = normalizeString(
+        entry.instance_id ?? data.instance_id,
+        defaultSensorId
+      );
 
-    rows.push({
-      timestamp: new Date(timestampMs).toISOString(),
-      tenant_id: tenantId,
-      sensor_id: instanceId,
-      site: normalizeString(data.site, DEFAULT_SITE),
-      method: normalizeString(data.method, 'UNKNOWN'),
-      path: normalizeString(data.path, '/'),
-      status_code: Math.max(0, Math.floor(normalizeNumber(data.status_code ?? data.status, 0))),
-      latency_ms: Math.max(0, Math.floor(normalizeNumber(data.latency_ms, 0))),
-      waf_action: normalizeOptionalString(data.waf_action),
-    });
+      rows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        site: normalizeString(data.site, DEFAULT_SITE),
+        method: normalizeString(data.method, 'UNKNOWN'),
+        path: normalizeString(data.path, '/'),
+        status_code: Math.max(0, Math.floor(normalizeNumber(data.status_code ?? data.status, 0))),
+        latency_ms: Math.max(0, Math.floor(normalizeNumber(data.latency_ms, 0))),
+        waf_action: normalizeOptionalString(data.waf_action),
+      });
+      continue;
+    }
+
+    if (eventType === 'log_entry') {
+      const timestampMs = normalizeNumber(
+        data.log_timestamp_ms ?? entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const instanceId = normalizeString(
+        entry.instance_id ?? data.instance_id,
+        defaultSensorId
+      );
+
+      const fieldsValue = data.fields;
+      let fields: string | null = null;
+      if (typeof fieldsValue === 'string') {
+        fields = fieldsValue;
+      } else if (fieldsValue && typeof fieldsValue === 'object') {
+        try {
+          fields = JSON.stringify(fieldsValue);
+        } catch {
+          fields = null;
+        }
+      }
+
+      const statusCode = normalizeOptionalNumber(data.status_code ?? data.statusCode);
+      const latencyMs = normalizeOptionalNumber(data.latency_ms ?? data.latencyMs);
+
+      const logId = normalizeString(
+        data.id ?? data.log_id,
+        `log-${instanceId}-${timestampMs}`
+      );
+
+      logRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        log_id: logId,
+        source: normalizeString(data.source, 'system'),
+        level: normalizeString(data.level, 'info'),
+        message: normalizeString(data.message, ''),
+        fields,
+        method: normalizeOptionalString(data.method),
+        path: normalizeOptionalString(data.path),
+        status_code: statusCode === null ? null : Math.max(0, Math.floor(statusCode)),
+        latency_ms: latencyMs === null ? null : Math.max(0, latencyMs),
+        client_ip: normalizeOptionalString(data.client_ip ?? data.clientIp),
+        rule_id: normalizeOptionalString(data.rule_id ?? data.ruleId),
+      });
+    }
   }
 
+  const processed = rows.length + logRows.length;
   return {
     rows,
+    logRows,
     received: entries.length,
-    ignored: Math.max(0, entries.length - rows.length),
+    ignored: Math.max(0, entries.length - processed),
   };
 }
 
@@ -186,24 +254,35 @@ export function createTelemetryRouter(
     const tenantId = getHeader(req, 'x-tenant-id') ?? getHeader(req, 'x-tenant') ?? DEFAULT_TENANT_ID;
     const sensorId = getHeader(req, 'x-sensor-id') ?? 'unknown';
 
-    const { rows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId);
+    const { rows, logRows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId);
 
-    if (rows.length === 0) {
+    if (rows.length === 0 && logRows.length === 0) {
       return res.status(202).json({ received, inserted: 0, ignored });
     }
 
     try {
       let buffered = 0;
       if (options.retryBuffer) {
-        const success = await options.retryBuffer.insertHttpTransactions(rows);
-        buffered = success ? 0 : rows.length;
+        if (rows.length > 0) {
+          const success = await options.retryBuffer.insertHttpTransactions(rows);
+          buffered += success ? 0 : rows.length;
+        }
+        if (logRows.length > 0) {
+          const success = await options.retryBuffer.insertLogEntries(logRows);
+          buffered += success ? 0 : logRows.length;
+        }
       } else {
-        await options.clickhouse.insertHttpTransactions(rows);
+        if (rows.length > 0) {
+          await options.clickhouse.insertHttpTransactions(rows);
+        }
+        if (logRows.length > 0) {
+          await options.clickhouse.insertLogEntries(logRows);
+        }
       }
 
       res.status(202).json({
         received,
-        inserted: rows.length - buffered,
+        inserted: rows.length + logRows.length - buffered,
         buffered,
         ignored,
       });

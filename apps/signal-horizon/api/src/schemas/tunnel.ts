@@ -134,6 +134,7 @@ export const LogSourceSchema = z.enum([
   'error',
   'audit',
   'security',
+  'waf',
 ]);
 
 export const LogLevelSchema = z.enum([

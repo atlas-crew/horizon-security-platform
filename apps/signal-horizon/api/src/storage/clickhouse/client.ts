@@ -92,6 +92,26 @@ export interface HttpTransactionRow {
   waf_action: string | null;
 }
 
+/**
+ * Sensor log entry row for sensor_logs table
+ */
+export interface LogEntryRow {
+  timestamp: string; // ISO 8601
+  tenant_id: string;
+  sensor_id: string;
+  log_id: string;
+  source: string;
+  level: string;
+  message: string;
+  fields: string | null;
+  method: string | null;
+  path: string | null;
+  status_code: number | null;
+  latency_ms: number | null;
+  client_ip: string | null;
+  rule_id: string | null;
+}
+
 // =============================================================================
 // ClickHouse Service
 // =============================================================================
@@ -284,6 +304,25 @@ export class ClickHouseService {
       this.logger.debug({ count: events.length }, 'Inserted HTTP transaction events');
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to insert HTTP transaction events');
+      throw error;
+    }
+  }
+
+  /**
+   * Insert sensor log entries
+   */
+  async insertLogEntries(events: LogEntryRow[]): Promise<void> {
+    if (!this.enabled || !this.client || events.length === 0) return;
+
+    try {
+      await this.client.insert({
+        table: 'sensor_logs',
+        values: events,
+        format: 'JSONEachRow',
+      });
+      this.logger.debug({ count: events.length }, 'Inserted sensor log entries');
+    } catch (error) {
+      this.logger.error({ error, count: events.length }, 'Failed to insert sensor log entries');
       throw error;
     }
   }

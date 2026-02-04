@@ -10,6 +10,7 @@ export {
   type CampaignHistoryRow,
   type BlocklistHistoryRow,
   type HttpTransactionRow,
+  type LogEntryRow,
 } from './client.js';
 
 export {

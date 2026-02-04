@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Once, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use super::client::TunnelClientHandle;
 use super::types::{TunnelChannel, TunnelEnvelope};
+use crate::telemetry::{TelemetryClient, TelemetryEvent};
 
 const LOG_CHANNEL_BUFFER: usize = 2048;
 const LOG_CACHE_SIZE: usize = 1000;
@@ -147,6 +148,7 @@ static LOG_STREAM: Lazy<LogStreamState> = Lazy::new(|| {
         buffer: RwLock::new(VecDeque::with_capacity(LOG_CACHE_SIZE)),
     }
 });
+static LOG_TAILERS_STARTED: Once = Once::new();
 
 fn push_to_buffer(entry: &LogStreamEntry) {
     let mut buffer = LOG_STREAM
@@ -487,6 +489,54 @@ impl TunnelLogService {
     }
 }
 
+/// Telemetry-forwarding service for log entries.
+pub struct LogTelemetryService {
+    telemetry: Arc<TelemetryClient>,
+}
+
+impl LogTelemetryService {
+    pub fn new(telemetry: Arc<TelemetryClient>) -> Self {
+        Self { telemetry }
+    }
+
+    pub async fn run(self) {
+        start_log_tailers();
+        if !self.telemetry.is_enabled() {
+            return;
+        }
+
+        let mut rx = subscribe_logs();
+        loop {
+            match rx.recv().await {
+                Ok(entry) => {
+                    let event = TelemetryEvent::LogEntry {
+                        id: entry.id.clone(),
+                        source: entry.source.clone(),
+                        level: entry.level.clone(),
+                        message: entry.message.clone(),
+                        log_timestamp_ms: entry.timestamp_ms,
+                        fields: entry.fields.clone(),
+                        method: entry.method.clone(),
+                        path: entry.path.clone(),
+                        status_code: entry.status_code,
+                        latency_ms: entry.latency_ms,
+                        client_ip: entry.client_ip.clone(),
+                        rule_id: entry.rule_id.clone(),
+                    };
+
+                    if let Err(err) = self.telemetry.record(event).await {
+                        warn!("Failed to record log telemetry: {}", err);
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(count)) => {
+                    debug!("Log telemetry lagged by {} entries", count);
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    }
+}
+
 fn parse_filter(payload: &Value) -> LogStreamFilter {
     let filter_value = payload.get("filter").unwrap_or(payload);
 
@@ -534,24 +584,26 @@ fn parse_filter(payload: &Value) -> LogStreamFilter {
 }
 
 fn start_log_tailers() {
-    let kernel_paths = [
-        "/var/log/kern.log",
-        "/var/log/kernel.log",
-        "/var/log/messages",
-    ];
-    let syslog_paths = ["/var/log/syslog", "/var/log/messages"]; 
+    LOG_TAILERS_STARTED.call_once(|| {
+        let kernel_paths = [
+            "/var/log/kern.log",
+            "/var/log/kernel.log",
+            "/var/log/messages",
+        ];
+        let syslog_paths = ["/var/log/syslog", "/var/log/messages"];
 
-    for path in kernel_paths {
-        if std::path::Path::new(path).exists() {
-            spawn_tailer(path.to_string(), "kernel");
+        for path in kernel_paths {
+            if std::path::Path::new(path).exists() {
+                spawn_tailer(path.to_string(), "kernel");
+            }
         }
-    }
 
-    for path in syslog_paths {
-        if std::path::Path::new(path).exists() {
-            spawn_tailer(path.to_string(), "syslog");
+        for path in syslog_paths {
+            if std::path::Path::new(path).exists() {
+                spawn_tailer(path.to_string(), "syslog");
+            }
         }
-    }
+    });
 }
 
 fn spawn_tailer(path: String, subsource: &'static str) {

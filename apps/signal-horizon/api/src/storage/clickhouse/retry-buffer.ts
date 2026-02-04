@@ -12,6 +12,7 @@ import type {
   CampaignHistoryRow,
   BlocklistHistoryRow,
   HttpTransactionRow,
+  LogEntryRow,
 } from './client.js';
 
 /** Configuration for the retry buffer */
@@ -40,7 +41,7 @@ export const DEFAULT_RETRY_CONFIG: RetryBufferConfig = {
 };
 
 /** Types of buffered items */
-type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction';
+type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction' | 'log';
 
 /** Buffered item with retry metadata */
 interface BufferedItem<T> {
@@ -200,6 +201,25 @@ export class ClickHouseRetryBuffer {
   }
 
   /**
+   * Insert sensor log entries with automatic retry on failure.
+   */
+  async insertLogEntries(events: LogEntryRow[]): Promise<boolean> {
+    if (events.length === 0) return true;
+
+    try {
+      await this.clickhouse.insertLogEntries(events);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        { error, count: events.length },
+        'Sensor log write failed, buffering for retry'
+      );
+      this.bufferForRetry('log', events);
+      return false;
+    }
+  }
+
+  /**
    * Buffer an item for retry
    */
   private bufferForRetry<T>(type: BufferItemType, data: T): void {
@@ -311,6 +331,9 @@ export class ClickHouseRetryBuffer {
         break;
       case 'transaction':
         await this.clickhouse.insertHttpTransactions(item.data as HttpTransactionRow[]);
+        break;
+      case 'log':
+        await this.clickhouse.insertLogEntries(item.data as LogEntryRow[]);
         break;
     }
   }

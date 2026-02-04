@@ -233,7 +233,7 @@ impl TunnelShellService {
                     let mut child = entry.child.lock().unwrap();
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            let exit_code = status.exit_code().unwrap_or_default();
+                            let exit_code = status.exit_code();
                             let message = serde_json::json!({
                                 "type": "shell-exit",
                                 "sessionId": session_id,

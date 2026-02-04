@@ -2115,7 +2115,14 @@ async fn sensor_report_handler(
         "trap_trigger" => SignalType::BotSignature, // High confidence bot
         "protocol_probe" => SignalType::TemplateDiscovery, // Probing
         "dlp_match" => SignalType::SchemaViolation, // Abuse
-        _ => SignalType::IpThreat,
+        other => {
+            warn!(
+                sensor_id = %report.sensor_id,
+                signal_type = %other,
+                "Unknown external signal type; mapping to IpThreat"
+            );
+            SignalType::IpThreat
+        }
     };
 
     // Map severity

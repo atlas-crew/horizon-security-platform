@@ -695,6 +695,8 @@ impl ApiHandler {
                 ApiResponse::ok(HorizonStatsResponse {
                     signals_sent: stats.signals_sent,
                     signals_acked: stats.signals_acked,
+                    signals_queued: stats.signals_queued,
+                    signals_dropped: stats.signals_dropped,
                     batches_sent: stats.batches_sent,
                     heartbeats_sent: stats.heartbeats_sent,
                     heartbeat_failures: stats.heartbeat_failures,
@@ -826,6 +828,8 @@ pub struct CrawlerStatsResponse {
 pub struct HorizonStatsResponse {
     pub signals_sent: u64,
     pub signals_acked: u64,
+    pub signals_queued: u64,
+    pub signals_dropped: u64,
     pub batches_sent: u64,
     pub heartbeats_sent: u64,
     pub heartbeat_failures: u64,

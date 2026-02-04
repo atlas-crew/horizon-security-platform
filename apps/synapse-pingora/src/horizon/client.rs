@@ -1,7 +1,7 @@
 //! WebSocket client for Signal Horizon Hub communication.
 
 use futures_util::{SinkExt, StreamExt};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::System;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 
@@ -68,6 +69,8 @@ impl MetricsProvider for NoopMetricsProvider {
 struct InternalStats {
     signals_sent: AtomicU64,
     signals_acked: AtomicU64,
+    signals_queued: AtomicU64,
+    signals_dropped: AtomicU64,
     batches_sent: AtomicU64,
     heartbeats_sent: AtomicU64,
     heartbeat_failures: AtomicU64,
@@ -79,6 +82,8 @@ struct InternalStats {
 pub struct ClientStats {
     pub signals_sent: u64,
     pub signals_acked: u64,
+    pub signals_queued: u64,
+    pub signals_dropped: u64,
     pub batches_sent: u64,
     pub heartbeats_sent: u64,
     pub heartbeat_failures: u64,
@@ -90,6 +95,8 @@ impl From<&InternalStats> for ClientStats {
         Self {
             signals_sent: stats.signals_sent.load(Ordering::Relaxed),
             signals_acked: stats.signals_acked.load(Ordering::Relaxed),
+            signals_queued: stats.signals_queued.load(Ordering::Relaxed),
+            signals_dropped: stats.signals_dropped.load(Ordering::Relaxed),
             batches_sent: stats.batches_sent.load(Ordering::Relaxed),
             heartbeats_sent: stats.heartbeats_sent.load(Ordering::Relaxed),
             heartbeat_failures: stats.heartbeat_failures.load(Ordering::Relaxed),
@@ -106,6 +113,7 @@ pub struct HorizonClient {
     stats: Arc<InternalStats>,
     metrics_provider: Arc<dyn MetricsProvider>,
     signal_tx: Option<mpsc::Sender<ThreatSignal>>,
+    signal_retry: Arc<Mutex<VecDeque<ThreatSignal>>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
     tenant_id: Arc<RwLock<Option<String>>>,
     capabilities: Arc<RwLock<Vec<String>>>,
@@ -122,6 +130,8 @@ impl HorizonClient {
             stats: Arc::new(InternalStats {
                 signals_sent: AtomicU64::new(0),
                 signals_acked: AtomicU64::new(0),
+                signals_queued: AtomicU64::new(0),
+                signals_dropped: AtomicU64::new(0),
                 batches_sent: AtomicU64::new(0),
                 heartbeats_sent: AtomicU64::new(0),
                 heartbeat_failures: AtomicU64::new(0),
@@ -129,6 +139,7 @@ impl HorizonClient {
             }),
             metrics_provider: Arc::new(NoopMetricsProvider),
             signal_tx: None,
+            signal_retry: Arc::new(Mutex::new(VecDeque::new())),
             shutdown_tx: None,
             tenant_id: Arc::new(RwLock::new(None)),
             capabilities: Arc::new(RwLock::new(Vec::new())),
@@ -165,7 +176,7 @@ impl HorizonClient {
         let (signal_tx, signal_rx) = mpsc::channel::<ThreatSignal>(self.config.max_queued_signals);
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
 
-        self.signal_tx = Some(signal_tx);
+        self.signal_tx = Some(signal_tx.clone());
         self.shutdown_tx = Some(shutdown_tx);
 
         // Spawn connection task
@@ -177,6 +188,10 @@ impl HorizonClient {
         let tenant_id = Arc::clone(&self.tenant_id);
         let capabilities = Arc::clone(&self.capabilities);
         let config_manager = self.config_manager.clone();
+        let retry_queue = Arc::clone(&self.signal_retry);
+        let retry_stats = Arc::clone(&self.stats);
+        let retry_tx = signal_tx.clone();
+        let retry_limit = self.config.max_queued_signals;
 
         tokio::spawn(async move {
             connection_loop(
@@ -194,6 +209,42 @@ impl HorizonClient {
             .await;
         });
 
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(250));
+            loop {
+                interval.tick().await;
+                let mut queue = retry_queue.lock();
+                if queue.is_empty() {
+                    continue;
+                }
+                while let Some(signal) = queue.pop_front() {
+                    match retry_tx.try_send(signal) {
+                        Ok(()) => {
+                            retry_stats.signals_sent.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(TrySendError::Full(signal)) => {
+                            queue.push_front(signal);
+                            break;
+                        }
+                        Err(TrySendError::Closed(_)) => {
+                            retry_stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
+                            queue.clear();
+                            break;
+                        }
+                    }
+                }
+                if queue.len() > retry_limit {
+                    let overflow = queue.len() - retry_limit;
+                    for _ in 0..overflow {
+                        queue.pop_front();
+                    }
+                    retry_stats
+                        .signals_dropped
+                        .fetch_add(overflow as u64, Ordering::Relaxed);
+                }
+            }
+        });
+
         Ok(())
     }
 
@@ -208,10 +259,25 @@ impl HorizonClient {
     /// Report a threat signal.
     pub fn report_signal(&self, signal: ThreatSignal) {
         if let Some(ref tx) = self.signal_tx {
-            if let Err(e) = tx.try_send(signal) {
-                warn!("Failed to queue signal: {}", e);
-            } else {
-                self.stats.signals_sent.fetch_add(1, Ordering::Relaxed);
+            match tx.try_send(signal) {
+                Ok(()) => {
+                    self.stats.signals_sent.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(TrySendError::Full(signal)) => {
+                    let mut queue = self.signal_retry.lock();
+                    if queue.len() >= self.config.max_queued_signals {
+                        self.stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
+                        warn!("Signal queue full; dropping signal");
+                    } else {
+                        queue.push_back(signal);
+                        self.stats.signals_queued.fetch_add(1, Ordering::Relaxed);
+                        warn!("Signal queue full; queued for retry");
+                    }
+                }
+                Err(TrySendError::Closed(_)) => {
+                    self.stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
+                    warn!("Signal channel closed; dropping signal");
+                }
             }
         }
     }
@@ -1165,6 +1231,8 @@ mod tests {
         let stats = ClientStats::default();
         assert_eq!(stats.signals_sent, 0);
         assert_eq!(stats.signals_acked, 0);
+        assert_eq!(stats.signals_queued, 0);
+        assert_eq!(stats.signals_dropped, 0);
         assert_eq!(stats.batches_sent, 0);
         assert_eq!(stats.heartbeats_sent, 0);
     }

@@ -77,6 +77,7 @@ async function main() {
       name: 'Development Dashboard',
       scopes: [
         'admin',
+        'auth-coverage:read',
         'dashboard:read', 'dashboard:write',
         'fleet:admin', 'fleet:read', 'fleet:write',
         'sensor:diag', 'sensor:files', 'sensor:admin', 'sensor:control',

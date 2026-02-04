@@ -6925,4 +6925,200 @@ mod tests {
             "/health should remain public and return 200 without authentication"
         );
     }
+
+    // =========================================================================
+    // Rules Endpoint Authorization Tests (labs-95at.7)
+    // =========================================================================
+
+    /// Create a test app that includes /_sensor/rules routes with scope-based auth.
+    fn create_test_app_with_rules(scopes: Vec<String>) -> Router {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
+        let handler = Arc::new(ApiHandler::builder().build());
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_scopes: scopes,
+            signal_permissions: Arc::new(SignalPermissions::default()),
+            admin_rate_limiter,
+            public_rate_limiter,
+            report_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        let rules_read_routes = Router::new()
+            .route("/_sensor/rules", get(sensor_rules_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+        let rules_write_routes = Router::new()
+            .route("/_sensor/rules", post(sensor_rules_create_handler))
+            .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+        Router::new()
+            .merge(rules_read_routes)
+            .merge(rules_write_routes)
+            .with_state(state)
+    }
+
+    fn build_rule_payload() -> serde_json::Value {
+        serde_json::json!({
+            "name": "Block Admin",
+            "type": "BLOCK",
+            "enabled": true,
+            "priority": 100,
+            "conditions": [
+                { "field": "path", "operator": "eq", "value": "/admin" }
+            ],
+            "actions": [
+                { "type": "block" }
+            ]
+        })
+    }
+
+    #[tokio::test]
+    async fn test_rules_requires_auth() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_READ.to_string()]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/rules")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_rules_requires_admin_read_scope() {
+        let app = create_test_app_with_rules(vec![]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/rules")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_rules_allows_admin_read_scope() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_READ.to_string()]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/rules")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // ConfigManager is not configured in tests, so expect 503 after auth/scope passes.
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_rules_create_requires_admin_write_scope() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_READ.to_string()]);
+        let payload = build_rule_payload();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/rules")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_rules_create_allows_admin_write_scope() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_WRITE.to_string()]);
+        let payload = build_rule_payload();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/rules")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // ConfigManager is not configured in tests, so expect 503 after auth/scope passes.
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_rules_delete_requires_admin_write_scope() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_READ.to_string()]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/_sensor/rules/rule-1")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_rules_delete_allows_admin_write_scope() {
+        let app = create_test_app_with_rules(vec![scopes::ADMIN_WRITE.to_string()]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/_sensor/rules/rule-1")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // ConfigManager is not configured in tests, so expect 503 after auth/scope passes.
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
 }

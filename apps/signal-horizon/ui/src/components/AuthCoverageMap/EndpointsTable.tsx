@@ -3,7 +3,6 @@ import { ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { RiskBadge } from './RiskBadge.js';
 import { PatternBadge } from './PatternBadge.js';
-import styles from './EndpointsTable.module.css';
 
 export type AuthPattern = 'enforced' | 'none_observed' | 'public' | 'insufficient_data';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';

@@ -1,7 +1,6 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { RiskBadge } from './RiskBadge.js';
-import styles from './GapsPanel.module.css';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 

@@ -1,11 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Shield, Search, Filter, ArrowUpDown, ChevronRight, AlertTriangle, CheckCircle, Info } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Shield, Search, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react';
 import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
-import { GapsPanel, EndpointAuthStats as GapStats } from './GapsPanel.js';
+import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
-import styles from './AuthCoverageMap.module.css';
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 type SortField = 'risk' | 'requests' | 'denial_rate' | 'endpoint';

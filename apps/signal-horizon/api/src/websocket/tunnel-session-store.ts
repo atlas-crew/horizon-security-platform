@@ -54,3 +54,7 @@ export function updateTunnelSession(
 export function removeTunnelSession(sessionId: string): boolean {
   return sessions.delete(sessionId);
 }
+
+export function clearTunnelSessions(): void {
+  sessions.clear();
+}

@@ -11,6 +11,7 @@ import request from '../../__tests__/test-request.js';
 import { createTunnelRoutes } from './tunnel.js';
 import type { PrismaClient, Sensor } from '@prisma/client';
 import type { Logger } from 'pino';
+import { clearTunnelSessions } from '../../websocket/tunnel-session-store.js';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -63,6 +64,7 @@ describe('Tunnel Routes', () => {
   let mockPrisma: Partial<PrismaClient>;
 
   beforeEach(() => {
+    clearTunnelSessions();
     mockPrisma = {
       sensor: {
         findFirst: vi.fn(),

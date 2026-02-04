@@ -1327,9 +1327,7 @@ pub async fn start_admin_server(
         .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
         .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
         .route("/_sensor/config/kernel", get(config_kernel_get_handler).put(config_kernel_put_handler))
-        // Log viewer endpoints
-        .route("/_sensor/logs", get(logs_handler))
-        .route("/_sensor/logs/:source", get(logs_by_source_handler))
+        // Log viewer endpoints moved to admin_read_routes (require admin:read)
         // Diagnostic bundle export
         .route("/_sensor/diagnostic-bundle", get(diagnostic_bundle_handler))
         // Configuration export/import
@@ -5861,7 +5859,7 @@ async fn config_kernel_put_handler(
 mod tests {
     use super::*;
     use axum::body::Body;
-    use hyper::body::to_bytes;
+    use http_body_util::BodyExt;
     use http::Request;
     use tower::util::ServiceExt;
     use std::num::NonZeroU32;

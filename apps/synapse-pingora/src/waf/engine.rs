@@ -26,6 +26,9 @@ const REGEX_SIZE_LIMIT: usize = 10 * (1 << 20);
 /// Limits the state machine size to prevent exponential blowup.
 const REGEX_DFA_SIZE_LIMIT: usize = 10 * (1 << 20);
 
+/// Maximum recursion depth for condition evaluation.
+const MAX_RECURSION_DEPTH: u32 = 10;
+
 use crate::waf::index::{
     build_rule_index, get_candidate_rule_indices, method_to_mask, CandidateCache,
     CandidateCacheKey, RuleIndex, REQ_ARGS, REQ_ARG_ENTRIES, REQ_BODY, REQ_JSON,
@@ -665,7 +668,7 @@ impl Engine {
 
     fn eval_rule(&self, rule: &WafRule, ctx: &EvalContext, trace: &mut TraceState) -> bool {
         for cond in &rule.matches {
-            if !self.eval_condition(cond, ctx, None, trace, rule.id) {
+            if !self.eval_condition(cond, ctx, None, trace, rule.id, 0) {
                 return false;
             }
         }
@@ -679,14 +682,19 @@ impl Engine {
         value: Option<&str>,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
+        if depth >= MAX_RECURSION_DEPTH {
+            return false;
+        }
+
         let matched = match condition.kind.as_str() {
-            "boolean" => self.eval_boolean(condition, ctx, value, trace, rule_id),
-            "method" => self.eval_method(condition, ctx, trace, rule_id),
-            "uri" => self.eval_uri(condition, ctx, trace, rule_id),
-            "args" => self.eval_args(condition, ctx, trace, rule_id),
-            "named_argument" => self.eval_named_argument(condition, ctx, trace, rule_id),
-            "header" => self.eval_header(condition, ctx, trace, rule_id),
+            "boolean" => self.eval_boolean(condition, ctx, value, trace, rule_id, depth),
+            "method" => self.eval_method(condition, ctx, trace, rule_id, depth),
+            "uri" => self.eval_uri(condition, ctx, trace, rule_id, depth),
+            "args" => self.eval_args(condition, ctx, trace, rule_id, depth),
+            "named_argument" => self.eval_named_argument(condition, ctx, trace, rule_id, depth),
+            "header" => self.eval_header(condition, ctx, trace, rule_id, depth),
             "contains" => eval_contains(condition.match_value.as_ref(), value),
             "starts_with" => eval_starts_with(condition.match_value.as_ref(), value),
             "equals" => eval_equals(condition.match_value.as_ref(), value),
@@ -700,7 +708,7 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&lowered), trace, rule_id))
+                        .map(|child| self.eval_condition(child, ctx, Some(&lowered), trace, rule_id, depth + 1))
                         .unwrap_or(true)
                 }
                 None => false,
@@ -712,7 +720,7 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id))
+                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id, depth + 1))
                         .unwrap_or(false)
                 }
                 None => false,
@@ -724,7 +732,7 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id))
+                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id, depth + 1))
                         .unwrap_or(false)
                 }
                 None => false,
@@ -735,7 +743,7 @@ impl Engine {
                     .match_value
                     .as_ref()
                     .and_then(|m| m.as_cond())
-                    .map(|child| self.eval_condition(child, ctx, Some(&raw), trace, rule_id))
+                    .map(|child| self.eval_condition(child, ctx, Some(&raw), trace, rule_id, depth + 1))
                     .unwrap_or(false)
             }
             "request_json" => match ctx.json_text.as_deref() {
@@ -743,7 +751,7 @@ impl Engine {
                     .match_value
                     .as_ref()
                     .and_then(|m| m.as_cond())
-                    .map(|child| self.eval_condition(child, ctx, Some(json_text), trace, rule_id))
+                    .map(|child| self.eval_condition(child, ctx, Some(json_text), trace, rule_id, depth + 1))
                     .unwrap_or(true),
                 None => false,
             },
@@ -755,25 +763,25 @@ impl Engine {
                 .unwrap_or(false),
             "compare" => eval_compare(condition, value),
             "count_odd" => eval_count_odd(condition.match_value.as_ref(), value),
-            "sql_analyzer" => self.eval_sql_analyzer(condition, value, ctx, trace, rule_id),
-            "xss_analyzer" => self.eval_xss_analyzer(condition, value, ctx, trace, rule_id),
-            "cmd_analyzer" => self.eval_cmd_analyzer(condition, value, ctx, trace, rule_id),
+            "sql_analyzer" => self.eval_sql_analyzer(condition, value, ctx, trace, rule_id, depth),
+            "xss_analyzer" => self.eval_xss_analyzer(condition, value, ctx, trace, rule_id, depth),
+            "cmd_analyzer" => self.eval_cmd_analyzer(condition, value, ctx, trace, rule_id, depth),
             "path_traversal_analyzer" => {
-                self.eval_path_traversal_analyzer(condition, value, ctx, trace, rule_id)
+                self.eval_path_traversal_analyzer(condition, value, ctx, trace, rule_id, depth)
             }
-            "ssrf_analyzer" => self.eval_ssrf_analyzer(condition, value, ctx, trace, rule_id),
-            "nosql_analyzer" => self.eval_nosql_analyzer(condition, value, ctx, trace, rule_id),
+            "ssrf_analyzer" => self.eval_ssrf_analyzer(condition, value, ctx, trace, rule_id, depth),
+            "nosql_analyzer" => self.eval_nosql_analyzer(condition, value, ctx, trace, rule_id, depth),
             "hashset" => eval_hashset(condition.match_value.as_ref(), value),
-            "parse_multipart" => self.eval_parse_multipart(condition, ctx, trace, rule_id),
-            "track_by_ip" => self.eval_track_by_ip(condition, ctx, trace, rule_id),
-            "extract_argument" => self.eval_extract_argument(condition, ctx, trace, rule_id),
-            "unique_count" => self.eval_unique_count(condition, ctx, value, &[], trace, rule_id),
-            "count" => self.eval_count(condition, ctx, trace, rule_id),
+            "parse_multipart" => self.eval_parse_multipart(condition, ctx, trace, rule_id, depth),
+            "track_by_ip" => self.eval_track_by_ip(condition, ctx, trace, rule_id, depth),
+            "extract_argument" => self.eval_extract_argument(condition, ctx, trace, rule_id, depth),
+            "unique_count" => self.eval_unique_count(condition, ctx, value, &[], trace, rule_id, depth),
+            "count" => self.eval_count(condition, ctx, trace, rule_id, depth),
             "remember_match" => condition
                 .match_value
                 .as_ref()
                 .and_then(|m| m.as_cond())
-                .map(|child| self.eval_condition(child, ctx, value, trace, rule_id))
+                .map(|child| self.eval_condition(child, ctx, value, trace, rule_id, depth + 1))
                 .unwrap_or(false),
             _ => false,
         };
@@ -799,6 +807,7 @@ impl Engine {
         value: Option<&str>,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let op = condition.op.as_deref().unwrap_or("and");
         let Some(match_value) = condition.match_value.as_ref() else {
@@ -812,13 +821,13 @@ impl Engine {
                         let Some(child) = item.as_cond() else {
                             continue;
                         };
-                        if !self.eval_condition(child, ctx, value, trace, rule_id) {
+                        if !self.eval_condition(child, ctx, value, trace, rule_id, depth + 1) {
                             return false;
                         }
                     }
                     true
                 } else if let Some(child) = match_value.as_cond() {
-                    self.eval_condition(child, ctx, value, trace, rule_id)
+                    self.eval_condition(child, ctx, value, trace, rule_id, depth + 1)
                 } else {
                     true
                 }
@@ -831,13 +840,13 @@ impl Engine {
                             continue;
                         };
                         saw_operand = true;
-                        if self.eval_condition(child, ctx, value, trace, rule_id) {
+                        if self.eval_condition(child, ctx, value, trace, rule_id, depth + 1) {
                             return true;
                         }
                     }
                     !saw_operand
                 } else if let Some(child) = match_value.as_cond() {
-                    self.eval_condition(child, ctx, value, trace, rule_id)
+                    self.eval_condition(child, ctx, value, trace, rule_id, depth + 1)
                 } else {
                     true
                 }
@@ -848,13 +857,13 @@ impl Engine {
                         let Some(child) = item.as_cond() else {
                             continue;
                         };
-                        if self.eval_condition(child, ctx, value, trace, rule_id) {
+                        if self.eval_condition(child, ctx, value, trace, rule_id, depth + 1) {
                             return false;
                         }
                     }
                     true
                 } else if let Some(child) = match_value.as_cond() {
-                    !self.eval_condition(child, ctx, value, trace, rule_id)
+                    !self.eval_condition(child, ctx, value, trace, rule_id, depth + 1)
                 } else {
                     true
                 }
@@ -869,6 +878,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let method = ctx.method;
         let Some(match_value) = condition.match_value.as_ref() else {
@@ -888,7 +898,7 @@ impl Engine {
             return false;
         }
         if let Some(child) = match_value.as_cond() {
-            return self.eval_condition(child, ctx, Some(method), trace, rule_id);
+            return self.eval_condition(child, ctx, Some(method), trace, rule_id, depth + 1);
         }
         false
     }
@@ -899,6 +909,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let uri = ctx.url;
         let Some(match_value) = condition.match_value.as_ref() else {
@@ -908,7 +919,7 @@ impl Engine {
             return uri.contains(s);
         }
         if let Some(child) = match_value.as_cond() {
-            return self.eval_condition(child, ctx, Some(uri), trace, rule_id);
+            return self.eval_condition(child, ctx, Some(uri), trace, rule_id, depth + 1);
         }
         false
     }
@@ -919,12 +930,13 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) else {
             return false;
         };
         for candidate in &ctx.args {
-            if self.eval_condition(child, ctx, Some(candidate), trace, rule_id) {
+            if self.eval_condition(child, ctx, Some(candidate), trace, rule_id, depth + 1) {
                 return true;
             }
         }
@@ -937,6 +949,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) else {
             return false;
@@ -944,7 +957,7 @@ impl Engine {
         let name = condition.name.as_deref().unwrap_or("*");
         for entry in &ctx.arg_entries {
             if name == "*" || entry.key == name {
-                if self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id) {
+                if self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id, depth + 1) {
                     return true;
                 }
             }
@@ -958,6 +971,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         if let Some(direction) = condition.direction.as_deref() {
             if direction != "c2s" {
@@ -977,7 +991,7 @@ impl Engine {
         let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) else {
             return false;
         };
-        self.eval_condition(child, ctx, Some(header_value), trace, rule_id)
+        self.eval_condition(child, ctx, Some(header_value), trace, rule_id, depth + 1)
     }
 
     fn eval_regex(&self, match_value: Option<&MatchValue>, value: Option<&str>) -> bool {
@@ -1018,13 +1032,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = sql_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1036,13 +1053,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = xss_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1054,13 +1074,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = cmd_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1072,13 +1095,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = path_traversal_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1094,13 +1120,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = ssrf_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1116,13 +1145,16 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(value) = value else {
             return false;
         };
         let score = nosql_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id),
+            Some(child) => {
+                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
+            }
             None => score > 0,
         }
     }
@@ -1133,6 +1165,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) else {
             return false;
@@ -1150,7 +1183,7 @@ impl Engine {
         };
         let values = parse_multipart_values(raw_bytes, &boundary);
         for part_value in &values {
-            if self.eval_condition(child, ctx, Some(part_value), trace, rule_id) {
+            if self.eval_condition(child, ctx, Some(part_value), trace, rule_id, depth + 1) {
                 return true;
             }
         }
@@ -1163,11 +1196,12 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) else {
             return false;
         };
-        self.process_track_condition(child, ctx, Vec::new(), trace, rule_id)
+        self.process_track_condition(child, ctx, Vec::new(), trace, rule_id, depth + 1)
     }
 
     fn eval_extract_argument(
@@ -1176,6 +1210,7 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let selector = condition.selector.as_deref();
         let extracted = select_argument_values(self, selector, ctx);
@@ -1183,7 +1218,9 @@ impl Engine {
             return false;
         }
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => self.process_track_condition(child, ctx, extracted, trace, rule_id),
+            Some(child) => {
+                self.process_track_condition(child, ctx, extracted, trace, rule_id, depth + 1)
+            }
             None => true,
         }
     }
@@ -1196,6 +1233,7 @@ impl Engine {
         values: &[String],
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let timeframe = condition.timeframe.unwrap_or(60);
         let trace_label = "unique_count";
@@ -1219,7 +1257,14 @@ impl Engine {
 
         if let Some(mv) = condition.match_value.as_ref() {
             if let Some(child) = mv.as_cond() {
-                return self.eval_condition(child, ctx, Some(&unique_count.to_string()), trace, rule_id);
+                return self.eval_condition(
+                    child,
+                    ctx,
+                    Some(&unique_count.to_string()),
+                    trace,
+                    rule_id,
+                    depth + 1,
+                );
             }
             if let Some(num) = mv.as_num() {
                 return unique_count as f64 >= num;
@@ -1239,12 +1284,13 @@ impl Engine {
         ctx: &EvalContext,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         let timeframe = condition.timeframe.unwrap_or(60);
         let trace_label = "count";
 
         if let Some(child) = condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            if !self.eval_condition(child, ctx, None, trace, rule_id) {
+            if !self.eval_condition(child, ctx, None, trace, rule_id, depth + 1) {
                 return false;
             }
         }
@@ -1265,6 +1311,7 @@ impl Engine {
         values: Vec<String>,
         trace: &mut TraceState,
         rule_id: u32,
+        depth: u32,
     ) -> bool {
         match condition.kind.as_str() {
             "extract_argument" => {
@@ -1274,7 +1321,9 @@ impl Engine {
                     return false;
                 }
                 match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-                    Some(child) => self.process_track_condition(child, ctx, extracted, trace, rule_id),
+                    Some(child) => {
+                        self.process_track_condition(child, ctx, extracted, trace, rule_id, depth + 1)
+                    }
                     None => {
                         let mut store = self.store.write();
                         store.record_unique_values(ctx.ip, "extract", &extracted, 60);
@@ -1282,11 +1331,13 @@ impl Engine {
                     }
                 }
             }
-            "unique_count" => self.eval_unique_count(condition, ctx, None, &values, trace, rule_id),
-            "count" => self.eval_count(condition, ctx, trace, rule_id),
+            "unique_count" => {
+                self.eval_unique_count(condition, ctx, None, &values, trace, rule_id, depth + 1)
+            }
+            "count" => self.eval_count(condition, ctx, trace, rule_id, depth + 1),
             _ => {
                 let candidate = values.first().map(|s| s.as_str());
-                self.eval_condition(condition, ctx, candidate, trace, rule_id)
+                self.eval_condition(condition, ctx, candidate, trace, rule_id, depth + 1)
             }
         }
     }

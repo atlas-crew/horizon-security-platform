@@ -2,13 +2,86 @@
 //!
 //! Implements progressive delay calculation and state tracking for slow-drip defense.
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use tokio::sync::Semaphore;
+use parking_lot::Mutex;
 
 use dashmap::DashMap;
+
+// ============================================================================
+// LRU Tracker (O(1) amortized eviction)
+// ============================================================================
+
+/// Entry in the LRU queue with generation tracking.
+#[derive(Debug, Clone)]
+struct LruEntry {
+    /// The IP address
+    key: String,
+    /// Generation number for this entry
+    generation: u64,
+}
+
+/// Thread-safe LRU tracker using a generation-based queue.
+struct LruTracker {
+    /// FIFO queue of (key, generation) pairs
+    queue: VecDeque<LruEntry>,
+    /// Current generation for each key
+    generations: HashMap<String, u64>,
+    /// Counter for assigning unique generations
+    next_generation: u64,
+}
+
+impl LruTracker {
+    fn new(capacity: usize) -> Self {
+        Self {
+            queue: VecDeque::with_capacity(capacity),
+            generations: HashMap::with_capacity(capacity),
+            next_generation: 0,
+        }
+    }
+
+    /// Touch a key, marking it as recently used.
+    fn touch(&mut self, key: &str) -> bool {
+        let generation = self.next_generation;
+        self.next_generation = self.next_generation.wrapping_add(1);
+
+        let is_new = !self.generations.contains_key(key);
+        self.generations.insert(key.to_string(), generation);
+        self.queue.push_back(LruEntry {
+            key: key.to_string(),
+            generation,
+        });
+
+        is_new
+    }
+
+    /// Evict the oldest key that is still valid.
+    fn evict_oldest(&mut self) -> Option<String> {
+        while let Some(entry) = self.queue.pop_front() {
+            if let Some(&current_gen) = self.generations.get(&entry.key) {
+                if current_gen == entry.generation {
+                    self.generations.remove(&entry.key);
+                    return Some(entry.key);
+                }
+            }
+        }
+        None
+    }
+
+    fn remove(&mut self, key: &str) {
+        self.generations.remove(key);
+    }
+
+    fn clear(&mut self) {
+        self.queue.clear();
+        self.generations.clear();
+        self.next_generation = 0;
+    }
+}
 
 /// Configuration for tarpit behavior.
 #[derive(Debug, Clone, Deserialize)]
@@ -126,6 +199,8 @@ pub struct TarpitManager {
     states: DashMap<String, TarpitState>,
     /// Configuration.
     config: TarpitConfig,
+    /// LRU tracker for O(1) eviction.
+    lru: Mutex<LruTracker>,
     /// Total states created (for metrics).
     total_created: AtomicU64,
     /// Total states evicted (for metrics).
@@ -160,6 +235,7 @@ impl TarpitManager {
 
         Self {
             states: DashMap::with_capacity(config.max_states),
+            lru: Mutex::new(LruTracker::new(config.max_states)),
             delay_semaphore: semaphore,
             rejected_tarpits: AtomicU64::new(0),
             config,
@@ -239,6 +315,9 @@ impl TarpitManager {
 
         // Check capacity and evict if needed
         self.maybe_evict();
+
+        // Touch LRU
+        self.lru.lock().touch(ip);
 
         // Get or create state
         let mut entry = self.states.entry(ip.to_string()).or_insert_with(|| {
@@ -431,18 +510,8 @@ impl TarpitManager {
             return;
         }
 
-        // Find oldest state by last_tarpit_at
-        let mut oldest_ip: Option<String> = None;
-        let mut oldest_time = u64::MAX;
-
-        for entry in self.states.iter() {
-            if entry.value().last_tarpit_at < oldest_time {
-                oldest_time = entry.value().last_tarpit_at;
-                oldest_ip = Some(entry.key().clone());
-            }
-        }
-
-        if let Some(ip) = oldest_ip {
+        // Use LRU tracker for O(1) eviction
+        if let Some(ip) = self.lru.lock().evict_oldest() {
             if self.states.remove(&ip).is_some() {
                 self.total_evicted.fetch_add(1, Ordering::Relaxed);
             }

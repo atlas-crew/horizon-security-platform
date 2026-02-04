@@ -233,7 +233,19 @@ export class Aggregator {
       } else {
         // Prepend failed batch to current queues for retry
         // Signals that arrived during flush are already in this.signalBatch/retryQueue
-        this.retryQueue = [...batchSnapshot, ...retrySnapshot, ...this.retryQueue];
+        const combined = [...batchSnapshot, ...retrySnapshot, ...this.retryQueue];
+        
+        // Enforce memory bounds during restoration
+        if (combined.length > this.config.maxQueueSize) {
+          const dropCount = combined.length - this.config.maxQueueSize;
+          this.logger.warn(
+            { dropCount, maxSize: this.config.maxQueueSize },
+            'Max queue size exceeded during batch restoration, dropping oldest signals'
+          );
+          this.retryQueue = combined.slice(dropCount);
+        } else {
+          this.retryQueue = combined;
+        }
       }
     } finally {
       this.isFlushing = false;

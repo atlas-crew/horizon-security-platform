@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::System;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -22,6 +22,25 @@ use super::types::{
     AuthPayload, ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, ThreatSignal,
 };
 use crate::config_manager::ConfigManager;
+use crate::utils::circuit_breaker::CircuitBreaker;
+use async_trait::async_trait;
+
+/// SignalSink - trait for targets that can receive threat signals.
+#[async_trait]
+pub trait SignalSink: Send + Sync {
+    async fn report_signal(&self, signal: ThreatSignal) -> Result<(), String>;
+}
+
+#[async_trait]
+impl SignalSink for HorizonClient {
+    async fn report_signal(&self, signal: ThreatSignal) -> Result<(), String> {
+        if !self.circuit_breaker().allow_request().await {
+            return Err("Circuit breaker open".to_string());
+        }
+        self.report_signal(signal);
+        Ok(())
+    }
+}
 
 /// Metrics provider interface for heartbeat data.
 pub trait MetricsProvider: Send + Sync {
@@ -114,15 +133,17 @@ pub struct HorizonClient {
     metrics_provider: Arc<dyn MetricsProvider>,
     signal_tx: Option<mpsc::Sender<ThreatSignal>>,
     signal_retry: Arc<Mutex<VecDeque<ThreatSignal>>>,
-    shutdown_tx: Option<mpsc::Sender<()>>,
+    shutdown_tx: Option<broadcast::Sender<()>>,
     tenant_id: Arc<RwLock<Option<String>>>,
     capabilities: Arc<RwLock<Vec<String>>>,
     config_manager: Option<Arc<ConfigManager>>,
+    circuit_breaker: Arc<CircuitBreaker>,
 }
 
 impl HorizonClient {
     /// Create a new Horizon client.
     pub fn new(config: HorizonConfig) -> Self {
+        let circuit_breaker = Arc::new(CircuitBreaker::new(5, Duration::from_secs(30)));
         Self {
             config,
             state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
@@ -144,6 +165,7 @@ impl HorizonClient {
             tenant_id: Arc::new(RwLock::new(None)),
             capabilities: Arc::new(RwLock::new(Vec::new())),
             config_manager: None,
+            circuit_breaker,
         }
     }
 
@@ -174,10 +196,10 @@ impl HorizonClient {
 
         // Create channels
         let (signal_tx, signal_rx) = mpsc::channel::<ThreatSignal>(self.config.max_queued_signals);
-        let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+        let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
 
         self.signal_tx = Some(signal_tx.clone());
-        self.shutdown_tx = Some(shutdown_tx);
+        self.shutdown_tx = Some(shutdown_tx.clone());
 
         // Spawn connection task
         let config = self.config.clone();
@@ -188,10 +210,12 @@ impl HorizonClient {
         let tenant_id = Arc::clone(&self.tenant_id);
         let capabilities = Arc::clone(&self.capabilities);
         let config_manager = self.config_manager.clone();
+        let circuit_breaker = Arc::clone(&self.circuit_breaker);
         let retry_queue = Arc::clone(&self.signal_retry);
         let retry_stats = Arc::clone(&self.stats);
         let retry_tx = signal_tx.clone();
         let retry_limit = self.config.max_queued_signals;
+        let shutdown_rx_conn = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
             connection_loop(
@@ -201,46 +225,52 @@ impl HorizonClient {
                 stats,
                 metrics_provider,
                 signal_rx,
-                shutdown_rx,
+                shutdown_rx_conn,
                 tenant_id,
                 capabilities,
                 config_manager,
+                circuit_breaker,
             )
             .await;
         });
 
+        let mut shutdown_rx_retry = shutdown_tx.subscribe();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(250));
             loop {
-                interval.tick().await;
-                let mut queue = retry_queue.lock();
-                if queue.is_empty() {
-                    continue;
-                }
-                while let Some(signal) = queue.pop_front() {
-                    match retry_tx.try_send(signal) {
-                        Ok(()) => {
-                            retry_stats.signals_sent.fetch_add(1, Ordering::Relaxed);
+                tokio::select! {
+                    _ = interval.tick() => {
+                        let mut queue = retry_queue.lock();
+                        if queue.is_empty() {
+                            continue;
                         }
-                        Err(TrySendError::Full(signal)) => {
-                            queue.push_front(signal);
-                            break;
+                        while let Some(signal) = queue.pop_front() {
+                            match retry_tx.try_send(signal) {
+                                Ok(()) => {
+                                    retry_stats.signals_sent.fetch_add(1, Ordering::Relaxed);
+                                }
+                                Err(TrySendError::Full(signal)) => {
+                                    queue.push_front(signal);
+                                    break;
+                                }
+                                Err(TrySendError::Closed(_)) => {
+                                    retry_stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
+                                    queue.clear();
+                                    break;
+                                }
+                            }
                         }
-                        Err(TrySendError::Closed(_)) => {
-                            retry_stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
-                            queue.clear();
-                            break;
+                        if queue.len() > retry_limit {
+                            let overflow = queue.len() - retry_limit;
+                            for _ in 0..overflow {
+                                queue.pop_front();
+                            }
+                            retry_stats
+                                .signals_dropped
+                                .fetch_add(overflow as u64, Ordering::Relaxed);
                         }
                     }
-                }
-                if queue.len() > retry_limit {
-                    let overflow = queue.len() - retry_limit;
-                    for _ in 0..overflow {
-                        queue.pop_front();
-                    }
-                    retry_stats
-                        .signals_dropped
-                        .fetch_add(overflow as u64, Ordering::Relaxed);
+                    _ = shutdown_rx_retry.recv() => break,
                 }
             }
         });
@@ -251,7 +281,7 @@ impl HorizonClient {
     /// Stop the client.
     pub async fn stop(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(()).await;
+            let _ = tx.send(());
         }
         *self.state.write() = ConnectionState::Disconnected;
     }
@@ -299,6 +329,21 @@ impl HorizonClient {
         self.blocklist.is_fingerprint_blocked(fingerprint)
     }
 
+    /// Check if an IP or fingerprint is blocked.
+    pub fn is_blocked(&self, ip: Option<&str>, fingerprint: Option<&str>) -> bool {
+        if let Some(ip) = ip {
+            if self.is_ip_blocked(ip) {
+                return true;
+            }
+        }
+        if let Some(fp) = fingerprint {
+            if self.is_fingerprint_blocked(fp) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Get the current connection state.
     pub async fn connection_state(&self) -> ConnectionState {
         *self.state.read()
@@ -324,6 +369,11 @@ impl HorizonClient {
         ClientStats::from(self.stats.as_ref())
     }
 
+    /// Get the circuit breaker.
+    pub fn circuit_breaker(&self) -> Arc<CircuitBreaker> {
+        Arc::clone(&self.circuit_breaker)
+    }
+
     /// Get the tenant ID (if authenticated).
     pub async fn tenant_id(&self) -> Option<String> {
         self.tenant_id.read().clone()
@@ -343,10 +393,11 @@ async fn connection_loop(
     stats: Arc<InternalStats>,
     metrics_provider: Arc<dyn MetricsProvider>,
     mut signal_rx: mpsc::Receiver<ThreatSignal>,
-    mut shutdown_rx: mpsc::Receiver<()>,
+    mut shutdown_rx: broadcast::Receiver<()>,
     tenant_id: Arc<RwLock<Option<String>>>,
     capabilities: Arc<RwLock<Vec<String>>>,
     config_manager: Option<Arc<ConfigManager>>,
+    circuit_breaker: Arc<CircuitBreaker>,
 ) {
     let mut reconnect_delay = config.reconnect_delay_ms;
     let mut attempt = 0u32;
@@ -357,7 +408,7 @@ async fn connection_loop(
 
     loop {
         // Check for shutdown
-        if shutdown_rx.try_recv().is_ok() {
+        if let Ok(()) | Err(broadcast::error::TryRecvError::Closed) = shutdown_rx.try_recv() {
             info!("Horizon client shutdown requested");
             *state.write() = ConnectionState::Disconnected;
             return;
@@ -407,6 +458,7 @@ async fn connection_loop(
             &config_manager,
             &mut pending_signals,
             &mut inflight_signals,
+            &circuit_breaker,
         )
         .await
         {
@@ -507,12 +559,13 @@ async fn connect_and_run(
     stats: &Arc<InternalStats>,
     metrics_provider: &Arc<dyn MetricsProvider>,
     signal_rx: &mut mpsc::Receiver<ThreatSignal>,
-    shutdown_rx: &mut mpsc::Receiver<()>,
+    shutdown_rx: &mut broadcast::Receiver<()>,
     tenant_id: &Arc<RwLock<Option<String>>>,
     capabilities: &Arc<RwLock<Vec<String>>>,
     config_manager: &Option<Arc<ConfigManager>>,
     pending_signals: &mut VecDeque<ThreatSignal>,
     inflight_signals: &mut VecDeque<ThreatSignal>,
+    circuit_breaker: &Arc<CircuitBreaker>,
 ) -> ConnectionResult {
     let mut had_connection = false;
 
@@ -521,6 +574,7 @@ async fn connect_and_run(
         Ok((stream, _)) => stream,
         Err(e) => {
             error!("WebSocket connection failed: {}", e);
+            circuit_breaker.record_failure().await;
             return ConnectionResult::Disconnected { had_connection };
         }
     };
@@ -558,6 +612,7 @@ async fn connect_and_run(
                     capabilities: caps,
                 }) => {
                     info!("Authenticated with Hub (tenant: {})", tid);
+                    circuit_breaker.record_success().await;
                     *tenant_id.write() = Some(tid);
                     *capabilities.write() = caps;
                     *state.write() = ConnectionState::Connected;
@@ -576,12 +631,14 @@ async fn connect_and_run(
                 }
                 _ => {
                     error!("Unexpected auth response");
+                    circuit_breaker.record_failure().await;
                     return ConnectionResult::Disconnected { had_connection };
                 }
             }
         }
         _ => {
             error!("Auth timeout or error");
+            circuit_breaker.record_failure().await;
             return ConnectionResult::Disconnected { had_connection };
         }
     }
@@ -596,6 +653,7 @@ async fn connect_and_run(
         signal_batch.extend(pending_signals.drain(..));
         if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
             error!("Failed to send buffered signals: {}", e);
+            circuit_breaker.record_failure().await;
             stash_pending(pending_signals, &mut signal_batch);
             return ConnectionResult::Disconnected { had_connection };
         }
@@ -618,9 +676,11 @@ async fn connect_and_run(
                         if signal_batch.len() >= config.signal_batch_size {
                             if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
                                 error!("Failed to send batch: {}", e);
+                                circuit_breaker.record_failure().await;
                                 stash_pending(pending_signals, &mut signal_batch);
                                 return ConnectionResult::Disconnected { had_connection };
                             }
+                            circuit_breaker.record_success().await;
                         }
                     }
                     None => {
@@ -634,9 +694,11 @@ async fn connect_and_run(
                 if !signal_batch.is_empty() {
                     if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
                         error!("Failed to send batch: {}", e);
+                        circuit_breaker.record_failure().await;
                         stash_pending(pending_signals, &mut signal_batch);
                         return ConnectionResult::Disconnected { had_connection };
                     }
+                    circuit_breaker.record_success().await;
                 }
             }
 

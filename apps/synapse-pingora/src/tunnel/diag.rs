@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use sysinfo::System;
+use tokio::sync::broadcast;
 use tracing::warn;
 
 use crate::actor::ActorManager;
@@ -45,13 +46,21 @@ impl TunnelDiagService {
         }
     }
 
-    pub async fn run(self) {
+    pub async fn run(self, mut shutdown_rx: broadcast::Receiver<()>) {
         let mut rx = self.handle.subscribe_channel(TunnelChannel::Diag);
         loop {
-            match rx.recv().await {
-                Ok(envelope) => self.handle_message(envelope).await,
-                Err(err) => {
-                    warn!("Diag service channel closed: {}", err);
+            tokio::select! {
+                envelope = rx.recv() => {
+                    match envelope {
+                        Ok(envelope) => self.handle_message(envelope).await,
+                        Err(err) => {
+                            warn!("Diag service channel closed: {}", err);
+                            break;
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    tracing::debug!("Diag service shutdown signal received");
                     break;
                 }
             }

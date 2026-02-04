@@ -48,7 +48,7 @@ mod signal_buffer;
 mod types;
 
 pub use blocklist::{BlockType, BlocklistCache, BlocklistEntry, BlocklistUpdate};
-pub use client::{ClientStats, HorizonClient, MetricsProvider, NoopMetricsProvider};
+pub use client::{ClientStats, HorizonClient, MetricsProvider, NoopMetricsProvider, SignalSink};
 pub use config::HorizonConfig;
 pub use error::HorizonError;
 pub use manager::{HorizonManager, HorizonStats, HorizonStatsSnapshot};

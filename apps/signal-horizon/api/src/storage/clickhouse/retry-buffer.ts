@@ -43,8 +43,16 @@ export const DEFAULT_RETRY_CONFIG: RetryBufferConfig = {
 /** Types of buffered items */
 type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction' | 'log';
 
+/** Union of all possible data types that can be buffered */
+type BufferedData =
+  | SignalEventRow[]
+  | CampaignHistoryRow
+  | BlocklistHistoryRow[]
+  | HttpTransactionRow[]
+  | LogEntryRow[];
+
 /** Buffered item with retry metadata */
-interface BufferedItem<T> {
+interface BufferedItem<T extends BufferedData> {
   type: BufferItemType;
   data: T;
   attempts: number;
@@ -78,8 +86,11 @@ export class ClickHouseRetryBuffer {
   private logger: Logger;
   private config: RetryBufferConfig;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private buffer: BufferedItem<any>[] = [];
+  /** 
+   * Internal buffer of items awaiting retry.
+   * Uses BufferedData union to maintain type safety across different event types.
+   */
+  private buffer: BufferedItem<BufferedData>[] = [];
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private isProcessing = false;
 
@@ -273,14 +284,22 @@ export class ClickHouseRetryBuffer {
         this.totalAttempts++;
 
         try {
-          await this.retryItem(item);
+          // Add timeout to individual retry to prevent stalling the background process
+          const retryTimeoutMs = 10000; // 10s timeout
+          await Promise.race([
+            this.retryItem(item),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error(`Retry timed out after ${retryTimeoutMs}ms`)), retryTimeoutMs)
+            )
+          ]);
+
           // Success - remove from buffer
           const index = this.buffer.indexOf(item);
           if (index > -1) {
             this.buffer.splice(index, 1);
           }
           this.successfulRetries++;
-        } catch {
+        } catch (error) {
           item.attempts++;
           this.failedRetries++;
 
@@ -292,7 +311,7 @@ export class ClickHouseRetryBuffer {
             }
             this.droppedItems++;
             this.logger.error(
-              { type: item.type, attempts: item.attempts },
+              { type: item.type, attempts: item.attempts, error },
               'Max retries exceeded, dropping item'
             );
           } else {
@@ -303,7 +322,7 @@ export class ClickHouseRetryBuffer {
             );
             item.nextRetryAt = now + delay;
             this.logger.debug(
-              { type: item.type, attempts: item.attempts, nextDelayMs: delay },
+              { type: item.type, attempts: item.attempts, nextDelayMs: delay, error },
               'Scheduled retry with backoff'
             );
           }
@@ -315,10 +334,10 @@ export class ClickHouseRetryBuffer {
   }
 
   /**
-   * Retry a single buffered item
+   * Retry a single buffered item.
+   * Dispatches to the appropriate ClickHouse service method based on item type.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async retryItem(item: BufferedItem<any>): Promise<void> {
+  private async retryItem(item: BufferedItem<BufferedData>): Promise<void> {
     switch (item.type) {
       case 'signal':
         await this.clickhouse.insertSignalEvents(item.data as SignalEventRow[]);

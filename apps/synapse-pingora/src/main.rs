@@ -4655,7 +4655,7 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        rt.block_on(build_crawler_detector(CrawlerConfig::default()))
+        rt.block_on(build_crawler_detector(config.crawler.clone()))
     };
     info!("CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
         synapse_pingora::crawler::KNOWN_CRAWLERS.len(),

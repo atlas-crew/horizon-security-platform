@@ -1,3 +1,27 @@
+/**
+ * In-Memory Express Test Wrapper (labs-1s72)
+ *
+ * Rationale:
+ * This wrapper replaces 'supertest' for unit and integration testing of Express routes.
+ *
+ * Why not Supertest?
+ * 1. Performance: Supertest starts a real HTTP server on a random port for every test.
+ *    This adds significant overhead (100ms+ per test) and can exhaust ports in CI.
+ * 2. Reliability: Real network sockets are prone to flakes and isolation issues.
+ * 3. Timer Control: Supertest's asynchronous socket behavior conflicts with Vitest's
+ *    fake timers (vi.useFakeTimers()). test-request runs synchronously through the
+ *    Express middleware chain, allowing precise control over virtual time.
+ *
+ * When to use:
+ * - Use test-request for 90% of route/logic integration tests.
+ * - Use supertest/Playwright only for full-stack E2E tests requiring real TCP behavior.
+ *
+ * Implementation Details:
+ * - Directly invokes app.handle() using mocked HTTP primitives.
+ * - Simulates the full Express lifecycle without any network overhead.
+ * - Handles query parameter encoding via Express's native parser.
+ */
+
 import { EventEmitter } from 'node:events';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';

@@ -57,6 +57,8 @@ import { createHash } from 'node:crypto';
 import { jsonDepthLimit } from './middleware/json-depth.js';
 import { requestId } from './middleware/request-id.js';
 import { createTelemetryRouter } from './api/telemetry.js';
+import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
+import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -605,6 +607,10 @@ async function start() {
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
 
+  const authCoverageAggregator = new AuthCoverageAggregator();
+  app.use('/api/v1/auth-coverage', createAuthCoverageRoutes(authCoverageAggregator));
+  logger.info('Auth coverage routes mounted at /api/v1/auth-coverage');
+
   // Initialize core services (pass ClickHouse for dual-write)
   broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
@@ -625,7 +631,7 @@ async function start() {
     path: config.websocket.sensorPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxSensorConnections,
-  });
+  }, authCoverageAggregator);
 
   dashboardGateway = new DashboardGateway(prisma, logger, {
     path: config.websocket.dashboardPath,

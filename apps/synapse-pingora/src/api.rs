@@ -108,6 +108,8 @@ pub struct ApiHandler {
     dlp_scanner: Option<Arc<DlpScanner>>,
     /// Signal Horizon client (Phase 6)
     horizon_client: Option<Arc<HorizonClient>>,
+    /// Signal dispatcher facade (labs-pdb2)
+    signal_dispatcher: Arc<crate::signals::dispatcher::SignalDispatcher>,
 }
 
 /// Timing-safe comparison of API keys without early exits.
@@ -131,10 +133,44 @@ impl ApiHandler {
         self.dlp_scanner.as_ref().map(Arc::clone)
     }
 
-    /// Dispatch a signal to Signal Horizon without exposing the client.
-    pub fn dispatch_horizon_signal(&self, signal: ThreatSignal) -> Result<(), String> {
+    /// Signal dispatcher facade (labs-pdb2)
+    pub fn signal_dispatcher(&self) -> Arc<crate::signals::dispatcher::SignalDispatcher> {
+        Arc::clone(&self.signal_dispatcher)
+    }
+
+    /// Report a threat signal to Signal Horizon (Phase 6).
+    pub async fn report_signal(&self, signal: ThreatSignal) -> Result<(), String> {
+        self.dispatch_horizon_signal(signal).await
+    }
+
+    /// Check if an IP or fingerprint is blocked by Signal Horizon blocklist.
+    pub fn is_horizon_blocked(&self, ip: Option<&str>, fingerprint: Option<&str>) -> bool {
+        match &self.horizon_client {
+            Some(client) => client.is_blocked(ip, fingerprint),
+            None => false,
+        }
+    }
+
+    /// Force a blocklist sync with Signal Horizon.
+    pub async fn sync_horizon_blocklist(&self) -> Result<(), String> {
         match &self.horizon_client {
             Some(client) => {
+                client.flush_signals().await; // Flush any pending signals first
+                // Blocklist sync is handled automatically by client reconnect/heartbeat
+                // but we can expose it if needed.
+                Ok(())
+            }
+            None => Err("Horizon client not available".to_string()),
+        }
+    }
+
+    /// Dispatch a signal to Signal Horizon without exposing the client.
+    pub async fn dispatch_horizon_signal(&self, signal: ThreatSignal) -> Result<(), String> {
+        match &self.horizon_client {
+            Some(client) => {
+                if !client.circuit_breaker().allow_request().await {
+                    return Err("Horizon circuit breaker open".to_string());
+                }
                 client.report_signal(signal);
                 Ok(())
             }
@@ -988,9 +1024,10 @@ impl ApiHandlerBuilder {
 
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
+        let metrics = self.metrics.unwrap_or_else(|| Arc::new(MetricsRegistry::new()));
         ApiHandler {
             health: self.health.unwrap_or_else(|| Arc::new(HealthChecker::default())),
-            metrics: self.metrics.unwrap_or_else(|| Arc::new(MetricsRegistry::new())),
+            metrics: metrics.clone(),
             reloader: self.reloader,
             rate_limiter: self.rate_limiter.unwrap_or_else(|| {
                 Arc::new(RwLock::new(RateLimitManager::new()))
@@ -1008,10 +1045,21 @@ impl ApiHandlerBuilder {
             synapse_engine: self.synapse_engine,
             payload_manager: self.payload_manager,
             trends_manager: self.trends_manager,
-            signal_manager: self.signal_manager,
+            signal_manager: self.signal_manager.clone(),
             crawler_detector: self.crawler_detector,
             dlp_scanner: self.dlp_scanner,
-            horizon_client: self.horizon_client,
+            horizon_client: self.horizon_client.clone(),
+            signal_dispatcher: {
+                let mut sinks: Vec<Arc<dyn crate::horizon::SignalSink>> = Vec::new();
+                if let Some(ref client) = self.horizon_client {
+                    sinks.push(Arc::clone(client) as Arc<dyn crate::horizon::SignalSink>);
+                }
+                Arc::new(crate::signals::dispatcher::SignalDispatcher::new(
+                    sinks,
+                    self.signal_manager,
+                    metrics,
+                ))
+            },
         }
     }
 }

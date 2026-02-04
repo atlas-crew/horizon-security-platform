@@ -16,7 +16,7 @@ export const SensorStatusBadge = memo(function SensorStatusBadge({
   status,
   className = '',
 }: SensorStatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? statusConfig.offline;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border ${config.color} ${className}`}>
       <span>{config.icon}</span>

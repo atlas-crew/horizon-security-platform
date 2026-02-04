@@ -217,6 +217,15 @@ export type ValidatedSensorAuthPayload = z.infer<typeof SensorAuthPayloadSchema>
 export type ValidatedSensorHeartbeatPayload = z.infer<typeof SensorHeartbeatPayloadSchema>;
 export type ValidatedSensorCommandAckPayload = z.infer<typeof SensorCommandAckPayloadSchema>;
 
+import {
+  AuthCoverageSummarySchema,
+} from './auth-coverage.js';
+
+// =============================================================================
+// Fingerprint Validation (labs-764)
+// =============================================================================
+// ... (rest of imports)
+// ... (lines 255-285)
 // Discriminated union for all sensor messages
 export const SensorMessageSchema = z.discriminatedUnion('type', [
   z.object({
@@ -244,6 +253,10 @@ export const SensorMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('blocklist-sync'),
+  }),
+  z.object({
+    type: z.literal('auth-coverage-summary'),
+    payload: AuthCoverageSummarySchema,
   }),
 ]);
 

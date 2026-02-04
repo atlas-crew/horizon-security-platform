@@ -14,6 +14,22 @@ import type { Rule, RolloutConfig } from './types.js';
 // Test tenant ID for all tests
 const TEST_TENANT_ID = 'test-tenant-123';
 
+// Timer constants for tests (labs-pg4p)
+/** Time allowed for async initialization (DB queries, microtask flush) before checking side effects */
+const ASYNC_INIT_DELAY_MS = 10;
+/** Default interval for polling async status in test loops */
+const TEST_POLL_INTERVAL_MS = 500;
+/** Short cleanup delay for testing */
+const TEST_CLEANUP_DELAY_MS = 500;
+/** Timeout for staging phase in blue/green tests */
+const TEST_STAGING_TIMEOUT_MS = 5000;
+/** Timeout for switch phase in blue/green tests */
+const TEST_SWITCH_TIMEOUT_MS = 3000;
+/** Default delay between canary stages in implementation (60s) */
+const DEFAULT_CANARY_STAGE_DELAY_MS = 60000;
+/** Short delay for fast canary tests */
+const SHORT_CANARY_DELAY_MS = 1;
+
 // Helper to create sensor ownership records for validation
 const createSensorOwnership = (sensorIds: string[], tenantId: string = TEST_TENANT_ID) =>
   sensorIds.map((id) => ({ id, tenantId }));
@@ -617,8 +633,8 @@ describe('RuleDistributor', () => {
 
       const config: RolloutConfig = {
         strategy: 'blue_green',
-        stagingTimeout: 5000,
-        switchTimeout: 3000,
+        stagingTimeout: TEST_STAGING_TIMEOUT_MS,
+        switchTimeout: TEST_SWITCH_TIMEOUT_MS,
         requireAllSensorsStaged: false,
         minStagedPercentage: 0,
       };
@@ -626,13 +642,12 @@ describe('RuleDistributor', () => {
       // Start deployment - don't await, we need to advance timers manually
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance time in small increments to allow async operations to run
-      // This is needed because the deployment runs async and we need to give
-      // the event loop a chance to process the staging commands
-      for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
-        await Promise.resolve(); // Yield to event loop
-      }
+      // Advance time to allow async initialization and sendCommand calls
+      // Using advanceUntil is more robust than a fixed loop (labs-t1xj)
+      await advanceUntil(
+        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
+      );
 
       // Verify staging command was sent with activate: false
       expect(mockFleetCommander.sendCommand).toHaveBeenCalled();
@@ -656,7 +671,7 @@ describe('RuleDistributor', () => {
 
       // Advance through the remaining poll loops
       for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(500);
+        await vi.advanceTimersByTimeAsync(TEST_POLL_INTERVAL_MS);
         await Promise.resolve();
       }
 
@@ -671,8 +686,8 @@ describe('RuleDistributor', () => {
 
       const config: RolloutConfig = {
         strategy: 'blue_green',
-        stagingTimeout: 5000,  // Must be > 2000ms (sleep interval in staging loop)
-        switchTimeout: 3000,   // Must be > 1000ms (sleep interval in switch loop)
+        stagingTimeout: TEST_STAGING_TIMEOUT_MS,
+        switchTimeout: TEST_SWITCH_TIMEOUT_MS,
         requireAllSensorsStaged: false,
         minStagedPercentage: 0,
       };
@@ -681,10 +696,10 @@ describe('RuleDistributor', () => {
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       // Advance time to allow staging commands to be sent
-      for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
-        await Promise.resolve();
-      }
+      await advanceUntil(
+        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
+      );
 
       // Simulate staging complete by marking sensors as staged
       const deployments = distributor.listActiveDeployments();
@@ -694,9 +709,9 @@ describe('RuleDistributor', () => {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through staging poll loop (2000ms interval) to detect staged sensors
+      // Advance through staging poll loop (2000ms interval in implementation)
       for (let i = 0; i < 6; i++) {
-        await vi.advanceTimersByTimeAsync(500);
+        await vi.advanceTimersByTimeAsync(TEST_POLL_INTERVAL_MS);
         await Promise.resolve();
       }
 
@@ -705,9 +720,9 @@ describe('RuleDistributor', () => {
         distributor.updateSensorActivationStatus(deploymentId, sensorId, true);
       }
 
-      // Advance through switch poll loop (1000ms interval)
+      // Advance through switch poll loop (1000ms interval in implementation)
       for (let i = 0; i < 4; i++) {
-        await vi.advanceTimersByTimeAsync(500);
+        await vi.advanceTimersByTimeAsync(TEST_POLL_INTERVAL_MS);
         await Promise.resolve();
       }
 
@@ -1279,14 +1294,14 @@ describe('RuleDistributor', () => {
       const config: RolloutConfig = {
         strategy: 'canary',
         canaryPercentages: [10, 50, 100],
-        delayBetweenStages: 1, // Very short delay for testing
+        delayBetweenStages: SHORT_CANARY_DELAY_MS, // Very short delay for testing
       };
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       // Wait for all stages - advance incrementally to ensure timers fire
       for (let i = 0; i < 50; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve(); // Allow microtasks to complete
       }
       const result = await resultPromise;
@@ -1309,13 +1324,13 @@ describe('RuleDistributor', () => {
 
       const config: RolloutConfig = {
         strategy: 'canary',
-        delayBetweenStages: 1, // Very short delay
+        delayBetweenStages: SHORT_CANARY_DELAY_MS, // Very short delay
       };
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       for (let i = 0; i < 50; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
       const result = await resultPromise;
@@ -1345,7 +1360,7 @@ describe('RuleDistributor', () => {
 
       // Wait for canary stages to complete - advance incrementally
       for (let i = 0; i < 30; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
       await resultPromise;
@@ -1364,13 +1379,13 @@ describe('RuleDistributor', () => {
       const config: RolloutConfig = {
         strategy: 'canary',
         canaryPercentages: [10, 50, 100],
-        delayBetweenStages: 1, // Very short delay
+        delayBetweenStages: SHORT_CANARY_DELAY_MS, // Very short delay
       };
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       for (let i = 0; i < 50; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
       await resultPromise;
@@ -1397,13 +1412,13 @@ describe('RuleDistributor', () => {
       const config: RolloutConfig = {
         strategy: 'canary',
         canaryPercentages: [50, 100],
-        delayBetweenStages: 1, // Very short delay
+        delayBetweenStages: SHORT_CANARY_DELAY_MS, // Very short delay
       };
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       for (let i = 0; i < 20; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
       const result = await resultPromise;
@@ -2317,11 +2332,16 @@ describe('RuleDistributor', () => {
       const sensorIds = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
 
       // Note: distributeRules uses the default 60000ms delay between stages
-      // So we need to advance timers by at least 2 x 60000ms for 3 stages
       const resultPromise = distributor.distributeRules(TEST_TENANT_ID, ruleIds, sensorIds, {
         strategy: 'canary',
         canaryPercentage: 25,
       });
+
+      // Advance time to allow async initialization and the first logger call
+      await advanceUntil(
+        () => (mockLogger.info as any).mock.calls.find((c: any) => c[1] === 'Starting canary deployment'),
+        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'canary deployment initialization' }
+      );
 
       // Advance timer incrementally by large amounts for the default 60s delays
       // 3 stages means 2 delays of 60s each = 120s total, plus some buffer
@@ -2396,10 +2416,10 @@ describe('RuleDistributor', () => {
       distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       // Advance to allow staging commands to be sent
-      for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
-        await Promise.resolve();
-      }
+      await advanceUntil(
+        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
+      );
 
       const deployments = distributor.listActiveDeployments();
       expect(deployments.length).toBe(1);
@@ -2430,7 +2450,7 @@ describe('RuleDistributor', () => {
       distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
 
@@ -2463,7 +2483,7 @@ describe('RuleDistributor', () => {
       distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
         await Promise.resolve();
       }
 

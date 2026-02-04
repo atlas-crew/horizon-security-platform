@@ -1,9 +1,9 @@
 import express from 'express';
 import net from 'node:net';
 
-const originalListen = express.application.listen;
+const originalListen = express.application.listen as any;
 
-express.application.listen = function (...args: Parameters<typeof originalListen>) {
+(express.application.listen as any) = function (this: any, ...args: any[]) {
   if (args.length === 0) {
     return originalListen.apply(this, args);
   }
@@ -25,9 +25,9 @@ express.application.listen = function (...args: Parameters<typeof originalListen
   return originalListen.apply(this, args);
 };
 
-const originalServerListen = net.Server.prototype.listen;
+const originalServerListen = net.Server.prototype.listen as any;
 
-net.Server.prototype.listen = function (...args: Parameters<typeof originalServerListen>) {
+(net.Server.prototype.listen as any) = function (this: any, ...args: any[]) {
   if (typeof args[0] === 'number') {
     const port = args[0];
     const hostOrBacklog = args[1];

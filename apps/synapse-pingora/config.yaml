@@ -1,7 +1,7 @@
 # Synapse-Pingora Demo Configuration
 server:
-  listen: "0.0.0.0:6190"
-  admin_listen: "0.0.0.0:6191"
+  listen: "127.0.0.1:6190"
+  admin_listen: "127.0.0.1:6192"
   workers: 0
   waf_threshold: 75
   waf_enabled: true
@@ -31,7 +31,7 @@ detection:
   block_status: 403
 
 tls:
-  enabled: true
+  enabled: false
   cert_path: "certs/server.crt"
   key_path: "certs/server.key"
   min_version: "1.3"
@@ -75,3 +75,16 @@ dlp:
   scan_text_only: true
   max_body_inspection_bytes: 8192
   fast_mode: false
+
+crawler:
+  enabled: false
+  dns_cache_ttl_secs: 300
+  verification_cache_ttl_secs: 3600
+  max_cache_entries: 50000
+  dns_timeout_ms: 2000
+  max_concurrent_dns_lookups: 100
+  verify_legitimate_crawlers: false
+  block_bad_bots: false
+  dns_failure_policy: "apply_risk_penalty"
+  dns_failure_risk_penalty: 50
+  max_stats_entries: 1000

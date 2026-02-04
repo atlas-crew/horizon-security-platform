@@ -10,6 +10,7 @@ use super::config::HorizonConfig;
 use super::error::HorizonError;
 use super::types::{ConnectionState, ThreatSignal};
 use crate::config_manager::ConfigManager;
+use crate::utils::circuit_breaker::CircuitBreaker;
 
 /// Statistics for the Horizon integration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -194,6 +195,12 @@ impl HorizonManager {
     pub fn blocklist(&self) -> Arc<BlocklistCache> {
         let client = self.client.read();
         Arc::clone(client.blocklist())
+    }
+
+    /// Get the circuit breaker.
+    pub fn circuit_breaker(&self) -> Arc<CircuitBreaker> {
+        let client = self.client.read();
+        client.circuit_breaker()
     }
 
     /// Get statistics.

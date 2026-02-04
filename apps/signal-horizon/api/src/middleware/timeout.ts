@@ -11,6 +11,13 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 
 declare global {
+  /** 
+   * Extending Express Request interface to include timeout metadata.
+   * This allows downstream middleware and logging to access timeout context.
+   * 
+   * ESLint Override: Using namespace here is the standard pattern for 
+   * augmenting global Express types in a type-safe manner.
+   */
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {

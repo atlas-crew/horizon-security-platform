@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { useEffect, Suspense, useMemo, useState } from 'react';
+import { useEffect, Suspense, useMemo, useState, lazy } from 'react';
 import {
   LayoutDashboard,
   Target,
@@ -44,6 +44,7 @@ import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
+const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
 import { fleetRoutes } from './routes/fleet.routes';
@@ -61,6 +62,7 @@ const primaryNavItems = [
   { path: '/hunting', icon: Search, label: 'Threat Hunting' },
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
+  { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
   { path: '/warroom', icon: Users, label: 'War Room' },
 ];
 
@@ -405,6 +407,7 @@ function App() {
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
+                <Route path="/auth-coverage" element={<SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />

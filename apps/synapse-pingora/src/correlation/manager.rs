@@ -127,6 +127,8 @@ impl MitigationRateLimiter {
             .window_start
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        
+        // Double-check expiration under the lock to prevent multiple resets
         if start.elapsed() >= self.window_duration {
             *start = Instant::now();
             self.bans_in_window.store(0, Ordering::SeqCst);

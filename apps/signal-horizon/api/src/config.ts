@@ -5,6 +5,25 @@
 
 import { z } from 'zod';
 
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Normalizes environment variables to lowercase for case-insensitive matching.
+ * Used for enums like NODE_ENV, LOG_LEVEL, and boolean flags.
+ */
+const normalize = (val: unknown) => (typeof val === 'string' ? val.toLowerCase() : val);
+
+/**
+ * Parses a string value as a boolean (case-insensitive).
+ * Accepts: true, 1, yes, y, on
+ */
+const booleanString = (defaultValue: 'true' | 'false' = 'false') =>
+  z.preprocess(normalize, z.string())
+    .transform((val) => ['true', '1', 'yes', 'y', 'on'].includes(val))
+    .catch(defaultValue === 'true');
+
 /**
  * Helper to parse string to positive integer with range validation
  */
@@ -26,7 +45,7 @@ const portString = z.string()
 
 const envSchema = z.object({
   // Server
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.preprocess(normalize, z.enum(['development', 'production', 'test'])).default('development'),
   PORT: portString.catch(3100),
   HOST: z.string().default('0.0.0.0'),
 
@@ -57,7 +76,7 @@ const envSchema = z.object({
     .default('http://localhost:5173,http://localhost:4200,http://localhost:5180,http://127.0.0.1:5180'),
 
   // Logging
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  LOG_LEVEL: z.preprocess(normalize, z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])).default('info'),
 
   // Risk Server (upstream Synapse proxy)
   RISK_SERVER_URL: z.string().url().default('http://localhost:3000'),
@@ -69,20 +88,20 @@ const envSchema = z.object({
 
   // Sensor Bridge (bridges synapse-pingora to fleet management)
   // Requires SYNAPSE_DIRECT_URL to be set
-  SENSOR_BRIDGE_ENABLED: z.enum(['true', 'false']).default('false'),
+  SENSOR_BRIDGE_ENABLED: booleanString('false'),
   SENSOR_BRIDGE_API_KEY: z.string().optional(),
   SENSOR_BRIDGE_SENSOR_ID: z.string().default('synapse-pingora-1'),
   SENSOR_BRIDGE_SENSOR_NAME: z.string().default('Synapse Pingora WAF'),
   SENSOR_BRIDGE_HEARTBEAT_MS: positiveIntString(5000, 120000).catch(15000), // 5s - 2min
 
   // ClickHouse (optional - for historical data)
-  CLICKHOUSE_ENABLED: z.enum(['true', 'false']).default('false'),
+  CLICKHOUSE_ENABLED: booleanString('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
   CLICKHOUSE_HTTP_PORT: portString.catch(8123),
   CLICKHOUSE_DB: z.string().default('signal_horizon'),
   CLICKHOUSE_USER: z.string().default('default'),
   CLICKHOUSE_PASSWORD: z.string().default('clickhouse'),
-  CLICKHOUSE_COMPRESSION: z.enum(['true', 'false']).default('true'),
+  CLICKHOUSE_COMPRESSION: booleanString('true'),
   CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 100).catch(10),
 });
 
@@ -172,7 +191,7 @@ function loadConfig() {
 
     // Sensor Bridge (bridges synapse-pingora to fleet management)
     sensorBridge: {
-      enabled: env.SENSOR_BRIDGE_ENABLED === 'true' && !!env.SYNAPSE_DIRECT_URL,
+      enabled: env.SENSOR_BRIDGE_ENABLED && !!env.SYNAPSE_DIRECT_URL,
       apiKey: env.SENSOR_BRIDGE_API_KEY,
       sensorId: env.SENSOR_BRIDGE_SENSOR_ID,
       sensorName: env.SENSOR_BRIDGE_SENSOR_NAME,
@@ -181,13 +200,13 @@ function loadConfig() {
 
     // ClickHouse for historical data (optional)
     clickhouse: {
-      enabled: env.CLICKHOUSE_ENABLED === 'true',
+      enabled: env.CLICKHOUSE_ENABLED,
       host: env.CLICKHOUSE_HOST,
       port: env.CLICKHOUSE_HTTP_PORT, // Already parsed
       database: env.CLICKHOUSE_DB,
       username: env.CLICKHOUSE_USER,
       password: env.CLICKHOUSE_PASSWORD,
-      compression: env.CLICKHOUSE_COMPRESSION === 'true',
+      compression: env.CLICKHOUSE_COMPRESSION,
       maxOpenConnections: env.CLICKHOUSE_MAX_CONNECTIONS, // Already parsed
     },
   } as const;

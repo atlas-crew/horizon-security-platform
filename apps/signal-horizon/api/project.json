@@ -18,6 +18,7 @@
         "command": "tsup src/index.ts --format esm --dts",
         "cwd": "apps/signal-horizon/api"
       },
+      "dependsOn": ["db:generate"],
       "outputs": ["{projectRoot}/dist"]
     },
     "start": {

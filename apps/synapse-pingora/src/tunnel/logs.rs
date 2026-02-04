@@ -11,7 +11,7 @@ use std::sync::{Arc, Once, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Instant};
 use tracing::{debug, warn};
 
 use super::client::TunnelClientHandle;
@@ -309,17 +309,31 @@ impl TunnelLogService {
         }
     }
 
-    pub async fn run(self) {
+    pub async fn run(self, mut shutdown_rx: broadcast::Receiver<()>) {
         start_log_tailers();
         let mut rx = self.handle.subscribe_channel(TunnelChannel::Logs);
         loop {
-            match rx.recv().await {
-                Ok(envelope) => self.handle_message(envelope).await,
-                Err(err) => {
-                    warn!("Log service channel closed: {}", err);
+            tokio::select! {
+                message = rx.recv() => {
+                    match message {
+                        Ok(envelope) => self.handle_message(envelope).await,
+                        Err(err) => {
+                            warn!("Log service channel closed: {}", err);
+                            break;
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    debug!("Log service shutdown signal received");
                     break;
                 }
             }
+        }
+
+        // Stop all active log sessions
+        let session_ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
+        for id in session_ids {
+            self.stop_session(&id);
         }
     }
 
@@ -618,11 +632,17 @@ async fn tail_file(path: String, subsource: &'static str) -> Result<(), String> 
     let file = tokio::fs::File::open(&path)
         .await
         .map_err(|err| format!("open error: {}", err))?;
+    
+    // Get initial metadata to track rotation
+    let mut last_metadata = file.metadata().await.map_err(|e| e.to_string())?;
+    
     let mut reader = BufReader::new(file);
     reader
         .seek(std::io::SeekFrom::End(0))
         .await
         .map_err(|err| format!("seek error: {}", err))?;
+
+    let mut last_rotation_check = Instant::now();
 
     loop {
         let mut line = String::new();
@@ -632,6 +652,29 @@ async fn tail_file(path: String, subsource: &'static str) -> Result<(), String> 
             .map_err(|err| format!("read error: {}", err))?;
 
         if bytes == 0 {
+            // Periodically check for rotation (every 5 seconds or when idle)
+            if last_rotation_check.elapsed() > Duration::from_secs(5) {
+                if let Ok(current_metadata) = tokio::fs::metadata(&path).await {
+                    let rotated = if let (Some(old_ino), Some(new_ino)) = (get_inode(&last_metadata), get_inode(&current_metadata)) {
+                        old_ino != new_ino
+                    } else {
+                        // Fallback to size/mtime if inodes not available or comparable
+                        current_metadata.len() < last_metadata.len()
+                    };
+
+                    if rotated {
+                        debug!("Log file {} rotated, re-opening", path);
+                        let new_file = tokio::fs::File::open(&path)
+                            .await
+                            .map_err(|err| format!("re-open error: {}", err))?;
+                        last_metadata = new_file.metadata().await.map_err(|e| e.to_string())?;
+                        reader = BufReader::new(new_file);
+                        // Start reading from the beginning of the new file
+                    }
+                }
+                last_rotation_check = Instant::now();
+            }
+
             sleep(Duration::from_millis(250)).await;
             continue;
         }
@@ -649,6 +692,17 @@ async fn tail_file(path: String, subsource: &'static str) -> Result<(), String> 
         }));
         publish_log(entry);
     }
+}
+
+#[cfg(unix)]
+fn get_inode(metadata: &std::fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    Some(metadata.ino())
+}
+
+#[cfg(not(unix))]
+fn get_inode(_metadata: &std::fs::Metadata) -> Option<u64> {
+    None
 }
 
 fn infer_level(line: &str) -> &'static str {

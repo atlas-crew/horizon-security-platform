@@ -661,6 +661,7 @@ impl SchemaLearner {
             "",
             &mut result,
             schema.sample_count,
+            0, // Start at depth 0
         );
 
         result
@@ -674,7 +675,13 @@ impl SchemaLearner {
         prefix: &str,
         result: &mut ValidationResult,
         sample_count: u32,
+        depth: usize,
     ) {
+        // Protect against stack overflow from malicious deeply nested JSON
+        if depth >= self.config.max_nesting_depth {
+            return;
+        }
+
         let obj = match data.as_object() {
             Some(o) => o,
             None => return,
@@ -731,6 +738,7 @@ impl SchemaLearner {
                         &field_name,
                         result,
                         sample_count,
+                        depth + 1,
                     );
                 }
             }

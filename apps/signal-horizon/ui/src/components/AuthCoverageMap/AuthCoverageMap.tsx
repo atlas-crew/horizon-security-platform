@@ -5,6 +5,9 @@ import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
 import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
 
+const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+
 type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 type SortField = 'risk' | 'requests' | 'denial_rate' | 'endpoint';
 
@@ -14,7 +17,7 @@ interface AuthCoverageResponse {
 }
 
 async function fetchAuthCoverageSummary(): Promise<CoverageMapSummary> {
-  const res = await fetch('/api/v1/auth-coverage/summary');
+  const res = await fetch('/api/v1/auth-coverage/summary', { headers: authHeaders });
   if (!res.ok) throw new Error('Failed to fetch summary');
   return res.json();
 }
@@ -26,8 +29,8 @@ async function fetchAuthCoverage(params: {
   const searchParams = new URLSearchParams();
   if (params.risk) searchParams.set('risk', params.risk);
   searchParams.set('sort', params.sort);
-  
-  const res = await fetch(`/api/v1/auth-coverage?${searchParams}`);
+
+  const res = await fetch(`/api/v1/auth-coverage?${searchParams}`, { headers: authHeaders });
   if (!res.ok) throw new Error('Failed to fetch endpoints');
   return res.json();
 }

@@ -89,6 +89,46 @@ impl TunnelRouter {
     }
 }
 
+/// Handle for sending/receiving tunnel messages from other services.
+#[derive(Clone)]
+pub struct TunnelClientHandle {
+    sender: mpsc::Sender<serde_json::Value>,
+    router: Arc<TunnelRouter>,
+}
+
+impl TunnelClientHandle {
+    /// Subscribe to a channel's incoming messages.
+    pub fn subscribe_channel(&self, channel: TunnelChannel) -> broadcast::Receiver<TunnelEnvelope> {
+        self.router.subscribe_channel(channel)
+    }
+
+    /// Subscribe to legacy tunnel messages.
+    pub fn subscribe_legacy(&self) -> broadcast::Receiver<LegacyTunnelMessage> {
+        self.router.subscribe_legacy()
+    }
+
+    /// Send a JSON message to the hub.
+    pub async fn send_json(&self, value: serde_json::Value) -> Result<(), TunnelError> {
+        self.sender
+            .send(value)
+            .await
+            .map_err(|e| TunnelError::SendFailed(e.to_string()))
+    }
+
+    /// Send a JSON message to the hub from a blocking context.
+    pub fn send_json_blocking(&self, value: serde_json::Value) -> Result<(), TunnelError> {
+        self.sender
+            .blocking_send(value)
+            .map_err(|e| TunnelError::SendFailed(e.to_string()))
+    }
+
+    /// Send a message to the hub with automatic serialization.
+    pub async fn send<T: Serialize>(&self, message: T) -> Result<(), TunnelError> {
+        let value = serde_json::to_value(message)?;
+        self.send_json(value).await
+    }
+}
+
 /// WebSocket client for Signal Horizon tunnel.
 pub struct TunnelClient {
     config: TunnelConfig,
@@ -125,6 +165,14 @@ impl TunnelClient {
     /// Get client stats.
     pub fn stats(&self) -> TunnelClientStats {
         TunnelClientStats::from(self.stats.as_ref())
+    }
+
+    /// Create a handle for sending/receiving messages.
+    pub fn handle(&self) -> Option<TunnelClientHandle> {
+        self.outbound_tx.as_ref().map(|sender| TunnelClientHandle {
+            sender: sender.clone(),
+            router: Arc::clone(&self.router),
+        })
     }
 
     /// Subscribe to a channel's incoming messages.

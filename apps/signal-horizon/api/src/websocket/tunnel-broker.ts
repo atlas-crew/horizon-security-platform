@@ -241,6 +241,9 @@ export type TunnelMessageType =
   | 'heartbeat'
   | 'shell-data'
   | 'shell-resize'
+  | 'shell-ready'
+  | 'shell-exit'
+  | 'shell-error'
   | 'dashboard-request'
   | 'dashboard-response'
   | 'error';
@@ -1203,6 +1206,9 @@ export class TunnelBroker extends EventEmitter {
           this.handleHeartbeat(sensorId);
           break;
         case 'shell-data':
+        case 'shell-ready':
+        case 'shell-exit':
+        case 'shell-error':
         case 'dashboard-response':
           this.routeToUser(sensorId, message);
           break;
@@ -1242,6 +1248,20 @@ export class TunnelBroker extends EventEmitter {
     tenantId: string,
     sensorId: string
   ): string | null {
+    const sessionId = randomUUID();
+    return this.startShellSessionWithId(ws, userId, tenantId, sensorId, sessionId);
+  }
+
+  /**
+   * @deprecated Use createSession('shell', ...) instead
+   */
+  startShellSessionWithId(
+    ws: WebSocket,
+    userId: string,
+    tenantId: string,
+    sensorId: string,
+    sessionId: string
+  ): string | null {
     const tunnel = this.legacyTunnels.get(sensorId);
     if (!tunnel || !tunnel.capabilities.includes('shell')) {
       return null;
@@ -1252,7 +1272,11 @@ export class TunnelBroker extends EventEmitter {
       return null;
     }
 
-    const sessionId = randomUUID();
+    if (this.legacySessions.has(sessionId)) {
+      this.logger.warn({ sessionId, sensorId }, 'Shell session already exists');
+      return null;
+    }
+
     const session: UserSession = {
       sessionId,
       userId,
@@ -1293,6 +1317,20 @@ export class TunnelBroker extends EventEmitter {
     tenantId: string,
     sensorId: string
   ): string | null {
+    const sessionId = randomUUID();
+    return this.startDashboardProxyWithId(ws, userId, tenantId, sensorId, sessionId);
+  }
+
+  /**
+   * @deprecated Use createSession() with a dashboard channel instead
+   */
+  startDashboardProxyWithId(
+    ws: WebSocket,
+    userId: string,
+    tenantId: string,
+    sensorId: string,
+    sessionId: string
+  ): string | null {
     const tunnel = this.legacyTunnels.get(sensorId);
     if (!tunnel || !tunnel.capabilities.includes('dashboard')) {
       return null;
@@ -1302,7 +1340,11 @@ export class TunnelBroker extends EventEmitter {
       return null;
     }
 
-    const sessionId = randomUUID();
+    if (this.legacySessions.has(sessionId)) {
+      this.logger.warn({ sessionId, sensorId }, 'Dashboard session already exists');
+      return null;
+    }
+
     const session: UserSession = {
       sessionId,
       userId,

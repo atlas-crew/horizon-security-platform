@@ -21,7 +21,14 @@ export interface ShellSession {
 }
 
 /** Message types for shell WebSocket communication */
-export type ShellMessageType = 'data' | 'resize' | 'exit' | 'error' | 'init' | 'ping' | 'pong';
+export type ShellMessageType =
+  | 'shell-data'
+  | 'shell-resize'
+  | 'shell-exit'
+  | 'shell-error'
+  | 'shell-ready'
+  | 'ping'
+  | 'pong';
 
 /** WebSocket message structure for shell communication */
 export interface ShellMessage {
@@ -29,16 +36,13 @@ export interface ShellMessage {
   type: ShellMessageType;
   /** Session identifier */
   sessionId: string;
-  /** Base64 encoded data (for 'data' type) */
-  data?: string;
-  /** Terminal columns (for 'resize' type) */
-  cols?: number;
-  /** Terminal rows (for 'resize' type) */
-  rows?: number;
-  /** Exit code (for 'exit' type) */
-  code?: number;
-  /** Error message (for 'error' type) */
-  error?: string;
+  /** Payload for shell messages */
+  payload?: {
+    data?: string;
+    cols?: number;
+    rows?: number;
+    action?: string;
+  };
   /** Timestamp */
   timestamp?: number;
 }
@@ -51,6 +55,7 @@ export interface ShellServerMessage {
     data?: string;
     code?: number;
     error?: string;
+    shell?: string;
   };
   timestamp?: number;
 }

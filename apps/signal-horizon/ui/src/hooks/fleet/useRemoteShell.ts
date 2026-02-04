@@ -251,11 +251,34 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     }, delay);
   }, [reconnectAttempt, reconnectConfig, onError]);
 
+  const sessionUrlRef = useRef<string | null>(null);
+
+  const createSession = useCallback(async () => {
+    const response = await fetch(`${API_URL}/api/v1/tunnel/shell/${sensorId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to create shell session');
+    }
+
+    const data = await response.json();
+    return {
+      sessionId: data.sessionId as string,
+      wsUrl: data.wsUrl as string,
+    };
+  }, [sensorId]);
+
   /**
    * Internal connect function
    */
   const connectInternal = useCallback(
-    (initOptions?: ShellInitOptions) => {
+    async (initOptions?: ShellInitOptions) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         return;
       }
@@ -269,22 +292,15 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         pendingInitOptionsRef.current = initOptions;
       }
 
-      // Build WebSocket URL
-      const wsProtocol = API_URL.startsWith('https') ? 'wss' : 'ws';
-      const wsHost = API_URL.replace(/^https?:\/\//, '');
-      const wsUrl = `${wsProtocol}://${wsHost}/api/v1/tunnel?channel=shell&sensorId=${sensorId}`;
+      let sessionId = session?.id || '';
+      let wsPath = sessionUrlRef.current;
 
-      try {
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          console.log('[RemoteShell] WebSocket connected');
-
-          // Generate session ID
-          const sessionId = `shell-${sensorId}-${Date.now()}`;
-
-          // Create session object
+      if (!sessionId || !wsPath) {
+        try {
+          const sessionInfo = await createSession();
+          sessionId = sessionInfo.sessionId;
+          wsPath = sessionInfo.wsUrl;
+          sessionUrlRef.current = wsPath;
           const newSession: ShellSession = {
             id: sessionId,
             sensorId,
@@ -292,22 +308,34 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
             startedAt: new Date(),
           };
           setSession(newSession);
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to create session';
+          setError(errorMsg);
+          setStatus('error');
+          onError?.(errorMsg);
+          return;
+        }
+      }
 
-          // Send authentication
+      const wsProtocol = API_URL.startsWith('https') ? 'wss' : 'ws';
+      const wsHost = API_URL.replace(/^https?:\/\//, '');
+      const wsUrl = wsPath.startsWith('ws')
+        ? wsPath
+        : `${wsProtocol}://${wsHost}${wsPath.startsWith('/') ? wsPath : `/${wsPath}`}`;
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[RemoteShell] WebSocket connected');
+          const cols = initOptions?.cols ?? 80;
+          const rows = initOptions?.rows ?? 24;
           ws.send(
             JSON.stringify({
-              type: 'auth',
-              payload: { apiKey: API_KEY },
-            })
-          );
-
-          // Send shell init message
-          ws.send(
-            JSON.stringify({
-              type: 'shell-init',
+              type: 'shell-resize',
               sessionId,
-              sensorId,
-              options: initOptions || { cols: 80, rows: 24 },
+              payload: { cols, rows },
             })
           );
         };
@@ -342,7 +370,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         onError?.(errorMsg);
       }
     },
-    [cleanup, handleMessage, onError, scheduleReconnect, sensorId]
+    [cleanup, createSession, handleMessage, onError, scheduleReconnect, sensorId, session?.id]
   );
 
   /**
@@ -352,7 +380,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     (initOptions?: ShellInitOptions) => {
       setReconnectAttempt(0);
       setIsReconnecting(false);
-      connectInternal(initOptions);
+      void connectInternal(initOptions);
     },
     [connectInternal]
   );
@@ -367,19 +395,14 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     setIsReconnecting(false);
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Send disconnect message before closing
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'shell-disconnect',
-          sessionId: session?.id,
-        })
-      );
+      wsRef.current.close(1000, 'Client disconnect');
     }
 
     cleanup();
     setStatus('disconnected');
     setSession(null);
     setError(null);
+    sessionUrlRef.current = null;
     pendingInitOptionsRef.current = null;
     isCleaningUpRef.current = false;
   }, [cleanup, clearTimers, session?.id]);
@@ -395,9 +418,9 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
       }
 
       const message: ShellMessage = {
-        type: 'data',
+        type: 'shell-data',
         sessionId: session?.id || '',
-        data, // Already base64 encoded by caller
+        payload: { data },
       };
 
       wsRef.current.send(JSON.stringify(message));
@@ -415,10 +438,9 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
       }
 
       const message: ShellMessage = {
-        type: 'resize',
+        type: 'shell-resize',
         sessionId: session?.id || '',
-        cols,
-        rows,
+        payload: { cols, rows },
       };
 
       wsRef.current.send(JSON.stringify(message));

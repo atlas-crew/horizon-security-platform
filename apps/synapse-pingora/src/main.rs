@@ -106,7 +106,7 @@ use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
 
 // Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
 use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
-use synapse_pingora::tunnel::{TunnelClient, TunnelConfig};
+use synapse_pingora::tunnel::{TunnelClient, TunnelConfig, TunnelShellService};
 
 // Phase 9: Payload Profiling (bandwidth tracking and anomaly detection)
 use synapse_pingora::payload::{PayloadManager, PayloadConfig};
@@ -4327,6 +4327,11 @@ fn main() {
                 if let Err(e) = tunnel_client.start().await {
                     error!("Failed to start tunnel client: {}", e);
                     return;
+                }
+                if let Some(handle) = tunnel_client.handle() {
+                    tokio::spawn(TunnelShellService::new(handle).run());
+                } else {
+                    warn!("Tunnel client handle unavailable; shell service disabled");
                 }
                 std::future::pending::<()>().await;
             });

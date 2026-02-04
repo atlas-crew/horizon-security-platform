@@ -6,11 +6,13 @@
 mod client;
 mod config;
 mod error;
+mod shell;
 mod types;
 
-pub use client::{TunnelClient, TunnelClientStats};
+pub use client::{TunnelClient, TunnelClientHandle, TunnelClientStats};
 pub use config::TunnelConfig;
 pub use error::TunnelError;
+pub use shell::TunnelShellService;
 pub use types::{
     ConnectionState, LegacyTunnelMessage, TunnelAuthMetadata, TunnelAuthPayload,
     TunnelChannel, TunnelEnvelope,

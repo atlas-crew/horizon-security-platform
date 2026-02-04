@@ -14,6 +14,12 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'crypto';
 import { requireScope, requireRole } from '../middleware/auth.js';
+import {
+  createTunnelSession,
+  getTunnelSession,
+  listTunnelSessions,
+  removeTunnelSession,
+} from '../../websocket/tunnel-session-store.js';
 
 // ============================================================================
 // Zod Schemas
@@ -28,6 +34,7 @@ const TunnelSessionSchema = z.object({
   status: z.enum(['pending', 'connected', 'disconnected', 'error']),
   createdAt: z.string().datetime(),
   lastActivity: z.string().datetime().nullish(),
+  expiresAt: z.number().optional(),
 });
 
 // ============================================================================
@@ -36,9 +43,6 @@ const TunnelSessionSchema = z.object({
 
 export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router {
   const router = Router();
-
-  // In-memory session store (in production, use Redis)
-  const sessions = new Map<string, z.infer<typeof TunnelSessionSchema>>();
 
   /**
    * GET /tunnel/status/:sensorId
@@ -122,9 +126,10 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         status: 'pending',
         createdAt: new Date().toISOString(),
         lastActivity: null,
+        expiresAt: Date.now() + 300000,
       };
 
-      sessions.set(sessionId, session);
+      createTunnelSession(session);
       logger.info({ sessionId, sensorId, userId }, 'Shell session created');
 
       return res.status(201).json({
@@ -184,9 +189,10 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         status: 'pending',
         createdAt: new Date().toISOString(),
         lastActivity: null,
+        expiresAt: Date.now() + 300000,
       };
 
-      sessions.set(sessionId, session);
+      createTunnelSession(session);
       logger.info({ sessionId, sensorId, userId }, 'Dashboard session created');
 
       return res.status(201).json({
@@ -213,7 +219,7 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
     const { sessionId } = req.params;
     const tenantId = req.auth!.tenantId;
 
-    const session = sessions.get(sessionId);
+    const session = getTunnelSession(sessionId);
 
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -237,7 +243,7 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
     const { sessionId } = req.params;
     const tenantId = req.auth!.tenantId;
 
-    const session = sessions.get(sessionId);
+    const session = getTunnelSession(sessionId);
 
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -248,7 +254,7 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    sessions.delete(sessionId);
+    removeTunnelSession(sessionId);
     logger.info({ sessionId }, 'Session terminated');
 
     return res.status(204).send();
@@ -263,8 +269,7 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
   router.get('/sessions', requireScope('tunnel:read'), (req: Request, res): Response => {
     const tenantId = req.auth!.tenantId;
 
-    const tenantSessions = Array.from(sessions.values())
-      .filter(s => s.tenantId === tenantId)
+    const tenantSessions = listTunnelSessions(tenantId)
       .map(s => ({
         sessionId: s.sessionId,
         sensorId: s.sensorId,

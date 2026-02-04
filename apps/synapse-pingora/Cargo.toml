@@ -95,6 +95,9 @@ tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 # System monitoring
 sysinfo = "0.32"        # CPU, memory, network, process metrics
 
+# Terminal PTY support (remote shell)
+portable-pty = "0.8"
+
 # Phase 3: Feature Migration - JA4 Fingerprinting
 sha2 = "0.10"           # SHA256 for fingerprint hashing
 hex = "0.4"             # Hex encoding for hash output

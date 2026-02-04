@@ -46,6 +46,10 @@ import { SynapseProxyService } from './services/synapse-proxy.js';
 import { initSynapseDirectAdapter } from './services/synapse-direct.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { matchUpgradePath } from './websocket/upgrade-path.js';
+import {
+  getTunnelSession,
+  updateTunnelSession,
+} from './websocket/tunnel-session-store.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'node:crypto';
 // Security middleware
@@ -382,6 +386,70 @@ function handleTunnelSensorConnection(
   });
 }
 
+/**
+ * Handle incoming user tunnel connections (shell/dashboard).
+ */
+function handleTunnelUserConnection(
+  ws: WebSocket,
+  log: typeof logger,
+  sessionId: string
+): void {
+  if (!tunnelBroker) {
+    log.error('Tunnel broker not initialized');
+    ws.close(1011, 'Tunnel broker unavailable');
+    return;
+  }
+
+  const session = getTunnelSession(sessionId);
+  if (!session) {
+    ws.close(4004, 'Session not found');
+    return;
+  }
+
+  if (session.expiresAt && Date.now() > session.expiresAt) {
+    updateTunnelSession(sessionId, { status: 'error', lastActivity: new Date().toISOString() });
+    ws.close(4005, 'Session expired');
+    return;
+  }
+
+  if (session.status !== 'pending') {
+    ws.close(4006, 'Session already used');
+    return;
+  }
+
+  const { tenantId, userId, sensorId, type } = session;
+  let started: string | null = null;
+
+  if (type === 'shell') {
+    started = tunnelBroker.startShellSessionWithId(
+      ws,
+      userId,
+      tenantId,
+      sensorId,
+      sessionId
+    );
+  } else {
+    started = tunnelBroker.startDashboardProxyWithId(
+      ws,
+      userId,
+      tenantId,
+      sensorId,
+      sessionId
+    );
+  }
+
+  if (!started) {
+    updateTunnelSession(sessionId, { status: 'error', lastActivity: new Date().toISOString() });
+    ws.close(4007, 'Sensor tunnel not connected');
+    return;
+  }
+
+  updateTunnelSession(sessionId, { status: 'connected', lastActivity: new Date().toISOString() });
+  ws.on('close', () => {
+    updateTunnelSession(sessionId, { status: 'disconnected', lastActivity: new Date().toISOString() });
+  });
+}
+
 async function start() {
   logger.info('Starting Signal Horizon Hub...');
 
@@ -616,8 +684,16 @@ async function start() {
     }
 
     if (match.type === 'tunnel-user') {
-      logger.info({ path: match.path }, 'User tunnel WebSocket not yet implemented');
-      socket.destroy();
+      const parts = match.path.split('/');
+      const sessionId = parts[parts.length - 1];
+      if (!sessionId) {
+        logger.warn({ path: match.path }, 'Missing tunnel session id');
+        socket.destroy();
+        return;
+      }
+      tunnelWss.handleUpgrade(req, netSocket, head, (ws) => {
+        handleTunnelUserConnection(ws, logger, sessionId);
+      });
       return;
     }
 

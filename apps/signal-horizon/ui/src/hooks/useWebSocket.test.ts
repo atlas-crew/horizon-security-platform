@@ -287,7 +287,10 @@ describe('useWebSocket', () => {
         });
       });
 
-      expect(mockSetSnapshot).toHaveBeenCalledWith(snapshotData);
+      expect(mockSetSnapshot).toHaveBeenCalledWith({
+        ...snapshotData,
+        apiStats: { discoveryEvents: 0, schemaViolations: 0 },
+      });
     });
 
     it('should handle campaign-alert message', () => {

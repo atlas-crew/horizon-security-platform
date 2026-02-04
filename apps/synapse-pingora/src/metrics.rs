@@ -28,10 +28,24 @@ pub struct MetricsRegistry {
     dlp_metrics: DlpMetrics,
     /// Signal dispatch metrics (labs-4gsj)
     signal_dispatch_metrics: SignalDispatchMetrics,
+    /// Active request counter (used for heartbeat connection metrics)
+    active_requests: Arc<AtomicU64>,
     /// Backend health metrics
     backend_metrics: Arc<RwLock<HashMap<String, BackendMetrics>>>,
     /// Registry start time for uptime calculation
     start_time: Option<Instant>,
+}
+
+/// RAII guard to track active requests.
+#[derive(Debug)]
+pub struct ActiveRequestGuard {
+    counter: Arc<AtomicU64>,
+}
+
+impl Drop for ActiveRequestGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 /// DLP (Data Loss Prevention) metrics for observability (P1 fix).
@@ -808,6 +822,19 @@ impl MetricsRegistry {
         };
     }
 
+    /// Track a request as active (returns a guard that decrements on drop).
+    pub fn begin_request(&self) -> ActiveRequestGuard {
+        self.active_requests.fetch_add(1, Ordering::Relaxed);
+        ActiveRequestGuard {
+            counter: Arc::clone(&self.active_requests),
+        }
+    }
+
+    /// Returns the number of active requests.
+    pub fn active_requests(&self) -> u64 {
+        self.active_requests.load(Ordering::Relaxed)
+    }
+
     /// Records a blocked request.
     pub fn record_blocked(&self) {
         self.request_counts.blocked.fetch_add(1, Ordering::Relaxed);
@@ -990,6 +1017,13 @@ impl MetricsRegistry {
         output.push_str(&format!(
             "synapse_requests_blocked {}\n",
             self.request_counts.blocked.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_active_requests Current number of active requests\n");
+        output.push_str("# TYPE synapse_active_requests gauge\n");
+        output.push_str(&format!(
+            "synapse_active_requests {}\n",
+            self.active_requests.load(Ordering::Relaxed)
         ));
 
         // Latency histogram
@@ -1307,6 +1341,7 @@ impl MetricsRegistry {
         self.signal_dispatch_metrics.failure.store(0, Ordering::Relaxed);
         self.signal_dispatch_metrics.timeout.store(0, Ordering::Relaxed);
         self.signal_dispatch_metrics.latencies.reset();
+        self.active_requests.store(0, Ordering::Relaxed);
     }
 
     /// Returns a reference to the DLP metrics.

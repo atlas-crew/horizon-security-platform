@@ -47,13 +47,14 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use tokio::sync::oneshot;
 use pingora::listeners::tls::TlsSettings;
+use sysinfo::{Disks, System};
 use uuid::Uuid;
 
 // Admin API imports
 use synapse_pingora::admin_server::{start_admin_server, register_profiles_getter, register_schemas_getter, register_evaluate_callback, EvaluationResult};
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
-use synapse_pingora::metrics::MetricsRegistry;
+use synapse_pingora::metrics::{ActiveRequestGuard, MetricsRegistry};
 
 // Phase 3: Fingerprinting (Feature Migration from risk-server)
 use synapse_pingora::fingerprint::{
@@ -98,7 +99,7 @@ use synapse_pingora::shadow::{ShadowMirrorManager, MirrorPayload};
 // Phase 5: Actor and Session State Management (previously sleeping capabilities)
 use synapse_pingora::actor::{ActorConfig, ActorManager};
 use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use sha2::{Sha256, Digest};
 use percent_encoding::percent_decode_str;
 
@@ -986,6 +987,8 @@ pub struct RequestContext {
     request_start: Instant,
     /// Request correlation ID (X-Request-ID)
     request_id: String,
+    /// Active request guard for tracking concurrency
+    active_request_guard: ActiveRequestGuard,
     /// Detection result from request_filter
     detection: Option<DetectionResult>,
     /// Backend index for round-robin
@@ -1716,6 +1719,7 @@ impl ProxyHttp for SynapseProxy {
         RequestContext {
             request_start: Instant::now(),
             request_id: Self::generate_request_id(),
+            active_request_guard: self.metrics_registry.begin_request(),
             detection: None,
             backend_idx: 0,
             matched_site: None,
@@ -3765,19 +3769,40 @@ use synapse_pingora::horizon::MetricsProvider;
 struct HorizonMetricsProvider {
     metrics: Arc<MetricsRegistry>,
     health: Arc<HealthChecker>,
+    system: Mutex<System>,
 }
 
 impl MetricsProvider for HorizonMetricsProvider {
     fn cpu_usage(&self) -> f64 {
-        // Pingora metrics registry doesn't track CPU/Mem directly yet
-        // We could add sysinfo here or rely on the registry if it supports it
-        0.0 
+        let mut sys = self.system.lock();
+        sys.refresh_cpu();
+        (sys.global_cpu_usage() as f64).clamp(0.0, 100.0)
     }
     fn memory_usage(&self) -> f64 {
-        0.0
+        let mut sys = self.system.lock();
+        sys.refresh_memory();
+        let total = sys.total_memory();
+        if total == 0 {
+            return 0.0;
+        }
+        let used = sys.used_memory();
+        ((used as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
     }
     fn disk_usage(&self) -> f64 {
-        0.0
+        let disks = Disks::new_with_refreshed_list();
+        let (used, total) = disks
+            .list()
+            .first()
+            .map(|disk| {
+                let total = disk.total_space();
+                let free = disk.available_space();
+                (total.saturating_sub(free), total)
+            })
+            .unwrap_or((0, 0));
+        if total == 0 {
+            return 0.0;
+        }
+        ((used as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
     }
     fn requests_last_minute(&self) -> u64 {
         self.metrics.requests_last_minute()
@@ -3792,7 +3817,8 @@ impl MetricsProvider for HorizonMetricsProvider {
         RULES_HASH.read().clone()
     }
     fn active_connections(&self) -> Option<u32> {
-        None
+        let active = self.metrics.active_requests();
+        Some(active.min(u32::MAX as u64) as u32)
     }
 }
 

@@ -7221,6 +7221,46 @@ mod tests {
             .with_state(state)
     }
 
+    /// Create a test app that includes /_sensor/config/kernel routes with scope-based auth.
+    fn create_test_app_with_kernel_config(scopes: Vec<String>) -> Router {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
+        let handler = Arc::new(ApiHandler::builder().build());
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_scopes: scopes,
+            signal_permissions: Arc::new(SignalPermissions::default()),
+            admin_rate_limiter,
+            public_rate_limiter,
+            report_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        let kernel_read_routes = Router::new()
+            .route("/_sensor/config/kernel", get(config_kernel_get_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+        let kernel_write_routes = Router::new()
+            .route("/_sensor/config/kernel", put(config_kernel_put_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+        Router::new()
+            .merge(kernel_read_routes)
+            .merge(kernel_write_routes)
+            .with_state(state)
+    }
+
     fn build_rule_payload() -> serde_json::Value {
         serde_json::json!({
             "name": "Block Admin",
@@ -7370,5 +7410,93 @@ mod tests {
 
         // ConfigManager is not configured in tests, so expect 503 after auth/scope passes.
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    // =========================================================================
+    // Kernel Config Endpoint Authorization Tests (labs-95at.7)
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_kernel_config_requires_auth() {
+        let app = create_test_app_with_kernel_config(vec![scopes::ADMIN_READ.to_string()]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/config/kernel")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_kernel_config_requires_admin_read_scope() {
+        let app = create_test_app_with_kernel_config(vec![]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/config/kernel")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_kernel_config_put_requires_admin_write_scope() {
+        let app = create_test_app_with_kernel_config(vec![scopes::ADMIN_READ.to_string()]);
+
+        let payload = serde_json::json!({
+            "params": { "net.core.somaxconn": 1024 },
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/kernel")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_kernel_config_put_with_admin_write_scope() {
+        let app = create_test_app_with_kernel_config(vec![scopes::ADMIN_WRITE.to_string()]);
+
+        let payload = serde_json::json!({
+            "params": { "net.core.somaxconn": 1024 },
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/kernel")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
     }
 }

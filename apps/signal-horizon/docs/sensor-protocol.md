@@ -1,6 +1,6 @@
 # Sensor Protocol Guide
 
-This guide documents how sensors (like Cutlass/Echo Pro) connect to and communicate with Signal Horizon Hub.
+This guide documents how sensors (like Apparatus, formerly Cutlass) connect to and communicate with Signal Horizon Hub.
 
 ## Overview
 
@@ -282,7 +282,7 @@ import WebSocket from 'ws';
 
 const HORIZON_URL = 'ws://signal-horizon:3000/ws/sensors';
 const API_KEY = process.env.SIGNAL_HORIZON_API_KEY;
-const SENSOR_ID = process.env.SENSOR_ID || 'tracer-1';
+const SENSOR_ID = process.env.SENSOR_ID || 'apparatus-1';
 
 class SignalHorizonClient {
   private ws: WebSocket | null = null;
@@ -304,7 +304,7 @@ class SignalHorizonClient {
       payload: {
         apiKey: API_KEY,
         sensorId: SENSOR_ID,
-        sensorName: 'Tracer Edge Sensor',
+        sensorName: 'Apparatus Edge Sensor',
         version: '1.0.0'
       }
     });
@@ -415,11 +415,11 @@ Common errors:
 - `"Auth timeout"` - Did not authenticate within 10 seconds
 - `"Invalid API key"` - API key not found or invalid
 
-## Mapping from Cutlass Signal Types
+## Mapping from Apparatus Signal Types
 
-If you're integrating Cutlass/Echo Pro sensors, here's how to map their signal types:
+If you're integrating Apparatus sensors (formerly Cutlass), here's how to map their signal types:
 
-| Cutlass Signal | Signal Horizon Type | Notes |
+| Apparatus Signal | Signal Horizon Type | Notes |
 |---------------|---------------------|-------|
 | `honeypot_hit` | `IP_THREAT` | High severity, probe behavior |
 | `trap_trigger` | `IP_THREAT` | Critical severity, immediate action |

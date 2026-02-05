@@ -46,7 +46,7 @@ use std::time::{Duration, Instant};
 
 use futures::future::join_all;
 use parking_lot::RwLock as ParkingLotRwLock;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 
 use crate::correlation::{
@@ -83,7 +83,7 @@ pub struct MitigationRateLimiter {
     /// Number of bans in current window.
     bans_in_window: AtomicU64,
     /// Window start time.
-    window_start: std::sync::Mutex<Instant>,
+    window_start: Mutex<Instant>,
     /// Maximum bans allowed per window.
     max_bans_per_window: u64,
     /// Window duration.
@@ -97,7 +97,7 @@ impl MitigationRateLimiter {
     pub fn new(max_bans_per_window: u64, window_duration: Duration, max_ips_per_campaign: usize) -> Self {
         Self {
             bans_in_window: AtomicU64::new(0),
-            window_start: std::sync::Mutex::new(Instant::now()),
+            window_start: Mutex::new(Instant::now()),
             max_bans_per_window,
             window_duration,
             max_ips_per_campaign,
@@ -107,8 +107,8 @@ impl MitigationRateLimiter {
     /// Attempts to acquire a ban permit.
     ///
     /// Returns Ok(()) if the ban is allowed, Err with reason if rate limited.
-    pub fn try_ban(&self) -> Result<(), String> {
-        self.maybe_reset_window();
+    pub async fn try_ban(&self) -> Result<(), String> {
+        self.maybe_reset_window().await;
 
         let current = self.bans_in_window.fetch_add(1, Ordering::SeqCst);
         if current >= self.max_bans_per_window {
@@ -122,11 +122,8 @@ impl MitigationRateLimiter {
     }
 
     /// Resets the window if it has expired.
-    fn maybe_reset_window(&self) {
-        let mut start = self
-            .window_start
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    async fn maybe_reset_window(&self) {
+        let mut start = self.window_start.lock().await;
         
         // Double-check expiration under the lock to prevent multiple resets
         if start.elapsed() >= self.window_duration {
@@ -1328,7 +1325,7 @@ impl CampaignManager {
         let mut rate_limited = false;
 
         for ip in &ips_to_block {
-            if let Err(reason) = self.mitigation_rate_limiter.try_ban() {
+            if let Err(reason) = self.mitigation_rate_limiter.try_ban().await {
                 tracing::warn!(
                     campaign_id = %campaign.id,
                     reason = %reason,
@@ -1729,6 +1726,15 @@ mod tests {
         assert!(!config.background_scanning);
         assert!(!config.track_combined);
         assert!((config.shared_confidence - 0.9).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_mitigation_rate_limiter_limits() {
+        let limiter = MitigationRateLimiter::new(2, Duration::from_secs(60), 10);
+
+        assert!(limiter.try_ban().await.is_ok());
+        assert!(limiter.try_ban().await.is_ok());
+        assert!(limiter.try_ban().await.is_err());
     }
 
     #[test]

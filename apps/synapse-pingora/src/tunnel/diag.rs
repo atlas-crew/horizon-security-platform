@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use sysinfo::System;
 use tokio::sync::broadcast;
 use tracing::warn;
@@ -52,7 +53,16 @@ impl TunnelDiagService {
             tokio::select! {
                 envelope = rx.recv() => {
                     match envelope {
-                        Ok(envelope) => self.handle_message(envelope).await,
+                        Ok(envelope) => {
+                            let started = Instant::now();
+                            self.handle_message(envelope).await;
+                            self.metrics
+                                .tunnel_metrics()
+                                .record_handler_latency_ms(
+                                    TunnelChannel::Diag,
+                                    started.elapsed().as_millis() as u64,
+                                );
+                        }
                         Err(broadcast::error::RecvError::Lagged(count)) => {
                             warn!("Diag service lagged by {} messages", count);
                             continue;

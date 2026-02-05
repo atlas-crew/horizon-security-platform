@@ -542,6 +542,13 @@ impl ConfigLoader {
                         site.hostname
                     );
                 }
+                // P1-RUST-002: Bounds checking for RPS
+                if rl.rps > 1_000_000 {
+                    return Err(ConfigError::ValidationError(format!(
+                        "site '{}' has extreme RPS limit {} (max 1,000,000)",
+                        site.hostname, rl.rps
+                    )));
+                }
             }
 
             // Validate shadow mirroring config
@@ -554,6 +561,28 @@ impl ConfigLoader {
                     )));
                 }
             }
+        }
+
+        // P1-RUST-002: Global bounds checking
+        if config.server.workers > 1024 {
+            return Err(ConfigError::ValidationError(format!(
+                "extreme worker count {} (max 1024)",
+                config.server.workers
+            )));
+        }
+
+        if config.server.shutdown_timeout_secs > 3600 {
+            return Err(ConfigError::ValidationError(format!(
+                "extreme shutdown timeout {}s (max 3600)",
+                config.server.shutdown_timeout_secs
+            )));
+        }
+
+        if config.server.waf_regex_timeout_ms > 500 {
+            return Err(ConfigError::ValidationError(format!(
+                "extreme WAF regex timeout {}ms (max 500)",
+                config.server.waf_regex_timeout_ms
+            )));
         }
 
         // Warn if global WAF is disabled (SYNAPSE-SEC-011)

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
+use crate::tunnel::TunnelChannel;
 
 /// Metrics registry holding all metric collectors.
 #[derive(Debug, Default)]
@@ -28,6 +29,8 @@ pub struct MetricsRegistry {
     dlp_metrics: DlpMetrics,
     /// Signal dispatch metrics (labs-4gsj)
     signal_dispatch_metrics: SignalDispatchMetrics,
+    /// Tunnel health metrics (labs-82yr)
+    tunnel_metrics: TunnelMetrics,
     /// Active request counter (used for heartbeat connection metrics)
     active_requests: Arc<AtomicU64>,
     /// Backend health metrics
@@ -133,6 +136,156 @@ impl SignalDispatchMetrics {
     /// Record a dispatch timeout
     pub fn record_timeout(&self) {
         self.timeout.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+const TUNNEL_CHANNEL_COUNT: usize = TunnelChannel::ALL.len();
+
+/// Histogram in milliseconds for Prometheus exposition.
+#[derive(Debug)]
+pub struct MsHistogram {
+    /// Bucket boundaries in milliseconds
+    buckets: Vec<u64>,
+    /// Counts per bucket
+    counts: Vec<AtomicU64>,
+    /// Sum of all values (for average)
+    sum_ms: AtomicU64,
+    /// Total count
+    count: AtomicU64,
+}
+
+impl Default for MsHistogram {
+    fn default() -> Self {
+        let buckets = vec![
+            1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000,
+            300000,
+        ];
+        let counts = buckets.iter().map(|_| AtomicU64::new(0)).collect();
+        Self {
+            buckets,
+            counts,
+            sum_ms: AtomicU64::new(0),
+            count: AtomicU64::new(0),
+        }
+    }
+}
+
+impl MsHistogram {
+    pub fn observe_ms(&self, value_ms: u64) {
+        self.sum_ms.fetch_add(value_ms, Ordering::Relaxed);
+        self.count.fetch_add(1, Ordering::Relaxed);
+
+        for (idx, &boundary) in self.buckets.iter().enumerate() {
+            if value_ms <= boundary {
+                self.counts[idx].fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+        }
+        if let Some(last) = self.counts.last() {
+            last.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn reset(&self) {
+        for count in &self.counts {
+            count.store(0, Ordering::Relaxed);
+        }
+        self.sum_ms.store(0, Ordering::Relaxed);
+        self.count.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Tunnel health metrics for observability (labs-82yr).
+#[derive(Debug)]
+pub struct TunnelMetrics {
+    connected: AtomicU64,
+    messages_sent: AtomicU64,
+    messages_received: AtomicU64,
+    reconnect_attempts: AtomicU64,
+    reconnect_delay_ms: MsHistogram,
+    auth_timeouts: AtomicU64,
+    heartbeats_sent: AtomicU64,
+    heartbeat_timeouts: AtomicU64,
+    channel_overflows: [AtomicU64; TUNNEL_CHANNEL_COUNT],
+    handler_latency_ms: [MsHistogram; TUNNEL_CHANNEL_COUNT],
+}
+
+impl Default for TunnelMetrics {
+    fn default() -> Self {
+        Self {
+            connected: AtomicU64::new(0),
+            messages_sent: AtomicU64::new(0),
+            messages_received: AtomicU64::new(0),
+            reconnect_attempts: AtomicU64::new(0),
+            reconnect_delay_ms: MsHistogram::default(),
+            auth_timeouts: AtomicU64::new(0),
+            heartbeats_sent: AtomicU64::new(0),
+            heartbeat_timeouts: AtomicU64::new(0),
+            channel_overflows: std::array::from_fn(|_| AtomicU64::new(0)),
+            handler_latency_ms: std::array::from_fn(|_| MsHistogram::default()),
+        }
+    }
+}
+
+impl TunnelMetrics {
+    pub fn set_connected(&self, connected: bool) {
+        self.connected.store(u64::from(connected), Ordering::Relaxed);
+    }
+
+    pub fn record_message_sent(&self) {
+        self.messages_sent.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_message_received(&self) {
+        self.messages_received.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_reconnect_attempt(&self, delay_ms: u64) {
+        self.reconnect_attempts.fetch_add(1, Ordering::Relaxed);
+        self.reconnect_delay_ms.observe_ms(delay_ms);
+    }
+
+    pub fn record_auth_timeout(&self) {
+        self.auth_timeouts.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_heartbeat_sent(&self) {
+        self.heartbeats_sent.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_heartbeat_timeout(&self) {
+        self.heartbeat_timeouts.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_channel_overflow(&self, channel: TunnelChannel) {
+        let idx = tunnel_channel_index(channel);
+        self.channel_overflows[idx].fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_handler_latency_ms(&self, channel: TunnelChannel, latency_ms: u64) {
+        let idx = tunnel_channel_index(channel);
+        self.handler_latency_ms[idx].observe_ms(latency_ms);
+    }
+
+    fn channel_overflow_total(&self, channel: TunnelChannel) -> u64 {
+        let idx = tunnel_channel_index(channel);
+        self.channel_overflows[idx].load(Ordering::Relaxed)
+    }
+
+    fn handler_latency_hist(&self, channel: TunnelChannel) -> &MsHistogram {
+        let idx = tunnel_channel_index(channel);
+        &self.handler_latency_ms[idx]
+    }
+}
+
+fn tunnel_channel_index(channel: TunnelChannel) -> usize {
+    match channel {
+        TunnelChannel::Shell => 0,
+        TunnelChannel::Logs => 1,
+        TunnelChannel::Diag => 2,
+        TunnelChannel::Control => 3,
+        TunnelChannel::Files => 4,
+        TunnelChannel::Update => 5,
     }
 }
 
@@ -1276,6 +1429,122 @@ impl MetricsRegistry {
             self.signal_dispatch_metrics.latencies.count.load(Ordering::Relaxed)
         ));
 
+        // Tunnel metrics (labs-82yr)
+        output.push_str("# HELP synapse_tunnel_connected Tunnel connection state (1=connected)\n");
+        output.push_str("# TYPE synapse_tunnel_connected gauge\n");
+        output.push_str(&format!(
+            "synapse_tunnel_connected {}\n",
+            self.tunnel_metrics.connected.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_messages_sent_total Tunnel messages sent\n");
+        output.push_str("# TYPE synapse_tunnel_messages_sent_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_messages_sent_total {}\n",
+            self.tunnel_metrics.messages_sent.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_messages_received_total Tunnel messages received\n");
+        output.push_str("# TYPE synapse_tunnel_messages_received_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_messages_received_total {}\n",
+            self.tunnel_metrics.messages_received.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_reconnect_attempts_total Tunnel reconnect attempts\n");
+        output.push_str("# TYPE synapse_tunnel_reconnect_attempts_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_reconnect_attempts_total {}\n",
+            self.tunnel_metrics.reconnect_attempts.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_reconnect_delay_ms Tunnel reconnect backoff in milliseconds\n");
+        output.push_str("# TYPE synapse_tunnel_reconnect_delay_ms histogram\n");
+        let mut reconnect_cumulative = 0u64;
+        for (idx, &boundary) in self.tunnel_metrics.reconnect_delay_ms.buckets.iter().enumerate() {
+            reconnect_cumulative += self.tunnel_metrics.reconnect_delay_ms.counts[idx].load(Ordering::Relaxed);
+            output.push_str(&format!(
+                "synapse_tunnel_reconnect_delay_ms_bucket{{le=\"{}\"}} {}\n",
+                boundary, reconnect_cumulative
+            ));
+        }
+        output.push_str(&format!(
+            "synapse_tunnel_reconnect_delay_ms_bucket{{le=\"+Inf\"}} {}\n",
+            self.tunnel_metrics.reconnect_delay_ms.count.load(Ordering::Relaxed)
+        ));
+        output.push_str(&format!(
+            "synapse_tunnel_reconnect_delay_ms_sum {}\n",
+            self.tunnel_metrics.reconnect_delay_ms.sum_ms.load(Ordering::Relaxed)
+        ));
+        output.push_str(&format!(
+            "synapse_tunnel_reconnect_delay_ms_count {}\n",
+            self.tunnel_metrics.reconnect_delay_ms.count.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_auth_timeout_total Tunnel auth timeouts\n");
+        output.push_str("# TYPE synapse_tunnel_auth_timeout_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_auth_timeout_total {}\n",
+            self.tunnel_metrics.auth_timeouts.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_heartbeat_sent_total Tunnel heartbeats sent\n");
+        output.push_str("# TYPE synapse_tunnel_heartbeat_sent_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_heartbeat_sent_total {}\n",
+            self.tunnel_metrics.heartbeats_sent.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_tunnel_heartbeat_timeout_total Tunnel heartbeat timeouts\n");
+        output.push_str("# TYPE synapse_tunnel_heartbeat_timeout_total counter\n");
+        output.push_str(&format!(
+            "synapse_tunnel_heartbeat_timeout_total {}\n",
+            self.tunnel_metrics.heartbeat_timeouts.load(Ordering::Relaxed)
+        ));
+
+        output.push_str(
+            "# HELP synapse_tunnel_channel_buffer_overflow_total Tunnel channel buffer pressure events\n",
+        );
+        output.push_str("# TYPE synapse_tunnel_channel_buffer_overflow_total counter\n");
+        for channel in TunnelChannel::ALL.iter().copied() {
+            output.push_str(&format!(
+                "synapse_tunnel_channel_buffer_overflow_total{{channel=\"{}\"}} {}\n",
+                channel.as_str(),
+                self.tunnel_metrics.channel_overflow_total(channel)
+            ));
+        }
+
+        output.push_str("# HELP synapse_tunnel_handler_latency_ms Tunnel handler latency in milliseconds\n");
+        output.push_str("# TYPE synapse_tunnel_handler_latency_ms histogram\n");
+        for channel in TunnelChannel::ALL.iter().copied() {
+            let hist = self.tunnel_metrics.handler_latency_hist(channel);
+            let mut cumulative = 0u64;
+            for (idx, &boundary) in hist.buckets.iter().enumerate() {
+                cumulative += hist.counts[idx].load(Ordering::Relaxed);
+                output.push_str(&format!(
+                    "synapse_tunnel_handler_latency_ms_bucket{{channel=\"{}\",le=\"{}\"}} {}\n",
+                    channel.as_str(),
+                    boundary,
+                    cumulative
+                ));
+            }
+            output.push_str(&format!(
+                "synapse_tunnel_handler_latency_ms_bucket{{channel=\"{}\",le=\"+Inf\"}} {}\n",
+                channel.as_str(),
+                hist.count.load(Ordering::Relaxed)
+            ));
+            output.push_str(&format!(
+                "synapse_tunnel_handler_latency_ms_sum{{channel=\"{}\"}} {}\n",
+                channel.as_str(),
+                hist.sum_ms.load(Ordering::Relaxed)
+            ));
+            output.push_str(&format!(
+                "synapse_tunnel_handler_latency_ms_count{{channel=\"{}\"}} {}\n",
+                channel.as_str(),
+                hist.count.load(Ordering::Relaxed)
+            ));
+        }
+
         output.push_str("# HELP synapse_uptime_seconds Service uptime in seconds\n");
         output.push_str("# TYPE synapse_uptime_seconds gauge\n");
         output.push_str(&format!("synapse_uptime_seconds {}\n", self.uptime_secs()));
@@ -1341,6 +1610,21 @@ impl MetricsRegistry {
         self.signal_dispatch_metrics.failure.store(0, Ordering::Relaxed);
         self.signal_dispatch_metrics.timeout.store(0, Ordering::Relaxed);
         self.signal_dispatch_metrics.latencies.reset();
+
+        // Reset tunnel metrics
+        self.tunnel_metrics.connected.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.messages_sent.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.messages_received.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.reconnect_attempts.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.reconnect_delay_ms.reset();
+        self.tunnel_metrics.auth_timeouts.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.heartbeats_sent.store(0, Ordering::Relaxed);
+        self.tunnel_metrics.heartbeat_timeouts.store(0, Ordering::Relaxed);
+        for channel in TunnelChannel::ALL.iter().copied() {
+            let idx = tunnel_channel_index(channel);
+            self.tunnel_metrics.channel_overflows[idx].store(0, Ordering::Relaxed);
+            self.tunnel_metrics.handler_latency_ms[idx].reset();
+        }
         self.active_requests.store(0, Ordering::Relaxed);
     }
 
@@ -1352,6 +1636,11 @@ impl MetricsRegistry {
     /// Returns a reference to the signal dispatch metrics.
     pub fn signal_dispatch_metrics(&self) -> &SignalDispatchMetrics {
         &self.signal_dispatch_metrics
+    }
+
+    /// Returns a reference to the tunnel metrics.
+    pub fn tunnel_metrics(&self) -> &TunnelMetrics {
+        &self.tunnel_metrics
     }
 
     /// Returns a reference to the profiling metrics.

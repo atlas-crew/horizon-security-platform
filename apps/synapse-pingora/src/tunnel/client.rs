@@ -20,6 +20,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::metrics::MetricsRegistry;
 use super::config::TunnelConfig;
 use super::error::TunnelError;
 use super::types::{
@@ -38,6 +39,8 @@ const OPEN_MIN_BACKOFF_MS: u64 = 5_000;
 const OPEN_MAX_BACKOFF_MS: u64 = 60_000;
 const HALF_OPEN_INTERVAL_MS: u64 = 60_000;
 const HALF_OPEN_AUTH_TIMEOUT_MULTIPLIER: u64 = 2;
+const MIN_HEARTBEAT_TIMEOUT_MS: u64 = 3_000;
+const MAX_HEARTBEAT_BACKOFF_EXP: u32 = 4;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -113,10 +116,11 @@ struct TunnelRouter {
     channels: HashMap<TunnelChannel, ChannelQueue>,
     legacy: broadcast::Sender<LegacyTunnelMessage>,
     started: AtomicBool,
+    metrics: Arc<MetricsRegistry>,
 }
 
 impl TunnelRouter {
-    fn new() -> Self {
+    fn new(metrics: Arc<MetricsRegistry>) -> Self {
         let mut channels = HashMap::new();
         for channel in TunnelChannel::ALL {
             let buffer_size = channel_buffer_size(channel);
@@ -139,6 +143,7 @@ impl TunnelRouter {
             channels,
             legacy,
             started: AtomicBool::new(false),
+            metrics,
         }
     }
 
@@ -191,6 +196,9 @@ impl TunnelRouter {
                     "Tunnel channel {:?} buffer full ({}); applying backpressure",
                     channel, queue.buffer_size
                 );
+                self.metrics
+                    .tunnel_metrics()
+                    .record_channel_overflow(channel);
                 if let Err(err) = queue.inbound_tx.send(message).await {
                     warn!(
                         "Tunnel channel {:?} closed while applying backpressure: {}",
@@ -241,7 +249,15 @@ impl TunnelClientHandle {
             .map_err(|e| TunnelError::SendFailed(e.to_string()))
     }
 
-    /// Send a JSON message to the hub from a blocking context.
+    /// Send a JSON message to the hub from a blocking context with backpressure.
+    pub fn send_json_sync(&self, value: serde_json::Value) -> Result<(), TunnelError> {
+        self.sender
+            .blocking_send(value)
+            .map_err(|e| TunnelError::SendFailed(e.to_string()))
+    }
+
+    /// Send a JSON message to the hub from a blocking context (legacy/non-blocking).
+    /// WARNING: Spawns a task if in async context, potentially unbounded.
     pub fn send_json_blocking(&self, value: serde_json::Value) -> Result<(), TunnelError> {
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let sender = self.sender.clone();
@@ -279,6 +295,7 @@ pub struct TunnelClient {
     state_rx: watch::Receiver<ConnectionState>,
     router: Arc<TunnelRouter>,
     stats: Arc<InternalStats>,
+    metrics: Arc<MetricsRegistry>,
     outbound_tx: Option<mpsc::Sender<serde_json::Value>>,
     shutdown_tx: Option<broadcast::Sender<()>>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
@@ -286,13 +303,13 @@ pub struct TunnelClient {
 
 impl TunnelClient {
     /// Create a new tunnel client.
-    pub fn new(config: TunnelConfig) -> Self {
+    pub fn new(config: TunnelConfig, metrics: Arc<MetricsRegistry>) -> Self {
         let (state_tx, state_rx) = watch::channel(ConnectionState::Disconnected);
         Self {
             config,
             state_tx,
             state_rx,
-            router: Arc::new(TunnelRouter::new()),
+            router: Arc::new(TunnelRouter::new(Arc::clone(&metrics))),
             stats: Arc::new(InternalStats {
                 messages_sent: AtomicU64::new(0),
                 messages_received: AtomicU64::new(0),
@@ -302,6 +319,7 @@ impl TunnelClient {
                 reconnect_attempts: AtomicU32::new(0),
                 circuit_breaker_state: AtomicU32::new(CircuitBreakerState::Closed.as_u32()),
             }),
+            metrics,
             outbound_tx: None,
             shutdown_tx: None,
             task_handle: None,
@@ -380,12 +398,13 @@ impl TunnelClient {
         let state_tx = self.state_tx.clone();
         let router = Arc::clone(&self.router);
         let stats = Arc::clone(&self.stats);
+        let metrics = Arc::clone(&self.metrics);
         let shutdown_rx = shutdown_tx.subscribe();
 
         self.router.start();
 
         let handle = tokio::spawn(async move {
-            connection_loop(config, state_tx, router, stats, outbound_rx, shutdown_rx).await;
+            connection_loop(config, state_tx, router, stats, metrics, outbound_rx, shutdown_rx).await;
         });
         self.task_handle = Some(handle);
 
@@ -421,6 +440,7 @@ async fn connection_loop(
     state_tx: watch::Sender<ConnectionState>,
     router: Arc<TunnelRouter>,
     stats: Arc<InternalStats>,
+    metrics: Arc<MetricsRegistry>,
     mut outbound_rx: mpsc::Receiver<serde_json::Value>,
     mut shutdown_rx: broadcast::Receiver<()>,
 ) {
@@ -448,6 +468,7 @@ async fn connection_loop(
             return;
         }
 
+        metrics.tunnel_metrics().set_connected(false);
         let _ = state_tx.send_replace(ConnectionState::Connecting);
         info!("Connecting to Tunnel: {}", config.url);
 
@@ -466,6 +487,7 @@ async fn connection_loop(
             &state_tx,
             &router,
             &stats,
+            &metrics,
             &mut outbound_rx,
             &mut shutdown_rx_run,
             auth_timeout_override,
@@ -473,15 +495,18 @@ async fn connection_loop(
         .await
         {
             ConnectionResult::Shutdown => {
+                metrics.tunnel_metrics().set_connected(false);
                 let _ = state_tx.send_replace(ConnectionState::Disconnected);
                 return;
             }
             ConnectionResult::AuthFailed => {
+                metrics.tunnel_metrics().set_connected(false);
                 error!("Tunnel authentication failed, not retrying");
                 let _ = state_tx.send_replace(ConnectionState::Error);
                 return;
             }
             ConnectionResult::ConfigError => {
+                metrics.tunnel_metrics().set_connected(false);
                 error!("Tunnel configuration error, not retrying");
                 let _ = state_tx.send_replace(ConnectionState::Error);
                 return;
@@ -519,6 +544,8 @@ async fn connection_loop(
                 }
 
                 let delay_ms = apply_jitter(delay_ms.max(1));
+                metrics.tunnel_metrics().record_reconnect_attempt(delay_ms);
+                metrics.tunnel_metrics().set_connected(false);
                 let delay = Duration::from_millis(delay_ms);
                 warn!(
                     "Tunnel disconnected, reconnecting in {}ms (attempt {}, circuit {})",
@@ -648,6 +675,7 @@ async fn connect_and_run(
     state_tx: &watch::Sender<ConnectionState>,
     router: &Arc<TunnelRouter>,
     stats: &Arc<InternalStats>,
+    metrics: &Arc<MetricsRegistry>,
     outbound_rx: &mut mpsc::Receiver<serde_json::Value>,
     shutdown_rx: &mut broadcast::Receiver<()>,
     auth_timeout_override: Option<u64>,
@@ -715,7 +743,6 @@ async fn connect_and_run(
     let auth_timeout_ms = auth_timeout_override.unwrap_or(config.auth_timeout_ms).max(1);
     let auth_timeout =
         tokio::time::timeout(Duration::from_millis(auth_timeout_ms), ws_rx.next()).await;
-    let mut authenticated = false;
 
     match auth_timeout {
         Ok(Some(Ok(Message::Text(text)))) => {
@@ -723,7 +750,7 @@ async fn connect_and_run(
                 Ok(true) => {
                     let _ = state_tx.send_replace(ConnectionState::Connected);
                     info!("Tunnel authenticated and connected");
-                    authenticated = true;
+                    metrics.tunnel_metrics().set_connected(true);
                 }
                 Ok(false) => {
                     error!("Tunnel auth failed");
@@ -749,15 +776,18 @@ async fn connect_and_run(
         }
         _ => {
             error!("Tunnel auth timeout");
+            metrics.tunnel_metrics().record_auth_timeout();
             return ConnectionResult::Disconnected { connected: false };
         }
     }
 
+    let authenticated = true;
     let heartbeat_interval_duration =
         Duration::from_millis(config.heartbeat_interval_ms.max(1));
     let mut heartbeat_interval = tokio::time::interval(heartbeat_interval_duration);
-    let mut last_message_at = tokio::time::Instant::now();
-    let mut last_ping_at: Option<tokio::time::Instant> = None;
+    let mut heartbeat_inflight_at: Option<tokio::time::Instant> = None;
+    let mut heartbeat_misses: u32 = 0;
+    let mut heartbeat_backoff_exp: u32 = 0;
 
     loop {
         tokio::select! {
@@ -776,6 +806,7 @@ async fn connect_and_run(
                                     return ConnectionResult::Disconnected { connected: authenticated };
                                 }
                                 stats.messages_sent.fetch_add(1, Ordering::Relaxed);
+                                metrics.tunnel_metrics().record_message_sent();
                             }
                             Err(e) => {
                                 error!("Tunnel message serialization failed: {}", e);
@@ -792,20 +823,20 @@ async fn connect_and_run(
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         stats.messages_received.fetch_add(1, Ordering::Relaxed);
-                        last_message_at = tokio::time::Instant::now();
+                        metrics.tunnel_metrics().record_message_received();
                         handle_incoming_message(&text, router).await;
                     }
                     Some(Ok(Message::Ping(data))) => {
-                        last_message_at = tokio::time::Instant::now();
                         let _ = ws_tx.send(Message::Pong(data)).await;
                     }
                     Some(Ok(Message::Pong(_))) => {
                         let now = tokio::time::Instant::now();
-                        last_message_at = now;
-                        if let Some(sent_at) = last_ping_at.take() {
+                        if let Some(sent_at) = heartbeat_inflight_at.take() {
                             let rtt_ms = now.duration_since(sent_at).as_millis() as u64;
                             stats.heartbeat_rtt_ms.store(rtt_ms, Ordering::Relaxed);
                         }
+                        heartbeat_misses = 0;
+                        heartbeat_backoff_exp = 0;
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         warn!("Tunnel WebSocket closed");
@@ -820,11 +851,34 @@ async fn connect_and_run(
             }
             _ = heartbeat_interval.tick() => {
                 let now = tokio::time::Instant::now();
-                if now.duration_since(last_message_at) > heartbeat_interval_duration + heartbeat_interval_duration {
-                    stats.heartbeat_timeouts.fetch_add(1, Ordering::Relaxed);
-                    warn!("Tunnel heartbeat timeout detected");
-                    return ConnectionResult::Disconnected { connected: authenticated };
+                let observed_rtt_ms = stats.heartbeat_rtt_ms.load(Ordering::Relaxed);
+                let base_timeout_ms = MIN_HEARTBEAT_TIMEOUT_MS.max(observed_rtt_ms);
+                let backoff_factor =
+                    1u64 << heartbeat_backoff_exp.min(MAX_HEARTBEAT_BACKOFF_EXP);
+                let timeout_ms = base_timeout_ms.saturating_mul(backoff_factor);
+                let timeout_duration = Duration::from_millis(timeout_ms);
+
+                if let Some(sent_at) = heartbeat_inflight_at {
+                    if now.duration_since(sent_at) > timeout_duration {
+                        heartbeat_misses = heartbeat_misses.saturating_add(1);
+                        stats.heartbeat_timeouts.fetch_add(1, Ordering::Relaxed);
+                        metrics.tunnel_metrics().record_heartbeat_timeout();
+                        warn!(
+                            "Tunnel heartbeat timeout (miss {}, rtt={}ms, timeout={}ms, backoff=2^{})",
+                            heartbeat_misses,
+                            observed_rtt_ms,
+                            timeout_ms,
+                            heartbeat_backoff_exp
+                        );
+                        if heartbeat_misses >= 2 {
+                            return ConnectionResult::Disconnected { connected: authenticated };
+                        }
+                        heartbeat_backoff_exp =
+                            (heartbeat_backoff_exp.saturating_add(1)).min(MAX_HEARTBEAT_BACKOFF_EXP);
+                        heartbeat_inflight_at = None;
+                    }
                 }
+
                 let heartbeat = serde_json::json!({
                     "type": "heartbeat",
                     "payload": { "timestamp": chrono::Utc::now().to_rfc3339() },
@@ -834,12 +888,15 @@ async fn connect_and_run(
                     error!("Failed to send tunnel heartbeat: {}", e);
                     return ConnectionResult::Disconnected { connected: authenticated };
                 }
-                if let Err(e) = ws_tx.send(Message::Ping(Vec::new())).await {
-                    error!("Failed to send tunnel ping: {}", e);
-                    return ConnectionResult::Disconnected { connected: authenticated };
+                if heartbeat_inflight_at.is_none() {
+                    if let Err(e) = ws_tx.send(Message::Ping(Vec::new())).await {
+                        error!("Failed to send tunnel ping: {}", e);
+                        return ConnectionResult::Disconnected { connected: authenticated };
+                    }
+                    heartbeat_inflight_at = Some(now);
+                    stats.heartbeats_sent.fetch_add(1, Ordering::Relaxed);
+                    metrics.tunnel_metrics().record_heartbeat_sent();
                 }
-                last_ping_at = Some(now);
-                stats.heartbeats_sent.fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -1250,7 +1307,7 @@ mod tests {
 
     #[tokio::test]
     async fn logs_channel_delivers_without_drops_under_load() {
-        let router = TunnelRouter::new();
+        let router = TunnelRouter::new(Arc::new(MetricsRegistry::new()));
         router.start();
 
         let mut rx = router.subscribe_channel(TunnelChannel::Logs);

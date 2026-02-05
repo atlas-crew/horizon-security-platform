@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use super::client::TunnelClientHandle;
 use super::types::{TunnelChannel, TunnelEnvelope};
+use crate::metrics::MetricsRegistry;
 use crate::telemetry::{TelemetryClient, TelemetryEvent};
 
 const LOG_CHANNEL_BUFFER: usize = 2048;
@@ -299,13 +300,15 @@ struct LogSession {
 pub struct TunnelLogService {
     handle: TunnelClientHandle,
     sessions: Arc<DashMap<String, LogSession>>,
+    metrics: Arc<MetricsRegistry>,
 }
 
 impl TunnelLogService {
-    pub fn new(handle: TunnelClientHandle) -> Self {
+    pub fn new(handle: TunnelClientHandle, metrics: Arc<MetricsRegistry>) -> Self {
         Self {
             handle,
             sessions: Arc::new(DashMap::new()),
+            metrics,
         }
     }
 
@@ -316,7 +319,16 @@ impl TunnelLogService {
             tokio::select! {
                 message = rx.recv() => {
                     match message {
-                        Ok(envelope) => self.handle_message(envelope).await,
+                        Ok(envelope) => {
+                            let started = Instant::now();
+                            self.handle_message(envelope).await;
+                            self.metrics
+                                .tunnel_metrics()
+                                .record_handler_latency_ms(
+                                    TunnelChannel::Logs,
+                                    started.elapsed().as_millis() as u64,
+                                );
+                        }
                         Err(broadcast::error::RecvError::Lagged(count)) => {
                             warn!("Log service lagged by {} messages", count);
                             continue;

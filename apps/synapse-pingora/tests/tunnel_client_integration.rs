@@ -7,13 +7,27 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch, Notify};
-use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::{
+    accept_async,
+    tungstenite::{
+        Message,
+        protocol::CloseFrame,
+        protocol::frame::coding::CloseCode,
+    },
+};
 use sha2::Sha256;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
-use synapse_pingora::tunnel::{ConnectionState, TunnelChannel, TunnelClient, TunnelConfig};
+use synapse_pingora::metrics::MetricsRegistry;
+use synapse_pingora::tunnel::{
+    ConnectionState,
+    TunnelChannel,
+    TunnelClient,
+    TunnelConfig,
+    TunnelError,
+};
 
 const TEST_API_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -138,8 +152,29 @@ fn build_config(url: String) -> TunnelConfig {
     }
 }
 
+fn build_client(config: TunnelConfig) -> TunnelClient {
+    TunnelClient::new(config, Arc::new(MetricsRegistry::new()))
+}
+
 async fn wait_for_state(client: &TunnelClient, expected: ConnectionState) -> bool {
     let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if client.state() == expected {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
+async fn wait_for_state_with_timeout(
+    client: &TunnelClient,
+    expected: ConnectionState,
+    timeout: Duration,
+) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
     loop {
         if client.state() == expected {
             return true;
@@ -262,7 +297,7 @@ async fn auth_success_connects() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     client.start().await.unwrap();
 
     assert!(wait_for_state(&client, ConnectionState::Connected).await);
@@ -289,7 +324,7 @@ async fn auth_error_sets_error_state() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     client.start().await.unwrap();
 
     assert!(wait_for_state(&client, ConnectionState::Error).await);
@@ -309,7 +344,7 @@ async fn concurrent_state_watchers_observe_connected() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     let receivers: Vec<_> = (0..128).map(|_| client.subscribe_state()).collect();
 
     client.start().await.unwrap();
@@ -343,7 +378,7 @@ async fn auth_timeout_retries_then_errors() {
     config.reconnect_delay_ms = 100;
     config.max_reconnect_attempts = 1;
 
-    let mut client = TunnelClient::new(config);
+    let mut client = build_client(config);
     client.start().await.unwrap();
 
     assert!(wait_for_state(&client, ConnectionState::Error).await);
@@ -359,7 +394,7 @@ async fn heartbeat_timeout_disconnects() {
         let _ = ws
             .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
             .await;
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(8)).await;
     })
     .await;
 
@@ -368,11 +403,49 @@ async fn heartbeat_timeout_disconnects() {
     config.reconnect_delay_ms = 100;
     config.max_reconnect_attempts = 1;
 
-    let mut client = TunnelClient::new(config);
+    let mut client = build_client(config);
     client.start().await.unwrap();
 
-    assert!(wait_for_state(&client, ConnectionState::Error).await);
+    assert!(wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(10)).await);
     assert!(client.stats().heartbeat_timeouts > 0);
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn heartbeat_allows_slow_pong() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        while let Some(msg) = ws.next().await {
+            match msg {
+                Ok(Message::Ping(data)) => {
+                    tokio::time::sleep(Duration::from_millis(1_500)).await;
+                    let _ = ws.send(Message::Pong(data)).await;
+                }
+                Ok(Message::Close(_)) => break,
+                Err(_) => break,
+                _ => {}
+            }
+        }
+    })
+    .await;
+
+    let mut config = build_config(server.url());
+    config.heartbeat_interval_ms = 1_000;
+    config.reconnect_delay_ms = 100;
+    config.max_reconnect_attempts = 1;
+
+    let mut client = build_client(config);
+    client.start().await.unwrap();
+
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+    tokio::time::sleep(Duration::from_millis(2_000)).await;
+    assert_eq!(client.state(), ConnectionState::Connected);
+    assert_eq!(client.stats().heartbeat_timeouts, 0);
 
     client.stop().await;
     server.shutdown().await;
@@ -397,7 +470,7 @@ async fn routes_channel_message() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     let mut rx = client.subscribe_channel(TunnelChannel::Shell);
     client.start().await.unwrap();
 
@@ -429,7 +502,7 @@ async fn serializes_outbound_messages() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     client.start().await.unwrap();
     assert!(wait_for_state(&client, ConnectionState::Connected).await);
 
@@ -446,6 +519,221 @@ async fn serializes_outbound_messages() {
         }
         _ => panic!("unexpected event"),
     }
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn malformed_json_is_ignored() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        let _ = ws.send(Message::Text("{\"type\":".to_string())).await;
+        while ws.next().await.is_some() {}
+    })
+    .await;
+
+    let mut client = build_client(build_config(server.url()));
+    let mut legacy_rx = client.subscribe_legacy();
+    client.start().await.unwrap();
+
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+
+    let result = tokio::time::timeout(Duration::from_millis(100), legacy_rx.recv()).await;
+    assert!(result.is_err());
+    assert_eq!(client.state(), ConnectionState::Connected);
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn send_while_disconnected_errors() {
+    let client = build_client(build_config("ws://127.0.0.1:1".to_string()));
+    let payload = serde_json::json!({ "type": "shell", "payload": { "cmd": "whoami" }});
+
+    let err = client.send_json(payload).await.expect_err("expected not connected error");
+    assert!(matches!(err, TunnelError::NotConnected));
+}
+
+#[tokio::test]
+async fn oversized_payload_disconnects() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        if let Some(Ok(Message::Text(text))) = ws.next().await {
+            if text.len() > 1024 {
+                let _ = ws
+                    .send(Message::Close(Some(CloseFrame {
+                        code: CloseCode::Size,
+                        reason: "payload too large".into(),
+                    })))
+                    .await;
+            }
+        }
+    })
+    .await;
+
+    let mut config = build_config(server.url());
+    config.max_reconnect_attempts = 1;
+    config.reconnect_delay_ms = 100;
+
+    let mut client = build_client(config);
+    client.start().await.unwrap();
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+
+    let large_payload = serde_json::json!({
+        "type": "shell",
+        "payload": { "data": "a".repeat(2048) }
+    });
+    client.send_json(large_payload).await.unwrap();
+
+    assert!(wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(2)).await);
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn concurrent_message_send_delivers_all() {
+    let expected = 16usize;
+    let (server, mut events) = spawn_mock_server(move |mut ws, state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        let mut received = 0usize;
+        while received < expected {
+            match ws.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                    let is_heartbeat = json.get("type").and_then(Value::as_str) == Some("heartbeat");
+                    if is_heartbeat {
+                        continue;
+                    }
+                    let _ = state.events.send(ServerEvent::ClientMessage(json)).await;
+                    received += 1;
+                }
+                _ => break,
+            }
+        }
+    })
+    .await;
+
+    let mut client = build_client(build_config(server.url()));
+    client.start().await.unwrap();
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+
+    let handle = client.handle().expect("handle");
+    let payload = serde_json::json!({ "type": "shell", "payload": { "cmd": "uptime" }});
+    let mut tasks = Vec::new();
+
+    for _ in 0..expected {
+        let handle = handle.clone();
+        let payload = payload.clone();
+        tasks.push(tokio::spawn(async move { handle.send_json(payload).await }));
+    }
+
+    for task in tasks {
+        assert!(task.await.expect("send task").is_ok());
+    }
+
+    let mut received = 0usize;
+    while received < expected {
+        let event = tokio::time::timeout(Duration::from_millis(500), events.recv())
+            .await
+            .expect("timeout waiting for outbound")
+            .expect("outbound event");
+        if matches!(event, ServerEvent::ClientMessage(_)) {
+            received += 1;
+        }
+    }
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn close_normal_reconnects() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = ws
+            .send(Message::Close(Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: "normal close".into(),
+            })))
+            .await;
+    })
+    .await;
+
+    let mut config = build_config(server.url());
+    config.reconnect_delay_ms = 100;
+    config.max_reconnect_attempts = 1;
+
+    let mut client = build_client(config);
+    client.start().await.unwrap();
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+    assert!(wait_for_state_with_timeout(&client, ConnectionState::Reconnecting, Duration::from_secs(2)).await);
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn close_abnormal_reconnects() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        // Drop connection without close frame (abnormal close)
+    })
+    .await;
+
+    let mut config = build_config(server.url());
+    config.reconnect_delay_ms = 100;
+    config.max_reconnect_attempts = 1;
+
+    let mut client = build_client(config);
+    client.start().await.unwrap();
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+    assert!(wait_for_state_with_timeout(&client, ConnectionState::Reconnecting, Duration::from_secs(2)).await);
+
+    client.stop().await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+#[ignore = "stress test: 100MB payload"]
+async fn large_payload_stress() {
+    let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
+        let _ = ws.next().await;
+        let _ = ws
+            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .await;
+        let _ = ws.next().await;
+    })
+    .await;
+
+    let mut client = build_client(build_config(server.url()));
+    client.start().await.unwrap();
+    assert!(wait_for_state(&client, ConnectionState::Connected).await);
+
+    let payload = serde_json::json!({
+        "type": "shell",
+        "payload": { "data": "a".repeat(100 * 1024 * 1024) }
+    });
+    let _ = client.send_json(payload).await;
 
     client.stop().await;
     server.shutdown().await;
@@ -469,7 +757,7 @@ async fn reconnect_backoff_increases() {
     let max_first_delay = base_delay.saturating_mul(2);
     let max_second_delay = base_delay.saturating_mul(4);
 
-    let mut client = TunnelClient::new(config);
+    let mut client = build_client(config);
     client.start().await.unwrap();
 
     assert!(server
@@ -512,7 +800,7 @@ async fn graceful_shutdown_disconnects() {
     })
     .await;
 
-    let mut client = TunnelClient::new(build_config(server.url()));
+    let mut client = build_client(build_config(server.url()));
     client.start().await.unwrap();
 
     assert!(wait_for_state(&client, ConnectionState::Connected).await);

@@ -6,10 +6,11 @@ use dashmap::DashMap;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
+use crate::metrics::MetricsRegistry;
 use super::client::TunnelClientHandle;
 use super::types::LegacyTunnelMessage;
 
@@ -91,17 +92,19 @@ pub struct TunnelShellService {
     sessions: Arc<DashMap<String, ShellSession>>,
     default_shell: String,
     enabled: bool,
+    metrics: Arc<MetricsRegistry>,
 }
 
 impl TunnelShellService {
     /// Create a new shell service with the given tunnel handle.
-    pub fn new(handle: TunnelClientHandle, enabled: bool) -> Self {
+    pub fn new(handle: TunnelClientHandle, enabled: bool, metrics: Arc<MetricsRegistry>) -> Self {
         let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
         Self {
             handle,
             sessions: Arc::new(DashMap::new()),
             default_shell,
             enabled,
+            metrics,
         }
     }
 
@@ -117,7 +120,16 @@ impl TunnelShellService {
             tokio::select! {
                 message = rx.recv() => {
                     match message {
-                        Ok(message) => self.handle_message(message).await,
+                        Ok(message) => {
+                            let started = Instant::now();
+                            self.handle_message(message).await;
+                            self.metrics
+                                .tunnel_metrics()
+                                .record_handler_latency_ms(
+                                    super::types::TunnelChannel::Shell,
+                                    started.elapsed().as_millis() as u64,
+                                );
+                        }
                         Err(broadcast::error::RecvError::Lagged(count)) => {
                             warn!("Shell service lagged by {} messages", count);
                             continue;
@@ -307,7 +319,8 @@ impl TunnelShellService {
                             "payload": { "data": encoded },
                             "timestamp": chrono::Utc::now().to_rfc3339(),
                         });
-                        let _ = handle.send_json_blocking(message);
+                        // Use sync send for backpressure against PTY reader
+                        let _ = handle.send_json_sync(message);
                     }
                     Err(err) => {
                         // Avoid logging error if it's just the session closing
@@ -318,7 +331,7 @@ impl TunnelShellService {
                                 "payload": { "error": format!("shell output error: {}", err) },
                                 "timestamp": chrono::Utc::now().to_rfc3339(),
                             });
-                            let _ = handle.send_json_blocking(message);
+                            let _ = handle.send_json_sync(message);
                         }
                         break;
                     }

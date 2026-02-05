@@ -35,6 +35,17 @@ impl TunnelChannel {
         TunnelChannel::Files,
         TunnelChannel::Update,
     ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            TunnelChannel::Shell => "shell",
+            TunnelChannel::Logs => "logs",
+            TunnelChannel::Diag => "diag",
+            TunnelChannel::Control => "control",
+            TunnelChannel::Files => "files",
+            TunnelChannel::Update => "update",
+        }
+    }
 }
 
 /// Metadata included during tunnel authentication.

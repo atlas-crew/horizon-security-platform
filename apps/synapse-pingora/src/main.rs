@@ -4626,24 +4626,29 @@ fn main() {
 
             rt.block_on(async move {
                 let shell_enabled = tunnel_config.shell_enabled;
-                let mut tunnel_client = TunnelClient::new(tunnel_config);
+                let mut tunnel_client = TunnelClient::new(tunnel_config, Arc::clone(&metrics));
                 if let Err(e) = tunnel_client.start().await {
                     error!("Failed to start tunnel client: {}", e);
                     return;
                 }
                 if let Some(handle) = tunnel_client.handle() {
                     tokio::spawn(
-                        TunnelShellService::new(handle.clone(), shell_enabled)
+                        TunnelShellService::new(
+                            handle.clone(),
+                            shell_enabled,
+                            Arc::clone(&metrics),
+                        )
                             .run(handle.subscribe_shutdown()),
                     );
                     tokio::spawn(
-                        TunnelLogService::new(handle.clone()).run(handle.subscribe_shutdown()),
+                        TunnelLogService::new(handle.clone(), Arc::clone(&metrics))
+                            .run(handle.subscribe_shutdown()),
                     );
                     tokio::spawn(
                         TunnelDiagService::new(
                             handle.clone(),
                             health,
-                            metrics,
+                            Arc::clone(&metrics),
                             actor_manager,
                             config_manager,
                         )

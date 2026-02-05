@@ -109,7 +109,7 @@ impl AuthCoverageAggregator {
             std::mem::take(&mut *guard)
         };
         
-        let dropped_endpoints = self.dropped_endpoints.swap(0, Ordering::SeqCst);
+        let dropped_endpoints = self.dropped_endpoints.load(Ordering::Relaxed);
         
         if counts.is_empty() && dropped_endpoints == 0 {
             return; // Nothing to send
@@ -131,6 +131,7 @@ impl AuthCoverageAggregator {
         
         if let Ok(payload) = serde_json::to_value(&summary) {
             self.emitter.emit("auth_coverage_summary", payload).await;
+            self.dropped_endpoints.fetch_sub(dropped_endpoints, Ordering::SeqCst);
         }
     }
     

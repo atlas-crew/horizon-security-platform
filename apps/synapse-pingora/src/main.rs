@@ -4958,6 +4958,17 @@ fn main() {
 
     // Phase 5 & 9: Start all shared background maintenance tasks
     // These tasks handle risk decay, state cleanup, and correlation cycles
+    let background_rt = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            error!("Failed to create background runtime: {}", err);
+            std::process::exit(1);
+        }
+    };
+    let _background_guard = background_rt.enter();
     shared_actor_manager.clone().start_background_tasks();
     shared_session_manager.clone().start_background_tasks();
     campaign_manager.clone().start_background_worker();

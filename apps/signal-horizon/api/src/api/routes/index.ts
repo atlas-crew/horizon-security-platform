@@ -41,6 +41,8 @@ import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
 import { createPlaybookRoutes } from './playbooks.js';
 import docsRouter from './docs.js';
 import { UserAuthService } from '../../services/user-auth.js';
+import { createAuthManagementRoutes } from './auth-management.js';
+import type { RedisKv } from '../../storage/redis/kv.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
@@ -67,6 +69,8 @@ export interface ApiRouterOptions {
   warRoomService?: WarRoomService;
   apiIntelligenceService?: APIIntelligenceService;
   preferenceService?: PreferenceService;
+  /** Redis KV for epoch-based token revocation (labs-wqy1) */
+  kv?: RedisKv | null;
   // Additional services for dependency injection
   intelService?: import('../../services/intel/index.js').IntelService;
   policyService?: import('../../services/fleet/policy-template.js').PolicyTemplateService;
@@ -82,9 +86,10 @@ export function createApiRouter(
   options: ApiRouterOptions = {}
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(prisma);
+  const kv = options.kv ?? null;
+  const authMiddleware = createAuthMiddleware(prisma, kv);
   const authRateLimiters = createAuthRateLimiters(logger);
-  const userAuthService = new UserAuthService(prisma, logger);
+  const userAuthService = new UserAuthService(prisma, logger, kv);
 
   // PEN-004: Content-type validation for all mutation endpoints
   // Applied before auth to reject malformed requests early
@@ -143,6 +148,9 @@ export function createApiRouter(
       /^\/synapse/,                 // Synapse proxy routes
     ],
   }));
+
+  // Mount Auth Management routes (admin-only token revocation, epoch management)
+  router.use('/auth', createAuthManagementRoutes(prisma, logger, kv));
 
   // Mount route modules
   router.use('/campaigns', createCampaignRoutes(prisma));

@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 import { signJwt, type JwtPayload } from '../lib/jwt.js';
 import { config } from '../config.js';
 import { ROLE_SCOPES } from '../api/middleware/scopes.js';
+import { getEpochForTenant } from '../lib/epoch.js';
+import type { RedisKv } from '../storage/redis/kv.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -21,7 +23,15 @@ export interface LoginResult {
 }
 
 export class UserAuthService {
-  constructor(private prisma: PrismaClient, private logger: Logger) {}
+  private prisma: PrismaClient;
+  private logger: Logger;
+  private kv: RedisKv | null;
+
+  constructor(prisma: PrismaClient, logger: Logger, kv?: RedisKv | null) {
+    this.prisma = prisma;
+    this.logger = logger;
+    this.kv = kv ?? null;
+  }
 
   /**
    * Authenticate user and create a session.
@@ -187,6 +197,9 @@ export class UserAuthService {
     // Get scopes for role
     const scopes = ROLE_SCOPES[role] || [];
 
+    // Embed current epoch for bulk token revocation (labs-wqy1)
+    const epoch = this.kv ? await getEpochForTenant(tenantId, this.kv) : 0;
+
     const accessPayload: JwtPayload = {
       iat: now,
       exp: accessTokenExp,
@@ -194,6 +207,7 @@ export class UserAuthService {
       userId,
       tenantId,
       scopes,
+      epoch,
     };
 
     const jwtSecret = config.telemetry.jwtSecret;

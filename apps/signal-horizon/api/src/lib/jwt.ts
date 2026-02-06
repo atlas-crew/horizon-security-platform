@@ -35,6 +35,8 @@ export type JwtPayload = {
   userId?: string;
   sensorId?: string;
   scopes?: string[];
+  /** Epoch for bulk token revocation (labs-wqy1) */
+  epoch?: number;
   // Legacy aliases
   tenant_id?: string;
   user_id?: string;

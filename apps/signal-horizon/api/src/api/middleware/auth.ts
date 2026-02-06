@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto';
 import { config } from '../../config.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
+import { getEpochForTenant } from '../../lib/epoch.js';
+import type { RedisKv } from '../../storage/redis/kv.js';
 import {
   checkAuthLockout,
   recordFailedAuth,
@@ -42,7 +44,7 @@ declare global {
   }
 }
 
-export function createAuthMiddleware(prisma: PrismaClient) {
+export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) {
   return async function authMiddleware(
     req: Request,
     res: Response,
@@ -119,6 +121,21 @@ export function createAuthMiddleware(prisma: PrismaClient) {
             instance: req.originalUrl,
           });
           return;
+        }
+
+        // Epoch-based bulk revocation check (labs-wqy1)
+        // If Redis is available and the JWT carries an epoch claim, verify it
+        // against the current tenant epoch. Fail-open when Redis is unavailable.
+        if (kv && typeof jwtPayload.epoch === 'number') {
+          const currentEpoch = await getEpochForTenant(tenantId, kv);
+          if (jwtPayload.epoch < currentEpoch) {
+            recordFailedAuth(clientIp);
+            sendProblem(res, 401, 'Token epoch has expired — all sessions were revoked', {
+              code: 'TOKEN_EPOCH_EXPIRED',
+              instance: req.originalUrl,
+            });
+            return;
+          }
         }
 
         const scopes = 'scopes' in jwtPayload && Array.isArray(jwtPayload.scopes) ? jwtPayload.scopes : [];

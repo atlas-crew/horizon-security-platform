@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express, { type Express } from 'express';
 import { createHmac, createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import type { RedisKv } from '../../storage/redis/kv.js';
 import request from '../../__tests__/test-request.js';
 import { createAuthMiddleware } from './auth.js';
 import { metrics } from '../../services/metrics.js';
@@ -170,5 +171,127 @@ describe('Auth middleware JWT', () => {
       scopes: ['fleet:read'],
       isFleetAdmin: false,
     });
+  });
+});
+
+describe('Auth middleware epoch validation (labs-wqy1)', () => {
+  let prisma: PrismaClient;
+
+  function createMockKv(epochValue: string | null = null): RedisKv {
+    return {
+      get: vi.fn().mockResolvedValue(epochValue),
+      set: vi.fn().mockResolvedValue(true),
+      del: vi.fn().mockResolvedValue(1),
+    };
+  }
+
+  beforeEach(() => {
+    mockConfig.telemetry.jwtSecret = 'test-secret';
+
+    prisma = {
+      tokenBlacklist: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+      apiKey: {
+        findUnique: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    } as unknown as PrismaClient;
+  });
+
+  it('rejects token when epoch is behind current tenant epoch', async () => {
+    const kv = createMockKv('3'); // Current epoch is 3
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma, kv));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    // Token has epoch 1, which is behind current epoch 3
+    const token = createJwt({ epoch: 1 });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+
+    expect(res.body).toMatchObject({ code: 'TOKEN_EPOCH_EXPIRED' });
+  });
+
+  it('accepts token when epoch matches current tenant epoch', async () => {
+    const kv = createMockKv('3');
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma, kv));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const token = createJwt({ epoch: 3 });
+
+    await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('accepts token when epoch is ahead of current tenant epoch', async () => {
+    const kv = createMockKv('2');
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma, kv));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const token = createJwt({ epoch: 3 });
+
+    await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('skips epoch check when no kv is provided', async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma)); // No kv
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const token = createJwt({ epoch: 0 });
+
+    await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('skips epoch check when token has no epoch claim', async () => {
+    const kv = createMockKv('5');
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma, kv));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    // Token without epoch claim (legacy tokens)
+    const token = createJwt({}); // No epoch in overrides
+
+    await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('fails open when Redis errors during epoch check', async () => {
+    const kv = createMockKv();
+    vi.mocked(kv.get).mockRejectedValue(new Error('connection refused'));
+    const app = express();
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma, kv));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const token = createJwt({ epoch: 1 });
+
+    // Should pass because getEpochForTenant returns 0 on error (fail-open)
+    // and 1 >= 0
+    await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
   });
 });

@@ -20,6 +20,7 @@ describe('ThreatService', () => {
         signalType: 'CREDENTIAL_STUFFING',
         severity: 'HIGH',
         confidence: 0.9,
+        tenantId: 'tenant-1',
       };
 
       const result = await service.calculateThreatScore(signal);
@@ -33,6 +34,7 @@ describe('ThreatService', () => {
         signalType: 'IMPOSSIBLE_TRAVEL',
         severity: 'CRITICAL',
         confidence: 0.95,
+        tenantId: 'tenant-1',
       };
 
       const result = await service.calculateThreatScore(signal);
@@ -46,6 +48,7 @@ describe('ThreatService', () => {
         signalType: 'TEMPLATE_DISCOVERY',
         severity: 'LOW',
         confidence: 0.5,
+        tenantId: 'tenant-1',
       };
 
       const result = await service.calculateThreatScore(signal);
@@ -60,6 +63,7 @@ describe('ThreatService', () => {
         signalType: 'BOT_SIGNATURE',
         severity: 'MEDIUM',
         confidence: 0.7,
+        tenantId: 'tenant-1',
         sourceIp: '192.168.1.100',
         eventCount: 1,
       };
@@ -81,6 +85,7 @@ describe('ThreatService', () => {
         signalType: 'IP_THREAT',
         severity: 'HIGH',
         confidence: 0.8,
+        tenantId: 'tenant-1',
       };
 
       const result = await service.calculateThreatScore(signal);
@@ -96,6 +101,7 @@ describe('ThreatService', () => {
         signalType: 'IMPOSSIBLE_TRAVEL',
         severity: 'CRITICAL',
         confidence: 1.0,
+        tenantId: 'tenant-1',
         eventCount: 1000,
       };
 
@@ -128,6 +134,7 @@ describe('ThreatService', () => {
         signalType: 'RATE_ANOMALY',
         severity: 'MEDIUM',
         confidence: 0.7,
+        tenantId: 'tenant-1',
         sourceIp: '10.0.0.1',
       };
 
@@ -148,6 +155,7 @@ describe('ThreatService', () => {
         signalType: 'TEMPLATE_DISCOVERY',
         severity: 'LOW',
         confidence: 0.3,
+        tenantId: 'tenant-1',
       };
 
       const result = await service.calculateThreatScore(signal);
@@ -165,6 +173,7 @@ describe('ThreatService', () => {
         signalType: 'IMPOSSIBLE_TRAVEL',
         severity: 'CRITICAL',
         confidence: 0.95,
+        tenantId: 'tenant-1',
       };
 
       const result = await strictService.calculateThreatScore(signal);

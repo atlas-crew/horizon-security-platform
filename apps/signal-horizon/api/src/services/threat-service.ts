@@ -6,6 +6,7 @@
 
 import type { Logger } from 'pino';
 import type { Severity } from '../types/protocol.js';
+import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from '../storage/redis/index.js';
 
 /**
  * Signal context for threat scoring
@@ -14,6 +15,7 @@ export interface SignalContext {
   signalType: string;
   severity: Severity;
   confidence: number;
+  tenantId: string;
   sourceIp?: string;
   fingerprint?: string;
   eventCount?: number;
@@ -135,6 +137,169 @@ export class InMemoryRecentSignalsStore implements RecentSignalsStore {
   }
 }
 
+type StoredRecentSignalEntry = { count: number; lastSeen: number };
+type RecentSignalsIndexEntry = { tenantId: string; id: string };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export class RedisRecentSignalsStore implements RecentSignalsStore {
+  private kv: RedisKv;
+  private namespace: string;
+  private version: number;
+  private dataType: string;
+  private indexTenantId: string;
+  private indexDataType: string;
+  private indexId: string;
+  private windowMs: number;
+  private lockTtlSeconds: number;
+
+  constructor(
+    kv: RedisKv,
+    options: {
+      namespace?: string;
+      version?: number;
+      dataType?: string;
+      indexTenantId?: string;
+      indexDataType?: string;
+      indexId?: string;
+      windowMs?: number;
+      lockTtlSeconds?: number;
+    } = {}
+  ) {
+    this.kv = kv;
+    this.namespace = options.namespace ?? 'horizon';
+    this.version = options.version ?? 1;
+    this.dataType = options.dataType ?? 'recent-signal-volume';
+    this.indexTenantId = options.indexTenantId ?? 'global';
+    this.indexDataType = options.indexDataType ?? 'recent-signal-volume-index';
+    this.indexId = options.indexId ?? 'all';
+    this.windowMs = options.windowMs ?? 5 * 60 * 1000;
+    this.lockTtlSeconds = options.lockTtlSeconds ?? TTL_SECONDS.lockMin;
+  }
+
+  private parseVolumeKey(key: string): { tenantId: string; id: string } {
+    // Expected: "t:<tenantId>:<entityKey>"
+    if (!key.startsWith('t:')) throw new Error('RedisRecentSignalsStore: key missing tenant prefix');
+    const parts = key.split(':');
+    if (parts.length < 3) throw new Error('RedisRecentSignalsStore: key format invalid');
+    const tenantId = parts[1];
+    const id = parts.slice(2).join(':');
+    if (!tenantId || !id) throw new Error('RedisRecentSignalsStore: key format invalid');
+    return { tenantId, id };
+  }
+
+  private entryKey(tenantId: string, id: string): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId,
+      dataType: this.dataType,
+      id,
+    });
+  }
+
+  private indexKey(): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId: this.indexTenantId,
+      dataType: this.indexDataType,
+      id: this.indexId,
+    });
+  }
+
+  private indexLockKey(): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId: this.indexTenantId,
+      dataType: 'lock',
+      id: [this.indexDataType, this.indexId],
+    });
+  }
+
+  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
+    const lockKey = this.indexLockKey();
+    let lockAcquired = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      lockAcquired = await this.kv.set(lockKey, '1', { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
+      if (lockAcquired) break;
+      await sleep(25 * (attempt + 1));
+    }
+
+    try {
+      return await fn();
+    } finally {
+      if (lockAcquired) await this.kv.del(lockKey);
+    }
+  }
+
+  private async readIndex(): Promise<RecentSignalsIndexEntry[]> {
+    const raw = await this.kv.get(this.indexKey());
+    if (!raw) return [];
+    return jsonDecode<RecentSignalsIndexEntry[]>(raw, { maxBytes: 1024 * 1024 });
+  }
+
+  private async writeIndex(entries: RecentSignalsIndexEntry[]): Promise<void> {
+    const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
+    await this.kv.set(this.indexKey(), jsonEncode(entries), { ttlSeconds });
+  }
+
+  async get(key: string): Promise<StoredRecentSignalEntry | undefined> {
+    const { tenantId, id } = this.parseVolumeKey(key);
+    const raw = await this.kv.get(this.entryKey(tenantId, id));
+    if (!raw) return undefined;
+    return jsonDecode<StoredRecentSignalEntry>(raw);
+  }
+
+  async set(key: string, value: StoredRecentSignalEntry): Promise<void> {
+    const { tenantId, id } = this.parseVolumeKey(key);
+    const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
+
+    await this.kv.set(this.entryKey(tenantId, id), jsonEncode(value), { ttlSeconds });
+
+    await this.withIndexLock(async () => {
+      const entries = await this.readIndex();
+      const exists = entries.some((e) => e.tenantId === tenantId && e.id === id);
+      if (!exists) entries.push({ tenantId, id });
+      await this.writeIndex(entries);
+    });
+  }
+
+  async delete(key: string): Promise<void> {
+    const { tenantId, id } = this.parseVolumeKey(key);
+    await this.kv.del(this.entryKey(tenantId, id));
+
+    await this.withIndexLock(async () => {
+      const entries = await this.readIndex();
+      const next = entries.filter((e) => !(e.tenantId === tenantId && e.id === id));
+      await this.writeIndex(next);
+    });
+  }
+
+  async entries(): Promise<[string, StoredRecentSignalEntry][]> {
+    const entries = await this.readIndex();
+    const loaded: Array<[string, StoredRecentSignalEntry]> = [];
+    const stillPresent: RecentSignalsIndexEntry[] = [];
+
+    for (const entry of entries) {
+      const raw = await this.kv.get(this.entryKey(entry.tenantId, entry.id));
+      if (!raw) continue;
+      loaded.push([`t:${entry.tenantId}:${entry.id}`, jsonDecode<StoredRecentSignalEntry>(raw)]);
+      stillPresent.push(entry);
+    }
+
+    // Best-effort index compaction.
+    if (stillPresent.length !== entries.length) {
+      await this.kv.set(this.indexKey(), jsonEncode(stillPresent), { ttlSeconds: TTL_SECONDS.cacheMax });
+    }
+
+    return loaded;
+  }
+}
+
 export class ThreatService {
   private logger: Logger;
   private config: ThreatScoringConfig;
@@ -226,9 +391,10 @@ export class ThreatService {
 
   private buildVolumeKey(signal: SignalContext): string {
     // Key by fingerprint, sourceIp, or signal type
-    if (signal.fingerprint) return `fp:${signal.fingerprint}`;
-    if (signal.sourceIp) return `ip:${signal.sourceIp}`;
-    return `type:${signal.signalType}`;
+    const base = `t:${signal.tenantId}:`;
+    if (signal.fingerprint) return `${base}fp:${signal.fingerprint}`;
+    if (signal.sourceIp) return `${base}ip:${signal.sourceIp}`;
+    return `${base}type:${signal.signalType}`;
   }
 
   private async updateVolumeTracking(key: string, eventCount: number): Promise<number> {

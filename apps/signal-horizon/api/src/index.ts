@@ -27,21 +27,23 @@ import { FileRetryStore } from './storage/clickhouse/persistent-store.js';
 import path from 'node:path';
 // Fleet management services
 import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
-import { AutomatedPlaybookTrigger } from './services/warroom/automated-trigger.js';
+import { AutomatedPlaybookTrigger, RedisTriggerCooldownStore } from './services/warroom/automated-trigger.js';
 import { PlaybookService } from './services/warroom/playbook-service.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { PreferenceService } from './services/fleet/preference-service.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
+import { RedisDeploymentStateStore } from './services/fleet/deployment-state-store.js';
 import { FleetIntelService } from './services/fleet/fleet-intel.js';
 import { FleetSessionQueryService } from './services/fleet/session-query.js';
-import { ImpossibleTravelService } from './services/impossible-travel.js';
+import { ImpossibleTravelService, RedisUserHistoryStore } from './services/impossible-travel.js';
 import { SecurityAuditService } from './services/audit/security-audit.js';
 import { DataRetentionService } from './jobs/data-retention.js';
 import { createRetentionQueue, createRetentionWorker, type RetentionJobData } from './jobs/retention-queue.js';
 import { createBlocklistQueue, createBlocklistWorker, type BlocklistJobData } from './jobs/blocklist-queue.js';
 import { metrics } from './services/metrics.js';
+import { ThreatService, RedisRecentSignalsStore } from './services/threat-service.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
 // Job queue and workers
@@ -69,6 +71,7 @@ import { createTelemetryRouter } from './api/telemetry.js';
 import { PrismaNonceStore } from './middleware/replay-protection.js';
 import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
 import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
+import { getSharedRedisKv, type SharedRedisKv } from './storage/redis/shared-kv.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -238,6 +241,7 @@ let aggregator: Aggregator;
 let correlator: Correlator;
 let broadcaster: Broadcaster;
 let apiIntelligenceService: APIIntelligenceService;
+let threatService: ThreatService | null = null;
 let sensorGateway: SensorGateway;
 let dashboardGateway: DashboardGateway;
 // Fleet management services
@@ -265,6 +269,7 @@ let retentionQueue: Queue<RetentionJobData> | null = null;
 let retentionWorker: Worker<RetentionJobData, Record<string, number>> | null = null;
 let retentionInterval: NodeJS.Timeout | null = null;
 let retentionTimeout: NodeJS.Timeout | null = null;
+let sharedRedis: SharedRedisKv | null = null;
 
 // ============================================================================
 // Tunnel Authentication Handler
@@ -626,6 +631,15 @@ async function start() {
   commandSender = new CommandSender();
   logger.info('Protocol handlers initialized');
 
+  // Shared Redis (BullMQ-managed ioredis) for distributed state.
+  try {
+    sharedRedis = await getSharedRedisKv(logger);
+    logger.info('Shared Redis state KV ready');
+  } catch (error) {
+    sharedRedis = null;
+    logger.warn({ error }, 'Shared Redis KV unavailable; falling back to in-memory state stores');
+  }
+
   // Simple permission cache (10s TTL)
   const permissionCache = new Map<string, { allowed: boolean; expires: number }>();
 
@@ -647,8 +661,17 @@ async function start() {
       toggleMtd: config.fleetCommands.enableToggleMtd,
     },
   });
-  ruleDistributor = new RuleDistributor(prisma, logger);
-  impossibleTravelService = new ImpossibleTravelService(prisma, logger);
+
+  // Distributed stores (optional)
+  const deploymentStateStore = sharedRedis ? new RedisDeploymentStateStore(sharedRedis.kv) : undefined;
+  ruleDistributor = new RuleDistributor(prisma, logger, deploymentStateStore);
+
+  const userHistoryStore = sharedRedis ? new RedisUserHistoryStore(sharedRedis.kv) : undefined;
+  impossibleTravelService = new ImpossibleTravelService(prisma, logger, userHistoryStore);
+
+  const recentSignalsStore = sharedRedis ? new RedisRecentSignalsStore(sharedRedis.kv) : undefined;
+  threatService = new ThreatService(logger, undefined, recentSignalsStore);
+
   preferenceService = new PreferenceService(prisma, logger, clickhouse ?? undefined);
   
   // Initialize TunnelBroker with permission checker (labs-zbjy)
@@ -704,7 +727,14 @@ async function start() {
     warRoomService,
     securityAuditService
   );
-  playbookTrigger = new AutomatedPlaybookTrigger(prisma, logger, playbookService);
+  const triggerCooldownStore = sharedRedis ? new RedisTriggerCooldownStore(sharedRedis.kv) : undefined;
+  playbookTrigger = new AutomatedPlaybookTrigger(
+    prisma,
+    logger,
+    playbookService,
+    undefined,
+    triggerCooldownStore
+  );
 
   // labs-ohgy: Initialize Data Retention Service
   const retentionService = new DataRetentionService(
@@ -804,7 +834,7 @@ async function start() {
     clickhouse ?? undefined,
     impossibleTravelService,
     apiIntelligenceService,
-    undefined,
+    threatService ?? undefined,
     playbookTrigger,
     idempotencyStore
   );
@@ -1040,6 +1070,12 @@ async function shutdown(signal: string) {
   if (clickhouse) {
     await clickhouse.close();
     logger.info('ClickHouse connection closed');
+  }
+
+  if (sharedRedis) {
+    await sharedRedis.close();
+    sharedRedis = null;
+    logger.info('Shared Redis connection closed');
   }
 
   // Disconnect database

@@ -371,6 +371,7 @@ export class Aggregator {
       signalType: signal.signalType,
       severity: signal.severity,
       confidence: signal.confidence,
+      tenantId: signal.tenantId,
       sourceIp: signal.sourceIp,
       fingerprint: signal.fingerprint,
       eventCount: signal.eventCount,

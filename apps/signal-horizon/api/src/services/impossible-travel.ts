@@ -35,17 +35,48 @@ export interface ImpossibleTravelAlert {
 
 type f64 = number;
 
+/**
+ * Store interface for user login history.
+ * Allows swapping between in-memory and Redis-backed implementations.
+ */
+export interface UserHistoryStore {
+  get(key: string): Promise<LoginEvent[]>;
+  set(key: string, events: LoginEvent[]): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+/**
+ * In-memory implementation of UserHistoryStore (default).
+ * Suitable for single-instance deployments.
+ */
+export class InMemoryUserHistoryStore implements UserHistoryStore {
+  private map = new Map<string, LoginEvent[]>();
+
+  async get(key: string): Promise<LoginEvent[]> {
+    return this.map.get(key) || [];
+  }
+
+  async set(key: string, events: LoginEvent[]): Promise<void> {
+    this.map.set(key, events);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.map.delete(key);
+  }
+}
+
 export class ImpossibleTravelService {
   private prisma: PrismaClient;
   private logger: Logger;
-  private userHistory: Map<string, LoginEvent[]> = new Map();
+  private userHistory: UserHistoryStore;
   private historyWindowMs = 24 * 60 * 60 * 1000; // 24 hours
   private maxHistoryPerUser = 10;
   private maxSpeedKmh = 1000; // Commercial flight speed approx
 
-  constructor(prisma: PrismaClient, logger: Logger) {
+  constructor(prisma: PrismaClient, logger: Logger, userHistoryStore?: UserHistoryStore) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'impossible-travel' });
+    this.userHistory = userHistoryStore ?? new InMemoryUserHistoryStore();
   }
 
   /**
@@ -53,7 +84,7 @@ export class ImpossibleTravelService {
    */
   async processLogin(event: LoginEvent): Promise<ImpossibleTravelAlert | null> {
     const key = `${event.tenantId}:${event.userId}`;
-    let history = this.userHistory.get(key) || [];
+    let history = await this.userHistory.get(key);
 
     // Clean old history
     const cutoff = Date.now() - this.historyWindowMs;
@@ -77,7 +108,7 @@ export class ImpossibleTravelService {
     if (history.length > this.maxHistoryPerUser) {
       history.shift();
     }
-    this.userHistory.set(key, history);
+    await this.userHistory.set(key, history);
 
     if (alert) {
       this.logger.warn(

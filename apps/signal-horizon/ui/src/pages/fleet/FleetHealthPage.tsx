@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
@@ -95,18 +96,24 @@ export function FleetHealthPage() {
 
       {/* Health Score */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <div className="card p-6 md:col-span-2">
+        <div className={`card border border-border-subtle border-l-2 p-6 md:col-span-2 ${
+          healthScore >= 90 ? 'border-l-ac-green' : healthScore >= 70 ? 'border-l-ac-orange' : 'border-l-ac-red'
+        }`}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-ink-secondary">Overall Health Score</p>
-              <p className="mt-2 text-5xl font-light text-ink-primary">{healthScore}%</p>
+              <p className={`mt-2 text-5xl font-light ${
+                healthScore >= 90 ? 'text-ac-green' : healthScore >= 70 ? 'text-ac-orange' : 'text-ac-red'
+              }`}>{healthScore}%</p>
             </div>
-            <div
-              className={`w-20 h-20 flex items-center justify-center text-ac-white text-2xl font-semibold ${
-                healthScore >= 90 ? 'bg-ac-green' : healthScore >= 70 ? 'bg-ac-orange' : 'bg-ac-red'
-              }`}
-            >
-              {healthScore >= 90 ? '✓' : healthScore >= 70 ? '!' : '✕'}
+            <div className="w-20 h-20 flex items-center justify-center border border-border-subtle">
+              {healthScore >= 90 ? (
+                <CheckCircle2 className="w-8 h-8 text-ac-green" />
+              ) : healthScore >= 70 ? (
+                <AlertTriangle className="w-8 h-8 text-ac-orange" />
+              ) : (
+                <XCircle className="w-8 h-8 text-ac-red" />
+              )}
             </div>
           </div>
         </div>
@@ -114,23 +121,27 @@ export function FleetHealthPage() {
         <MetricCard
           label="Critical Alerts"
           value={health?.criticalAlerts ?? criticalSensors.length}
-          className={criticalSensors.length > 0 ? 'border-ac-red/40 bg-ac-red/10' : ''}
+          className="border-l-2 border-l-ac-red"
+          labelClassName="text-ac-red"
+          valueClassName="text-ac-red"
         />
         <MetricCard
           label="Warnings"
           value={health?.warningAlerts ?? warningSensors.length}
-          className={warningSensors.length > 0 ? 'border-ac-orange/40 bg-ac-orange/10' : ''}
+          className="border-l-2 border-l-ac-orange"
+          labelClassName="text-ac-orange"
+          valueClassName="text-ac-orange"
         />
       </div>
 
       {/* Resource Usage */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="card p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
           <h3 className="text-lg font-medium text-ink-primary mb-4">Fleet Resource Usage</h3>
           <ResourceBarGroup cpu={avgCpu} memory={avgMemory} disk={35} size="lg" />
         </div>
 
-        <div className="card p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-navy dark:border-t-ac-sky-light p-6">
           <h3 className="text-lg font-medium text-ink-primary mb-4">Status Distribution</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -138,21 +149,21 @@ export function FleetHealthPage() {
                 <div className="w-4 h-4 bg-ac-green" />
                 <span className="text-sm text-ink-secondary">Online</span>
               </div>
-              <span className="text-sm font-medium text-ink-primary">{metrics?.onlineCount ?? 0}</span>
+              <span className="text-sm font-medium text-ac-green">{metrics?.onlineCount ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 bg-ac-orange" />
                 <span className="text-sm text-ink-secondary">Warning</span>
               </div>
-              <span className="text-sm font-medium text-ink-primary">{metrics?.warningCount ?? 0}</span>
+              <span className="text-sm font-medium text-ac-orange">{metrics?.warningCount ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 bg-ac-gray-mid" />
                 <span className="text-sm text-ink-secondary">Offline</span>
               </div>
-              <span className="text-sm font-medium text-ink-primary">{metrics?.offlineCount ?? 0}</span>
+              <span className="text-sm font-medium text-ac-red">{metrics?.offlineCount ?? 0}</span>
             </div>
           </div>
         </div>
@@ -160,7 +171,7 @@ export function FleetHealthPage() {
 
       {/* Sensors Requiring Attention */}
       {criticalSensors.length > 0 && (
-        <div className="card border-ac-red/40 p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-red p-6">
           <h3 className="text-lg font-medium text-ac-red mb-4">
             Critical Issues ({criticalSensors.length})
           </h3>
@@ -168,8 +179,12 @@ export function FleetHealthPage() {
             {criticalSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15"
+                className="flex items-center justify-between p-3 border border-ac-red/20 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
+                tabIndex={0}
+                role="link"
+                aria-label={`View critical sensor ${sensor.name}`}
               >
                 <div className="flex items-center gap-4">
                   <SensorStatusBadge status={sensor.status} />
@@ -186,7 +201,7 @@ export function FleetHealthPage() {
 
       {/* Warning Sensors */}
       {warningSensors.length > 0 && (
-        <div className="card border-ac-orange/40 p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-orange p-6">
           <h3 className="text-lg font-medium text-ac-orange mb-4">
             Warnings ({warningSensors.length})
           </h3>
@@ -194,8 +209,12 @@ export function FleetHealthPage() {
             {warningSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15"
+                className="flex items-center justify-between p-3 border border-ac-orange/20 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
+                tabIndex={0}
+                role="link"
+                aria-label={`View warning sensor ${sensor.name}`}
               >
                 <div className="flex items-center gap-4">
                   <SensorStatusBadge status={sensor.status} />
@@ -212,8 +231,10 @@ export function FleetHealthPage() {
 
       {/* All Healthy */}
       {criticalSensors.length === 0 && warningSensors.length === 0 && sensors.length > 0 && (
-        <div className="card border-ac-green/40 p-6 text-center">
-          <div className="text-ac-green text-4xl mb-2">✓</div>
+        <div className="card border border-border-subtle border-t-2 border-t-ac-green p-6 text-center">
+          <div className="flex items-center justify-center mb-2">
+            <CheckCircle2 className="w-10 h-10 text-ac-green" />
+          </div>
           <h3 className="text-lg font-medium text-ac-green">All Systems Healthy</h3>
           <p className="text-sm text-ink-secondary mt-1">
             All {sensors.length} sensors are operating normally

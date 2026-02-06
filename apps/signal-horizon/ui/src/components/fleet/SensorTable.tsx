@@ -66,6 +66,10 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
                 key={col.key}
                 className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest cursor-pointer hover:bg-surface-card"
                 onClick={() => handleSort(col.key)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key); } }}
+                tabIndex={0}
+                role="columnheader"
+                aria-sort={sortField === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
               >
                 <div className="flex items-center gap-2">
                   {col.label} <SortIcon field={col.key} />
@@ -83,6 +87,10 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
               key={sensor.id}
               className="hover:bg-surface-subtle cursor-pointer transition-colors group"
               onClick={() => onSensorClick?.(sensor)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSensorClick?.(sensor); } }}
+              tabIndex={0}
+              role="link"
+              aria-label={`View sensor ${sensor.name}`}
             >
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-ink-primary">{sensor.name}</td>
               <td className="px-6 py-4 whitespace-nowrap"><SensorStatusBadge status={sensor.status ?? 'DISCONNECTED'} /></td>

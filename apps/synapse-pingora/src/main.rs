@@ -3769,6 +3769,7 @@ impl ProxyHttp for SynapseProxy {
             status,
             total_time.as_secs_f64() * 1000.0,
             ctx.client_ip.as_deref(),
+            Some(ctx.request_id.as_str()),
         );
 
         if let Some(ref detection) = ctx.detection {
@@ -3783,6 +3784,7 @@ impl ProxyHttp for SynapseProxy {
                     ctx.client_ip.as_deref(),
                     Some(path),
                     message,
+                    Some(ctx.request_id.as_str()),
                 );
             }
         }

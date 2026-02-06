@@ -26,6 +26,7 @@ const DEFAULT_BACKFILL: usize = 200;
 #[derive(Clone, Debug)]
 pub struct LogStreamEntry {
     pub id: String,
+    pub request_id: Option<String>,
     pub timestamp_ms: u64,
     pub timestamp: String,
     pub source: String,
@@ -45,6 +46,7 @@ impl LogStreamEntry {
         let timestamp = chrono::Utc::now();
         Self {
             id: fastrand::u64(..).to_string(),
+            request_id: None,
             timestamp_ms: timestamp.timestamp_millis().max(0) as u64,
             timestamp: timestamp.to_rfc3339(),
             source: source.into(),
@@ -70,6 +72,9 @@ impl LogStreamEntry {
             "logTimestamp": self.timestamp_ms,
         });
 
+        if let Some(request_id) = &self.request_id {
+            entry["requestId"] = Value::String(request_id.clone());
+        }
         if let Some(fields) = &self.fields {
             entry["fields"] = fields.clone();
         }
@@ -105,6 +110,9 @@ impl LogStreamEntry {
         fields.insert("message".to_string(), Value::String(self.message.clone()));
         fields.insert("logTimestamp".to_string(), Value::Number(self.timestamp_ms.into()));
 
+        if let Some(request_id) = &self.request_id {
+            fields.insert("requestId".to_string(), Value::String(request_id.clone()));
+        }
         if let Some(extra) = &self.fields {
             fields.insert("fields".to_string(), extra.clone());
         }
@@ -177,6 +185,7 @@ pub fn publish_access_log(
     status_code: u16,
     latency_ms: f64,
     client_ip: Option<&str>,
+    request_id: Option<&str>,
 ) {
     let level = if status_code >= 500 {
         "error"
@@ -196,6 +205,7 @@ pub fn publish_access_log(
     entry.status_code = Some(status_code);
     entry.latency_ms = Some(latency_ms);
     entry.client_ip = client_ip.map(|ip| ip.to_string());
+    entry.request_id = request_id.map(|v| v.to_string());
 
     publish_log(entry);
 }
@@ -206,6 +216,7 @@ pub fn publish_waf_log(
     client_ip: Option<&str>,
     path: Option<&str>,
     message: String,
+    request_id: Option<&str>,
 ) {
     let level = if risk_score >= 80 {
         "error"
@@ -221,6 +232,7 @@ pub fn publish_waf_log(
     }
     entry.client_ip = client_ip.map(|ip| ip.to_string());
     entry.path = path.map(|p| p.to_string());
+    entry.request_id = request_id.map(|v| v.to_string());
     entry.fields = Some(serde_json::json!({
         "riskScore": risk_score,
         "ruleIds": rule_ids,
@@ -540,7 +552,7 @@ impl LogTelemetryService {
             match rx.recv().await {
                 Ok(entry) => {
                     let event = TelemetryEvent::LogEntry {
-                        request_id: None,
+                        request_id: entry.request_id.clone(),
                         id: entry.id.clone(),
                         source: entry.source.clone(),
                         level: entry.level.clone(),

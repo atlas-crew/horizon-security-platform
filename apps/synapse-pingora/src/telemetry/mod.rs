@@ -803,6 +803,28 @@ mod tests {
     }
 
     #[test]
+    fn test_log_entry_request_id_serialization() {
+        let event = TelemetryEvent::LogEntry {
+            request_id: Some("req_456".into()),
+            id: "log-1".into(),
+            source: "access".into(),
+            level: "info".into(),
+            message: "GET /".into(),
+            log_timestamp_ms: 1234,
+            fields: None,
+            method: Some("GET".into()),
+            path: Some("/".into()),
+            status_code: Some(200),
+            latency_ms: Some(12.5),
+            client_ip: Some("203.0.113.1".into()),
+            rule_id: None,
+        };
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["event_type"], "log_entry");
+        assert_eq!(value["data"]["request_id"], "req_456");
+    }
+
+    #[test]
     fn test_timestamped_event() {
         let event = request_processed(100, 200, None, "site".into(), "GET".into(), "/".into());
         let timestamped = TimestampedEvent::new(event, Some("node-1".to_string()));

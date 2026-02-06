@@ -1,0 +1,8 @@
+scrape_configs:
+  - job_name: synapse_tunnel
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - sensor-1:6191
+          - sensor-2:6191

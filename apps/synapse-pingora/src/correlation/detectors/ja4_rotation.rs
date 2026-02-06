@@ -50,7 +50,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use std::sync::RwLock;
+use parking_lot::RwLock;
 use std::time::{Duration, Instant};
 
 use crate::correlation::{
@@ -260,10 +260,7 @@ impl Ja4RotationDetector {
             return;
         }
 
-        let mut history = match self.history.write() {
-            Ok(h) => h,
-            Err(_) => return, // Skip on lock contention
-        };
+        let mut history = self.history.write();
 
         let entry = history.entry(ip).or_insert_with(FingerprintHistory::new);
         entry.add(fingerprint);
@@ -277,9 +274,7 @@ impl Ja4RotationDetector {
         let unique_count = entry.unique_count_in_window(self.config.window);
         if unique_count >= self.config.min_fingerprints {
             drop(history); // Release write lock
-            if let Ok(mut flagged) = self.flagged.write() {
-                flagged.insert(ip);
-            }
+            self.flagged.write().insert(ip);
         }
     }
 
@@ -289,10 +284,8 @@ impl Ja4RotationDetector {
     /// multiple unique fingerprints within the detection window).
     pub fn is_rotating(&self, ip: &IpAddr) -> bool {
         // First check the flagged set (fast path)
-        if let Ok(flagged) = self.flagged.read() {
-            if flagged.contains(ip) {
-                return true;
-            }
+        if self.flagged.read().contains(ip) {
+            return true;
         }
 
         // Check current state (may have been updated since last flag check)
@@ -307,12 +300,7 @@ impl Ja4RotationDetector {
     /// # Returns
     /// Number of unique fingerprints seen within the detection window.
     pub fn unique_count_in_window(&self, ip: &IpAddr) -> usize {
-        let history = match self.history.read() {
-            Ok(h) => h,
-            Err(_) => return 0,
-        };
-
-        history
+        self.history.read()
             .get(ip)
             .map(|h| h.unique_count_in_window(self.config.window))
             .unwrap_or(0)
@@ -326,12 +314,7 @@ impl Ja4RotationDetector {
     /// # Returns
     /// List of unique fingerprints seen within the detection window.
     pub fn unique_fingerprints(&self, ip: &IpAddr) -> Vec<String> {
-        let history = match self.history.read() {
-            Ok(h) => h,
-            Err(_) => return Vec::new(),
-        };
-
-        history
+        self.history.read()
             .get(ip)
             .map(|h| h.unique_fingerprints_in_window(self.config.window))
             .unwrap_or_default()
@@ -339,21 +322,17 @@ impl Ja4RotationDetector {
 
     /// Get all IPs currently flagged as rotating.
     pub fn get_rotating_ips(&self) -> Vec<IpAddr> {
-        let flagged = match self.flagged.read() {
-            Ok(f) => f,
-            Err(_) => return Vec::new(),
-        };
-        flagged.iter().copied().collect()
+        self.flagged.read().iter().copied().collect()
     }
 
     /// Get the number of tracked IPs.
     pub fn tracked_ip_count(&self) -> usize {
-        self.history.read().map(|h| h.len()).unwrap_or(0)
+        self.history.read().len()
     }
 
     /// Get the number of flagged (rotating) IPs.
     pub fn flagged_ip_count(&self) -> usize {
-        self.flagged.read().map(|f| f.len()).unwrap_or(0)
+        self.flagged.read().len()
     }
 
     /// Clean old observations from history.
@@ -361,10 +340,7 @@ impl Ja4RotationDetector {
     /// This is called automatically during normal operation but can be
     /// invoked manually if needed.
     pub fn cleanup_old_observations(&self) {
-        let mut history = match self.history.write() {
-            Ok(h) => h,
-            Err(_) => return,
-        };
+        let mut history = self.history.write();
 
         // Cleanup each IP's history
         for (_, ip_history) in history.iter_mut() {
@@ -377,29 +353,21 @@ impl Ja4RotationDetector {
         // Re-evaluate flagged IPs
         let window = self.config.window;
         let min_fps = self.config.min_fingerprints;
-        if let Ok(mut flagged) = self.flagged.write() {
-            flagged.retain(|ip| {
-                history
-                    .get(ip)
-                    .map(|h| h.unique_count_in_window(window) >= min_fps)
-                    .unwrap_or(false)
-            });
-        }
+        self.flagged.write().retain(|ip| {
+            history
+                .get(ip)
+                .map(|h| h.unique_count_in_window(window) >= min_fps)
+                .unwrap_or(false)
+        });
     }
 
     /// Get detector statistics.
     pub fn stats(&self) -> Ja4RotationStats {
-        let (tracked, total_observations) = self
-            .history
-            .read()
-            .map(|h| {
-                let tracked = h.len();
-                let total: usize = h.values().map(|v| v.observations.len()).sum();
-                (tracked, total)
-            })
-            .unwrap_or((0, 0));
+        let history = self.history.read();
+        let tracked = history.len();
+        let total_observations: usize = history.values().map(|v| v.observations.len()).sum();
 
-        let flagged = self.flagged.read().map(|f| f.len()).unwrap_or(0);
+        let flagged = self.flagged.read().len();
 
         Ja4RotationStats {
             tracked_ips: tracked,
@@ -415,15 +383,8 @@ impl Ja4RotationDetector {
     /// IPs that started rotating around the same time may be part of
     /// the same campaign.
     fn group_by_rotation_timing(&self) -> Vec<Vec<IpAddr>> {
-        let history = match self.history.read() {
-            Ok(h) => h,
-            Err(_) => return Vec::new(),
-        };
-
-        let flagged = match self.flagged.read() {
-            Ok(f) => f,
-            Err(_) => return Vec::new(),
-        };
+        let history = self.history.read();
+        let flagged = self.flagged.read();
 
         // Get first observation time for each flagged IP
         let mut ip_first_seen: Vec<(IpAddr, Instant)> = flagged

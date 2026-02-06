@@ -522,7 +522,7 @@ impl TelemetryClient {
                         self.stats.retries.fetch_add(1, Ordering::SeqCst);
                         debug!("Telemetry send failed (attempt {}), retrying: {}", attempt + 1, e);
                         tokio::time::sleep(backoff).await;
-                        backoff = (backoff * 2).min(self.config.max_backoff);
+                        backoff = backoff.checked_mul(2).unwrap_or(self.config.max_backoff).min(self.config.max_backoff);
                     } else {
                         self.circuit_breaker.record_failure().await;
                         self.stats.send_failures.fetch_add(1, Ordering::SeqCst);

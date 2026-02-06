@@ -570,7 +570,19 @@ async fn connect_and_run(
     let mut had_connection = false;
 
     // Connect WebSocket
-    let ws_stream = match tokio_tungstenite::connect_async(&config.hub_url).await {
+    let request = match http::Request::builder()
+        .uri(&config.hub_url)
+        .header("Authorization", format!("Bearer {}", config.api_key))
+        .body(())
+    {
+        Ok(req) => req,
+        Err(e) => {
+            error!("Failed to build WebSocket request: {}", e);
+            return ConnectionResult::Disconnected { had_connection };
+        }
+    };
+
+    let ws_stream = match tokio_tungstenite::connect_async(request).await {
         Ok((stream, _)) => stream,
         Err(e) => {
             error!("WebSocket connection failed: {}", e);

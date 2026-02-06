@@ -10,6 +10,9 @@ use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use crate::tunnel::TunnelChannel;
 
+/// Maximum number of entries allowed in any metrics hash map to prevent DoS via memory exhaustion. (labs-7tdw)
+const MAX_METRICS_MAP_SIZE: usize = 1000;
+
 /// Metrics registry holding all metric collectors.
 #[derive(Debug, Default)]
 pub struct MetricsRegistry {
@@ -79,10 +82,14 @@ impl DlpMetrics {
         self.matches_total.fetch_add(1, Ordering::Relaxed);
 
         let mut by_type = self.matches_by_type.write();
-        *by_type.entry(pattern_type.to_string()).or_insert(0) += 1;
+        if by_type.contains_key(pattern_type) || by_type.len() < MAX_METRICS_MAP_SIZE {
+            *by_type.entry(pattern_type.to_string()).or_insert(0) += 1;
+        }
 
         let mut by_severity = self.matches_by_severity.write();
-        *by_severity.entry(severity.to_string()).or_insert(0) += 1;
+        if by_severity.contains_key(severity) || by_severity.len() < MAX_METRICS_MAP_SIZE {
+            *by_severity.entry(severity.to_string()).or_insert(0) += 1;
+        }
     }
 
     /// Record a dropped violation
@@ -410,7 +417,9 @@ impl ProfilingMetrics {
     /// Record a schema violation for a specific endpoint.
     pub fn record_schema_violation(&self, endpoint: &str) {
         let mut violations = self.schema_violations_total.write();
-        *violations.entry(endpoint.to_string()).or_insert(0) += 1;
+        if violations.contains_key(endpoint) || violations.len() < MAX_METRICS_MAP_SIZE {
+            *violations.entry(endpoint.to_string()).or_insert(0) += 1;
+        }
     }
 
     /// Get all schema violations by endpoint.
@@ -424,7 +433,9 @@ impl ProfilingMetrics {
     /// Record an anomaly detection.
     pub fn record_anomaly(&self, anomaly_type: &str, score: f64) {
         let mut anomalies = self.anomalies_detected.write();
-        *anomalies.entry(anomaly_type.to_string()).or_insert(0) += 1;
+        if anomalies.contains_key(anomaly_type) || anomalies.len() < MAX_METRICS_MAP_SIZE {
+            *anomalies.entry(anomaly_type.to_string()).or_insert(0) += 1;
+        }
 
         self.requests_with_anomalies.fetch_add(1, Ordering::Relaxed);
 
@@ -447,6 +458,12 @@ impl ProfilingMetrics {
             .unwrap_or(0);
 
         let mut stats = self.endpoint_stats.write();
+        
+        // Memory protection: don't track more than MAX_METRICS_MAP_SIZE unique endpoints
+        if !stats.contains_key(path) && stats.len() >= MAX_METRICS_MAP_SIZE {
+            return;
+        }
+
         let entry = stats.entry(path.to_string()).or_insert_with(|| EndpointStats {
             hit_count: 0,
             first_seen: now,
@@ -1114,6 +1131,9 @@ impl MetricsRegistry {
     /// Records backend response.
     pub fn record_backend(&self, backend: &str, success: bool, response_time_us: u64) {
         let mut backends = self.backend_metrics.write();
+        if !backends.contains_key(backend) && backends.len() >= MAX_METRICS_MAP_SIZE {
+            return;
+        }
         let metrics = backends.entry(backend.to_string()).or_default();
         metrics.requests += 1;
         metrics.response_time_us += response_time_us;

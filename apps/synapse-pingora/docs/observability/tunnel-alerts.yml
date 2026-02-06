@@ -1,0 +1,29 @@
+groups:
+  - name: synapse-tunnel
+    rules:
+      - alert: TunnelDisconnected
+        expr: synapse_tunnel_connected == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tunnel disconnected
+          description: Tunnel has been disconnected for more than 5 minutes.
+
+      - alert: TunnelReconnectDelayHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(synapse_tunnel_reconnect_delay_ms_bucket[5m]))) > 30000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tunnel reconnect delay high
+          description: P95 reconnect backoff exceeds 30 seconds.
+
+      - alert: TunnelBufferOverflow
+        expr: increase(synapse_tunnel_channel_buffer_overflow_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tunnel channel backpressure
+          description: Tunnel channel buffers are hitting backpressure.

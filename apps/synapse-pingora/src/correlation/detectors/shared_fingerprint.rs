@@ -33,7 +33,7 @@
 
 use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::RwLock;
+use parking_lot::RwLock;
 
 use crate::correlation::{
     Campaign, CampaignUpdate, CorrelationReason, CorrelationType, FingerprintGroup,
@@ -136,30 +136,22 @@ impl SharedFingerprintDetector {
     fn is_processed(&self, fingerprint: &str) -> bool {
         self.processed_fingerprints
             .read()
-            .map(|guard| guard.contains(fingerprint))
-            .unwrap_or(false)
+            .contains(fingerprint)
     }
 
     /// Mark a fingerprint as processed.
     fn mark_processed(&self, fingerprint: &str) {
-        if let Ok(mut guard) = self.processed_fingerprints.write() {
-            guard.insert(fingerprint.to_string());
-        }
+        self.processed_fingerprints.write().insert(fingerprint.to_string());
     }
 
     /// Clear processed fingerprints (e.g., when resetting detector state).
     pub fn clear_processed(&self) {
-        if let Ok(mut guard) = self.processed_fingerprints.write() {
-            guard.clear();
-        }
+        self.processed_fingerprints.write().clear();
     }
 
     /// Get the number of processed fingerprints.
     pub fn processed_count(&self) -> usize {
-        self.processed_fingerprints
-            .read()
-            .map(|guard| guard.len())
-            .unwrap_or(0)
+        self.processed_fingerprints.read().len()
     }
 
     /// Calculate confidence score based on fingerprint type and group size.

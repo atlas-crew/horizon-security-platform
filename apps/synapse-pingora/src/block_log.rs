@@ -2,8 +2,8 @@
 //! Maintains a circular buffer of recent WAF block events.
 
 use std::collections::VecDeque;
-use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use parking_lot::RwLock;
 use serde::Serialize;
 
 /// A WAF block event for dashboard display
@@ -57,16 +57,10 @@ impl BlockLog {
         }
     }
 
-    fn read_events(&self) -> std::sync::RwLockReadGuard<'_, VecDeque<BlockEvent>> {
-        self.events.read().unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn write_events(&self) -> std::sync::RwLockWriteGuard<'_, VecDeque<BlockEvent>> {
-        self.events.write().unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
     pub fn record(&self, event: BlockEvent) {
-        let mut events = self.write_events();
+        // If a panic occurs mid-write, the buffer may be partially updated.
+        // This is acceptable for metrics and avoids poisoning the lock.
+        let mut events = self.events.write();
         if events.len() >= self.max_size {
             events.pop_front();
         }
@@ -74,13 +68,13 @@ impl BlockLog {
     }
 
     pub fn recent(&self, limit: usize) -> Vec<BlockEvent> {
-        let events = self.read_events();
+        let events = self.events.read();
         let take = limit.min(events.len());
         events.iter().rev().take(take).cloned().collect()
     }
 
     pub fn len(&self) -> usize {
-        self.read_events().len()
+        self.events.read().len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -89,7 +83,7 @@ impl BlockLog {
 
     /// Clear all events
     pub fn clear(&self) {
-        self.write_events().clear();
+        self.events.write().clear();
     }
 }
 
@@ -216,21 +210,22 @@ mod tests {
     }
 
     #[test]
-    fn test_block_log_poisoned_lock() {
-        use std::sync::Arc;
+    fn test_block_log_lock_survives_panic() {
+        use std::sync::{Arc, Barrier};
         let log = Arc::new(BlockLog::new(10));
+        let barrier = Arc::new(Barrier::new(2));
 
-        // Poison the lock by panicking in a thread while holding it
+        // Panic while holding the lock to ensure future access is still possible
         let log_clone = log.clone();
-        let _ = std::thread::spawn(move || {
-            let _lock = log_clone.events.write().unwrap();
-            panic!("Poisoning lock intentionally for test");
-        })
-        .join();
+        let barrier_clone = barrier.clone();
+        let handle = std::thread::spawn(move || {
+            let _lock = log_clone.events.write();
+            barrier_clone.wait();
+            panic!("Intentional panic while holding lock");
+        });
+        barrier.wait();
+        let _ = handle.join();
 
-        assert!(log.events.is_poisoned());
-
-        // Should still be able to record and read thanks to unwrap_or_else handling
         let event = BlockEvent::new(
             "1.1.1.1".to_string(),
             "GET".to_string(),

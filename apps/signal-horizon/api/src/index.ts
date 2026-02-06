@@ -30,6 +30,7 @@ import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js'
 import { AutomatedPlaybookTrigger } from './services/warroom/automated-trigger.js';
 import { PlaybookService } from './services/warroom/playbook-service.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
+import { PreferenceService } from './services/fleet/preference-service.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
@@ -37,12 +38,17 @@ import { FleetIntelService } from './services/fleet/fleet-intel.js';
 import { FleetSessionQueryService } from './services/fleet/session-query.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
 import { SecurityAuditService } from './services/audit/security-audit.js';
+import { DataRetentionService } from './jobs/data-retention.js';
+import { createRetentionQueue, createRetentionWorker, type RetentionJobData } from './jobs/retention-queue.js';
+import { createBlocklistQueue, createBlocklistWorker, type BlocklistJobData } from './jobs/blocklist-queue.js';
+import { metrics } from './services/metrics.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
 // Job queue and workers
-import { createRolloutWorker, stopRolloutWorker, recoverStalledRollouts } from './jobs/index.js';
-import type { Worker } from 'bullmq';
+import { createRolloutWorker, stopRolloutWorker, recoverStalledRollouts, closeQueue, closeWorker } from './jobs/index.js';
+import type { Queue, Worker } from 'bullmq';
 import type { RolloutJobData } from './jobs/queue.js';
+import type { SharingPreference } from './types/protocol.js';
 // Tunnel broker for remote access
 import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
 import { SynapseProxyService } from './services/synapse-proxy.js';
@@ -50,8 +56,7 @@ import { initSynapseDirectAdapter } from './services/synapse-direct.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { matchUpgradePath } from './websocket/upgrade-path.js';
 import {
-  getTunnelSession,
-  updateTunnelSession,
+  TunnelSessionStore,
 } from './websocket/tunnel-session-store.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash, randomUUID } from 'node:crypto';
@@ -61,6 +66,7 @@ import { jsonDepthLimit } from './middleware/json-depth.js';
 import { requestId } from './middleware/request-id.js';
 import { enforceHttps } from './middleware/security.js';
 import { createTelemetryRouter } from './api/telemetry.js';
+import { PrismaNonceStore } from './middleware/replay-protection.js';
 import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
 import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
 
@@ -74,6 +80,13 @@ const logger = pino({
       'req.headers["x-api-key"]',
       'req.headers["x-auth-token"]',
       'req.headers["x-admin-key"]',
+      // Redact sensitive body fields
+      'req.body.apiKey',
+      'req.body.password',
+      'req.body.token',
+      'req.body.secret',
+      'req.body.clientSecret',
+      'req.body.signature',
       // Also redact in response context
       'res.headers["set-cookie"]',
     ],
@@ -105,6 +118,9 @@ const httpServer = createServer(app);
 // Request ID middleware - must be first for tracing
 // Accepts X-Request-ID header or generates UUID v4
 app.use(requestId());
+
+// Trust the first proxy level (e.g. Nginx, ALB) to ensure req.ip and req.secure are accurate (labs-mmft.4)
+app.set('trust proxy', 1);
 
 // Enforce HTTPS in production (labs-mmft.4)
 app.use(enforceHttps);
@@ -230,8 +246,10 @@ let fleetAggregator: FleetAggregator;
 let configManager: ConfigManager;
 let fleetCommander: FleetCommander;
 let ruleDistributor: RuleDistributor;
+let preferenceService: PreferenceService;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
+let tunnelSessionStore: TunnelSessionStore;
 let synapseProxy: SynapseProxyService;
 let sessionQueryService: FleetSessionQueryService;
 let fleetIntelService: FleetIntelService;
@@ -241,6 +259,12 @@ let playbookService: PlaybookService;
 let playbookTrigger: AutomatedPlaybookTrigger;
 let tunnelWss: WebSocketServer;
 let rolloutWorker: Worker<RolloutJobData, void>;
+let blocklistQueue: Queue<BlocklistJobData> | null = null;
+let blocklistWorker: Worker<BlocklistJobData, void> | null = null;
+let retentionQueue: Queue<RetentionJobData> | null = null;
+let retentionWorker: Worker<RetentionJobData, Record<string, number>> | null = null;
+let retentionInterval: NodeJS.Timeout | null = null;
+let retentionTimeout: NodeJS.Timeout | null = null;
 
 // ============================================================================
 // Tunnel Authentication Handler
@@ -436,12 +460,16 @@ function handleTunnelSensorConnection(
 }
 
 /**
- * Handle incoming user tunnel connections (shell/dashboard).
+ * Handle incoming user tunnel connections using first-message auth (labs-c4hh).
+ *
+ * The sessionId is no longer extracted from the URL path. Instead, the client
+ * must send `{ type: 'auth', sessionId: '<id>' }` as its first WebSocket message.
+ * This prevents the session token from being logged by proxies, stored in browser
+ * history, or leaked via Referer headers.
  */
 function handleTunnelUserConnection(
   ws: WebSocket,
-  log: typeof logger,
-  sessionId: string
+  log: typeof logger
 ): void {
   if (!tunnelBroker) {
     log.error('Tunnel broker not initialized');
@@ -449,61 +477,34 @@ function handleTunnelUserConnection(
     return;
   }
 
-  const session = getTunnelSession(sessionId);
-  if (!session) {
-    ws.close(4004, 'Session not found');
-    return;
-  }
+  tunnelBroker.handleUserConnection(ws, async (sessionId: string) => {
+    const session = await tunnelSessionStore.get(sessionId);
+    if (!session) {
+      return null;
+    }
 
-  if (session.expiresAt && Date.now() > session.expiresAt) {
-    updateTunnelSession(sessionId, { status: 'error', lastActivity: new Date().toISOString() });
-    ws.close(4005, 'Session expired');
-    return;
-  }
+    if (session.expiresAt && Date.now() > session.expiresAt.getTime()) {
+      await tunnelSessionStore.update(sessionId, { status: 'error', lastActivity: new Date() });
+      return null;
+    }
 
-  if (session.status !== 'pending') {
-    ws.close(4006, 'Session already used');
-    return;
-  }
+    if (session.status !== 'pending') {
+      return null;
+    }
 
-  const { tenantId, userId, sensorId, type } = session;
-  let started: string | null = null;
+    // Mark session as connected and track close
+    await tunnelSessionStore.update(sessionId, { status: 'connected', lastActivity: new Date() });
+    ws.on('close', async () => {
+      await tunnelSessionStore.update(sessionId, { status: 'disconnected', lastActivity: new Date() });
+    });
 
-  if (type === 'shell') {
-    started = tunnelBroker.startShellSessionWithId(
-      ws,
-      userId,
-      tenantId,
-      sensorId,
-      sessionId
-    );
-  } else if (type === 'logs') {
-    started = tunnelBroker.startLogsSessionWithId(
-      ws,
-      userId,
-      tenantId,
-      sensorId,
-      sessionId
-    );
-  } else {
-    started = tunnelBroker.startDashboardProxyWithId(
-      ws,
-      userId,
-      tenantId,
-      sensorId,
-      sessionId
-    );
-  }
-
-  if (!started) {
-    updateTunnelSession(sessionId, { status: 'error', lastActivity: new Date().toISOString() });
-    ws.close(4007, 'Sensor tunnel not connected');
-    return;
-  }
-
-  updateTunnelSession(sessionId, { status: 'connected', lastActivity: new Date().toISOString() });
-  ws.on('close', () => {
-    updateTunnelSession(sessionId, { status: 'disconnected', lastActivity: new Date().toISOString() });
+    return {
+      sessionId: session.id,
+      sensorId: session.sensorId,
+      tenantId: session.tenantId,
+      userId: session.userId,
+      type: session.type as 'shell' | 'dashboard' | 'logs',
+    };
   });
 }
 
@@ -542,12 +543,48 @@ async function start() {
     telemetryRetryBuffer = new ClickHouseRetryBuffer(clickhouse, logger, {}, persistentStore);
     await telemetryRetryBuffer.start();
   }
+
+  // PEN-006: Use Prisma-backed distributed nonce store for telemetry idempotency (labs-yb6m)
+  const idempotencyStore = new PrismaNonceStore(prisma, {
+    windowMs: 24 * 60 * 60 * 1000, // 24h window for batch idempotency
+  });
+
   const telemetryRouter = createTelemetryRouter(logger, {
     clickhouse,
     retryBuffer: telemetryRetryBuffer,
+    idempotencyStore,
+    prisma,
   });
   app.use(telemetryRouter);
   logger.info('Telemetry routes mounted at /telemetry and /_sensor/report');
+
+  /**
+   * Prometheus Metrics Endpoint (P1-OBSERVABILITY-002)
+   * Protected by bearer token or localhost-only access (labs-igrw).
+   */
+  app.get('/metrics', async (req, res) => {
+    // Allow localhost access for Prometheus scraping without auth
+    const clientIp = req.ip ?? req.socket.remoteAddress ?? '';
+    const isLocalhost = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1';
+
+    if (!isLocalhost) {
+      const authHeader = req.headers.authorization;
+      const metricsToken = process.env.METRICS_AUTH_TOKEN;
+
+      if (metricsToken && (!authHeader || authHeader !== `Bearer ${metricsToken}`)) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+    }
+
+    try {
+      res.setHeader('Content-Type', metrics.getContentType());
+      res.send(await metrics.getMetrics());
+    } catch (error) {
+      logger.error({ error }, 'Error rendering metrics');
+      res.status(500).send('Error rendering metrics');
+    }
+  });
 
   // Initialize Synapse Direct adapter for synapse-pingora connection (if configured)
   if (config.synapseDirect.enabled && config.synapseDirect.url) {
@@ -589,6 +626,9 @@ async function start() {
   commandSender = new CommandSender();
   logger.info('Protocol handlers initialized');
 
+  // Simple permission cache (10s TTL)
+  const permissionCache = new Map<string, { allowed: boolean; expires: number }>();
+
   // Initialize fleet management services
   fleetAggregator = new FleetAggregator(logger, {
     metricsRetentionMs: 5 * 60 * 1000, // 5 minutes
@@ -609,7 +649,41 @@ async function start() {
   });
   ruleDistributor = new RuleDistributor(prisma, logger);
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
-  tunnelBroker = new TunnelBroker(logger);
+  preferenceService = new PreferenceService(prisma, logger, clickhouse ?? undefined);
+  
+  // Initialize TunnelBroker with permission checker (labs-zbjy)
+  tunnelBroker = new TunnelBroker(logger, {
+    permissionChecker: async (userId: string, tenantId: string) => {
+      const cacheKey = `${userId}:${tenantId}`;
+      const now = Date.now();
+      const cached = permissionCache.get(cacheKey);
+      
+      if (cached && cached.expires > now) {
+        return cached.allowed;
+      }
+
+      // If userId is actually an apiKeyId (service account)
+      const apiKey = await prisma.apiKey.findUnique({
+        where: { id: userId },
+        select: { tenantId: true, isRevoked: true },
+      });
+
+      let allowed = false;
+      if (apiKey) {
+        allowed = !apiKey.isRevoked && apiKey.tenantId === tenantId;
+      } else {
+        // Assume user ID? We don't have a user table in schema.
+        // For now, assume if it's not an API key, it might be a future user ID or system.
+        // If "system", allow.
+        if (userId === 'system') allowed = true;
+      }
+
+      permissionCache.set(cacheKey, { allowed, expires: now + 10000 }); // 10s cache
+      return allowed;
+    }
+  });
+  
+  tunnelSessionStore = new TunnelSessionStore(prisma);
   synapseProxy = new SynapseProxyService(tunnelBroker, logger);
   sessionQueryService = new FleetSessionQueryService({ prisma, logger, tunnelBroker });
   fleetIntelService = new FleetIntelService(prisma, logger, synapseProxy);
@@ -631,6 +705,59 @@ async function start() {
     securityAuditService
   );
   playbookTrigger = new AutomatedPlaybookTrigger(prisma, logger, playbookService);
+
+  // labs-ohgy: Initialize Data Retention Service
+  const retentionService = new DataRetentionService(
+    prisma,
+    logger,
+    {},
+    securityAuditService,
+    clickhouse
+  );
+  const startRetentionFallback = () => {
+    if (retentionInterval || retentionTimeout) {
+      return;
+    }
+
+    // Run daily (86400000 ms)
+    retentionInterval = setInterval(async () => {
+      // PEN-006: Use distributed lock for fallback (labs-y0t2)
+      const lockKey = `retention-purge-daily-${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}-${new Date().getUTCDate()}`;
+      try {
+        const acquired = await idempotencyStore.checkAndAdd(lockKey, Date.now(), {
+          tenantId: 'system',
+          path: 'jobs:retention:fallback',
+        });
+
+        if (acquired) {
+          logger.info({ lockKey }, 'Acquired distributed lock for data retention fallback');
+          await retentionService.runPurge();
+        } else {
+          logger.debug({ lockKey }, 'Data retention fallback lock already held by another instance');
+        }
+      } catch (err) {
+        logger.error({ err }, 'Periodic data retention purge failed');
+      }
+    }, 86400000);
+
+    // Also run once on startup (after a short delay to let DB settle)
+    retentionTimeout = setTimeout(async () => {
+      const lockKey = `retention-purge-startup-${Date.now() - (Date.now() % 3600000)}`; // 1 hour bucket
+      try {
+        const acquired = await idempotencyStore.checkAndAdd(lockKey, Date.now(), {
+          tenantId: 'system',
+          path: 'jobs:retention:startup',
+        });
+
+        if (acquired) {
+          logger.info({ lockKey }, 'Acquired distributed lock for data retention startup');
+          await retentionService.runPurge();
+        }
+      } catch (err) {
+        logger.error({ err }, 'Startup data retention purge failed');
+      }
+    }, 60000);
+  };
 
   // Create WebSocket server for tunnel connections (noServer mode - we handle upgrades manually)
   tunnelWss = new WebSocketServer({ noServer: true });
@@ -678,7 +805,8 @@ async function start() {
     impossibleTravelService,
     apiIntelligenceService,
     undefined,
-    playbookTrigger
+    playbookTrigger,
+    idempotencyStore
   );
 
   // Initialize WebSocket gateways
@@ -701,6 +829,18 @@ async function start() {
   broadcaster.setWarRoomService(warRoomService);
   warRoomService.setDashboardGateway(dashboardGateway);
 
+  // labs-aoyv: Initialize Blocklist Queue & Worker
+  blocklistQueue = createBlocklistQueue(logger);
+  blocklistWorker = createBlocklistWorker(sensorGateway, logger);
+  broadcaster.setBlocklistQueue(blocklistQueue);
+
+  // labs-9yin: Wire up preference transition consensus
+  preferenceService.on('preference-change-requested', (tenantId: string, preference: SharingPreference) => {
+    return [
+      sensorGateway.acknowledgePreferenceChange(tenantId, preference),
+    ];
+  });
+
   // Start protocol handlers for fleet management
   commandSender.start();
   logger.info('Protocol handlers started');
@@ -715,14 +855,39 @@ async function start() {
       // Start the rollout worker (processes rollout jobs from the queue)
       rolloutWorker = createRolloutWorker(prisma, logger, fleetCommander);
       logger.info('Rollout worker started - background job processing enabled');
+
+      retentionQueue = createRetentionQueue(logger);
+      retentionWorker = createRetentionWorker(retentionService, logger);
+
+      try {
+        await retentionQueue.add(
+          'data-retention-startup',
+          { trigger: 'startup' },
+          { jobId: 'data-retention-startup', delay: 60000 }
+        );
+      } catch (error) {
+        logger.warn({ error }, 'Retention startup job already scheduled or failed');
+      }
+
+      try {
+        await retentionQueue.add(
+          'data-retention-daily',
+          { trigger: 'schedule' },
+          { jobId: 'data-retention-daily', repeat: { every: 86400000 } }
+        );
+      } catch (error) {
+        logger.warn({ error }, 'Retention repeat job already scheduled or failed');
+      }
     } catch (error) {
       logger.warn(
         { error: error instanceof Error ? error.message : String(error) },
-        'Failed to start rollout worker - Redis may not be available. Set ENABLE_JOB_QUEUE=false to suppress this warning.'
+        'Failed to start job queue - Redis may not be available. Set ENABLE_JOB_QUEUE=false to suppress this warning.'
       );
+      startRetentionFallback();
     }
   } else {
     logger.info('Job queue disabled (ENABLE_JOB_QUEUE=false) - rollout processing will not be available');
+    startRetentionFallback();
   }
 
   // Wire up protocol handlers to sensor gateway for fleet operations
@@ -761,15 +926,10 @@ async function start() {
     }
 
     if (match.type === 'tunnel-user') {
-      const parts = match.path.split('/');
-      const sessionId = parts[parts.length - 1];
-      if (!sessionId) {
-        logger.warn({ path: match.path }, 'Missing tunnel session id');
-        socket.destroy();
-        return;
-      }
+      // labs-c4hh: Session ID is no longer in the URL path.
+      // The client sends it as the first WebSocket message (first-message auth).
       tunnelWss.handleUpgrade(req, netSocket, head, (ws) => {
-        handleTunnelUserConnection(ws, logger, sessionId);
+        handleTunnelUserConnection(ws, logger);
       });
       return;
     }
@@ -836,16 +996,46 @@ async function shutdown(signal: string) {
     logger.info('Sensor bridge stopped');
   }
 
+  if (retentionInterval) {
+    clearInterval(retentionInterval);
+    retentionInterval = null;
+  }
+  if (retentionTimeout) {
+    clearTimeout(retentionTimeout);
+    retentionTimeout = null;
+  }
+
   // Stop job queue workers
   if (rolloutWorker) {
     await stopRolloutWorker(rolloutWorker, logger);
     logger.info('Rollout worker stopped');
   }
+  if (blocklistWorker) {
+    await closeWorker(blocklistWorker, logger);
+    logger.info('Blocklist worker stopped');
+  }
+  if (blocklistQueue) {
+    await closeQueue(blocklistQueue, logger);
+    logger.info('Blocklist queue closed');
+  }
+  if (retentionWorker) {
+    await closeWorker(retentionWorker, logger);
+    logger.info('Retention worker stopped');
+  }
+  if (retentionQueue) {
+    await closeQueue(retentionQueue, logger);
+    logger.info('Retention queue closed');
+  }
   logger.info('Fleet services stopped');
 
-  // Close ClickHouse connection
+  // Flush ClickHouse retry buffer with timeout to prevent hanging on shutdown (labs-ykn9)
   if (telemetryRetryBuffer) {
-    await telemetryRetryBuffer.flush();
+    logger.info('Flushing ClickHouse retry buffer...');
+    const flushResult = await telemetryRetryBuffer.flush(5000);
+    logger.info(
+      { succeeded: flushResult.succeeded, failed: flushResult.failed },
+      'ClickHouse retry buffer flushed'
+    );
   }
   if (clickhouse) {
     await clickhouse.close();

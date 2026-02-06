@@ -118,11 +118,14 @@ function App() {
   const unreadAlerts = alerts.filter((a) => a.timestamp > Date.now() - 3600000).length; // Last hour
 
   useEffect(() => {
-    // Connect to WebSocket on mount
-    connect();
-    // No cleanup - let the hook manage its own connection lifecycle
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timeout = window.setTimeout(() => {
+      connect();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [connect]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -134,6 +137,14 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
+      {/* Skip to main content — WCAG 2.4.1 */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-ac-blue focus:text-white focus:outline-none"
+      >
+        Skip to main content
+      </a>
+
       {/* Top Header - Command Bar with gradient depth
            Navy header maintains brand identity in both light and dark modes */}
       <header className="h-14 border-b border-ac-navy-light bg-ac-navy relative z-10 surface-hero-gradient edge-highlight">
@@ -384,7 +395,7 @@ function App() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto flex flex-col">
+        <main id="main-content" className="flex-1 overflow-auto flex flex-col">
           <ConnectionBanner
             isConnected={isConnected}
             isReconnecting={connectionState === 'connecting'}

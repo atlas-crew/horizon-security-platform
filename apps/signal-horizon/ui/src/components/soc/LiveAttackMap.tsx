@@ -69,7 +69,12 @@ function isFirefox(): boolean {
   return navigator.userAgent.toLowerCase().includes('firefox');
 }
 
-export function LiveAttackMap() {
+interface LiveAttackMapProps {
+  /** Show a "DEMO" badge when using simulated data. Defaults to true. */
+  isDemo?: boolean;
+}
+
+export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
   const { attacks, sensors } = useLiveAttacks();
   const [countries, setCountries] = useState<any>(null);
   const [tooltip, setTooltip] = useState<{x: number, y: number, content: string} | null>(null);
@@ -233,6 +238,15 @@ export function LiveAttackMap() {
             />
           </div>
         </DeckErrorBoundary>
+      )}
+
+      {/* Demo Data Badge */}
+      {isDemo && (
+        <div className="absolute top-3 right-3 z-10 pointer-events-none">
+          <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold uppercase tracking-wider bg-ac-orange/90 text-white">
+            Demo Data
+          </span>
+        </div>
       )}
 
       {/* Overlay Stats */}

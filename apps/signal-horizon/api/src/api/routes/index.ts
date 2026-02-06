@@ -12,6 +12,7 @@ import { createAuthMiddleware } from '../middleware/auth.js';
 import { createAuthRateLimiters } from '../middleware/rate-limit.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { contentTypeValidation } from '../../middleware/content-type.js';
+import { apiVersioning } from '../../middleware/versioning.js';
 import { csrfProtection, csrfTokenHandler, ensureCsrfToken } from '../../middleware/csrf.js';
 import { createCampaignRoutes } from './campaigns.js';
 import { createThreatRoutes } from './threats.js';
@@ -105,6 +106,12 @@ export function createApiRouter(
 
   // Ensure CSRF cookie exists on all requests (sets cookie if missing)
   router.use(ensureCsrfToken());
+
+  // Apply API versioning (labs-2j5u.17)
+  router.use(apiVersioning({
+    defaultVersion: 1,
+    supportedVersions: [1],
+  }));
 
   // Apply global rate limiting to all authenticated routes (labs-mmft.7)
   router.use(rateLimiters.global);

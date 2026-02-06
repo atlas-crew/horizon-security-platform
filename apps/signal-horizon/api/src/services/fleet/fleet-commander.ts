@@ -6,8 +6,10 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'node:events';
+import { metrics } from '../metrics.js';
 import type { SensorCommand, CommandStatus, Command } from './types.js';
 import type { CommandSender, CommandType } from '../../protocols/command-sender.js';
+import type { FleetAggregator } from './fleet-aggregator.js';
 
 export interface FleetCommanderConfig {
   /**
@@ -15,6 +17,24 @@ export interface FleetCommanderConfig {
    * Default: 30000 (30 seconds)
    */
   defaultTimeoutMs?: number;
+
+  /**
+   * Whether to use adaptive timeouts based on sensor network quality (RTT)
+   * Default: false
+   */
+  enableAdaptiveTimeout?: boolean;
+
+  /**
+   * Maximum adaptive timeout (milliseconds)
+   * Default: 120000 (2 minutes)
+   */
+  maxAdaptiveTimeoutMs?: number;
+
+  /**
+   * Minimum adaptive timeout (milliseconds)
+   * Default: 5000 (5 seconds)
+   */
+  minAdaptiveTimeoutMs?: number;
 
   /**
    * Maximum retry attempts for failed commands
@@ -57,14 +77,19 @@ export class FleetCommander extends EventEmitter {
   private config: Required<FleetCommanderConfig>;
   private timeoutCheckInterval: NodeJS.Timeout | null = null;
   private commandSender: CommandSender | null = null;
+  private fleetAggregator: FleetAggregator | null = null;
   private commandFeatures: { toggleChaos: boolean; toggleMtd: boolean };
 
-  constructor(prisma: PrismaClient, logger: Logger, config: FleetCommanderConfig = {}) {
+  constructor(prisma: PrismaClient, logger: Logger, config: FleetCommanderConfig = {}, fleetAggregator?: FleetAggregator) {
     super();
     this.prisma = prisma;
     this.logger = logger.child({ service: 'fleet-commander' });
+    this.fleetAggregator = fleetAggregator ?? null;
     this.config = {
       defaultTimeoutMs: config.defaultTimeoutMs ?? 30000, // 30 seconds
+      enableAdaptiveTimeout: config.enableAdaptiveTimeout ?? false,
+      maxAdaptiveTimeoutMs: config.maxAdaptiveTimeoutMs ?? 120000, // 2 minutes
+      minAdaptiveTimeoutMs: config.minAdaptiveTimeoutMs ?? 5000, // 5 seconds
       maxRetries: config.maxRetries ?? 3,
       timeoutCheckIntervalMs: config.timeoutCheckIntervalMs ?? 5000, // 5 seconds
       commandFeatures: config.commandFeatures ?? {},
@@ -117,39 +142,82 @@ export class FleetCommander extends EventEmitter {
   async sendCommand(tenantId: string, sensorId: string, command: SensorCommand): Promise<string> {
     this.ensureCommandEnabled(command.type);
 
-    // SECURITY: Validate tenant ownership of the sensor before sending command
-    const sensor = await this.prisma.sensor.findUnique({
-      where: { id: sensorId },
-      select: { tenantId: true },
-    });
+    this.logger.info({ sensorId, commandType: command.type }, 'Initiating command dispatch');
 
-    if (!sensor) {
-      throw new Error(`Sensor not found: ${sensorId}`);
+    // Calculate adaptive timeout if enabled (labs-2j5u.14)
+    let timeout = command.timeout ?? this.config.defaultTimeoutMs;
+    
+    if (this.config.enableAdaptiveTimeout && this.fleetAggregator) {
+      const sensorMetrics = this.fleetAggregator.getSensorMetrics(sensorId);
+      if (sensorMetrics && sensorMetrics.latency > 0) {
+        // timeout = latency + 10s buffer (as per implementation findings)
+        const adaptiveTimeout = sensorMetrics.latency + 10000;
+        
+        // Clamp between min/max
+        timeout = Math.max(
+          this.config.minAdaptiveTimeoutMs,
+          Math.min(adaptiveTimeout, this.config.maxAdaptiveTimeoutMs)
+        );
+        
+        this.logger.debug(
+          { sensorId, latency: sensorMetrics.latency, adaptiveTimeout: timeout },
+          'Using adaptive timeout based on sensor network quality'
+        );
+      }
     }
 
-    if (sensor.tenantId !== tenantId) {
-      this.logger.warn(
-        { tenantId, sensorId, sensorTenantId: sensor.tenantId },
-        'Tenant isolation violation: attempted to send command to sensor owned by different tenant'
-      );
-      throw new Error(`Sensor ${sensorId} does not belong to tenant ${tenantId}`);
-    }
-
-    this.logger.info({ sensorId, commandType: command.type }, 'Sending command to sensor');
-
-    const timeout = command.timeout ?? this.config.defaultTimeoutMs;
     const timeoutAt = new Date(Date.now() + timeout);
 
-    const created = await this.prisma.fleetCommand.create({
-      data: {
-        sensorId,
-        commandType: command.type,
-        payload: command.payload as Prisma.InputJsonValue,
-        status: 'pending',
-        timeoutAt,
-        attempts: 0,
-      },
+    // Use a transaction to ensure atomic validation and creation (P0-RACE-001)
+    const created = await this.prisma.$transaction(async (tx) => {
+      // 1. Validate tenant ownership and sensor state atomically
+      const sensor = await tx.sensor.findUnique({
+        where: { id: sensorId },
+        select: { tenantId: true, connectionState: true },
+      });
+
+      if (!sensor) {
+        throw new Error(`Sensor not found: ${sensorId}`);
+      }
+
+      if (sensor.tenantId !== tenantId) {
+        this.logger.warn(
+          { tenantId, sensorId, sensorTenantId: sensor.tenantId },
+          'Tenant isolation violation: attempted to send command to sensor owned by different tenant'
+        );
+        throw new Error(`Sensor ${sensorId} does not belong to tenant ${tenantId}`);
+      }
+
+      // 2. Check for duplicate pending commands of the same type to prevent redundant operations
+      const existingPending = await tx.fleetCommand.findFirst({
+        where: {
+          sensorId,
+          commandType: command.type,
+          status: 'pending',
+          createdAt: { gte: new Date(Date.now() - 5000) }, // Within last 5 seconds
+        },
+      });
+
+      if (existingPending) {
+        this.logger.info({ sensorId, commandType: command.type, existingId: existingPending.id }, 'Identical command already pending, skipping duplicate');
+        return existingPending;
+      }
+
+      // 3. Create the command record
+      return tx.fleetCommand.create({
+        data: {
+          sensorId,
+          commandType: command.type,
+          payload: command.payload as Prisma.InputJsonValue,
+          status: 'pending',
+          timeoutAt,
+          attempts: 0,
+        },
+      });
     });
+
+    // Increment metrics (P1-OBSERVABILITY-002)
+    metrics.fleetCommandsSent.inc({ type: command.type, tenant_id: tenantId });
 
     // Emit command-sent event (locally queued)
     this.emit('command-sent', {
@@ -243,6 +311,7 @@ export class FleetCommander extends EventEmitter {
   async getCommandStatus(commandId: string): Promise<CommandStatus | null> {
     const command = await this.prisma.fleetCommand.findUnique({
       where: { id: commandId },
+      include: { sensor: true },
     });
 
     if (!command) {
@@ -348,6 +417,7 @@ export class FleetCommander extends EventEmitter {
 
     const command = await this.prisma.fleetCommand.findUnique({
       where: { id: commandId },
+      include: { sensor: true },
     });
 
     if (!command) {
@@ -356,6 +426,11 @@ export class FleetCommander extends EventEmitter {
     }
 
     this.logger.info({ commandId, sensorId: command.sensorId }, 'Command succeeded');
+
+    // Update metrics (P1-OBSERVABILITY-002)
+    metrics.fleetCommandsSucceeded.inc({ type: command.commandType, tenant_id: command.sensor.tenantId });
+    const duration = (new Date().getTime() - command.sentAt!.getTime()) / 1000;
+    metrics.fleetCommandDuration.observe({ type: command.commandType, tenant_id: command.sensor.tenantId }, duration);
 
     this.emit('command-success', {
       commandId,
@@ -371,6 +446,7 @@ export class FleetCommander extends EventEmitter {
   async markCommandFailed(commandId: string, error: string): Promise<void> {
     const command = await this.prisma.fleetCommand.findUnique({
       where: { id: commandId },
+      include: { sensor: true },
     });
 
     if (!command) return;
@@ -418,6 +494,13 @@ export class FleetCommander extends EventEmitter {
     }
 
     this.logger.error({ commandId, sensorId: command.sensorId, error }, 'Command failed permanently');
+
+    // Update metrics (P1-OBSERVABILITY-002)
+    metrics.fleetCommandsFailed.inc({ 
+      type: command.commandType, 
+      tenant_id: command.sensor.tenantId,
+      error_type: 'execution_failed'
+    });
 
     this.emit('command-failed', {
       commandId,
@@ -472,6 +555,16 @@ export class FleetCommander extends EventEmitter {
         if (updated.count === 0) {
           continue;
         }
+
+        // Increment metrics (P1-OBSERVABILITY-002)
+        // Note: command.sensor might not be included in findMany, but we can use tenantId if we included it
+        // Since it's not included, we'll just use 'unknown' or fetch it.
+        // For simplicity here, we'll just track type.
+        metrics.fleetCommandsFailed.inc({ 
+          type: command.commandType, 
+          tenant_id: 'unknown',
+          error_type: 'timeout'
+        });
 
         this.emit('command-timeout', {
           commandId: command.id,

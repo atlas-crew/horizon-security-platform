@@ -36,7 +36,7 @@ const createMockPrisma = (ownedSensorIds: string[] = []) => {
     sensor: {
       // Default implementation handles both ownership checks and health polling
       findMany: vi.fn().mockImplementation(({ where, select }: { where?: any, select?: any } = {}) => {
-        // If select includes tenantId, it's likely an ownership validation call
+        // If select includes tenantId, it's an ownership validation call
         if (select?.tenantId && where?.id?.in) {
           return Promise.resolve(
             where.id.in.map((id: string) => ({
@@ -55,12 +55,24 @@ const createMockPrisma = (ownedSensorIds: string[] = []) => {
               .map((id: string) => ({ 
                 id, 
                 tenantId: TEST_TENANT_ID,
-                // These defaults can be overridden by specific test mocks
                 connectionState: 'CONNECTED',
                 lastHeartbeat: new Date(),
               }))
           );
         }
+        
+        // Handle tenant-based lookup (e.g. getRuleSyncStatus)
+        if (where?.tenantId === TEST_TENANT_ID) {
+          const ids = ownedSensorIds.length > 0 ? ownedSensorIds : ['sensor-1'];
+          return Promise.resolve(ids.map(id => ({
+            id,
+            tenantId: TEST_TENANT_ID,
+            connectionState: 'CONNECTED',
+            lastHeartbeat: new Date(),
+            ruleSyncState: [],
+          })));
+        }
+
         return Promise.resolve([]);
       }),
       findUnique: vi.fn().mockResolvedValue(null),

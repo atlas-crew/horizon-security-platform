@@ -164,8 +164,9 @@ export class RuleDistributor {
   /**
    * Get rule sync status across the fleet
    */
-  async getRuleSyncStatus(): Promise<RuleSyncStatus[]> {
+  async getRuleSyncStatus(tenantId: string): Promise<RuleSyncStatus[]> {
     const sensors = await this.prisma.sensor.findMany({
+      where: { tenantId },
       include: {
         ruleSyncState: true,
       },
@@ -203,7 +204,16 @@ export class RuleDistributor {
   /**
    * Get rule status for a specific sensor
    */
-  async getSensorRuleStatus(sensorId: string): Promise<SensorRuleStatus> {
+  async getSensorRuleStatus(sensorId: string, tenantId: string): Promise<SensorRuleStatus> {
+    // Verify ownership first
+    const sensor = await this.prisma.sensor.findFirst({
+      where: { id: sensorId, tenantId },
+    });
+
+    if (!sensor) {
+      throw new Error('Sensor not found or access denied');
+    }
+
     const ruleSyncStates = await this.prisma.ruleSyncState.findMany({
       where: { sensorId },
       orderBy: { createdAt: 'desc' },
@@ -1353,6 +1363,7 @@ export class RuleDistributor {
 
   /**
    * Wait for health confirmation from sensors after deployment
+   * Optimized with batch database queries (labs-2j5u.15)
    */
   private async waitForHealthConfirmation(
     sensorIds: string[],
@@ -1372,31 +1383,92 @@ export class RuleDistributor {
     }
 
     while (Date.now() - startTime < timeout) {
-      let allHealthy = true;
+      const remainingSensorIds = Array.from(results.entries())
+        .filter(([_, r]) => !r.healthy)
+        .map(([id, _]) => id);
 
-      for (const sensorId of sensorIds) {
-        const currentResult = results.get(sensorId)!;
-        if (currentResult.healthy) continue;
+      if (remainingSensorIds.length === 0) break;
 
-        try {
-          const health = await this.checkSensorHealth(sensorId);
-          results.set(sensorId, health);
-          if (!health.healthy) {
-            allHealthy = false;
+      try {
+        // Batch query all relevant data for remaining sensors
+        const [syncStates, sensors] = await Promise.all([
+          this.prisma.ruleSyncState.findMany({
+            where: { sensorId: { in: remainingSensorIds } },
+          }),
+          this.prisma.sensor.findMany({
+            where: { id: { in: remainingSensorIds } },
+            select: { id: true, lastHeartbeat: true, connectionState: true },
+          }),
+        ]);
+
+        const syncStateMap = new Map(syncStates.map((s) => [s.sensorId, s]));
+        const sensorMap = new Map(sensors.map((s) => [s.id, s]));
+
+        let allBatchHealthy = true;
+
+        for (const sensorId of remainingSensorIds) {
+          const syncState = syncStateMap.get(sensorId);
+          const sensor = sensorMap.get(sensorId);
+
+          if (!syncState) {
+            results.set(sensorId, {
+              healthy: false,
+              sensorId,
+              status: 'unhealthy',
+              errorMessage: 'No sync state found',
+            });
+            allBatchHealthy = false;
+            continue;
           }
-        } catch (error) {
-          allHealthy = false;
+
+          if (!sensor) {
+            results.set(sensorId, {
+              healthy: false,
+              sensorId,
+              status: 'unhealthy',
+              errorMessage: 'Sensor not found',
+            });
+            allBatchHealthy = false;
+            continue;
+          }
+
+          // Check heartbeat freshness (within 60 seconds)
+          const heartbeatAge = Date.now() - (sensor.lastHeartbeat?.getTime() ?? 0);
+          if (heartbeatAge > 60000) {
+            results.set(sensorId, {
+              healthy: false,
+              sensorId,
+              status: 'degraded',
+              errorMessage: `Stale heartbeat: ${heartbeatAge}ms old`,
+            });
+            allBatchHealthy = false;
+            continue;
+          }
+
+          // Check sensor connection state
+          if (sensor.connectionState === 'DISCONNECTED') {
+            results.set(sensorId, {
+              healthy: false,
+              sensorId,
+              status: 'unhealthy',
+              errorMessage: 'Sensor is disconnected',
+            });
+            allBatchHealthy = false;
+            continue;
+          }
+
+          // All checks passed for this sensor
           results.set(sensorId, {
-            healthy: false,
+            healthy: true,
             sensorId,
-            status: 'unhealthy',
-            errorMessage: error instanceof Error ? error.message : String(error),
+            status: 'healthy',
           });
         }
-      }
 
-      if (allHealthy) {
-        break;
+        if (allBatchHealthy) break;
+      } catch (error) {
+        this.logger.error({ error }, 'Error during batch health check');
+        // On error, we'll just wait and retry next interval
       }
 
       await this.sleep(checkInterval);
@@ -1732,8 +1804,9 @@ export class RuleDistributor {
   /**
    * Get sensors with failed rule syncs
    */
-  async getSensorsWithFailedRules(): Promise<Array<{ sensorId: string; failedRules: string[] }>> {
+  async getSensorsWithFailedRules(tenantId: string): Promise<Array<{ sensorId: string; failedRules: string[] }>> {
     const sensors = await this.prisma.sensor.findMany({
+      where: { tenantId },
       include: {
         ruleSyncState: {
           where: {

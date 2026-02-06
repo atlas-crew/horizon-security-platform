@@ -1,0 +1,7 @@
+{
+  "type": "sync_blocklist",
+  "commandId": "cmd-sync-bl-001",
+  "payload": {
+    "fullSync": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "type": "heartbeat",
+  "payload": {
+    "timestamp": 1706745600000,
+    "status": "degraded",
+    "cpu": 95,
+    "memory": 88.3,
+    "disk": 75,
+    "requestsLastMinute": 0,
+    "avgLatencyMs": 150.5,
+    "configHash": "hash1",
+    "rulesHash": "hash2"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "type": "signal",
+  "payload": {
+    "signalType": "BOT_SIGNATURE",
+    "severity": "MEDIUM",
+    "confidence": 0.7
+  }
+}

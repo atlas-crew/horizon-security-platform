@@ -1,0 +1,18 @@
+{
+  "type": "blocklist-update",
+  "updates": [
+    {
+      "action": "add",
+      "blockType": "IP",
+      "indicator": "10.0.0.50",
+      "source": "FLEET_INTEL",
+      "reason": "Cross-tenant campaign"
+    },
+    {
+      "action": "remove",
+      "blockType": "FINGERPRINT",
+      "indicator": "t13d1516h2_cleared"
+    }
+  ],
+  "sequenceId": 101
+}

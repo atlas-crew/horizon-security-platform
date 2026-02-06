@@ -1,0 +1,8 @@
+{
+  "type": "auth",
+  "payload": {
+    "apiKey": "sk_live_minimal",
+    "sensorId": "sensor-dev-01",
+    "version": "1.0.0"
+  }
+}

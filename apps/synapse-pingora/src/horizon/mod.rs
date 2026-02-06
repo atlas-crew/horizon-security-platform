@@ -54,6 +54,6 @@ pub use error::HorizonError;
 pub use manager::{HorizonManager, HorizonStats, HorizonStatsSnapshot};
 pub use signal_buffer::{SignalBuffer, SignalBufferConfig, SignalBufferError, SignalBufferStats};
 pub use types::{
-    ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, Severity, SignalType,
-    ThreatSignal,
+    AuthPayload, CommandAckPayload, ConfigPayload, ConnectionState, HeartbeatPayload, HubMessage,
+    SensorMessage, Severity, SignalType, ThreatSignal,
 };

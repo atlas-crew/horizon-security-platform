@@ -1,0 +1,8 @@
+{
+  "type": "update",
+  "commandId": "cmd-update-001",
+  "payload": {
+    "targetVersion": "1.3.0",
+    "channel": "stable"
+  }
+}

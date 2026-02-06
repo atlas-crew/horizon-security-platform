@@ -1,0 +1,38 @@
+[
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IP_THREAT",
+      "severity": "LOW",
+      "confidence": 0.8,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IP_THREAT",
+      "severity": "MEDIUM",
+      "confidence": 0.8,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IP_THREAT",
+      "severity": "HIGH",
+      "confidence": 0.8,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IP_THREAT",
+      "severity": "CRITICAL",
+      "confidence": 0.8,
+      "sourceIp": "10.0.0.1"
+    }
+  }
+]

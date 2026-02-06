@@ -1,0 +1,12 @@
+{
+  "type": "push_config",
+  "commandId": "cmd-push-config-001",
+  "payload": {
+    "config": {
+      "autoblockThreshold": 90
+    },
+    "version": "2.2.0",
+    "component": "waf",
+    "action": "merge"
+  }
+}

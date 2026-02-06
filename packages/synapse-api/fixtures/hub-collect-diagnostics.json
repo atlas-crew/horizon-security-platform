@@ -1,0 +1,8 @@
+{
+  "type": "collect_diagnostics",
+  "commandId": "cmd-diag-001",
+  "payload": {
+    "includeMemoryDump": false,
+    "includeConfigDump": true
+  }
+}

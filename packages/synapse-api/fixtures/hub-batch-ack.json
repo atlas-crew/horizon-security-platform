@@ -1,0 +1,5 @@
+{
+  "type": "batch-ack",
+  "count": 3,
+  "sequenceId": 43
+}

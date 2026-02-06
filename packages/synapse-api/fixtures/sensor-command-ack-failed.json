@@ -1,0 +1,8 @@
+{
+  "type": "command-ack",
+  "payload": {
+    "commandId": "cmd-def-456",
+    "success": false,
+    "message": "Invalid configuration format"
+  }
+}

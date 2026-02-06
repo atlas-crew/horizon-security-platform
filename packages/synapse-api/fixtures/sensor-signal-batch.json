@@ -1,0 +1,30 @@
+{
+  "type": "signal-batch",
+  "payload": [
+    {
+      "signalType": "CREDENTIAL_STUFFING",
+      "sourceIp": "10.0.0.1",
+      "severity": "CRITICAL",
+      "confidence": 0.99,
+      "eventCount": 200,
+      "metadata": {
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "city": "New York"
+      }
+    },
+    {
+      "signalType": "RATE_ANOMALY",
+      "sourceIp": "10.0.0.2",
+      "severity": "LOW",
+      "confidence": 0.5
+    },
+    {
+      "signalType": "FINGERPRINT_THREAT",
+      "fingerprint": "t13d1516h2_abc123",
+      "severity": "HIGH",
+      "confidence": 0.88,
+      "eventCount": 12
+    }
+  ]
+}

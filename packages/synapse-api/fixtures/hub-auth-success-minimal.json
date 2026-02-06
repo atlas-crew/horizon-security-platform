@@ -1,0 +1,6 @@
+{
+  "type": "auth-success",
+  "sensorId": "sensor-dev-01",
+  "tenantId": "tenant-dev",
+  "capabilities": []
+}

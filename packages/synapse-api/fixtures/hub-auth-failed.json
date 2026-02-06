@@ -1,0 +1,4 @@
+{
+  "type": "auth-failed",
+  "error": "Invalid API key"
+}

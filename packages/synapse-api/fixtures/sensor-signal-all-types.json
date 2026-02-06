@@ -1,0 +1,83 @@
+[
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IP_THREAT",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "FINGERPRINT_THREAT",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "CAMPAIGN_INDICATOR",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "CREDENTIAL_STUFFING",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "RATE_ANOMALY",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "BOT_SIGNATURE",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "IMPOSSIBLE_TRAVEL",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "TEMPLATE_DISCOVERY",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  },
+  {
+    "type": "signal",
+    "payload": {
+      "signalType": "SCHEMA_VIOLATION",
+      "severity": "MEDIUM",
+      "confidence": 0.75,
+      "sourceIp": "10.0.0.1"
+    }
+  }
+]

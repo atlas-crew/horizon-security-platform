@@ -1,0 +1,11 @@
+{
+  "type": "auth-success",
+  "sensorId": "sensor-prod-01",
+  "tenantId": "tenant-acme-corp",
+  "capabilities": [
+    "signals",
+    "blocklist-sync",
+    "fleet-commands"
+  ],
+  "protocolVersion": "1.0"
+}

@@ -1,0 +1,13 @@
+{
+  "type": "push_rules",
+  "commandId": "cmd-push-rules-001",
+  "payload": {
+    "rules": [
+      {
+        "id": 100,
+        "description": "New emergency rule",
+        "blocking": true
+      }
+    ]
+  }
+}

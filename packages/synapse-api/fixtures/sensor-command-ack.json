@@ -1,0 +1,12 @@
+{
+  "type": "command-ack",
+  "payload": {
+    "commandId": "cmd-abc-123",
+    "success": true,
+    "message": "Configuration applied successfully",
+    "result": {
+      "appliedRules": 42,
+      "reloadTimeMs": 150
+    }
+  }
+}

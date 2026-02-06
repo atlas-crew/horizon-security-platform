@@ -1,0 +1,16 @@
+{
+  "type": "heartbeat",
+  "payload": {
+    "timestamp": 1706745600000,
+    "status": "healthy",
+    "cpu": 45.2,
+    "memory": 62.1,
+    "disk": 23.5,
+    "requestsLastMinute": 15420,
+    "avgLatencyMs": 2.3,
+    "configHash": "abc123def456",
+    "rulesHash": "789ghi012jkl",
+    "activeConnections": 342,
+    "blocklistSize": 1500
+  }
+}

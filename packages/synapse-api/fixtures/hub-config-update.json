@@ -1,0 +1,9 @@
+{
+  "type": "config-update",
+  "config": {
+    "riskBasedBlockingEnabled": true,
+    "autoblockThreshold": 80,
+    "riskDecayPerMinute": 0.5
+  },
+  "version": "2.1.0"
+}

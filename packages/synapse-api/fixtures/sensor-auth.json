@@ -1,0 +1,10 @@
+{
+  "type": "auth",
+  "payload": {
+    "apiKey": "sk_live_test_key_12345",
+    "sensorId": "sensor-prod-01",
+    "sensorName": "Production Edge US-East",
+    "version": "1.2.0",
+    "protocolVersion": "1.0"
+  }
+}

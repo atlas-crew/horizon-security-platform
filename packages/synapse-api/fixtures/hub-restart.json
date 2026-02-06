@@ -1,0 +1,8 @@
+{
+  "type": "restart",
+  "commandId": "cmd-restart-001",
+  "payload": {
+    "graceful": true,
+    "timeoutSecs": 30
+  }
+}

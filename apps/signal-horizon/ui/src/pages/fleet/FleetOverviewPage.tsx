@@ -146,41 +146,73 @@ export function FleetOverviewPage() {
           <p className="text-ink-secondary">Sensor Fleet Command & Health Monitoring</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 text-sm border border-border-subtle rounded-lg hover:bg-surface-subtle transition-colors">
+          <button className="btn-outline h-10 px-4 text-xs uppercase tracking-[0.2em]">
             Export Report
           </button>
-          <button className="px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 transition-colors">
-            + Deploy Sensor
+          <button className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]">
+            Deploy Sensor
           </button>
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatsCard icon={CheckCircle} iconBg="bg-status-success/10" iconColor="text-status-success" value={summary.onlineCount} label="SENSORS ONLINE" />
-        <StatsCard icon={AlertTriangle} iconBg="bg-status-warning/10" iconColor="text-status-warning" value={summary.warningCount} label="NEEDS ATTENTION" />
-        <StatsCard icon={XCircle} iconBg="bg-status-error/10" iconColor="text-status-error" value={summary.offlineCount} label="OFFLINE" />
-        <StatsCard icon={Zap} iconBg="bg-accent-primary/10" iconColor="text-accent-primary" value={formatNumber(fleetMetrics.totalRps)} label="REQUESTS/MIN" />
+        <StatsCard
+          icon={CheckCircle}
+          iconBg="bg-status-success/10"
+          iconColor="text-status-success"
+          value={summary.onlineCount}
+          label="Sensors Online"
+          borderClassName="border-l-ac-green"
+          valueClassName="text-ac-green"
+        />
+        <StatsCard
+          icon={AlertTriangle}
+          iconBg="bg-status-warning/10"
+          iconColor="text-status-warning"
+          value={summary.warningCount}
+          label="Needs Attention"
+          borderClassName="border-l-ac-orange"
+          valueClassName="text-ac-orange"
+        />
+        <StatsCard
+          icon={XCircle}
+          iconBg="bg-status-error/10"
+          iconColor="text-status-error"
+          value={summary.offlineCount}
+          label="Offline"
+          borderClassName="border-l-ac-red"
+          valueClassName="text-ac-red"
+        />
+        <StatsCard
+          icon={Zap}
+          iconBg="bg-ac-purple/10"
+          iconColor="text-ac-purple"
+          value={formatNumber(fleetMetrics.totalRps)}
+          label="Requests/Min"
+          borderClassName="border-l-ac-purple"
+          valueClassName="text-ac-purple"
+        />
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
-        <QuickAction icon={Search} title="Run Diagnostics" description="Check sensor health & connectivity" />
-        <QuickAction icon={Shield} title="DLP Management" description="Monitor sensitive data leaks" onClick={() => navigate('/fleet/dlp')} />
-        <QuickAction icon={Settings} title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} />
-        <QuickAction icon={Globe} title="Test Connectivity" description="Run network connectivity tests" />
+        <QuickAction icon={Search} title="Run Diagnostics" description="Check sensor health & connectivity" accentClassName="border-l-ac-blue dark:border-l-ac-sky-light" iconClassName="text-ac-blue dark:text-ac-sky-light" />
+        <QuickAction icon={Shield} title="DLP Management" description="Monitor sensitive data leaks" onClick={() => navigate('/fleet/dlp')} accentClassName="border-l-ac-green" iconClassName="text-ac-green" />
+        <QuickAction icon={Settings} title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} accentClassName="border-l-ac-orange" iconClassName="text-ac-orange" />
+        <QuickAction icon={Globe} title="Test Connectivity" description="Run network connectivity tests" accentClassName="border-l-ac-purple" iconClassName="text-ac-purple" />
       </div>
 
       {/* Alerts and Distribution */}
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-ink-primary">Recent Alerts</h2>
-            <button className="text-sm text-accent-primary hover:underline">View All</button>
+            <button className="text-sm text-ac-blue dark:text-ac-sky-light hover:underline">View All</button>
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts || []).length === 0 ? (
-              <div className="text-ink-muted text-sm py-4 text-center">No recent alerts</div>
+              <div className="text-ink-secondary text-sm py-4 text-center">No recent alerts</div>
             ) : (
               overview?.recentAlerts.slice(0, 5).map((alert) => (
                 <AlertItem key={alert.id} alert={alert} />
@@ -189,11 +221,11 @@ export function FleetOverviewPage() {
           </div>
         </div>
 
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-navy dark:border-t-ac-sky-light p-6">
           <h2 className="text-lg font-semibold text-ink-primary mb-4">Fleet Distribution</h2>
           <div className="space-y-3">
             {(overview?.regionDistribution || []).length === 0 ? (
-              <div className="text-ink-muted text-sm py-4 text-center">No region data</div>
+              <div className="text-ink-secondary text-sm py-4 text-center">No region data</div>
             ) : (
               overview?.regionDistribution.map((region) => (
                 <RegionBar key={region.region} region={region} />
@@ -204,8 +236,8 @@ export function FleetOverviewPage() {
       </div>
 
       {/* Sensor Fleet Table */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl">
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light">
+        <div className="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-inset">
           <h2 className="text-lg font-semibold text-ink-primary">Sensor Fleet</h2>
           <div className="flex items-center gap-4">
             <input
@@ -213,12 +245,14 @@ export function FleetOverviewPage() {
               placeholder="Search sensors..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-2 text-sm border border-border-subtle rounded-lg bg-surface-base focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+              aria-label="Search sensors by name"
+              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50"
             />
             <select
               value={filters.status || ''}
               onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
-              className="px-3 py-2 text-sm border border-border-subtle rounded-lg bg-surface-base"
+              aria-label="Filter sensors by status"
+              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base"
             >
               <option value="">All Status</option>
               <option value="online">Online</option>
@@ -232,7 +266,7 @@ export function FleetOverviewPage() {
           onSensorClick={handleSensorClick}
           onConfigureClick={handleConfigureClick}
         />
-        <div className="p-4 border-t border-border-subtle text-sm text-ink-muted">
+        <div className="p-4 border-t border-border-subtle text-sm text-ink-secondary">
           Showing {filteredSensors.length} of {sensors.length} sensors
         </div>
       </div>
@@ -240,27 +274,27 @@ export function FleetOverviewPage() {
   );
 }
 
-function StatsCard({ icon: Icon, iconBg, iconColor, value, label }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string }) {
+function StatsCard({ icon: Icon, iconBg, iconColor, value, label, borderClassName, valueClassName }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string; borderClassName: string; valueClassName: string }) {
   return (
-    <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-      <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center mb-3`}>
+    <div className={`card border border-border-subtle border-l-2 p-6 ${borderClassName}`}>
+      <div className={`w-10 h-10 border border-border-subtle ${iconBg} flex items-center justify-center mb-3`}>
         <Icon className={`w-5 h-5 ${iconColor}`} />
       </div>
-      <div className="text-3xl font-bold text-ink-primary">{value}</div>
-      <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide mt-1">{label}</div>
+      <div className={`text-3xl font-light ${valueClassName}`}>{value}</div>
+      <div className="text-xs font-semibold text-ink-secondary uppercase tracking-wide mt-1">{label}</div>
     </div>
   );
 }
 
-function QuickAction({ icon: Icon, title, description, onClick }: { icon: LucideIcon; title: string; description: string; onClick?: () => void }) {
+function QuickAction({ icon: Icon, title, description, onClick, accentClassName, iconClassName }: { icon: LucideIcon; title: string; description: string; onClick?: () => void; accentClassName: string; iconClassName: string }) {
   return (
-    <button onClick={onClick} className="bg-surface-card border border-border-subtle rounded-xl p-4 text-left hover:bg-surface-subtle transition-colors group">
+    <button onClick={onClick} className={`card border border-border-subtle border-l-2 p-4 text-left hover:bg-surface-subtle transition-colors group ${accentClassName}`}>
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-accent-primary/10 flex items-center justify-center">
-          <Icon className="w-5 h-5 text-accent-primary" />
+        <div className="w-10 h-10 border border-border-subtle bg-surface-subtle flex items-center justify-center">
+          <Icon className={`w-5 h-5 ${iconClassName}`} />
         </div>
         <div>
-          <div className="font-semibold text-ink-primary group-hover:text-accent-primary transition-colors">{title}</div>
+          <div className="font-semibold text-ink-primary group-hover:text-ink-primary transition-colors">{title}</div>
           <div className="text-sm text-ink-secondary">{description}</div>
         </div>
       </div>
@@ -271,13 +305,13 @@ function QuickAction({ icon: Icon, title, description, onClick }: { icon: Lucide
 function AlertItem({ alert }: { alert: { id: string; sensorName: string; type: string; error: string | null; createdAt: string } }) {
   const timeAgo = getTimeAgo(new Date(alert.createdAt));
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-surface-subtle transition-colors">
+    <div className="flex items-start gap-3 p-3 hover:bg-surface-subtle transition-colors">
       <AlertTriangle className="w-5 h-5 text-status-error flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <div className="font-medium text-ink-primary truncate">{alert.type.replace(/_/g, ' ')}</div>
         <div className="text-sm text-ink-secondary truncate">{alert.sensorName}: {alert.error || 'Command failed'}</div>
       </div>
-      <div className="text-sm text-ink-muted whitespace-nowrap">{timeAgo}</div>
+      <div className="text-sm text-ink-secondary whitespace-nowrap">{timeAgo}</div>
     </div>
   );
 }
@@ -292,9 +326,9 @@ function RegionBar({ region }: { region: { region: string; online: number; warni
     <div>
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-ink-primary">{formatRegion(region.region)}</span>
-        <span className="text-sm text-ink-muted">{region.total} sensors</span>
+        <span className="text-sm text-ink-secondary">{region.total} sensors</span>
       </div>
-      <div className="h-6 flex rounded overflow-hidden bg-surface-subtle">
+      <div className="h-6 flex overflow-hidden bg-surface-subtle border border-border-subtle">
         {onlinePct > 0 && <div className="bg-status-success" style={{ width: `${onlinePct}%` }} />}
         {warningPct > 0 && <div className="bg-status-warning" style={{ width: `${warningPct}%` }} />}
         {offlinePct > 0 && <div className="bg-status-error" style={{ width: `${offlinePct}%` }} />}

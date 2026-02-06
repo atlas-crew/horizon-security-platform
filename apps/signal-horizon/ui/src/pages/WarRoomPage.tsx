@@ -121,6 +121,7 @@ export default function WarRoomPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type a message..."
+                aria-label="War room message"
                 className="flex-1 bg-surface-inset border border-border-subtle px-4 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue"
               />
               <button className="btn-primary h-10 px-4">

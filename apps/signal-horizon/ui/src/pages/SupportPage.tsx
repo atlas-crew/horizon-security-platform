@@ -823,12 +823,12 @@ function ContactSupport() {
 
       <form className="space-y-8">
         <div>
-          <label className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Subject</label>
-          <input type="text" className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Brief description of the issue" />
+          <label htmlFor="contact-subject" className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Subject</label>
+          <input id="contact-subject" type="text" className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Brief description of the issue" />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Message</label>
-          <textarea rows={6} className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Describe the problem you're experiencing..." />
+          <label htmlFor="contact-message" className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Message</label>
+          <textarea id="contact-message" rows={6} className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Describe the problem you're experiencing..." />
         </div>
         <div className="flex items-center justify-between pt-4">
           <button type="button" className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-10 py-4 font-bold uppercase tracking-widest text-xs shadow-lg hover:shadow-xl transition-all active:scale-95">

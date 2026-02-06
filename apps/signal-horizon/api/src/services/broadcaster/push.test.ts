@@ -87,26 +87,34 @@ describe('Broadcaster Push', () => {
   });
 
   it('should push blocklist updates to both dashboards and sensors', async () => {
-    const campaign = createCampaign();
-    const signals = [createEnrichedSignal({ sourceIp: '10.0.0.1' })];
+    vi.useFakeTimers();
+    try {
+      const campaign = createCampaign();
+      const signals = [createEnrichedSignal({ sourceIp: '10.0.0.1' })];
 
-    await broadcaster.onCampaignDetected(campaign, signals);
+      await broadcaster.onCampaignDetected(campaign, signals);
 
-    // Verify dashboard broadcast
-    expect(mockDashboardGateway.broadcastBlocklistUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        updates: expect.arrayContaining([
+      // Blocks are buffered; advance timers to trigger the flush
+      vi.advanceTimersByTime(5000);
+
+      // Verify dashboard broadcast
+      expect(mockDashboardGateway.broadcastBlocklistUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updates: expect.arrayContaining([
+            expect.objectContaining({ indicator: '10.0.0.1' }),
+          ]),
+        })
+      );
+
+      // Verify sensor push
+      expect(mockSensorGateway.broadcastBlocklistPush).toHaveBeenCalledWith(
+        expect.arrayContaining([
           expect.objectContaining({ indicator: '10.0.0.1' }),
-        ]),
-      })
-    );
-
-    // Verify sensor push
-    expect(mockSensorGateway.broadcastBlocklistPush).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ indicator: '10.0.0.1' }),
-      ])
-    );
+        ])
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should honor tenantId in alerts', async () => {

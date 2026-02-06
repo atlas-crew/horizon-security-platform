@@ -16,6 +16,9 @@ const mockPrisma = {
   signal: {
     create: vi.fn(),
   },
+  tenant: {
+    findUnique: vi.fn().mockResolvedValue({ sharingPreference: 'CONTRIBUTE_AND_RECEIVE', anonymizationSalt: 'test-salt' }),
+  },
 } as unknown as PrismaClient;
 
 // Mock Logger - use explicit type

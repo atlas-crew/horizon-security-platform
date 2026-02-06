@@ -171,7 +171,11 @@ export class UserAuthService {
       scopes,
     };
 
-    const accessToken = signJwt(accessPayload, config.telemetry.jwtSecret || 'dev-secret-do-not-use-in-prod');
+    const jwtSecret = config.telemetry.jwtSecret;
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET is not configured. Set JWT_SECRET or TELEMETRY_JWT_SECRET environment variable.');
+    }
+    const accessToken = signJwt(accessPayload, jwtSecret);
 
     const refreshTokenStr = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(refreshTokenStr).digest('hex');

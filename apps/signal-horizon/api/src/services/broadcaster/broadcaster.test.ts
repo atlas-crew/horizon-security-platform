@@ -130,21 +130,28 @@ describe('Broadcaster', () => {
     });
 
     it('should broadcast blocklist updates after creating blocks', async () => {
-      const campaign = createCampaign({ confidence: 0.9 });
-      const signals = [createEnrichedSignal()];
+      vi.useFakeTimers();
+      try {
+        const campaign = createCampaign({ confidence: 0.9 });
+        const signals = [createEnrichedSignal()];
 
-      await broadcaster.onCampaignDetected(campaign, signals);
+        await broadcaster.onCampaignDetected(campaign, signals);
 
-      expect(mockDashboardGateway.broadcastBlocklistUpdate).toHaveBeenCalledWith({
-        updates: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'add',
-            blockType: 'IP',
-            source: 'FLEET_INTEL',
-          }),
-        ]),
-        campaign: 'campaign-123',
-      });
+        // Blocks are buffered; advance timers to trigger the flush
+        vi.advanceTimersByTime(5000);
+
+        expect(mockDashboardGateway.broadcastBlocklistUpdate).toHaveBeenCalledWith({
+          updates: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'add',
+              blockType: 'IP',
+              source: 'FLEET_INTEL',
+            }),
+          ]),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should update blocklist cache', async () => {

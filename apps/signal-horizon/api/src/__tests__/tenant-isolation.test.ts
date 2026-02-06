@@ -10,7 +10,7 @@
  * 5. API routes enforce tenant boundaries
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { PrismaClient, Sensor } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -18,7 +18,6 @@ import type { Logger } from 'pino';
 // Test tenant IDs
 const TENANT_A = 'tenant-alpha-001';
 const TENANT_B = 'tenant-beta-002';
-const TENANT_C = 'tenant-gamma-003';
 
 // Create mock logger
 function createMockLogger(): Logger {
@@ -58,15 +57,18 @@ describe('Tenant Isolation', () => {
       // Import FleetCommander dynamically to avoid module resolution issues
       const { FleetCommander } = await import('../services/fleet/fleet-commander.js');
 
-      const mockPrisma = {
+      const mockData = {
         sensor: {
           findUnique: vi.fn().mockResolvedValue(createMockSensor('sensor-1', TENANT_B)),
           findMany: vi.fn().mockResolvedValue([]),
         },
         fleetCommand: {
           create: vi.fn().mockResolvedValue({ id: 'cmd-1' }),
+          findFirst: vi.fn().mockResolvedValue(null),
         },
-      } as unknown as PrismaClient;
+      } as Record<string, unknown>;
+      mockData.$transaction = vi.fn(async (fn: (tx: typeof mockData) => Promise<unknown>) => fn(mockData));
+      const mockPrisma = mockData as unknown as PrismaClient;
 
       const commander = new FleetCommander(mockPrisma, createMockLogger(), {
         defaultTimeoutMs: 5000,
@@ -88,7 +90,7 @@ describe('Tenant Isolation', () => {
     it('should only allow commands to own sensors', async () => {
       const { FleetCommander } = await import('../services/fleet/fleet-commander.js');
 
-      const mockPrisma = {
+      const mockData2 = {
         sensor: {
           findUnique: vi.fn().mockResolvedValue(createMockSensor('sensor-1', TENANT_A)),
         },
@@ -101,8 +103,11 @@ describe('Tenant Isolation', () => {
             status: 'pending',
           }),
           update: vi.fn().mockResolvedValue({}),
+          findFirst: vi.fn().mockResolvedValue(null),
         },
-      } as unknown as PrismaClient;
+      } as Record<string, unknown>;
+      mockData2.$transaction = vi.fn(async (fn: (tx: typeof mockData2) => Promise<unknown>) => fn(mockData2));
+      const mockPrisma = mockData2 as unknown as PrismaClient;
 
       const commander = new FleetCommander(mockPrisma, createMockLogger(), {
         timeoutCheckIntervalMs: 60000,
@@ -133,7 +138,7 @@ describe('Tenant Isolation', () => {
       ];
 
       let cmdCounter = 0;
-      const mockPrisma = {
+      const mockData3 = {
         sensor: {
           // findMany should filter by tenantId
           findMany: vi.fn().mockImplementation(({ where }) => {
@@ -156,8 +161,11 @@ describe('Tenant Isolation', () => {
             status: 'pending',
           })),
           update: vi.fn().mockResolvedValue({}),
+          findFirst: vi.fn().mockResolvedValue(null),
         },
-      } as unknown as PrismaClient;
+      } as Record<string, unknown>;
+      mockData3.$transaction = vi.fn(async (fn: (tx: typeof mockData3) => Promise<unknown>) => fn(mockData3));
+      const mockPrisma = mockData3 as unknown as PrismaClient;
 
       const commander = new FleetCommander(mockPrisma, createMockLogger(), {
         timeoutCheckIntervalMs: 60000,
@@ -295,7 +303,7 @@ describe('Tenant Isolation', () => {
         createMockSensor('sensor-b1', TENANT_B),
       ];
 
-      const mockPrisma = {
+      const mockData5 = {
         sensor: {
           findUnique: vi.fn().mockImplementation(({ where: { id } }) => {
             return Promise.resolve(sensors.find(s => s.id === id) || null);
@@ -306,8 +314,11 @@ describe('Tenant Isolation', () => {
         },
         fleetCommand: {
           create: vi.fn().mockResolvedValue({ id: 'cmd-1' }),
+          findFirst: vi.fn().mockResolvedValue(null),
         },
-      } as unknown as PrismaClient;
+      } as Record<string, unknown>;
+      mockData5.$transaction = vi.fn(async (fn: (tx: typeof mockData5) => Promise<unknown>) => fn(mockData5));
+      const mockPrisma = mockData5 as unknown as PrismaClient;
 
       const logger = createMockLogger();
       const commander = new FleetCommander(mockPrisma, logger, {

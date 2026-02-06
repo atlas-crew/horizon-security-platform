@@ -14,8 +14,10 @@ describe('Configuration parsing', () => {
 
   it('parses NODE_ENV case-insensitively', async () => {
     process.env.NODE_ENV = 'PRODUCTION';
-    process.env.DATABASE_URL = 'postgres://localhost:5432/db';
-    
+    process.env.DATABASE_URL = 'postgres://db.example.com:5432/db';
+    process.env.JWT_SECRET = 'production-secret-at-least-16-chars';
+    process.env.TELEMETRY_JWT_SECRET = 'production-telemetry-secret-16ch';
+
     const { config } = await import('./config.js');
     expect(config.env).toBe('production');
     expect(config.isProd).toBe(true);

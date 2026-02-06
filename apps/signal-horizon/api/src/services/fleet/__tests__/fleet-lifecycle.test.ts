@@ -40,7 +40,7 @@ function createMockPrisma() {
   const commands = new Map<string, Record<string, unknown>>();
   let commandIdCounter = 0;
 
-  return {
+  const mock = {
     sensor: {
       findUnique: vi.fn().mockResolvedValue({ id: TEST_SENSOR_ID, tenantId: TEST_TENANT_ID }),
       findMany: vi.fn().mockResolvedValue([{ id: TEST_SENSOR_ID }]),
@@ -53,10 +53,19 @@ function createMockPrisma() {
         commands.set(id, command);
         return Promise.resolve(command);
       }),
-      findUnique: vi.fn().mockImplementation(({ where: { id } }) => {
-        return Promise.resolve(commands.get(id) || null);
+      findUnique: vi.fn().mockImplementation(({ where: { id }, include }) => {
+        const cmd = commands.get(id);
+        if (cmd) {
+          const result = { ...cmd };
+          if (include?.sensor) {
+            (result as any).sensor = { id: cmd.sensorId, tenantId: TEST_TENANT_ID };
+          }
+          return Promise.resolve(result);
+        }
+        return Promise.resolve(null);
       }),
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockImplementation(({ where: { id }, data }) => {
         const existing = commands.get(id);
         if (existing) {
@@ -92,9 +101,13 @@ function createMockPrisma() {
         return Promise.resolve({ count: 1 });
       }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findFirst: vi.fn().mockResolvedValue(null),
     },
+    $transaction: vi.fn(async (fn: (tx: typeof mock) => Promise<unknown>) => fn(mock)),
     _commands: commands, // Expose for test assertions
-  } as unknown as PrismaClient & { _commands: Map<string, Record<string, unknown>> };
+  };
+
+  return mock as unknown as PrismaClient & { _commands: Map<string, Record<string, unknown>> };
 }
 
 // Create mock logger

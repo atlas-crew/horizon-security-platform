@@ -19,14 +19,10 @@ const TEST_TENANT_ID = 'test-tenant-123';
 const ASYNC_INIT_DELAY_MS = 10;
 /** Default interval for polling async status in test loops */
 const TEST_POLL_INTERVAL_MS = 500;
-/** Short cleanup delay for testing */
-const TEST_CLEANUP_DELAY_MS = 500;
 /** Timeout for staging phase in blue/green tests */
 const TEST_STAGING_TIMEOUT_MS = 5000;
 /** Timeout for switch phase in blue/green tests */
 const TEST_SWITCH_TIMEOUT_MS = 3000;
-/** Default delay between canary stages in implementation (60s) */
-const DEFAULT_CANARY_STAGE_DELAY_MS = 60000;
 /** Short delay for fast canary tests */
 const SHORT_CANARY_DELAY_MS = 1;
 
@@ -35,26 +31,66 @@ const createSensorOwnership = (sensorIds: string[], tenantId: string = TEST_TENA
   sensorIds.map((id) => ({ id, tenantId }));
 
 // Mock Prisma client with tenant-aware sensor lookup
-const createMockPrisma = (ownedSensorIds: string[] = []) =>
-  ({
+const createMockPrisma = (ownedSensorIds: string[] = []) => {
+  const mock = {
     sensor: {
-      // Default implementation returns sensors owned by TEST_TENANT_ID
-      findMany: vi.fn().mockImplementation(({ where }: { where?: { id?: { in?: string[] } } } = {}) => {
-        if (where?.id?.in) {
-          // Return ownership records for requested sensors
+      // Default implementation handles both ownership checks and health polling
+      findMany: vi.fn().mockImplementation(({ where, select }: { where?: any, select?: any } = {}) => {
+        // If select includes tenantId, it's likely an ownership validation call
+        if (select?.tenantId && where?.id?.in) {
           return Promise.resolve(
-            where.id.in
+            where.id.in.map((id: string) => ({
+              id,
+              tenantId: TEST_TENANT_ID,
+            }))
+          );
+        }
+
+        // Otherwise treat as a health/status check
+        if (where?.id?.in) {
+          const ids = where.id.in;
+          return Promise.resolve(
+            ids
               .filter((id: string) => ownedSensorIds.length === 0 || ownedSensorIds.includes(id))
-              .map((id: string) => ({ id, tenantId: TEST_TENANT_ID }))
+              .map((id: string) => ({ 
+                id, 
+                tenantId: TEST_TENANT_ID,
+                // These defaults can be overridden by specific test mocks
+                connectionState: 'CONNECTED',
+                lastHeartbeat: new Date(),
+              }))
           );
         }
         return Promise.resolve([]);
       }),
       findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockImplementation(({ where }: { where?: any } = {}) => {
+        return Promise.resolve({
+          id: where?.id || 'sensor-1',
+          tenantId: TEST_TENANT_ID,
+          connectionState: 'CONNECTED',
+          lastHeartbeat: new Date(),
+        });
+      }),
     },
     ruleSyncState: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockImplementation(({ where }: { where?: any } = {}) => {
+        // Handle where: { sensorId: { in: [...] } }
+        if (where?.sensorId?.in) {
+          const ids = where.sensorId.in;
+          return Promise.resolve(ids.map((id: string) => ({
+            sensorId: id,
+            ruleId: 'rule-1',
+            status: 'synced',
+          })));
+        }
+        return Promise.resolve([]);
+      }),
+      findFirst: vi.fn().mockResolvedValue({
+        sensorId: 'sensor-1',
+        ruleId: 'rule-1',
+        status: 'synced',
+      }),
       upsert: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -64,6 +100,7 @@ const createMockPrisma = (ownedSensorIds: string[] = []) =>
     },
     fleetCommand: {
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'cmd-123' }),
     },
     scheduledDeployment: {
@@ -78,11 +115,13 @@ const createMockPrisma = (ownedSensorIds: string[] = []) =>
       update: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
     },
-    // Add $transaction mock that executes all operations in the array
-    $transaction: vi.fn().mockImplementation((operations: Promise<unknown>[]) => {
-      return Promise.all(operations);
+    $transaction: vi.fn(async (ops: any) => {
+      if (Array.isArray(ops)) return Promise.all(ops);
+      return ops;
     }),
-  }) as unknown as PrismaClient;
+  };
+  return mock as unknown as PrismaClient;
+};
 
 // Mock Logger
 const createMockLogger = () =>
@@ -179,6 +218,10 @@ describe('RuleDistributor', () => {
   let mockLogger: ReturnType<typeof createMockLogger>;
   let mockFleetCommander: ReturnType<typeof createMockFleetCommander>;
 
+  const getSendCommandMock = () => vi.mocked(mockFleetCommander.sendCommand);
+  const getSendCommandToMultipleMock = () => vi.mocked(mockFleetCommander.sendCommandToMultiple);
+  const getLoggerInfoMock = () => vi.mocked(mockLogger.info);
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -195,6 +238,35 @@ describe('RuleDistributor', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  /**
+   * Override sensor.findMany to preserve ownership validation
+   * while customizing health check responses.
+   *
+   * The production code calls findMany twice with different `select` shapes:
+   *   1. Ownership: select { id, tenantId }
+   *   2. Health:    select { id, lastHeartbeat, connectionState }
+   *
+   * This helper routes ownership calls to the default behaviour and
+   * delegates health-check calls to the provided override function.
+   */
+  const mockSensorFindManyForHealth = (
+    healthOverride: (ids: string[]) => Promise<any[]>
+  ) => {
+    vi.mocked(mockPrisma.sensor.findMany).mockImplementation(({ where, select }: any = {}) => {
+      // Ownership validation (select includes tenantId)
+      if (select?.tenantId && where?.id?.in) {
+        return Promise.resolve(
+          where.id.in.map((id: string) => ({ id, tenantId: TEST_TENANT_ID }))
+        );
+      }
+      // Health check delegation
+      if (where?.id?.in) {
+        return healthOverride(where.id.in);
+      }
+      return Promise.resolve([]);
+    });
+  };
 
   describe('Rolling Rollout Strategy', () => {
     const createHealthySensor = (id: string) => ({
@@ -243,15 +315,24 @@ describe('RuleDistributor', () => {
 
       // First sensor healthy, second needs time
       let healthCheckCalls = 0;
-      vi.mocked(mockPrisma.sensor.findUnique).mockImplementation(() => {
+      vi.mocked(mockPrisma.sensor.findMany).mockImplementation(({ where }: any) => {
+        // Ownership check returns both
+        if (where?.id?.in?.length > 1) {
+          return Promise.resolve(sensorIds.map(id => ({
+            id, tenantId: TEST_TENANT_ID, connectionState: 'CONNECTED', lastHeartbeat: new Date()
+          })));
+        }
+        
         healthCheckCalls++;
-        return Promise.resolve(
-          createHealthySensor(healthCheckCalls <= 2 ? 'sensor-1' : 'sensor-2')
-        ) as unknown as ReturnType<typeof mockPrisma.sensor.findUnique>;
+        return Promise.resolve([
+          {
+            id: healthCheckCalls <= 2 ? 'sensor-1' : 'sensor-2',
+            lastHeartbeat: new Date(),
+            connectionState: 'CONNECTED',
+            tenantId: TEST_TENANT_ID,
+          }
+        ]) as unknown as ReturnType<typeof mockPrisma.sensor.findMany>;
       });
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue(
-        createSyncState('sensor-1') as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>
-      );
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -268,8 +349,8 @@ describe('RuleDistributor', () => {
       });
 
       expect(result.success).toBe(true);
-      // Health checks should have been performed
-      expect(mockPrisma.sensor.findUnique).toHaveBeenCalled();
+      // Health checks should have been performed via findMany
+      expect(mockPrisma.sensor.findMany).toHaveBeenCalled();
     });
 
     it('should rollback on consecutive failures when enabled', async () => {
@@ -291,14 +372,21 @@ describe('RuleDistributor', () => {
       ] as unknown as Awaited<ReturnType<typeof mockPrisma.fleetCommand.findMany>>);
 
       // Mock deployment success but health check failures (stale heartbeat)
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue(
-        createSyncState('sensor-1') as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>
-      );
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(Date.now() - 120000), // Stale heartbeat - degraded
-        connectionState: 'CONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
+      vi.mocked(mockPrisma.sensor.findMany).mockImplementation(({ where }: any) => {
+        if (where?.id?.in?.length > 1) {
+          return Promise.resolve(sensorIds.map(id => ({
+            id, tenantId: TEST_TENANT_ID, connectionState: 'CONNECTED', lastHeartbeat: new Date()
+          })));
+        }
+        return Promise.resolve([
+          {
+            id: 'sensor-1',
+            lastHeartbeat: new Date(Date.now() - 120000), // Stale heartbeat - degraded
+            connectionState: 'CONNECTED',
+            tenantId: TEST_TENANT_ID,
+          }
+        ]) as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findMany>>;
+      });
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -392,16 +480,21 @@ describe('RuleDistributor', () => {
       const rules = [createTestRule()];
 
       // Both sensors return disconnected status (unhealthy)
-      vi.mocked(mockPrisma.sensor.findUnique).mockImplementation(
-        () => Promise.resolve({
-          id: 'sensor-1',
-          lastHeartbeat: new Date(),
-          connectionState: 'DISCONNECTED',
-        }) as unknown as ReturnType<typeof mockPrisma.sensor.findUnique>
-      );
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue(
-        createSyncState('sensor-1') as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>
-      );
+      vi.mocked(mockPrisma.sensor.findMany).mockImplementation(({ where }: any) => {
+        if (where?.id?.in?.length > 1) {
+          return Promise.resolve(sensorIds.map(id => ({
+            id, tenantId: TEST_TENANT_ID, connectionState: 'CONNECTED', lastHeartbeat: new Date()
+          })));
+        }
+        return Promise.resolve([
+          {
+            id: 'sensor-1',
+            lastHeartbeat: new Date(),
+            connectionState: 'DISCONNECTED',
+            tenantId: TEST_TENANT_ID,
+          }
+        ]) as unknown as ReturnType<typeof mockPrisma.sensor.findMany>;
+      });
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -498,11 +591,8 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      // Sync state exists but sensor never becomes healthy
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue(
-        createSyncState('sensor-1') as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>
-      );
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue(null);
+      // Sensor never found during health check (ownership still works)
+      mockSensorFindManyForHealth(() => Promise.resolve([]));
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -525,10 +615,7 @@ describe('RuleDistributor', () => {
       const rules = [createTestRule()];
 
       // No sync state found
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue(null);
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue(
-        createHealthySensor('sensor-1') as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>
-      );
+      vi.mocked(mockPrisma.ruleSyncState.findMany).mockResolvedValue([]);
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -645,7 +732,7 @@ describe('RuleDistributor', () => {
       // Advance time to allow async initialization and sendCommand calls
       // Using advanceUntil is more robust than a fixed loop (labs-t1xj)
       await advanceUntil(
-        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        () => (getSendCommandMock().mock.calls.length > 0 ? true : undefined),
         { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
       );
 
@@ -697,7 +784,7 @@ describe('RuleDistributor', () => {
 
       // Advance time to allow staging commands to be sent
       await advanceUntil(
-        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        () => (getSendCommandMock().mock.calls.length > 0 ? true : undefined),
         { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
       );
 
@@ -895,6 +982,52 @@ describe('RuleDistributor', () => {
       expect(deploymentStatus?.status).toBe('active');
       expect(deploymentStatus?.activatedAt).toBeDefined();
     }, 15000);
+
+    it('should handle concurrent deployments to the same sensor (labs-2j5u.13)', async () => {
+      const sensorIds = ['sensor-1'];
+      const rules1 = [createTestRule({ id: 'rule-1' })];
+      const rules2 = [createTestRule({ id: 'rule-2' })];
+
+      vi.mocked(mockPrisma.sensorSyncState.findUnique).mockResolvedValue(null);
+
+      const config: RolloutConfig = {
+        strategy: 'blue_green',
+        stagingTimeout: 1000,
+        switchTimeout: 1000,
+      };
+
+      // Start two deployments concurrently
+      const promise1 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules1, config);
+      const promise2 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules2, config);
+
+      // Both should initiate staging
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(100);
+      
+      const activeDeployments = distributor.listActiveDeployments();
+      expect(activeDeployments.length).toBe(2);
+
+      // Both should have sent staging commands
+      await advanceUntil(
+        () => (vi.mocked(mockFleetCommander.sendCommand).mock.calls.length >= 2 ? true : undefined),
+        { stepMs: 10, maxSteps: 50, description: 'concurrent sendCommand initiation' }
+      );
+      expect(mockFleetCommander.sendCommand).toHaveBeenCalledTimes(2);
+
+      // Complete both
+      for (const deployment of activeDeployments) {
+        distributor.updateSensorStagingStatus(deployment.deploymentId, sensorIds[0], true);
+        distributor.updateSensorActivationStatus(deployment.deploymentId, sensorIds[0], true);
+      }
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await Promise.all([promise1, promise2]);
+
+      // Verify both completed
+      expect(activeDeployments[0].status).toBe('active');
+      expect(activeDeployments[1].status).toBe('active');
+    });
 
     it('should timeout if staging takes too long', async () => {
       const sensorIds = ['sensor-1'];
@@ -1492,7 +1625,7 @@ describe('RuleDistributor', () => {
 
       // Advance timers until scheduled execution fires
       await advanceUntil(
-        () => (mockFleetCommander.sendCommandToMultiple as any).mock.calls.length > 0 ? true : undefined,
+        () => (getSendCommandToMultipleMock().mock.calls.length > 0 ? true : undefined),
         { stepMs: 100, maxSteps: 20, description: 'scheduled deployment execution' }
       );
     });
@@ -1561,7 +1694,7 @@ describe('RuleDistributor', () => {
 
       // Advance timers until scheduled execution fires
       await advanceUntil(
-        () => (mockFleetCommander.sendCommandToMultiple as any).mock.calls.length > 0 ? true : undefined,
+        () => (getSendCommandToMultipleMock().mock.calls.length > 0 ? true : undefined),
         { stepMs: 100, maxSteps: 20, description: 'scheduled deployment execution' }
       );
     });
@@ -1601,15 +1734,15 @@ describe('RuleDistributor', () => {
       // Mock previous rules for rollback
       mockPreviousRuleVersion();
 
-      // All sensors unhealthy
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue(
-        createUnhealthySensor() as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>
+      // All sensors unhealthy via findMany (stale heartbeat triggers degraded status)
+      mockSensorFindManyForHealth((ids) =>
+        Promise.resolve(ids.map(id => ({
+          id,
+          tenantId: TEST_TENANT_ID,
+          connectionState: 'CONNECTED',
+          lastHeartbeat: new Date(Date.now() - 120000), // Stale heartbeat - degraded
+        })))
       );
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1640,18 +1773,15 @@ describe('RuleDistributor', () => {
       // Mock previous rules for rollback
       mockPreviousRuleVersion();
 
-      // All sensors return unhealthy to trigger rollback
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(Date.now() - 120000), // Stale heartbeat
-        connectionState: 'CONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      // All sensors unhealthy via findMany (stale heartbeat triggers degraded status)
+      mockSensorFindManyForHealth((ids) =>
+        Promise.resolve(ids.map(id => ({
+          id,
+          tenantId: TEST_TENANT_ID,
+          connectionState: 'CONNECTED',
+          lastHeartbeat: new Date(Date.now() - 120000), // Stale heartbeat
+        })))
+      );
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1682,18 +1812,15 @@ describe('RuleDistributor', () => {
       // Mock previous rules for rollback
       mockPreviousRuleVersion();
 
-      // All unhealthy to trigger rollback
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(Date.now() - 120000),
-        connectionState: 'CONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      // All sensors unhealthy via findMany (stale heartbeat triggers degraded status)
+      mockSensorFindManyForHealth((ids) =>
+        Promise.resolve(ids.map(id => ({
+          id,
+          tenantId: TEST_TENANT_ID,
+          connectionState: 'CONNECTED',
+          lastHeartbeat: new Date(Date.now() - 120000),
+        })))
+      );
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1721,18 +1848,15 @@ describe('RuleDistributor', () => {
       // Mock previous rules for rollback
       mockPreviousRuleVersion();
 
-      // Unhealthy sensor triggers rollback
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(Date.now() - 120000),
-        connectionState: 'CONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      // Unhealthy sensor via findMany triggers rollback (stale heartbeat)
+      mockSensorFindManyForHealth((ids) =>
+        Promise.resolve(ids.map(id => ({
+          id,
+          tenantId: TEST_TENANT_ID,
+          connectionState: 'CONNECTED',
+          lastHeartbeat: new Date(Date.now() - 120000),
+        })))
+      );
 
       // Rollback deployment fails
       vi.mocked(mockFleetCommander.sendCommand)
@@ -1802,17 +1926,14 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(Date.now() - 90000), // 90 seconds old
-        connectionState: 'CONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      vi.mocked(mockPrisma.sensor.findMany).mockResolvedValue([
+        {
+          id: 'sensor-1',
+          lastHeartbeat: new Date(Date.now() - 90000), // 90 seconds old
+          connectionState: 'CONNECTED',
+          tenantId: TEST_TENANT_ID,
+        }
+      ] as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findMany>>);
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1834,17 +1955,14 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue({
-        id: 'sensor-1',
-        lastHeartbeat: new Date(),
-        connectionState: 'DISCONNECTED',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findUnique>>);
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      vi.mocked(mockPrisma.sensor.findMany).mockResolvedValue([
+        {
+          id: 'sensor-1',
+          lastHeartbeat: new Date(),
+          connectionState: 'DISCONNECTED',
+          tenantId: TEST_TENANT_ID,
+        }
+      ] as unknown as Awaited<ReturnType<typeof mockPrisma.sensor.findMany>>);
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1865,12 +1983,8 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue(null);
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      // Health check returns empty (sensor not found) while ownership still works
+      mockSensorFindManyForHealth(() => Promise.resolve([]));
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1891,14 +2005,9 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
-
-      vi.mocked(mockPrisma.sensor.findUnique).mockRejectedValue(
-        new Error('Database connection failed')
+      // Health check rejects with DB error while ownership still works
+      mockSensorFindManyForHealth(() =>
+        Promise.reject(new Error('Database connection failed'))
       );
 
       const config: RolloutConfig = {
@@ -1920,13 +2029,8 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules = [createTestRule()];
 
-      // Never return a healthy sensor
-      vi.mocked(mockPrisma.sensor.findUnique).mockResolvedValue(null);
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
+      // Sensor never found during health check (ownership still works)
+      mockSensorFindManyForHealth(() => Promise.resolve([]));
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -1949,23 +2053,18 @@ describe('RuleDistributor', () => {
       const rules = [createTestRule()];
 
       let pollCount = 0;
-      vi.mocked(mockPrisma.sensor.findUnique).mockImplementation(() => {
+      mockSensorFindManyForHealth(() => {
         pollCount++;
         if (pollCount < 3) {
-          return Promise.resolve(null) as unknown as ReturnType<typeof mockPrisma.sensor.findUnique>;
+          return Promise.resolve([]);
         }
-        return Promise.resolve({
+        return Promise.resolve([{
           id: 'sensor-1',
           lastHeartbeat: new Date(),
           connectionState: 'CONNECTED',
-        }) as unknown as ReturnType<typeof mockPrisma.sensor.findUnique>;
+          tenantId: TEST_TENANT_ID,
+        }]);
       });
-
-      vi.mocked(mockPrisma.ruleSyncState.findFirst).mockResolvedValue({
-        sensorId: 'sensor-1',
-        ruleId: 'rule-1',
-        status: 'synced',
-      } as unknown as Awaited<ReturnType<typeof mockPrisma.ruleSyncState.findFirst>>);
 
       const config: RolloutConfig = {
         strategy: 'rolling',
@@ -2339,7 +2438,7 @@ describe('RuleDistributor', () => {
 
       // Advance time to allow async initialization and the first logger call
       await advanceUntil(
-        () => (mockLogger.info as any).mock.calls.find((c: any) => c[1] === 'Starting canary deployment'),
+        () => getLoggerInfoMock().mock.calls.find((call) => call[1] === 'Starting canary deployment'),
         { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'canary deployment initialization' }
       );
 
@@ -2417,7 +2516,7 @@ describe('RuleDistributor', () => {
 
       // Advance to allow staging commands to be sent
       await advanceUntil(
-        () => (mockFleetCommander.sendCommand as any).mock.calls.length > 0 ? true : undefined,
+        () => (getSendCommandMock().mock.calls.length > 0 ? true : undefined),
         { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
       );
 

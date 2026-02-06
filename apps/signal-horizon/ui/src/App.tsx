@@ -157,7 +157,7 @@ function App() {
             <div className="hidden lg:flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
-                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/40')} />
+                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70')} />
                 </span>
                 <span className="text-xs text-white/70 font-mono">
                   <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
@@ -165,21 +165,21 @@ function App() {
               </div>
               <div className="flex items-center gap-2">
                 <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
-                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/40')} />
+                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/70')} />
                 </span>
                 <span className="text-xs text-white/70 font-mono">
                   <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/40')} />
+                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/70')} />
                 <span className="text-xs text-white/70 font-mono">
                   <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className={clsx(sensorCount > 0 && 'status-blink')}>
-                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-white/40')} />
+                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-white/70')} />
                 </span>
                 <span className="text-xs text-white/70 font-mono">
                   <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
@@ -339,7 +339,9 @@ function App() {
                 {settingsItems.map((item) => (
                   <div
                     key={item.label}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-ink-muted"
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-ink-disabled cursor-not-allowed opacity-50"
+                    aria-disabled="true"
+                    title={`${item.label} (coming soon)`}
                   >
                     {item.label}
                   </div>

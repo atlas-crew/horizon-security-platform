@@ -12,7 +12,6 @@ import { buildRedisKey, type RedisKv } from '../../storage/redis/index.js';
 import {
   type TriggerRateLimitStore,
   InMemoryTriggerRateLimitStore,
-  type TriggerCountRecord,
 } from './trigger-rate-limit-store.js';
 
 /**

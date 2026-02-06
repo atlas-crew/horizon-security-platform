@@ -857,7 +857,7 @@ async function start() {
   logger.info('Auth coverage routes mounted at /api/v1/auth-coverage');
 
   // Initialize core services (pass ClickHouse for dual-write)
-  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined, blocklistStore);
+  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
   aggregator = new Aggregator(
     prisma,

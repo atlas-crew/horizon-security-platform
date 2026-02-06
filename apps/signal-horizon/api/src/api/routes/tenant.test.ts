@@ -39,7 +39,14 @@ const mockLogger = {
 
 // Mock Security Audit
 const mockSecurityAudit = {
-  record: vi.fn().mockResolvedValue(undefined),
+  logEvent: vi.fn().mockResolvedValue(undefined),
+  extractRequestContext: vi.fn().mockReturnValue({
+    ipAddress: '127.0.0.1',
+    userAgent: 'test-agent',
+    userId: 'user-123',
+    tenantId: 'tenant-123',
+    requestId: null,
+  }),
 } as unknown as SecurityAuditService;
 
 describe('Tenant Settings API', () => {
@@ -113,10 +120,13 @@ describe('Tenant Settings API', () => {
       expect(mockPrisma.tenant.update).toHaveBeenCalled();
       
       // Verify audit log for change
-      expect(mockSecurityAudit.record).toHaveBeenCalledWith(
+      expect(mockSecurityAudit.logEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'TENANT_SETTINGS_UPDATE',
-          resourceType: 'tenant',
+          tenantId: 'tenant-123',
+        }),
+        expect.objectContaining({
+          action: 'CONFIG_UPDATED',
+          result: 'SUCCESS',
           resourceId: 'tenant-123',
           details: expect.objectContaining({
             change: 'sharingPreference',
@@ -181,10 +191,13 @@ describe('Tenant Settings API', () => {
       });
 
       // Verify audit log for withdrawal
-      expect(mockSecurityAudit.record).toHaveBeenCalledWith(
+      expect(mockSecurityAudit.logEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'DATA_WITHDRAWAL',
-          resourceType: 'tenant',
+          tenantId: 'tenant-123',
+        }),
+        expect.objectContaining({
+          action: 'CONFIG_UPDATED',
+          result: 'SUCCESS',
           resourceId: 'tenant-123',
           details: expect.objectContaining({
             signalsScrubbed: 50,

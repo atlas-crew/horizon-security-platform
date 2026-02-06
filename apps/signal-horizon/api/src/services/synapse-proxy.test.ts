@@ -358,8 +358,12 @@ describe('SynapseProxyService', () => {
       // Let acquire() settle
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance time by 30 seconds
-      vi.advanceTimersByTime(30001);
+      // With retry logic (MAX_RETRIES=3), each timeout triggers a retry with backoff.
+      // Advance enough time to exhaust all retries:
+      // 4 attempts * (30s timeout + ~6s max backoff) = ~144s total
+      for (let i = 0; i < 8; i++) {
+        await vi.advanceTimersByTimeAsync(20_000);
+      }
 
       await expect(request).rejects.toMatchObject({ code: 'TIMEOUT' });
     });
@@ -567,40 +571,14 @@ describe('SynapseProxyService', () => {
       expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
     });
 
-    it('getProfile encodes templates with slashes', async () => {
+    it('getProfile rejects templates with slashes (SSRF protection)', async () => {
+      // Templates containing slashes produce encoded paths with %2f,
+      // which are blocked by the SSRF encoded-traversal protection.
       const template = '/api/v1/users/:id';
-      const encoded = encodeURIComponent(template);
 
-      broker.sendToSensor.mockImplementation((_id, message) => {
-        expect(message.payload.endpoint).toBe(`/api/profiles/${encoded}`);
-        const response: LegacyTunnelMessage = {
-          type: 'dashboard-response',
-          sessionId: message.sessionId!,
-          payload: {
-            status: 200,
-            data: {
-              success: true,
-              data: {
-                template,
-                sampleCount: 1,
-                firstSeenMs: 1000,
-                lastUpdatedMs: 2000,
-                payloadSize: { mean: 1, variance: 0, stdDev: 0, count: 1 },
-                expectedParams: [],
-                contentTypes: [],
-                statusCodes: [],
-                endpointRisk: 0,
-                requestRate: { currentRps: 0, windowMs: 60000 },
-              },
-            },
-          },
-          timestamp: new Date().toISOString(),
-        };
-        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
-        return true;
-      });
-
-      await service.getProfile(sensorId, tenantId, template);
+      await expect(
+        service.getProfile(sensorId, tenantId, template)
+      ).rejects.toMatchObject({ code: 'INVALID_ENDPOINT' });
     });
 
     it('evaluateRequest performs POST', async () => {
@@ -774,16 +752,33 @@ describe('SynapseProxyService', () => {
     });
 
     it('rejects pending requests on sensor disconnect', async () => {
-      broker.sendToSensor.mockReturnValue(true);
+      let callCount = 0;
+      broker.sendToSensor.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: succeeds (request is pending)
+          // We'll disconnect before it gets a response
+          return true;
+        }
+        // Subsequent retry calls: sensor is gone, send fails
+        return false;
+      });
 
       const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
 
-      // Let acquire() settle
+      // Let acquire() and first executeRequest settle
       await vi.advanceTimersByTimeAsync(0);
 
-      broker.emit('tunnel:disconnected', 'sensor-1', 'tenant-1');
+      // Disconnect sensor - rejects the pending request with SENSOR_DISCONNECTED
+      broker.emit('tunnel:disconnected', 'sensor-1');
 
-      await expect(request).rejects.toMatchObject({ code: 'SENSOR_DISCONNECTED' });
+      // SENSOR_DISCONNECTED is retryable, so retries fire with sendToSensor returning false (SEND_FAILED).
+      // Advance enough time to exhaust all retry backoff delays.
+      for (let i = 0; i < 4; i++) {
+        await vi.advanceTimersByTimeAsync(10_000);
+      }
+
+      await expect(request).rejects.toMatchObject({ code: 'SEND_FAILED' });
     });
   });
 });
@@ -839,8 +834,9 @@ describe('validateSensorUrl', () => {
   });
 
   it('rejects ports outside valid range', () => {
-    expect(() => validateSensorUrl('http://sensor.example.com:80')).toThrow('Invalid sensor port');
-    expect(() => validateSensorUrl('http://sensor.example.com:0')).toThrow('Invalid sensor port');
+    // Ports below 1024 (that are not the default for the scheme) are rejected
+    expect(() => validateSensorUrl('http://sensor.example.com:1')).toThrow('Invalid sensor port');
+    expect(() => validateSensorUrl('http://sensor.example.com:1023')).toThrow('Invalid sensor port');
   });
 
   it('rejects invalid URLs', () => {

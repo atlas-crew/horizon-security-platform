@@ -160,8 +160,8 @@ describe('Broadcaster', () => {
 
       await broadcaster.onCampaignDetected(campaign, signals);
 
-      expect(broadcaster.isBlocked('IP', '10.0.0.50')).toBe(true);
-      expect(broadcaster.getCacheSize()).toBeGreaterThan(0);
+      expect(await broadcaster.isBlocked('IP', '10.0.0.50')).toBe(true);
+      expect(await broadcaster.getCacheSize()).toBeGreaterThan(0);
     });
 
     it('should handle signals without IP or fingerprint', async () => {
@@ -209,9 +209,9 @@ describe('Broadcaster', () => {
   });
 
   describe('blocklist cache', () => {
-    it('should return empty blocklist initially', () => {
-      expect(broadcaster.getBlocklist()).toEqual([]);
-      expect(broadcaster.getCacheSize()).toBe(0);
+    it('should return empty blocklist initially', async () => {
+      expect(await broadcaster.getBlocklist()).toEqual([]);
+      expect(await broadcaster.getCacheSize()).toBe(0);
     });
 
     it('should correctly check if indicator is blocked', async () => {
@@ -220,8 +220,8 @@ describe('Broadcaster', () => {
 
       await broadcaster.onCampaignDetected(campaign, signals);
 
-      expect(broadcaster.isBlocked('IP', '10.0.0.99')).toBe(true);
-      expect(broadcaster.isBlocked('IP', '10.0.0.100')).toBe(false);
+      expect(await broadcaster.isBlocked('IP', '10.0.0.99')).toBe(true);
+      expect(await broadcaster.isBlocked('IP', '10.0.0.100')).toBe(false);
     });
 
     it('should return all cached blocklist entries', async () => {
@@ -233,7 +233,7 @@ describe('Broadcaster', () => {
 
       await broadcaster.onCampaignDetected(campaign, signals);
 
-      const blocklist = broadcaster.getBlocklist();
+      const blocklist = await broadcaster.getBlocklist();
       expect(blocklist.length).toBe(4); // 2 IPs + 2 fingerprints
     });
   });
@@ -246,17 +246,26 @@ describe('Broadcaster', () => {
   });
 
   describe('stop', () => {
-    it('should clear cache and gateway reference', async () => {
+    it('should clear gateway reference on stop', async () => {
       const campaign = createCampaign({ confidence: 0.9 });
       const signals = [createEnrichedSignal()];
 
       await broadcaster.onCampaignDetected(campaign, signals);
-      expect(broadcaster.getCacheSize()).toBeGreaterThan(0);
+      expect(await broadcaster.getCacheSize()).toBeGreaterThan(0);
 
-      broadcaster.stop();
+      await broadcaster.stop();
 
-      expect(broadcaster.getCacheSize()).toBe(0);
-      expect(broadcaster.getBlocklist()).toEqual([]);
+      // After stop, cache persists (distributed store may still be shared)
+      // but dashboard gateway is cleared so broadcasts no longer fire
+      const threat = {
+        id: 'threat-after-stop',
+        threatType: 'BRUTE_FORCE' as const,
+        indicator: '192.168.1.100',
+        riskScore: 85,
+        isFleetThreat: true,
+      };
+      broadcaster.broadcastThreatAlert(threat as never);
+      expect(mockDashboardGateway.broadcastThreatAlert).not.toHaveBeenCalled();
     });
   });
 

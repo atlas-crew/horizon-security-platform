@@ -89,6 +89,7 @@ describe('Tunnel Routes', () => {
           (session) => session.tenantId === where.tenantId
         );
       }),
+      count: vi.fn(async () => createdSessions.length),
       delete: vi.fn(async ({ where }) => {
         const id = String(where.id);
         const index = createdSessions.findIndex((session) => session.id === id);
@@ -108,6 +109,7 @@ describe('Tunnel Routes', () => {
         createdSessions[index] = updated;
         return updated;
       }),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
     } as unknown as PrismaClient['tunnelSession'];
     mockPrisma = {
       sensor: sensorStore,

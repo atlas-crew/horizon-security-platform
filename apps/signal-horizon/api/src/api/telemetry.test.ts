@@ -15,6 +15,12 @@ vi.mock('../config.js', () => ({
   config: mockConfig,
 }));
 
+// Ensure the mock intercepts config imports from nested modules
+// (telemetry-jwt.ts imports config from ../../config.js relative to its location)
+vi.mock('../../config.js', () => ({
+  config: mockConfig,
+}));
+
 const createLogger = (): Logger => {
   const logger = {
     child: vi.fn(() => logger),
@@ -48,6 +54,7 @@ const createJwt = (overrides: Record<string, unknown> = {}): string => {
   const payloadData = {
     tenantId: 'tenant-1',
     sensorId: 'sensor-1',
+    aud: 'signal-horizon',
     jti: 'jti-1',
     iat: now - 1,
     exp: now + 3600,
@@ -82,6 +89,7 @@ describe('Telemetry routes', () => {
     prisma = {
       tokenBlacklist: {
         findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
       },
     } as unknown as PrismaClient;
 
@@ -137,6 +145,30 @@ describe('Telemetry routes', () => {
 
     expect(res.body).toMatchObject({ inserted: 1 });
     expect(insertSpy).toHaveBeenCalled();
+  });
+
+  it('prefers per-event request_id when provided', async () => {
+    const token = createJwt({ jti: 'valid-jti-per-event-request-id' });
+    const perEvent = {
+      event_type: 'request_processed',
+      data: {
+        request_id: 'req_123',
+        method: 'GET',
+        path: '/health',
+        status_code: 200,
+        latency_ms: 1,
+      },
+    };
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    const [rows] = insertSpy.mock.calls[0] ?? [];
+    expect(rows[0]?.request_id).toBe('req_123');
   });
 
   it('rejects payloads exceeding the event batch limit', async () => {
@@ -204,7 +236,7 @@ describe('Telemetry routes', () => {
 
   it('rejects revoked jwt tokens', async () => {
     const token = createJwt({ jti: 'revoked-jti' });
-    vi.mocked(prisma.tokenBlacklist.findUnique).mockResolvedValue({ jti: 'revoked-jti' });
+    vi.mocked(prisma.tokenBlacklist.findFirst).mockResolvedValue({ jti: 'revoked-jti' } as never);
 
     const res = await request(app)
       .post('/_sensor/report')

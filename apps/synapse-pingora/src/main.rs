@@ -294,7 +294,7 @@ fn default_listen() -> Vec<String> {
 }
 
 fn default_admin_listen() -> String {
-    "0.0.0.0:6191".to_string()
+    "127.0.0.1:6191".to_string()
 }
 
 fn parse_cidr_prefix(cidr: &str) -> Option<(IpAddr, u8, u8)> {

@@ -1820,6 +1820,34 @@ impl ProxyHttp for SynapseProxy {
                     client_ip, self.per_ip_rps_limit, ctx.request_id
                 );
 
+                // Fire-and-forget: telemetry should never block the hot path.
+                if self.telemetry_client.is_enabled() {
+                    let telemetry = self.telemetry_client.clone();
+                    let request_id = ctx.request_id.clone();
+                    let client_ip = client_ip.clone();
+                    let site = session
+                        .req_header()
+                        .headers
+                        .get("host")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.split(':').next())
+                        .unwrap_or("_default")
+                        .to_string();
+                    let limit = self.per_ip_rps_limit as u32;
+
+                    tokio::spawn(async move {
+                        let _ = telemetry
+                            .record(TelemetryEvent::RateLimitHit {
+                                request_id: Some(request_id),
+                                client_ip,
+                                limit,
+                                window_secs: 1,
+                                site,
+                            })
+                            .await;
+                    });
+                }
+
                 self.signal_manager.record_event(
                     SignalCategory::Behavior,
                     "rate_limit_per_ip",
@@ -1866,6 +1894,36 @@ impl ProxyHttp for SynapseProxy {
                 "Rate limit exceeded for {:?}, count: {}, limit: {}, request_id={}",
                 ctx.client_ip, count, self.rps_limit, ctx.request_id
             );
+
+            // Fire-and-forget: telemetry should never block the hot path.
+            if self.telemetry_client.is_enabled() {
+                if let Some(ref client_ip) = ctx.client_ip {
+                    let telemetry = self.telemetry_client.clone();
+                    let request_id = ctx.request_id.clone();
+                    let client_ip = client_ip.clone();
+                    let site = session
+                        .req_header()
+                        .headers
+                        .get("host")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.split(':').next())
+                        .unwrap_or("_default")
+                        .to_string();
+                    let limit = self.rps_limit as u32;
+
+                    tokio::spawn(async move {
+                        let _ = telemetry
+                            .record(TelemetryEvent::RateLimitHit {
+                                request_id: Some(request_id),
+                                client_ip,
+                                limit,
+                                window_secs: 1,
+                                site,
+                            })
+                            .await;
+                    });
+                }
+            }
 
             if let Some(ref client_ip) = ctx.client_ip {
                 self.signal_manager.record_event(

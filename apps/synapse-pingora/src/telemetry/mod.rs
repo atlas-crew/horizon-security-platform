@@ -95,6 +95,8 @@ pub enum TelemetryEvent {
         path: String,
     },
     RateLimitHit {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
         client_ip: String,
         limit: u32,
         window_secs: u32,
@@ -693,8 +695,8 @@ pub fn waf_block(
     }
 }
 
-pub fn rate_limit_hit(client_ip: String, limit: u32, window_secs: u32, site: String) -> TelemetryEvent {
-    TelemetryEvent::RateLimitHit { client_ip, limit, window_secs, site }
+pub fn rate_limit_hit(request_id: Option<String>, client_ip: String, limit: u32, window_secs: u32, site: String) -> TelemetryEvent {
+    TelemetryEvent::RateLimitHit { request_id, client_ip, limit, window_secs, site }
 }
 
 pub fn config_reload(sites_loaded: usize, duration_ms: u64, success: bool, error: Option<String>) -> TelemetryEvent {
@@ -768,7 +770,7 @@ mod tests {
         };
         assert_eq!(event.event_type(), EventType::LogEntry);
 
-        let event = rate_limit_hit("1.2.3.4".into(), 100, 60, "site".into());
+        let event = rate_limit_hit(None, "1.2.3.4".into(), 100, 60, "site".into());
         assert_eq!(event.event_type(), EventType::RateLimitHit);
 
         let event = config_reload(5, 100, true, None);

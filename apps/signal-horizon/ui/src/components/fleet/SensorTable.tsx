@@ -106,7 +106,7 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
                     e.stopPropagation();
                     onConfigureClick?.(sensor);
                   }}
-                  className="p-1 hover:bg-surface-card rounded text-ink-muted hover:text-accent-primary transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  className="p-1 hover:bg-surface-card text-ink-muted hover:text-accent-primary transition-colors opacity-40 group-hover:opacity-100 focus:opacity-100"
                   title="Configure Sensor"
                 >
                   <Settings className="w-4 h-4" />

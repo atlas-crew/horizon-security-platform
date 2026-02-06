@@ -41,7 +41,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-ac-blue/10 rounded-sm">
+            <div className="p-2 bg-ac-blue/10">
               <FileText className="w-5 h-5 text-ac-blue" />
             </div>
             <div>
@@ -69,7 +69,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
                 onChange={handleYamlChange}
                 language="json" // YAML highlighting often works ok with generic or we'd need another extension
                 height="100%"
-                className="h-full border-0 rounded-none"
+                className="h-full border-0"
               />
             </div>
           </div>
@@ -78,7 +78,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
           <div className="flex flex-col h-full bg-surface-inset">
             <div className="px-4 py-2 bg-surface-subtle border-b border-border-subtle text-xs font-semibold text-ink-secondary uppercase tracking-wider flex justify-between items-center">
               <span>SQL Preview</span>
-              <span className="px-2 py-0.5 bg-ac-green/10 text-ac-green text-[10px] border border-ac-green/20 rounded-sm">
+              <span className="px-2 py-0.5 bg-ac-green/10 text-ac-green text-[10px] border border-ac-green/20">
                 ClickHouse Optimized
               </span>
             </div>
@@ -89,7 +89,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
                 language="sql"
                 height="100%"
                 readOnly={true}
-                className="h-full border-0 rounded-none opacity-80"
+                className="h-full border-0 opacity-80"
               />
             </div>
           </div>
@@ -98,7 +98,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-subtle flex justify-between items-center bg-surface-base">
           <div className="text-xs text-ink-muted">
-            <p>Maps standard fields (UserAgent, c-ip) to <code className="bg-surface-subtle px-1 py-0.5 rounded border border-border-subtle">signal_events</code> schema.</p>
+            <p>Maps standard fields (UserAgent, c-ip) to <code className="bg-surface-subtle px-1 py-0.5 border border-border-subtle">signal_events</code> schema.</p>
           </div>
           <div className="flex gap-3">
             <button

@@ -53,7 +53,7 @@ export const EndpointsTable: React.FC<Props> = ({ endpoints, onSelectEndpoint })
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className={clsx(
-                    "px-2 py-0.5 rounded-none text-[10px] font-bold uppercase",
+                    "px-2 py-0.5  text-[10px] font-bold uppercase",
                     ep.method === 'GET' ? "bg-green-500/10 text-green-600" :
                     ep.method === 'POST' ? "bg-blue-500/10 text-blue-600" :
                     "bg-gray-500/10 text-gray-600"

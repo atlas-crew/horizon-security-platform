@@ -31,7 +31,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
   };
 
   return (
-    <div className="border border-ac-blue/30 bg-ac-blue/5 p-4 rounded-sm">
+    <div className="border border-ac-blue/30 bg-ac-blue/5 p-4">
       <div className="flex items-center justify-between mb-4 border-b border-ac-blue/20 pb-3">
         <h3 className="font-medium text-ac-blue flex items-center gap-2">
           <Play className="w-4 h-4" />

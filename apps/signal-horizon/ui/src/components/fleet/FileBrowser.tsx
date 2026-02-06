@@ -190,7 +190,7 @@ const Breadcrumbs = memo(function Breadcrumbs({ path, onNavigate }: BreadcrumbsP
     <nav className="flex items-center gap-1 text-sm overflow-x-auto">
       <button
         onClick={() => onNavigate('/')}
-        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors shrink-0"
+        className="flex items-center gap-1 px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors shrink-0"
         title="Go to root"
       >
         <Home className="w-4 h-4" />
@@ -210,7 +210,7 @@ const Breadcrumbs = memo(function Breadcrumbs({ path, onNavigate }: BreadcrumbsP
             ) : (
               <button
                 onClick={() => onNavigate(partPath)}
-                className="px-2 py-1 rounded hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors truncate max-w-[150px]"
+                className="px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors truncate max-w-[150px]"
               >
                 {part}
               </button>
@@ -308,7 +308,7 @@ const FileRow = memo(function FileRow({
                 e.stopPropagation();
                 onOpen();
               }}
-              className="p-1.5 rounded hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
+              className="p-1.5 hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
               title="Open folder"
             >
               <FolderOpen className="w-4 h-4" />
@@ -320,7 +320,7 @@ const FileRow = memo(function FileRow({
                 onDownload();
               }}
               disabled={isDownloading}
-              className="p-1.5 rounded hover:bg-surface-card text-ink-muted hover:text-accent-primary transition-colors disabled:opacity-50"
+              className="p-1.5 hover:bg-surface-card text-ink-muted hover:text-accent-primary transition-colors disabled:opacity-50"
               title="Download file"
             >
               {isDownloading ? (
@@ -336,7 +336,7 @@ const FileRow = memo(function FileRow({
               e.stopPropagation();
               onCopyPath();
             }}
-            className="p-1.5 rounded hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
+            className="p-1.5 hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
             title="Copy path"
           >
             <Copy className="w-4 h-4" />
@@ -348,7 +348,7 @@ const FileRow = memo(function FileRow({
                 e.stopPropagation();
                 onViewChecksum();
               }}
-              className="p-1.5 rounded hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
+              className="p-1.5 hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors"
               title="View checksum"
             >
               <Hash className="w-4 h-4" />
@@ -373,7 +373,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
   const filename = download.path.split('/').pop() || 'file';
 
   return (
-    <div className="flex flex-col gap-1 p-2 bg-surface-subtle rounded">
+    <div className="flex flex-col gap-1 p-2 bg-surface-subtle">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-ink-primary truncate" title={download.path}>
           {filename}
@@ -383,7 +383,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
           {download.status === 'complete' && (
             <button
               onClick={onSave}
-              className="p-1 rounded hover:bg-surface-card text-status-success"
+              className="p-1 hover:bg-surface-card text-status-success"
               title="Save file"
             >
               <Download className="w-3.5 h-3.5" />
@@ -393,7 +393,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
           {['pending', 'downloading', 'verifying'].includes(download.status) && (
             <button
               onClick={onCancel}
-              className="p-1 rounded hover:bg-surface-card text-ink-muted hover:text-status-error"
+              className="p-1 hover:bg-surface-card text-ink-muted hover:text-status-error"
               title="Cancel download"
             >
               <X className="w-3.5 h-3.5" />
@@ -403,10 +403,10 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 bg-surface-card rounded-full overflow-hidden">
+      <div className="h-1.5 bg-surface-card overflow-hidden">
         <div
           className={clsx(
-            'h-full rounded-full transition-all duration-300',
+            'h-full transition-all duration-300',
             download.status === 'error' || download.status === 'cancelled'
               ? 'bg-status-error'
               : download.status === 'complete'
@@ -481,12 +481,12 @@ const ChecksumModal = memo(function ChecksumModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-surface-card border border-border-subtle rounded-lg shadow-xl max-w-md w-full">
+      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
           <h3 className="text-sm font-semibold text-ink-primary">File Checksum</h3>
           <button
             onClick={onClose}
-            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -507,7 +507,7 @@ const ChecksumModal = memo(function ChecksumModal({
           )}
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded">
+            <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20">
               <AlertCircle className="w-4 h-4 text-status-error shrink-0 mt-0.5" />
               <p className="text-xs text-status-error">{error}</p>
             </div>
@@ -517,12 +517,12 @@ const ChecksumModal = memo(function ChecksumModal({
             <div>
               <div className="text-xs text-ink-muted mb-1">SHA-256</div>
               <div className="flex items-center gap-2">
-                <code className="flex-1 p-2 text-xs bg-surface-inset rounded font-mono text-ink-secondary break-all">
+                <code className="flex-1 p-2 text-xs bg-surface-inset font-mono text-ink-secondary break-all">
                   {checksum}
                 </code>
                 <button
                   onClick={handleCopy}
-                  className="p-2 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors shrink-0"
+                  className="p-2 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors shrink-0"
                   title="Copy checksum"
                 >
                   {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
@@ -760,7 +760,7 @@ export const FileBrowser = memo(function FileBrowser({
     <>
       <div
         className={clsx(
-          'flex flex-col bg-surface-base rounded-lg border border-border-subtle overflow-hidden',
+          'flex flex-col bg-surface-base border border-border-subtle overflow-hidden',
           className
         )}
         style={{ height: typeof height === 'string' ? height : `${height}px` }}
@@ -778,7 +778,7 @@ export const FileBrowser = memo(function FileBrowser({
             <button
               onClick={refresh}
               disabled={isLoadingFiles}
-              className="p-1.5 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50"
+              className="p-1.5 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50"
               title="Refresh (Ctrl+R)"
             >
               <RefreshCw className={clsx('w-4 h-4', isLoadingFiles && 'animate-spin')} />
@@ -788,7 +788,7 @@ export const FileBrowser = memo(function FileBrowser({
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-1.5 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors"
+                className="p-1.5 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors"
                 title="Close"
               >
                 <X className="w-4 h-4" />
@@ -803,7 +803,7 @@ export const FileBrowser = memo(function FileBrowser({
           <button
             onClick={navigateUp}
             disabled={currentPath === '/'}
-            className="p-1.5 rounded hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 hover:bg-surface-card text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Go up (Backspace)"
           >
             <ArrowUp className="w-4 h-4" />
@@ -821,7 +821,7 @@ export const FileBrowser = memo(function FileBrowser({
                 setPathInput(currentPath);
                 setIsEditingPath(false);
               }}
-              className="flex-1 px-3 py-1 text-sm bg-surface-base border border-border-subtle rounded font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
+              className="flex-1 px-3 py-1 text-sm bg-surface-base border border-border-subtle font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
               autoFocus
             />
           ) : (
@@ -851,7 +851,7 @@ export const FileBrowser = memo(function FileBrowser({
               <p className="text-xs text-ink-muted text-center mb-4">{filesError.message}</p>
               <button
                 onClick={refresh}
-                className="px-4 py-2 text-sm font-medium text-ink-primary bg-surface-subtle hover:bg-surface-card rounded transition-colors"
+                className="px-4 py-2 text-sm font-medium text-ink-primary bg-surface-subtle hover:bg-surface-card transition-colors"
               >
                 Retry
               </button>
@@ -946,7 +946,7 @@ export const FileBrowser = memo(function FileBrowser({
                       e.stopPropagation();
                       clearCompletedDownloads();
                     }}
-                    className="p-1 rounded hover:bg-surface-card text-ink-muted hover:text-ink-primary"
+                    className="p-1 hover:bg-surface-card text-ink-muted hover:text-ink-primary"
                     title="Clear completed"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -999,7 +999,7 @@ export const FileBrowser = memo(function FileBrowser({
 
         {/* Copy feedback */}
         {copiedPath && (
-          <div className="absolute bottom-16 right-4 flex items-center gap-2 px-3 py-2 bg-surface-card border border-border-subtle rounded shadow-lg text-xs text-status-success">
+          <div className="absolute bottom-16 right-4 flex items-center gap-2 px-3 py-2 bg-surface-card border border-border-subtle shadow-lg text-xs text-status-success">
             <Check className="w-3.5 h-3.5" />
             Path copied!
           </div>

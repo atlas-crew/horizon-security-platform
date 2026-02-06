@@ -26,7 +26,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center px-4 py-12 text-center ${className}`} role="status">
-      <div className="mb-4 rounded-full bg-surface-subtle p-4">
+      <div className="mb-4 bg-surface-subtle p-4">
         <Icon className="h-8 w-8 text-ink-secondary" aria-hidden="true" strokeWidth={1.5} />
       </div>
       <h3 className="mb-2 text-lg font-semibold text-ink-primary">{title}</h3>
@@ -48,7 +48,7 @@ export function EmptyStateButton({ children, onClick, icon: Icon }: EmptyStateBu
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
       {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
       {children}

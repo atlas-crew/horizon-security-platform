@@ -154,13 +154,13 @@ export function RuleDistributionPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setSelectedRules(new Set(rules.map((r) => r.id)))}
-              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
+              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
             >
               Select All
             </button>
             <button
               onClick={() => setSelectedRules(new Set())}
-              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
+              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
             >
               Clear Selection
             </button>

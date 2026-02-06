@@ -155,7 +155,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
       />
 
       {/* Dialog */}
-      <div className="relative bg-surface-card border border-border-subtle rounded-lg shadow-xl max-w-md w-full">
+      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
           <div className="flex items-center gap-2">
@@ -164,7 +164,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
           </div>
           <button
             onClick={onCancel}
-            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -175,7 +175,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
           <p className="text-sm text-ink-secondary">{message}</p>
 
           {warningMessage && (
-            <div className="flex items-start gap-2 p-3 bg-status-warning/10 border border-status-warning/20 rounded">
+            <div className="flex items-start gap-2 p-3 bg-status-warning/10 border border-status-warning/20">
               <AlertTriangle className="w-4 h-4 text-status-warning shrink-0 mt-0.5" />
               <p className="text-xs text-status-warning">{warningMessage}</p>
             </div>
@@ -192,7 +192,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
                 value={typedValue}
                 onChange={(e) => setTypedValue(e.target.value)}
                 placeholder={requireTypedConfirmation}
-                className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
                 disabled={isExecuting}
               />
             </div>
@@ -210,7 +210,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
           <button
             onClick={onCancel}
             disabled={isExecuting}
-            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
@@ -218,7 +218,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
             onClick={onConfirm}
             disabled={!isConfirmEnabled || isExecuting}
             className={clsx(
-              'px-4 py-2 text-sm font-medium rounded transition-colors flex items-center gap-2',
+              'px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
               'bg-status-error text-white hover:bg-status-error/90',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
@@ -254,14 +254,14 @@ const Toast = memo(function Toast({ message, type, onClose }: ToastProps) {
   return (
     <div
       className={clsx(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 border rounded-lg shadow-lg',
+        'fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 border shadow-lg',
         typeConfig[type]
       )}
     >
       <span className="text-sm font-medium">{message}</span>
       <button
         onClick={onClose}
-        className="p-0.5 hover:bg-black/10 rounded transition-colors"
+        className="p-0.5 hover:bg-black/10 transition-colors"
       >
         <X className="w-4 h-4" />
       </button>
@@ -440,7 +440,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
   // Loading state
   if (isLoading) {
     return (
-      <div className={clsx('bg-surface-card border border-border-subtle rounded-lg', className)}>
+      <div className={clsx('bg-surface-card border border-border-subtle', className)}>
         <div className="flex items-center justify-center p-6">
           <Loader2 className="w-6 h-6 animate-spin text-ink-muted" />
         </div>
@@ -452,7 +452,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
     <>
       <div
         className={clsx(
-          'bg-surface-card border border-border-subtle rounded-lg overflow-hidden',
+          'bg-surface-card border border-border-subtle overflow-hidden',
           className
         )}
       >
@@ -462,7 +462,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
           <button
             onClick={refreshState}
             disabled={isExecuting}
-            className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors disabled:opacity-50"
+            className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors disabled:opacity-50"
             title="Refresh status"
           >
             <RefreshCw className={clsx('w-4 h-4', isExecuting && 'animate-spin')} />
@@ -476,7 +476,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             {/* State Badge */}
             <div
               className={clsx(
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded',
+                'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border',
                 currentStateConfig.className
               )}
             >
@@ -520,14 +520,14 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
 
           {/* Error Display */}
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded">
+            <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20">
               <AlertTriangle className="w-4 h-4 text-status-error shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-xs text-status-error">{error.message}</p>
               </div>
               <button
                 onClick={clearError}
-                className="p-0.5 text-status-error hover:bg-status-error/10 rounded transition-colors"
+                className="p-0.5 text-status-error hover:bg-status-error/10 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -541,7 +541,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleReload}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors',
+                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
                 'bg-ac-blue/10 text-ac-blue border border-ac-blue/30',
                 'hover:bg-ac-blue/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
@@ -561,7 +561,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                 onClick={handleResume}
                 disabled={isExecuting}
                 className={clsx(
-                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors',
+                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
                   'bg-status-success/10 text-status-success border border-status-success/30',
                   'hover:bg-status-success/20 disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
@@ -579,7 +579,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                 onClick={handleDrain}
                 disabled={isExecuting || state === 'shutting_down' || state === 'restarting'}
                 className={clsx(
-                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors',
+                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
                   'bg-status-warning/10 text-status-warning border border-status-warning/30',
                   'hover:bg-status-warning/20 disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
@@ -599,7 +599,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleRestartClick}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors',
+                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
                 'bg-ac-orange/10 text-ac-orange border border-ac-orange/30',
                 'hover:bg-ac-orange/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
@@ -618,7 +618,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleShutdownClick}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors',
+                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
                 'bg-status-error/10 text-status-error border border-status-error/30',
                 'hover:bg-status-error/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
@@ -635,7 +635,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
 
           {/* Connection count during drain */}
           {state === 'draining' && activeConnections > 0 && (
-            <div className="flex items-center justify-center gap-2 py-2 px-3 bg-status-warning/5 border border-status-warning/20 rounded">
+            <div className="flex items-center justify-center gap-2 py-2 px-3 bg-status-warning/5 border border-status-warning/20">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-status-warning" />
               <span className="text-xs text-status-warning">
                 Draining {activeConnections} active connection{activeConnections !== 1 ? 's' : ''}...

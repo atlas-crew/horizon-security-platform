@@ -121,7 +121,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
     return (
       <div className="card">
         <div className="p-8 text-center text-ink-muted">
-          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full mx-auto mb-3" />
+          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent mx-auto mb-3" />
           <p>Searching...</p>
         </div>
       </div>
@@ -248,7 +248,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                               <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
                                 Signal Metadata
                               </h3>
-                              <div className="bg-surface-base border border-border-subtle p-3 rounded-sm">
+                              <div className="bg-surface-base border border-border-subtle p-3">
                                 <pre className="text-xs font-mono text-ink-secondary overflow-auto max-h-48">
                                   {JSON.stringify(signal.metadata || {}, null, 2)}
                                 </pre>

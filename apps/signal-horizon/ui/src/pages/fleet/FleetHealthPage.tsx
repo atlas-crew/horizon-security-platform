@@ -179,7 +179,7 @@ export function FleetHealthPage() {
             {criticalSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 border border-ac-red/20 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15"
+                className="flex items-center justify-between p-3 border border-ac-red/20 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15 focus:outline-none focus:ring-2 focus:ring-ac-red/50"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
                 tabIndex={0}
@@ -209,7 +209,7 @@ export function FleetHealthPage() {
             {warningSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 border border-ac-orange/20 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15"
+                className="flex items-center justify-between p-3 border border-ac-orange/20 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15 focus:outline-none focus:ring-2 focus:ring-ac-orange/50"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
                 tabIndex={0}

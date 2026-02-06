@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import {
   BarChart3,
   TrendingUp,
@@ -131,13 +132,9 @@ export default function IntelPage() {
               <XAxis dataKey="day" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(0, 87, 183, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
               />
               <Line type="monotone" dataKey="attacks" stroke="#D62598" strokeWidth={2.5} dot={false} name="Attacks" />
               <Line type="monotone" dataKey="blocked" stroke="#00B140" strokeWidth={2.5} dot={false} name="Blocked" />
@@ -230,8 +227,8 @@ export default function IntelPage() {
                 <XAxis type="number" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} hide />
                 <YAxis dataKey="label" type="category" width={90} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#001544', border: '1px solid rgba(214, 37, 152, 0.4)', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)' }}
-                  labelStyle={{ color: '#FFFFFF' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
                   cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
                 />
                 <Bar dataKey="value" fill="url(#barGradientMagenta)" radius={[0, 0, 0, 0]} barSize={14} />
@@ -259,8 +256,8 @@ export default function IntelPage() {
                 <XAxis type="number" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} hide />
                 <YAxis dataKey="label" type="category" width={120} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#001544', border: '1px solid rgba(0, 87, 183, 0.4)', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)' }}
-                  labelStyle={{ color: '#FFFFFF' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
                   cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
                 />
                 <Bar dataKey="value" fill="url(#barGradientBlue)" radius={[0, 0, 0, 0]} barSize={14} />

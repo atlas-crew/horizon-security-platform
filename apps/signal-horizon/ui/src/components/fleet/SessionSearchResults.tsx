@@ -354,7 +354,7 @@ export function SessionSearchResults({
                 onClick={() => toggleSensorExpanded(sensorResult.sensorId)}
               >
                 <div className="flex items-center gap-4">
-                  <span className={`w-2 h-2 rounded-full ${sensorResult.online ? 'bg-ac-green' : 'bg-ac-gray-mid'}`} />
+                  <span className={`w-2 h-2  ${sensorResult.online ? 'bg-ac-green' : 'bg-ac-gray-mid'}`} />
                   <span className="font-medium text-ink-primary">{sensorResult.sensorName}</span>
                   <span className="text-sm text-ink-secondary">
                     {sensorResult.sessions.length} session{sensorResult.sessions.length !== 1 ? 's' : ''}

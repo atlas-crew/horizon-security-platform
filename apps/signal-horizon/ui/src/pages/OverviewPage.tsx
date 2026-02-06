@@ -663,12 +663,12 @@ function AttackMap({
             animate={{ scale: 1, opacity: 1 }}
           >
             <span
-              className={clsx('block rounded-full shadow-[0_0_12px_rgba(0,0,0,0.15)]', dotClass)}
+              className={clsx('block  shadow-[0_0_12px_rgba(0,0,0,0.15)]', dotClass)}
               style={{ width: size, height: size }}
             />
             <span
               className={clsx(
-                'absolute inset-0 rounded-full animate-ping-slow opacity-50',
+                'absolute inset-0 animate-ping-slow opacity-50',
                 dotClass
               )}
               style={{ width: size, height: size }}
@@ -687,7 +687,7 @@ function AttackMap({
           <div key={severity} className="flex items-center gap-1.5">
             <span
               className={clsx(
-                'inline-block h-2 w-2 rounded-full',
+                'inline-block h-2 w-2',
                 severity === 'CRITICAL' && 'bg-ac-red',
                 severity === 'HIGH' && 'bg-ac-orange',
                 severity === 'MEDIUM' && 'bg-ac-blue',

@@ -44,7 +44,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
             className="sr-only peer"
             aria-label="Enable Crawler/Bot Detection"
           />
-          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-purple"></div>
+          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after: after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-purple"></div>
         </label>
       </div>
 
@@ -57,7 +57,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                 type="checkbox"
                 checked={config.verify_legitimate_crawlers}
                 onChange={(e) => onChange({ ...config, verify_legitimate_crawlers: e.target.checked })}
-                className="w-4 h-4 rounded border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
               <div className="flex items-center gap-1">
                 <Shield className="w-3 h-3 text-ac-green" />
@@ -69,7 +69,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                 type="checkbox"
                 checked={config.block_bad_bots}
                 onChange={(e) => onChange({ ...config, block_bad_bots: e.target.checked })}
-                className="w-4 h-4 rounded border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
               <div className="flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3 text-ac-red" />
@@ -87,7 +87,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                 ...config,
                 dns_failure_policy: (e.target.value as any) || DEFAULT_CRAWLER_DNS_FAILURE_POLICY,
               })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             >
               <option value="apply_risk_penalty">Apply Risk Penalty (recommended)</option>
               <option value="allow">Allow (fail-open)</option>
@@ -108,7 +108,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                   ...config,
                   dns_cache_ttl_secs: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_CACHE_TTL_SECS,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1">
@@ -122,7 +122,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                   ...config,
                   dns_timeout_ms: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_TIMEOUT_MS,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1">
@@ -136,7 +136,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                   ...config,
                   max_concurrent_dns_lookups: parseInt(e.target.value) || DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1">
@@ -150,7 +150,7 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
                   ...config,
                   dns_failure_risk_penalty: parseInt(e.target.value) || DEFAULT_CRAWLER_DNS_FAILURE_RISK_PENALTY,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
           </div>

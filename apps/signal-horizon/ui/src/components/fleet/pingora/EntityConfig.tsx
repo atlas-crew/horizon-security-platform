@@ -74,14 +74,14 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
               className="sr-only peer"
               aria-label="Enable Entity Store"
             />
-            <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
+            <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after: after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
           </label>
         </div>
 
         {entityConfig.enabled && (
           <div className="space-y-4 border-t border-border-subtle pt-6">
             {hasErrors && (
-              <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg" role="alert">
+              <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20" role="alert">
                 <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
                 <span className="text-xs text-status-error">Configuration has validation errors</span>
               </div>
@@ -100,7 +100,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   ...entityConfig,
                   max_entities: parseIntSafe(e.target.value, entityConfig.max_entities),
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1">
@@ -118,7 +118,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   ...entityConfig,
                   risk_decay_per_minute: parseFloat(e.target.value) || DEFAULT_ENTITY_RISK_DECAY_PER_MINUTE,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1">
@@ -133,7 +133,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   block_threshold: parseFloat(e.target.value) || DEFAULT_ENTITY_BLOCK_THRESHOLD,
                 })}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.block_threshold
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -155,7 +155,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   max_risk: parseFloat(e.target.value) || DEFAULT_ENTITY_MAX_RISK,
                 })}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.max_risk
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -176,7 +176,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   ...entityConfig,
                   max_rules_per_entity: parseIntSafe(e.target.value, entityConfig.max_rules_per_entity),
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             </div>
@@ -209,7 +209,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                 ...travelConfig,
                 max_speed_kmh: parseFloat(e.target.value) || DEFAULT_TRAVEL_MAX_SPEED_KMH,
               })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
             <p className="text-xs text-ink-muted">800 km/h ≈ commercial flight</p>
           </div>
@@ -224,7 +224,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                 ...travelConfig,
                 min_distance_km: parseFloat(e.target.value) || DEFAULT_TRAVEL_MIN_DISTANCE_KM,
               })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
           <div className="space-y-1">
@@ -238,7 +238,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                   ...travelConfig,
                   history_window_ms: parseIntSafe(e.target.value, Math.round(travelConfig.history_window_ms / 3600000)) * 3600000,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
           </div>
           <div className="space-y-1">
@@ -252,7 +252,7 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
                 ...travelConfig,
                 max_history_per_user: parseIntSafe(e.target.value, travelConfig.max_history_per_user),
               })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
         </div>

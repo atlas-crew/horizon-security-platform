@@ -65,14 +65,14 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
             className="sr-only peer"
             aria-label="Enable Tarpit"
           />
-          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-orange"></div>
+          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after: after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-orange"></div>
         </label>
       </div>
 
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {hasErrors && (
-            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg" role="alert">
+            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20" role="alert">
               <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
               <span className="text-xs text-status-error">Configuration has validation errors</span>
             </div>
@@ -94,7 +94,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 aria-invalid={!!validationErrors.base_delay_ms}
                 aria-describedby={validationErrors.base_delay_ms ? 'tarpit-base-delay-error' : undefined}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.base_delay_ms
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -119,7 +119,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 aria-invalid={!!validationErrors.max_delay_ms}
                 aria-describedby={validationErrors.max_delay_ms ? 'tarpit-max-delay-error' : undefined}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.max_delay_ms
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -145,7 +145,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 aria-invalid={!!validationErrors.progressive_multiplier}
                 aria-describedby={validationErrors.progressive_multiplier ? 'tarpit-multiplier-error' : undefined}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.progressive_multiplier
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -167,7 +167,7 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                   ...config,
                   max_concurrent_tarpits: parseIntSafe(e.target.value, config.max_concurrent_tarpits),
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
             <div className="space-y-1 col-span-2">
@@ -182,12 +182,12 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                   ...config,
                   decay_threshold_ms: parseIntSafe(e.target.value, Math.round(config.decay_threshold_ms / 60000)) * 60000,
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
           </div>
 
-          <div className="p-3 bg-surface-subtle rounded text-xs text-ink-muted">
+          <div className="p-3 bg-surface-subtle text-xs text-ink-muted">
             <div className="flex items-center gap-1 mb-1">
               <Timer className="w-3 h-3" />
               <span className="font-medium">Delay Formula:</span>

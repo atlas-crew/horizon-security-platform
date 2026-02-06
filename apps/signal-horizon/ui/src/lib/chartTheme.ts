@@ -93,7 +93,7 @@ export function isDarkMode(): boolean {
   return document.documentElement.classList.contains('dark');
 }
 
-// Tooltip styling - theme aware
+// Tooltip styling - theme aware via CSS variables
 export const TOOLTIP_STYLE_DARK = {
   contentStyle: {
     backgroundColor: '#001544',
@@ -133,6 +133,26 @@ export function getTooltipStyle() {
 
 // Legacy export for backwards compatibility
 export const TOOLTIP_STYLE = TOOLTIP_STYLE_DARK;
+
+/**
+ * CSS-variable-based tooltip styles that adapt to light/dark mode automatically.
+ * Use these for inline Recharts Tooltip props without needing isDarkMode() checks.
+ */
+export const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--chart-tooltip-bg)',
+  border: '1px solid var(--chart-tooltip-border)',
+  borderRadius: 0,
+  boxShadow: 'var(--chart-tooltip-shadow)',
+};
+
+export const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+  color: 'var(--chart-tooltip-label)',
+  fontWeight: 500,
+};
+
+export const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
+  color: 'var(--chart-tooltip-item)',
+};
 
 // Line chart defaults
 export const LINE_DEFAULTS = {

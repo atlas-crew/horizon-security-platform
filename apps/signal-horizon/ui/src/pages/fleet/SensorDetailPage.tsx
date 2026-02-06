@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,6 +16,8 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
+import { useToast } from '../../components/ui/Toast';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import { SensorDetailSkeleton, ConfigPanelSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -236,7 +238,7 @@ export function SensorDetailPage() {
           <div>
             <button
               onClick={() => navigate('/fleet')}
-              className="mb-2 text-xs uppercase tracking-[0.25em] text-ac-blue hover:text-ac-blue/80 flex items-center gap-2"
+              className="mb-2 text-xs uppercase tracking-[0.25em] text-ac-blue hover:text-ac-blue/80 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
             >
               <span className="text-ink-secondary">←</span>
               Back to Fleet
@@ -279,7 +281,7 @@ export function SensorDetailPage() {
               aria-selected={activeTab === tab.key}
               aria-controls={`tabpanel-${tab.key}`}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-1 py-2 text-xs uppercase tracking-[0.2em] border-b-2 transition-colors ${
+              className={`px-1 py-2 text-xs uppercase tracking-[0.2em] border-b-2 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 activeTab === tab.key
                   ? 'border-ac-blue text-ac-blue'
                   : 'border-transparent text-ink-secondary hover:text-ink-primary hover:border-border-subtle'
@@ -293,7 +295,7 @@ export function SensorDetailPage() {
 
       {/* Tab Content */}
       <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
-        {activeTab === 'overview' && <OverviewTab sensor={sensor} systemInfo={systemInfo} diagnostics={diagnosticsMutation.data} />}
+        {activeTab === 'overview' && <OverviewTab sensor={sensor} systemInfo={systemInfo} diagnostics={diagnosticsMutation.data} onRestartSensor={() => restartMutation.mutate()} />}
         {activeTab === 'performance' && <PerformanceTab data={performance} />}
         {activeTab === 'network' && <NetworkTab data={network} />}
         {activeTab === 'processes' && <ProcessesTab data={processes} />}
@@ -322,11 +324,79 @@ export function SensorDetailPage() {
 
 // ======================== Tab Components ========================
 
-function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemInfo: any; diagnostics: any }) {
+function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }: { sensor: any; systemInfo: any; diagnostics: any; onRestartSensor: () => void }) {
   const meta = sensor.metadata || {};
+  const { toast, Toasts } = useToast();
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    action: () => void;
+  } | null>(null);
+
+  const API_BASE_LOCAL = import.meta.env.VITE_API_URL || '';
+  const API_KEY_LOCAL = import.meta.env.VITE_API_KEY || 'demo-key';
+  const headers = {
+    Authorization: `Bearer ${API_KEY_LOCAL}`,
+    'Content-Type': 'application/json',
+  };
+
+  const requestAction = useCallback(async (endpoint: string, successMsg: string) => {
+    try {
+      const response = await fetch(`${API_BASE_LOCAL}/api/v1/fleet/sensors/${sensor.id}/actions/${endpoint}`, {
+        method: 'POST',
+        headers,
+      });
+      if (!response.ok) throw new Error(`Failed to ${endpoint}`);
+      toast.success(successMsg);
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }, [sensor.id, toast, API_BASE_LOCAL, headers]);
+
+  const handleRestartServices = () => {
+    setConfirmAction({
+      title: 'Restart Services',
+      description: 'This will restart all WAF services on this sensor. Active connections will be dropped and the sensor will be briefly unavailable. Are you sure?',
+      confirmLabel: 'Restart Services',
+      action: () => requestAction('restart-services', 'Services restart initiated'),
+    });
+  };
+
+  const handleClearLogs = () => {
+    setConfirmAction({
+      title: 'Clear Logs',
+      description: 'This will permanently delete all local log files on this sensor. This action cannot be undone. Are you sure?',
+      confirmLabel: 'Clear Logs',
+      action: () => requestAction('clear-logs', 'Log clearing initiated'),
+    });
+  };
+
+  const handleRestartSensor = () => {
+    setConfirmAction({
+      title: 'Restart Sensor',
+      description: 'This will fully restart the sensor process. The sensor will be offline during restart and all active connections will be terminated. Are you sure?',
+      confirmLabel: 'Restart Sensor',
+      action: onRestartSensor,
+    });
+  };
 
   return (
     <div className="space-y-6">
+      {Toasts}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction?.title ?? ''}
+        description={confirmAction?.description ?? ''}
+        confirmLabel={confirmAction?.confirmLabel}
+        variant="danger"
+        onConfirm={() => {
+          confirmAction?.action();
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
       {/* Resource Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <MetricCard label="CPU" value={`${(meta.cpu ?? 0).toFixed(1)}%`} className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
@@ -386,11 +456,11 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
       <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <ActionButton icon={RotateCcw} label="Restart Services" />
-          <ActionButton icon={Trash2} label="Clear Logs" />
+          <ActionButton icon={RotateCcw} label="Restart Services" onClick={handleRestartServices} />
+          <ActionButton icon={Trash2} label="Clear Logs" onClick={handleClearLogs} />
           <ActionButton icon={ArrowUpCircle} label="Update Sensor" />
           <ActionButton icon={Globe2} label="Test Connectivity" />
-          <ActionButton icon={Plug} label="Restart Sensor" />
+          <ActionButton icon={Plug} label="Restart Sensor" onClick={handleRestartSensor} />
         </div>
       </div>
 
@@ -696,6 +766,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   const isTunnelActive = Boolean(sensor?.tunnelActive);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, Toasts } = useToast();
   const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
 
   const {
@@ -821,7 +892,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     mutationFn: (config: any) => updatePingoraConfig(id, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config', 'pingora'] });
-      alert('Configuration updated and push initiated');
+      toast.success('Configuration updated and push initiated');
     },
   });
 
@@ -830,7 +901,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config', 'kernel'] });
       const appliedCount = Object.keys(result?.data?.applied || {}).length;
-      alert(`Kernel configuration applied (${appliedCount} parameters).`);
+      toast.success(`Kernel configuration applied (${appliedCount} parameters).`);
     },
   });
 
@@ -876,6 +947,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
 
   return (
     <div className="space-y-6">
+      {Toasts}
       {/* Config Tabs — ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
         <div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">
@@ -888,7 +960,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
               aria-selected={configTab === tab}
               aria-controls={`tabpanel-config-${tab}`}
               onClick={() => setConfigTab(tab)}
-              className={`px-4 py-2 text-xs uppercase tracking-[0.2em] border transition-colors ${
+              className={`px-4 py-2 text-xs uppercase tracking-[0.2em] border transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 configTab === tab
                   ? 'border-ac-blue text-ac-blue bg-ac-blue/10'
                   : 'border-border-subtle text-ink-secondary hover:border-ac-blue/50 hover:text-ink-primary'
@@ -1076,14 +1148,14 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
                   Persist changes
                 </label>
                 <button
-                  className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle"
+                  className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                   onClick={() => refetchKernel()}
                   disabled={isKernelFetching}
                 >
                   Refresh
                 </button>
                 <button
-                  className="px-3 py-1.5 text-xs bg-accent-primary text-white disabled:opacity-60"
+                  className="px-3 py-1.5 text-xs bg-accent-primary text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
                   onClick={() => updateKernelMutation.mutate(kernelDraft)}
                   disabled={updateKernelMutation.isPending || isKernelLoading}
                 >
@@ -1181,9 +1253,12 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActionButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function ActionButton({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick?: () => void }) {
   return (
-    <button className="group flex items-center gap-2 px-4 py-3 bg-surface-subtle border border-border-subtle hover:border-ac-blue/60 hover:bg-surface-card transition-colors">
+    <button
+      onClick={onClick}
+      className="group flex items-center gap-2 px-4 py-3 bg-surface-subtle border border-border-subtle hover:border-ac-blue/60 hover:bg-surface-card transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+    >
       <Icon className="w-4 h-4 text-ac-blue group-hover:text-ac-magenta transition-colors" />
       <span className="text-xs uppercase tracking-[0.2em] text-ink-secondary group-hover:text-ink-primary">
         {label}

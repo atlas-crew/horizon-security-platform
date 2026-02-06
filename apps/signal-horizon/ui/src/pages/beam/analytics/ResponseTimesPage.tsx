@@ -174,15 +174,15 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <div className="w-3 h-3 bg-green-500" />
             <span className="text-ink-secondary">P50</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-sky-500" />
+            <div className="w-3 h-3 bg-sky-500" />
             <span className="text-ink-secondary">P95</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <div className="w-3 h-3 bg-red-500" />
             <span className="text-ink-secondary">P99</span>
           </div>
         </div>

@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -148,11 +149,11 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
         <h3 className="text-lg font-semibold text-ink-primary">Bandwidth Timeline</h3>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.ingress }} />
+            <div className="w-3 h-3" style={{ backgroundColor: COLORS.ingress }} />
             <span className="text-ink-secondary">Ingress</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.egress }} />
+            <div className="w-3 h-3" style={{ backgroundColor: COLORS.egress }} />
             <span className="text-ink-secondary">Egress</span>
           </div>
           <span className="text-ink-muted text-xs">({granularity} intervals)</span>
@@ -184,15 +185,9 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
               tickFormatter={(v) => `${v.toFixed(0)} MB`}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-                color: '#fff',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
               formatter={(value: number, name: string) => [
                 `${value.toFixed(2)} MB`,
                 name === 'ingressMB' ? 'Ingress' : 'Egress',
@@ -374,15 +369,9 @@ function BillingPanel({
               )}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-                color: '#fff',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
               formatter={(value: number) => formatBytes(value)}
             />
           </PieChart>
@@ -426,15 +415,9 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
             <XAxis type="number" tick={{ fill: '#7B8FA8', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)} GB`} />
             <YAxis type="category" dataKey="name" tick={{ fill: '#7B8FA8', fontSize: 12 }} width={100} />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-                color: '#fff',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
               formatter={(value: number) => [`${value.toFixed(2)} GB`, 'Bandwidth']}
             />
             <Bar dataKey="bytes" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
@@ -446,7 +429,7 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
           <div key={sensor.sensorId} className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
               <div
-                className="w-3 h-3 rounded-full"
+                className="w-3 h-3"
                 style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
               />
               <span className="text-ink-secondary">{sensor.sensorName}</span>
@@ -561,7 +544,7 @@ export default function BandwidthDashboardPage() {
             <option value={1440}>Last 24 hours</option>
           </select>
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
+            <span className="w-2 h-2 bg-green-500 animate-pulse" aria-hidden="true" />
             <span className="text-green-400">Live</span>
           </div>
         </div>

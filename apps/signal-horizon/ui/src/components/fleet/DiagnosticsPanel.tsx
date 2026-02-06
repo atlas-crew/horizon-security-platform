@@ -150,7 +150,7 @@ const Section = memo(function Section({
   children,
 }: SectionProps) {
   return (
-    <div className="border border-border-subtle rounded-lg overflow-hidden">
+    <div className="border border-border-subtle overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-3 bg-surface-raised hover:bg-surface-subtle transition-colors"
@@ -187,7 +187,7 @@ const HealthSection = memo(function HealthSection({ health }: HealthSectionProps
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-secondary">Status</span>
         <span
-          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
+          className={`inline-flex items-center gap-2 px-3 py-1.5  text-sm font-medium border ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
         >
           {statusColors.icon}
           <span className="capitalize">{health.status}</span>
@@ -206,7 +206,7 @@ const HealthSection = memo(function HealthSection({ health }: HealthSectionProps
       {/* Version */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-secondary">Version</span>
-        <span className="text-sm font-mono text-ink-primary bg-surface-subtle px-2 py-0.5 rounded">
+        <span className="text-sm font-mono text-ink-primary bg-surface-subtle px-2 py-0.5">
           v{health.version}
         </span>
       </div>
@@ -247,7 +247,7 @@ const MemorySection = memo(function MemorySection({ memory }: MemorySectionProps
               <span className="text-sm text-ink-secondary">{label}</span>
               <span className="text-sm text-ink-muted">{formatMemory(value)}</span>
             </div>
-            <div className="w-full h-2 bg-surface-subtle rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-surface-subtle overflow-hidden">
               <div
                 className={`h-full ${color} transition-all duration-300`}
                 style={{ width: `${Math.min(100, (value / totalMemory) * 100)}%` }}
@@ -261,7 +261,7 @@ const MemorySection = memo(function MemorySection({ memory }: MemorySectionProps
       <div className="flex flex-wrap gap-3 pt-2 border-t border-border-subtle">
         {categories.map(({ label, value, color }) => (
           <div key={label} className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+            <span className={`w-2.5 h-2.5  ${color}`} />
             <span>{label}</span>
             <span className="text-ink-secondary">({((value / totalMemory) * 100).toFixed(1)}%)</span>
           </div>
@@ -298,7 +298,7 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
           {connections.upstreamPools.map((pool) => (
             <div
               key={pool.name}
-              className="flex items-center justify-between p-3 bg-surface-subtle rounded-lg"
+              className="flex items-center justify-between p-3 bg-surface-subtle"
             >
               <span className="text-sm font-medium text-ink-primary">{pool.name}</span>
               <div className="flex items-center gap-4 text-sm">
@@ -327,7 +327,7 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
           </div>
           <div className="flex items-center gap-2">
             <span
-              className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+              className={`px-2.5 py-1  text-xs font-medium ${
                 connections.horizonTunnel.connected
                   ? 'bg-ac-green/10 text-ac-green'
                   : 'bg-ac-red/10 text-ac-red'
@@ -362,11 +362,11 @@ const RulesSection = memo(function RulesSection({ rules }: RulesSectionProps) {
     <div className="space-y-4">
       {/* Rule Counts */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-3 bg-surface-subtle rounded-lg text-center">
+        <div className="p-3 bg-surface-subtle text-center">
           <p className="text-2xl font-semibold text-ink-primary">{rules.total}</p>
           <p className="text-xs text-ink-muted mt-1">Total Rules</p>
         </div>
-        <div className="p-3 bg-surface-subtle rounded-lg text-center">
+        <div className="p-3 bg-surface-subtle text-center">
           <p className="text-2xl font-semibold text-ac-green">{rules.enabled}</p>
           <p className="text-xs text-ink-muted mt-1">Enabled</p>
         </div>
@@ -414,7 +414,7 @@ const ActorsSection = memo(function ActorsSection({ actors }: ActorsSectionProps
             {actors.cacheUsage}% of {actors.cacheCapacity.toLocaleString()}
           </span>
         </div>
-        <div className="w-full h-3 bg-surface-subtle rounded-full overflow-hidden">
+        <div className="w-full h-3 bg-surface-subtle overflow-hidden">
           <div
             className={`h-full transition-all duration-300 ${
               actors.cacheUsage >= 90
@@ -486,7 +486,7 @@ export function DiagnosticsPanel({
   }, [refresh]);
 
   return (
-    <div className={`flex flex-col bg-surface-base rounded-lg border border-border-subtle overflow-hidden ${className}`}>
+    <div className={`flex flex-col bg-surface-base  border border-border-subtle overflow-hidden ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-surface-raised">
         <div className="flex items-center gap-3">
@@ -506,7 +506,7 @@ export function DiagnosticsPanel({
               }`}
             >
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`w-2 h-2  ${
                   isConnected ? 'bg-ac-green animate-pulse' : 'bg-ac-red'
                 }`}
               />
@@ -525,7 +525,7 @@ export function DiagnosticsPanel({
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className={`p-1.5 rounded hover:bg-surface-subtle transition-colors ${
+            className={`p-1.5  hover:bg-surface-subtle transition-colors ${
               isLoading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             title="Refresh"
@@ -537,7 +537,7 @@ export function DiagnosticsPanel({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded hover:bg-surface-subtle transition-colors"
+              className="p-1.5 hover:bg-surface-subtle transition-colors"
               title="Close"
             >
               <XCircle className="w-4 h-4 text-ink-muted hover:text-ink-primary" />
@@ -564,7 +564,7 @@ export function DiagnosticsPanel({
             <p className="text-xs text-ink-muted mt-1">{error.message}</p>
             <button
               onClick={handleRefresh}
-              className="mt-4 px-4 py-2 text-sm font-medium text-white bg-ac-blue rounded hover:bg-ac-blue/90 transition-colors"
+              className="mt-4 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue/90 transition-colors"
             >
               Retry
             </button>

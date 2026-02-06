@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import {
   BarChart3,
   Search,
@@ -130,7 +131,7 @@ export default function ApiIntelligencePage() {
         <p>{error.message}</p>
         <button
           onClick={() => refetch()}
-          className="mt-4 px-4 py-2 bg-ac-blue text-white rounded hover:bg-ac-blue/90 transition-colors"
+          className="mt-4 px-4 py-2 bg-ac-blue text-white hover:bg-ac-blue/90 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
           aria-label="Retry loading API intelligence data"
         >
           Retry
@@ -169,7 +170,7 @@ export default function ApiIntelligencePage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search endpoints"
-              className="h-9 pl-9 pr-4 bg-surface-base border border-border-subtle rounded text-sm w-64 focus:border-link focus:ring-1 focus:ring-link outline-none"
+              className="h-9 pl-9 pr-4 bg-surface-base border border-border-subtle text-sm w-64 focus:border-link focus:ring-1 focus:ring-link outline-none"
             />
           </div>
         </div>
@@ -229,13 +230,9 @@ export default function ApiIntelligencePage() {
                 <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    borderColor: 'rgba(0, 87, 183, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  }}
-                  labelStyle={{ color: '#FFFFFF' }}
-                  itemStyle={{ color: '#529EEC' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
                 />
                 <Area
                   type="monotone"
@@ -290,13 +287,9 @@ export default function ApiIntelligencePage() {
                 <YAxis dataKey="endpoint" type="category" width={150} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    borderColor: 'rgba(214, 37, 152, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  }}
-                  labelStyle={{ color: '#FFFFFF' }}
-                  itemStyle={{ color: '#D62598' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
                 />
                 <Bar dataKey="violationCount" fill="url(#violationGradient)" radius={[0, 0, 0, 0]} barSize={18} />
               </BarChart>
@@ -315,7 +308,7 @@ export default function ApiIntelligencePage() {
           />
           {/* Pagination Controls */}
           {totalEndpoints > pagination.limit && (
-            <div className="flex justify-between items-center p-4 border-t border-border-subtle bg-surface-base rounded-b">
+            <div className="flex justify-between items-center p-4 border-t border-border-subtle bg-surface-base">
               <span className="text-sm text-ink-muted">
                 Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, totalEndpoints)} of {totalEndpoints}
               </span>

@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
 import {
   Shield,
   Target,
@@ -463,14 +464,9 @@ export default function AttackPatternsPage() {
                 />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 12 }} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    border: '1px solid rgba(0, 87, 183, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                    borderRadius: '0',
-                  }}
-                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                  itemStyle={{ color: '#B0C4DE' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
                 />
                 <Line
                   type="monotone"
@@ -510,7 +506,7 @@ export default function AttackPatternsPage() {
           <div className="flex items-center justify-center gap-6 mt-4">
             {Object.entries(CHART_COLORS).map(([key, color]) => (
               <div key={key} className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                <div className="w-3 h-3" style={{ backgroundColor: color }} />
                 <span className="text-sm text-ink-secondary capitalize">{key}</span>
               </div>
             ))}
@@ -585,14 +581,9 @@ export default function AttackPatternsPage() {
                 width={140}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(0, 87, 183, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  borderRadius: '0',
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
               />
               <Bar dataKey="count" fill="#0057B7" radius={[0, 0, 0, 0]} name="Detections" />
             </BarChart>

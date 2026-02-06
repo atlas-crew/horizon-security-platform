@@ -209,7 +209,7 @@ export function ConfigManagerPage() {
             {['all', 'production', 'staging', 'dev'].map((env) => (
               <button
                 key={env}
-                className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle capitalize"
+                className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
               >
                 {env}
               </button>
@@ -267,13 +267,13 @@ export function ConfigManagerPage() {
                         pushMutation.mutate({ templateId: template.id, sensorIds: [] });
                       }}
                       disabled={pushMutation.isPending}
-                      className="px-3 py-1.5 text-sm font-medium text-ac-white bg-ac-blue hover:bg-ac-blue-dark disabled:opacity-50"
+                      className="px-3 py-1.5 text-sm font-medium text-ac-white bg-ac-blue hover:bg-ac-blue-dark disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                     >
                       {pushMutation.isPending ? 'Pushing...' : 'Push to All'}
                     </button>
                     <button
                       type="button"
-                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
+                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                     >
                       Edit
                     </button>

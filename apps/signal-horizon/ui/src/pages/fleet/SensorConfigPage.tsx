@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
+import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
 import {
@@ -73,6 +74,7 @@ export function SensorConfigPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, Toasts } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('guided');
   const [configJson, setConfigJson] = useState('');
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfigData>(defaultAdvancedConfig);
@@ -109,10 +111,10 @@ export function SensorConfigPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config'] });
       setIsDirty(false);
-      alert('Configuration updated successfully and push initiated');
+      toast.success('Configuration updated successfully and push initiated');
     },
     onError: (err: Error) => {
-      alert(`Update failed: ${err.message}`);
+      toast.error(`Update failed: ${err.message}`);
     }
   });
 
@@ -142,7 +144,7 @@ export function SensorConfigPage() {
       const parsed = JSON.parse(configJson);
       updateMutation.mutate(parsed);
     } catch {
-      alert('Invalid JSON configuration');
+      toast.error('Invalid JSON configuration');
     }
   };
 
@@ -158,8 +160,8 @@ export function SensorConfigPage() {
   if (isLoading) return (
     <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">
       <div className="px-6 py-4 border-b border-border-subtle bg-surface-card">
-        <Skeleton className="h-4 w-48 rounded mb-2" />
-        <Skeleton className="h-6 w-64 rounded" />
+        <Skeleton className="h-4 w-48 mb-2" />
+        <Skeleton className="h-6 w-64" />
       </div>
       <ConfigPanelSkeleton />
     </div>
@@ -173,7 +175,7 @@ export function SensorConfigPage() {
       <button
         onClick={() => refetch()}
         disabled={isFetching}
-        className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white hover:bg-accent-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
       >
         <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         {isFetching ? 'Retrying...' : 'Retry'}
@@ -183,13 +185,14 @@ export function SensorConfigPage() {
 
   return (
     <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">
+      {Toasts}
       {/* Header */}
       <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-card">
         <div>
           <div className="flex items-center gap-2 text-xs text-ink-muted mb-1">
-            <button onClick={() => navigate('/fleet')} className="hover:text-accent-primary">Fleet</button>
+            <button onClick={() => navigate('/fleet')} className="hover:text-accent-primary focus:outline-none focus:ring-2 focus:ring-ac-blue/50">Fleet</button>
             <span>/</span>
-            <button onClick={() => navigate(`/fleet/sensors/${id}`)} className="hover:text-accent-primary">{sensor?.name || id}</button>
+            <button onClick={() => navigate(`/fleet/sensors/${id}`)} className="hover:text-accent-primary focus:outline-none focus:ring-2 focus:ring-ac-blue/50">{sensor?.name || id}</button>
             <span>/</span>
             <span className="text-ink-secondary">Advanced Configuration</span>
           </div>
@@ -197,10 +200,10 @@ export function SensorConfigPage() {
         </div>
         <div className="flex items-center gap-3">
           {/* View Mode Tabs */}
-          <div className="flex items-center bg-surface-subtle rounded-lg p-1">
+          <div className="flex items-center bg-surface-subtle p-1">
             <button
               onClick={() => handleModeChange('guided')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium  transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 viewMode === 'guided'
                   ? 'bg-surface-card text-ink-primary shadow-sm'
                   : 'text-ink-secondary hover:text-ink-primary'
@@ -211,7 +214,7 @@ export function SensorConfigPage() {
             </button>
             <button
               onClick={() => handleModeChange('json')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium  transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 viewMode === 'json'
                   ? 'bg-surface-card text-ink-primary shadow-sm'
                   : 'text-ink-secondary hover:text-ink-primary'
@@ -225,14 +228,14 @@ export function SensorConfigPage() {
           {isDirty && <span className="text-xs text-status-warning font-medium">Unsaved Changes</span>}
           <button
             onClick={() => navigate(`/fleet/sensors/${id}`)}
-            className="px-4 py-2 text-sm border border-border-subtle rounded-lg hover:bg-surface-subtle"
+            className="px-4 py-2 text-sm border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!isDirty || updateMutation.isPending}
-            className="px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+            className="px-4 py-2 text-sm bg-accent-primary text-white hover:bg-accent-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save & Push'}
           </button>
@@ -248,7 +251,7 @@ export function SensorConfigPage() {
           />
         ) : (
           <div className="h-full p-6 flex flex-col gap-4">
-            <div className="bg-status-info/10 border border-status-info/20 p-4 rounded-lg flex items-start gap-3 flex-shrink-0">
+            <div className="bg-status-info/10 border border-status-info/20 p-4 flex items-start gap-3 flex-shrink-0">
               <span className="text-status-info text-xl">&#x2139;&#xFE0F;</span>
               <div className="text-sm text-ink-secondary">
                 <p className="font-semibold text-ink-primary mb-1">DANGER ZONE: Raw Configuration Access</p>
@@ -256,7 +259,7 @@ export function SensorConfigPage() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 border border-border-subtle rounded-lg overflow-hidden shadow-sm">
+            <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
               <CodeEditor
                 value={configJson}
                 onChange={handleJsonChange}

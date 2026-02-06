@@ -23,10 +23,10 @@ export const ServiceControls = memo(function ServiceControls({ onAction }: Servi
   }, [onAction]);
 
   return (
-    <div className="flex items-center justify-between bg-surface-subtle p-4 rounded border border-border-subtle">
+    <div className="flex items-center justify-between bg-surface-subtle p-4 border border-border-subtle">
       <div className="flex items-center gap-3">
         <div className={clsx(
-          "w-2 h-2 rounded-full",
+          "w-2 h-2 ",
           status === 'running' ? "bg-ac-blue animate-pulse" :
           status === 'success' ? "bg-ac-green" :
           status === 'error' ? "bg-ac-red" :

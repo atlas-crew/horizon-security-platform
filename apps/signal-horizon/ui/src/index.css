@@ -156,6 +156,15 @@
     /* Light mode table header */
     --table-header-bg: linear-gradient(180deg, #001E62 0%, #001544 100%);
     --table-header-text: #FFFFFF;
+
+    /* =========================================
+       CHART TOOLTIP TOKENS
+       ========================================= */
+    --chart-tooltip-bg: #FFFFFF;
+    --chart-tooltip-border: rgba(0, 30, 98, 0.15);
+    --chart-tooltip-shadow: 0 4px 12px rgba(0, 30, 98, 0.15);
+    --chart-tooltip-label: #001E62;
+    --chart-tooltip-item: #334E68;
   }
 
   .dark {
@@ -188,6 +197,13 @@
 
     --shadow-color: rgba(0, 0, 0, 0.5);
     --shadow-color-strong: rgba(0, 0, 0, 0.7);
+
+    /* Chart tooltip tokens - dark mode */
+    --chart-tooltip-bg: #001544;
+    --chart-tooltip-border: rgba(0, 87, 183, 0.4);
+    --chart-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --chart-tooltip-label: #FFFFFF;
+    --chart-tooltip-item: #B0C4DE;
 
     /* Depth effects - dark mode */
     --glow-magenta: rgba(214, 37, 152, 0.5);
@@ -1419,7 +1435,7 @@
 
   /* Code block wrapper */
   .code-block-wrapper {
-    @apply relative rounded overflow-hidden my-6;
+    @apply relative overflow-hidden my-6;
   }
 
   .code-block-wrapper pre {
@@ -1444,7 +1460,7 @@
 
   /* Copy button */
   .copy-btn {
-    @apply absolute top-3 right-3 p-2 rounded;
+    @apply absolute top-3 right-3 p-2;
     background: rgba(255, 255, 255, 0.08);
     color: #94a3b8;
     opacity: 0;

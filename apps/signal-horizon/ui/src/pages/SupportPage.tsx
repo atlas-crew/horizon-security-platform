@@ -65,12 +65,12 @@ marked.use({
         .replace(/\r/g, '&#13;')
         .replace(/\n/g, '&#10;');
       return `<div class="code-block-wrapper group relative">
-        <button type="button" class="copy-btn absolute top-3 right-3 p-2 rounded bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all" data-code="${escapedText}" aria-label="Copy code to clipboard">
+        <button type="button" class="copy-btn absolute top-3 right-3 p-2  bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all" data-code="${escapedText}" aria-label="Copy code to clipboard">
           <svg class="copy-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <svg class="check-icon w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
-        <pre class="!mt-0 !rounded-t-none"><code class="language-${language}">${highlighted}</code></pre>
-        <div class="code-lang absolute top-0 left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-800 rounded-tl">${language}</div>
+        <pre class="!mt-0 !"><code class="language-${language}">${highlighted}</code></pre>
+        <div class="code-lang absolute top-0 left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-800 ">${language}</div>
       </div>`;
     }
   }
@@ -163,7 +163,7 @@ export function SupportPage() {
 
                 onClick={() => setActiveTab('docs')}
 
-                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`inline-flex items-center px-5 py-2  text-xs font-bold uppercase tracking-wider transition-all ${
                   activeTab === 'docs'
                     ? 'bg-ac-blue text-white shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
@@ -178,7 +178,7 @@ export function SupportPage() {
 
                 onClick={() => setActiveTab('diagnostics')}
 
-                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`inline-flex items-center px-5 py-2  text-xs font-bold uppercase tracking-wider transition-all ${
                   activeTab === 'diagnostics'
                     ? 'bg-ac-magenta text-white shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
@@ -193,7 +193,7 @@ export function SupportPage() {
 
                 onClick={() => setActiveTab('contact')}
 
-                className={`inline-flex items-center px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`inline-flex items-center px-5 py-2  text-xs font-bold uppercase tracking-wider transition-all ${
                   activeTab === 'contact'
                     ? 'bg-ac-sky text-ac-navy shadow-lg'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
@@ -712,25 +712,25 @@ Track these metrics:
         <div className="max-w-3xl mx-auto">
           {isLoading && !content ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ac-blue"></div>
+              <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue"></div>
             </div>
           ) : (
             <div
               className="prose prose-slate dark:prose-invert max-w-none
-                font-sans text-ink-secondary leading-relaxed
-                prose-headings:font-light prose-headings:tracking-tight prose-headings:text-ac-navy dark:prose-headings:text-white
-                prose-h1:text-[48px] prose-h1:mb-12
-                prose-h2:text-[32px] prose-h2:mt-16 prose-h2:mb-6
-                prose-h3:text-[28px] prose-h3:mt-12 prose-h3:mb-4
-                prose-h4:text-[24px]
-                prose-strong:font-bold prose-strong:text-ac-blue
-                prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm
-                prose-pre:bg-ac-navy prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20 prose-pre:p-6
-                [&_pre_code]:bg-transparent [&_pre_code]:text-slate-100 [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-relaxed
-                prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline
-                prose-li:my-2
-                prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider
-                prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-border-subtle"
+ font-sans text-ink-secondary leading-relaxed
+ prose-headings:font-light prose-headings:tracking-tight prose-headings:text-ac-navy dark:prose-headings:text-white
+ prose-h1:text-[48px] prose-h1:mb-12
+ prose-h2:text-[32px] prose-h2:mt-16 prose-h2:mb-6
+ prose-h3:text-[28px] prose-h3:mt-12 prose-h3:mb-4
+ prose-h4:text-[24px]
+ prose-strong:font-bold prose-strong:text-ac-blue
+ prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm
+ prose-pre:bg-ac-navy prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20 prose-pre:p-6
+ [&_pre_code]:bg-transparent [&_pre_code]:text-slate-100 [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-relaxed
+ prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline
+ prose-li:my-2
+ prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider
+ prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-border-subtle"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
           )}
@@ -771,7 +771,7 @@ function DiagnosticsCenter() {
         <button
           onClick={handleGenerate}
           disabled={isGenerating}
-          className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-8 py-3 font-bold uppercase tracking-widest text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 hover:shadow-xl"
+          className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-8 py-3 font-bold uppercase tracking-widest text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ac-magenta/50"
         >
           {isGenerating ? 'Generating...' : 'Generate New Bundle'}
         </button>
@@ -802,7 +802,7 @@ function DiagnosticsCenter() {
                   </span>
                 </td>
                 <td className="px-8 py-5 text-right">
-                  <button className="text-ac-blue group-hover:text-ac-magenta font-bold uppercase text-xs tracking-wider transition-colors">
+                  <button className="text-ac-blue group-hover:text-ac-magenta font-bold uppercase text-xs tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50">
                     Download
                   </button>
                 </td>
@@ -831,7 +831,7 @@ function ContactSupport() {
           <textarea id="contact-message" rows={6} className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Describe the problem you're experiencing..." />
         </div>
         <div className="flex items-center justify-between pt-4">
-          <button type="button" className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-10 py-4 font-bold uppercase tracking-widest text-xs shadow-lg hover:shadow-xl transition-all active:scale-95">
+          <button type="button" className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-10 py-4 font-bold uppercase tracking-widest text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-ac-magenta/50">
             Send Message
           </button>
           <div className="text-right">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import {
   ComposedChart,
   Line,
@@ -133,13 +134,13 @@ export default function CapacityForecastPage() {
         </div>
         
         {/* Region Selector */}
-        <div className="flex bg-surface-subtle p-1 rounded-sm border border-border-subtle">
+        <div className="flex bg-surface-subtle p-1 border border-border-subtle">
           {REGIONS.map(region => (
             <button
               key={region}
               onClick={() => setSelectedRegion(region)}
               className={clsx(
-                "px-4 py-2 text-sm font-medium transition-colors rounded-sm",
+                "px-4 py-2 text-sm font-medium transition-colors ",
                 selectedRegion === region
                   ? "bg-surface-base text-ink-primary shadow-sm"
                   : "text-ink-secondary hover:text-ink-primary"
@@ -190,7 +191,7 @@ export default function CapacityForecastPage() {
             Load Projection (30 Days History + 14 Day Forecast)
           </h2>
           {forecastStats.daysToWarning < 14 && forecastStats.daysToWarning > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border border-ac-orange/30 text-ac-orange text-sm font-medium rounded-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border border-ac-orange/30 text-ac-orange text-sm font-medium">
               <AlertTriangle className="w-4 h-4" />
               Projected to hit 80% warning threshold in {forecastStats.daysToWarning} days
             </div>
@@ -228,13 +229,9 @@ export default function CapacityForecastPage() {
                 axisLine={false}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(0, 87, 183, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)'
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
                 formatter={(val: number) => typeof val === 'number' ? val.toFixed(1) + '%' : val}
               />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ color: '#B0C4DE' }} />
@@ -331,7 +328,7 @@ function InsightCard({
             {valueSuffix && <span className="text-sm text-ink-secondary">{valueSuffix}</span>}
           </div>
         </div>
-        <div className={clsx("p-2 rounded-full bg-surface-subtle", trendColor)}>
+        <div className={clsx("p-2  bg-surface-subtle", trendColor)}>
           <Icon className="w-5 h-5" />
         </div>
       </div>

@@ -80,7 +80,7 @@ export function DlpDashboardPage() {
             Monitor sensitive data leaks and fleet-wide DLP violations
           </p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/20 rounded text-status-success text-xs font-bold">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/20 text-status-success text-xs font-bold">
           <Shield className="w-4 h-4" />
           {isDemoMode ? 'SIMULATED ENFORCEMENT' : 'ENFORCEMENT ACTIVE'}
         </div>
@@ -141,13 +141,13 @@ export function DlpDashboardPage() {
                     </td>
                     <td className="px-6 py-4 font-medium text-ink-primary">{v.pattern_name}</td>
                     <td className="px-6 py-4">
-                      <span className="px-1.5 py-0.5 bg-surface-subtle border border-border-subtle rounded text-[9px] font-bold text-ink-secondary uppercase">
+                      <span className="px-1.5 py-0.5 bg-surface-subtle border border-border-subtle text-[9px] font-bold text-ink-secondary uppercase">
                         {v.data_type}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={clsx(
-                        'px-2 py-0.5 text-[9px] font-black border rounded uppercase tracking-tighter',
+                        'px-2 py-0.5 text-[9px] font-black border uppercase tracking-tighter',
                         v.severity === 'critical' && 'bg-ac-red/10 text-ac-red border-ac-red/30',
                         v.severity === 'high' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
                         v.severity === 'medium' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
@@ -195,7 +195,7 @@ export function DlpDashboardPage() {
             <Search className="w-5 h-5 text-ac-purple" />
             Violation Distribution
           </h3>
-          <div className="flex-1 flex items-center justify-center text-ink-muted border border-dashed border-border-subtle rounded-lg bg-surface-subtle/30">
+          <div className="flex-1 flex items-center justify-center text-ink-muted border border-dashed border-border-subtle bg-surface-subtle/30">
              <div className="text-center">
                <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-20 text-ac-purple" />
                <p className="text-xs font-mono uppercase tracking-widest opacity-40">Classification Analytics Coming Soon</p>
@@ -212,12 +212,12 @@ function CoverageItem({ label, status, progress, color }: { label: string, statu
     <div className="space-y-2">
       <div className="flex justify-between items-end">
         <span className="text-sm text-ink-primary font-medium tracking-tight">{label}</span>
-        <span className={clsx('text-[9px] font-black px-1.5 py-0.5 rounded border uppercase', color.replace('bg-', 'text-').replace('bg-', 'border-') + '/30')}>
+        <span className={clsx('text-[9px] font-black px-1.5 py-0.5 border uppercase', color.replace('bg-', 'text-').replace('bg-', 'border-') + '/30')}>
           {status}
         </span>
       </div>
-      <div className="h-1.5 w-full bg-surface-subtle rounded-full overflow-hidden border border-border-subtle/50">
-        <div className={clsx('h-full rounded-full transition-all duration-1000', color)} style={{ width: `${progress}%` }} />
+      <div className="h-1.5 w-full bg-surface-subtle overflow-hidden border border-border-subtle/50">
+        <div className={clsx('h-full transition-all duration-1000', color)} style={{ width: `${progress}%` }} />
       </div>
     </div>
   )

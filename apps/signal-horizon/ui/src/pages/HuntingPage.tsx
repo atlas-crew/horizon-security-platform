@@ -153,7 +153,7 @@ export default function HuntingPage() {
             {status?.historical ? 'Historical queries enabled' : 'Real-time only'}
           </span>
           <span
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2 h-2  ${
               status?.historical ? 'bg-ac-green' : 'bg-ac-orange'
             }`}
           />

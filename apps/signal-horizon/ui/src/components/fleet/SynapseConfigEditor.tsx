@@ -154,7 +154,7 @@ interface SectionProps {
 function Section({ title, description, children, defaultOpen = true }: SectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border-subtle rounded-lg overflow-hidden">
+    <div className="border border-border-subtle overflow-hidden">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -184,13 +184,13 @@ function Toggle({ label, description, checked, onChange }: {
   return (
     <label className="flex items-start gap-3 cursor-pointer">
       <div
-        className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
+        className={`relative w-10 h-6  transition-colors flex-shrink-0 mt-0.5 ${
           checked ? 'bg-ac-blue' : 'bg-surface-elevated'
         }`}
         onClick={() => onChange(!checked)}
       >
         <div
-          className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+          className={`absolute top-1 w-4 h-4  bg-white shadow transition-transform ${
             checked ? 'translate-x-5' : 'translate-x-1'
           }`}
         />
@@ -220,7 +220,7 @@ function Input({ label, description, value, onChange, type = 'text', placeholder
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle rounded text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue"
+        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue"
       />
     </div>
   );
@@ -240,7 +240,7 @@ function Select({ label, description, value, onChange, options }: {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle rounded text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue"
+        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -348,7 +348,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
         <button
           type="button"
           onClick={() => setMode('visual')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2  text-sm font-medium transition-colors ${
             mode === 'visual'
               ? 'bg-ac-blue text-white'
               : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
@@ -360,7 +360,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
         <button
           type="button"
           onClick={() => setMode('yaml')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2  text-sm font-medium transition-colors ${
             mode === 'yaml'
               ? 'bg-ac-blue text-white'
               : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
@@ -374,7 +374,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
       {mode === 'yaml' ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {yamlError && (
-            <div className="mb-2 p-2 bg-ac-red/10 border border-ac-red/30 rounded text-sm text-ac-red flex-shrink-0">
+            <div className="mb-2 p-2 bg-ac-red/10 border border-ac-red/30 text-sm text-ac-red flex-shrink-0">
               {yamlError}
             </div>
           )}
@@ -505,7 +505,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   key={idx}
                   type="button"
                   onClick={() => setActiveSiteIndex(idx)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-1.5  text-sm transition-colors ${
                     idx === activeSiteIndex
                       ? 'bg-ac-blue text-white'
                       : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
@@ -518,7 +518,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
               <button
                 type="button"
                 onClick={addSite}
-                className="flex items-center gap-1 px-3 py-1.5 rounded text-sm text-ac-blue hover:bg-surface-elevated transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm text-ac-blue hover:bg-surface-elevated transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 Add Site
@@ -527,7 +527,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
 
             {/* Active Site Config */}
             {activeSite && (
-              <div className="space-y-4 p-4 bg-surface-subtle rounded-lg">
+              <div className="space-y-4 p-4 bg-surface-subtle">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium text-ink-primary">Site Configuration</h4>
                   {config.sites.length > 1 && (
@@ -568,7 +568,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="hostname or IP"
-                          className="flex-1 px-3 py-2 bg-surface-elevated border border-border-subtle rounded text-ink-primary text-sm"
+                          className="flex-1 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
                         />
                         <input
                           type="number"
@@ -579,7 +579,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="port"
-                          className="w-24 px-3 py-2 bg-surface-elevated border border-border-subtle rounded text-ink-primary text-sm"
+                          className="w-24 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
                         />
                         <input
                           type="number"
@@ -590,7 +590,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="weight"
-                          className="w-20 px-3 py-2 bg-surface-elevated border border-border-subtle rounded text-ink-primary text-sm"
+                          className="w-20 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
                           title="Load balancing weight"
                         />
                         <button

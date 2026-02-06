@@ -32,7 +32,7 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
             className="sr-only peer"
             aria-label="Enable Rate Limiting"
           />
-          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
+          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after: after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-blue"></div>
         </label>
       </div>
 
@@ -46,7 +46,7 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
               min="1"
               value={config.requests_per_second}
               onChange={(e) => onChange({ ...config, requests_per_second: parseInt(e.target.value) || 1 })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
           <div className="space-y-1">
@@ -57,11 +57,11 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
               min="1"
               value={config.burst}
               onChange={(e) => onChange({ ...config, burst: parseInt(e.target.value) || 1 })}
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
           
-          <div className="col-span-2 p-3 bg-surface-subtle rounded text-xs text-ink-muted">
+          <div className="col-span-2 p-3 bg-surface-subtle text-xs text-ink-muted">
             Allows <strong className="text-ink-primary">{config.requests_per_second} RPS</strong> sustained, 
             with spikes up to <strong className="text-ink-primary">{config.burst} requests</strong>.
           </div>

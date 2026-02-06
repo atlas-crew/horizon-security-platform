@@ -198,18 +198,18 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className="relative bg-surface-card border border-border-subtle rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle sticky top-0 bg-surface-card">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-ac-blue/10 rounded-lg">
+            <div className="p-2 bg-ac-blue/10">
               <Upload className="w-5 h-5 text-ac-blue" />
             </div>
             <h2 className="text-lg font-semibold text-ink-primary">Upload Release</h2>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+            className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -228,7 +228,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               onChange={(e) => setVersion(e.target.value)}
               placeholder="2.4.2"
               className={clsx(
-                'w-full px-3 py-2 text-sm bg-surface-inset border rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
+                'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
                 validationErrors.version ? 'border-status-error' : 'border-border-subtle'
               )}
             />
@@ -249,7 +249,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               placeholder="### Changes&#10;- Feature 1&#10;- Bug fix 2"
               rows={6}
               className={clsx(
-                'w-full px-3 py-2 text-sm bg-surface-inset border rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50 font-mono',
+                'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50 font-mono',
                 validationErrors.changelog ? 'border-status-error' : 'border-border-subtle'
               )}
             />
@@ -266,7 +266,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               <button
                 onClick={() => setUploadMode('url')}
                 className={clsx(
-                  'flex-1 px-4 py-2 text-sm font-medium border rounded transition-colors',
+                  'flex-1 px-4 py-2 text-sm font-medium border transition-colors',
                   uploadMode === 'url'
                     ? 'bg-ac-blue text-white border-ac-blue'
                     : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted'
@@ -277,7 +277,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               <button
                 onClick={() => setUploadMode('file')}
                 className={clsx(
-                  'flex-1 px-4 py-2 text-sm font-medium border rounded transition-colors',
+                  'flex-1 px-4 py-2 text-sm font-medium border transition-colors',
                   uploadMode === 'file'
                     ? 'bg-ac-blue text-white border-ac-blue'
                     : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted'
@@ -300,7 +300,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                 onChange={(e) => setBinaryUrl(e.target.value)}
                 placeholder="https://releases.example.com/sensor-2.4.2.tar.gz"
                 className={clsx(
-                  'w-full px-3 py-2 text-sm bg-surface-inset border rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
+                  'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
                   validationErrors.binaryUrl ? 'border-status-error' : 'border-border-subtle'
                 )}
               />
@@ -326,7 +326,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className={clsx(
-                  'w-full px-4 py-6 border-2 border-dashed rounded-lg text-center transition-colors',
+                  'w-full px-4 py-6 border-2 border-dashed text-center transition-colors',
                   binaryFile
                     ? 'border-status-success bg-status-success/5'
                     : validationErrors.binaryFile
@@ -364,7 +364,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                 onChange={(e) => setSha256(e.target.value)}
                 placeholder="64-character hex string"
                 disabled={isCalculatingSha}
-                className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50 font-mono disabled:opacity-50"
+                className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50 font-mono disabled:opacity-50"
               />
               {isCalculatingSha && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -382,14 +382,14 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle bg-surface-raised sticky bottom-0">
           <button
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
@@ -417,9 +417,9 @@ function ConfirmDeleteModal({ isOpen, release, onClose, onConfirm, isDeleting }:
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-surface-card border border-border-subtle rounded-lg shadow-xl max-w-md w-full p-6">
+      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-status-error/10 rounded-lg">
+          <div className="p-2 bg-status-error/10">
             <AlertTriangle className="w-6 h-6 text-status-error" />
           </div>
           <h3 className="text-lg font-semibold text-ink-primary">Delete Release?</h3>
@@ -435,14 +435,14 @@ function ConfirmDeleteModal({ isOpen, release, onClose, onConfirm, isDeleting }:
         <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={isDeleting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
           >
             {isDeleting ? (
               <>
@@ -484,7 +484,7 @@ function ReleaseRow({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowChangelog(!showChangelog)}
-              className="p-1 hover:bg-surface-subtle rounded transition-colors"
+              className="p-1 hover:bg-surface-subtle transition-colors"
             >
               {showChangelog ? (
                 <ChevronDown className="w-4 h-4 text-ink-muted" />
@@ -494,7 +494,7 @@ function ReleaseRow({
             </button>
             <span className="font-semibold text-ink-primary">v{release.version}</span>
             {isLatest && (
-              <span className="px-2 py-0.5 text-xs font-medium bg-status-success/10 text-status-success border border-status-success/30 rounded">
+              <span className="px-2 py-0.5 text-xs font-medium bg-status-success/10 text-status-success border border-status-success/30">
                 Latest
               </span>
             )}
@@ -507,7 +507,7 @@ function ReleaseRow({
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => onDeploy(release)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-ac-blue bg-ac-blue/10 border border-ac-blue/30 rounded hover:bg-ac-blue/20 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-ac-blue bg-ac-blue/10 border border-ac-blue/30 hover:bg-ac-blue/20 transition-colors"
             >
               <Rocket className="w-3.5 h-3.5" />
               Deploy
@@ -515,14 +515,14 @@ function ReleaseRow({
             <div className="relative">
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+                className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-20 bg-surface-card border border-border-subtle rounded-lg shadow-lg py-1 min-w-[140px]">
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-surface-card border border-border-subtle shadow-lg py-1 min-w-[140px]">
                     <button
                       onClick={() => {
                         window.open(release.binaryUrl, '_blank');
@@ -565,7 +565,7 @@ function ReleaseRow({
         <tr className="bg-surface-subtle">
           <td colSpan={5} className="px-6 py-4">
             <div className="prose prose-sm max-w-none text-ink-secondary">
-              <pre className="whitespace-pre-wrap text-xs font-mono bg-surface-inset p-4 rounded border border-border-subtle">
+              <pre className="whitespace-pre-wrap text-xs font-mono bg-surface-inset p-4 border border-border-subtle">
                 {release.changelog}
               </pre>
             </div>
@@ -690,14 +690,14 @@ export function ReleasesPage() {
               refreshReleases();
               refreshRollouts();
             }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle rounded hover:bg-surface-subtle transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark rounded transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
           >
             <Upload className="w-4 h-4" />
             Upload Release
@@ -726,7 +726,7 @@ export function ReleasesPage() {
                   setShowRolloutManager(false);
                   setDeployingRelease(null);
                 }}
-                className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+                className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -764,7 +764,7 @@ export function ReleasesPage() {
             <p className="text-sm text-ink-muted">Upload your first release to get started.</p>
             <button
               onClick={() => setShowUploadModal(true)}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark rounded transition-colors"
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
             >
               <Upload className="w-4 h-4" />
               Upload Release
@@ -821,7 +821,7 @@ export function ReleasesPage() {
             {recentRollouts.map((rollout) => (
               <div key={rollout.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="p-2 bg-status-success/10 rounded-lg">
+                  <div className="p-2 bg-status-success/10">
                     <Check className="w-4 h-4 text-status-success" />
                   </div>
                   <div>

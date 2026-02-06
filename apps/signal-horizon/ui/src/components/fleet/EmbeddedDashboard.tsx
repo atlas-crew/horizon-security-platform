@@ -137,8 +137,8 @@ export function EmbeddedDashboard({
   return (
     <div
       className={clsx(
-        'bg-surface-card border border-border-subtle rounded-lg overflow-hidden',
-        state.fullscreen && 'fixed inset-0 z-50 rounded-none'
+        'bg-surface-card border border-border-subtle overflow-hidden',
+        state.fullscreen && 'fixed inset-0 z-50'
       )}
     >
       {/* Header */}
@@ -170,7 +170,7 @@ export function EmbeddedDashboard({
           <button
             onClick={handleRefresh}
             disabled={state.loading}
-            className="p-2 rounded hover:bg-surface-subtle disabled:opacity-50"
+            className="p-2 hover:bg-surface-subtle disabled:opacity-50"
             title="Refresh Dashboard"
           >
             <RefreshCw className={clsx('h-4 w-4', state.loading && 'animate-spin')} />
@@ -178,7 +178,7 @@ export function EmbeddedDashboard({
 
           <button
             onClick={handleOpenExternal}
-            className="p-2 rounded hover:bg-surface-subtle"
+            className="p-2 hover:bg-surface-subtle"
             title="Open in New Tab"
           >
             <ExternalLink className="h-4 w-4" />
@@ -186,7 +186,7 @@ export function EmbeddedDashboard({
 
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded hover:bg-surface-subtle"
+            className="p-2 hover:bg-surface-subtle"
             title={state.fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
           >
             {state.fullscreen ? (
@@ -203,13 +203,13 @@ export function EmbeddedDashboard({
         {/* Error State */}
         {state.error && (
           <div className="p-6">
-            <div className="bg-status-error/10 border border-status-error/20 rounded-lg p-4">
+            <div className="bg-status-error/10 border border-status-error/20 p-4">
               <div className="flex items-center gap-2 text-status-error">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{state.error.message}</span>
                 <button
                   onClick={handleRetry}
-                  className="px-3 py-1 text-sm border border-status-error/30 rounded hover:bg-status-error/10"
+                  className="px-3 py-1 text-sm border border-status-error/30 hover:bg-status-error/10"
                 >
                   Retry
                 </button>

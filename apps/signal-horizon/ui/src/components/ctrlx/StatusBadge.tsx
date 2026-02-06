@@ -66,7 +66,7 @@ export const StatusBadge = memo(function StatusBadge({
         ${className}
       `}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+      <span className={`w-1.5 h-1.5  ${config.dot}`} />
       {label || config.defaultLabel}
     </span>
   );

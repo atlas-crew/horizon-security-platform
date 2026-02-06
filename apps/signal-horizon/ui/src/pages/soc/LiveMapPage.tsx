@@ -16,7 +16,7 @@ export default function LiveMapPage() {
           <span className="text-sm text-ink-secondary">
             Global Fleet Connected
           </span>
-          <span className="w-2 h-2 rounded-full bg-ac-green animate-pulse" />
+          <span className="w-2 h-2 bg-ac-green animate-pulse" />
         </div>
       </div>
 
@@ -26,14 +26,14 @@ export default function LiveMapPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card p-4">
             <h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-ac-red" />
+              <span className="w-2 h-2 bg-ac-red" />
               Critical Threats (Last 5m)
             </h3>
             <span className="text-2xl font-mono text-ink-primary">142</span>
           </div>
           <div className="card p-4">
             <h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-ac-orange" />
+              <span className="w-2 h-2 bg-ac-orange" />
               High Severity
             </h3>
             <span className="text-2xl font-mono text-ink-primary">853</span>

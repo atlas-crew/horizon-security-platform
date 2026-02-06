@@ -300,7 +300,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
 
   if (error) {
     return (
-      <div className="w-full h-[480px] border border-border-subtle bg-surface-base rounded flex items-center justify-center text-status-error p-6 text-center">
+      <div className="w-full h-[480px] border border-border-subtle bg-surface-base flex items-center justify-center text-status-error p-6 text-center">
         <div>
           <p className="font-semibold mb-2">Failed to load correlation graph</p>
           <p className="text-sm opacity-80">{error}</p>
@@ -310,7 +310,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
   }
 
   return (
-    <div className="w-full border border-border-subtle bg-surface-base rounded overflow-hidden relative">
+    <div className="w-full border border-border-subtle bg-surface-base overflow-hidden relative">
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Graph Correlation (Real-time)</h3>
         <p className="text-[10px] text-ink-muted/50 mt-0.5">Connecting actors via shared attributes (IP, JA4, JWT)</p>
@@ -319,7 +319,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
       {!isLayoutComplete && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-surface-base/95 backdrop-blur-sm">
           <div className="flex items-center gap-3 text-ink-muted">
-            <div className="w-5 h-5 border-2 border-ink-muted/20 border-t-ink-muted rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-ink-muted/20 border-t-ink-muted animate-spin" />
             <span className="text-sm font-medium">Analyzing correlations...</span>
           </div>
         </div>
@@ -342,7 +342,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
             top: Math.max(hoveredNode.y - 70, 8),
           }}
         >
-          <div className="bg-surface-elevated/95 backdrop-blur border border-border-subtle rounded-lg shadow-xl px-3 py-2.5 min-w-[140px]">
+          <div className="bg-surface-elevated/95 backdrop-blur border border-border-subtle shadow-xl px-3 py-2.5 min-w-[140px]">
             <div className="text-sm font-medium text-ink-primary">{hoveredNode.label}</div>
             <div className="text-[10px] text-ink-muted uppercase tracking-wide mt-0.5">{hoveredNode.type}</div>
             {hoveredNode.details && Object.keys(hoveredNode.details).length > 0 && (
@@ -359,10 +359,10 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
         </div>
       )}
 
-      <div className="absolute bottom-3 right-3 p-2.5 bg-surface-base/90 backdrop-blur border border-border-subtle rounded text-[10px] z-10">
+      <div className="absolute bottom-3 right-3 p-2.5 bg-surface-base/90 backdrop-blur border border-border-subtle text-[10px] z-10">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm rotate-45" style={{ background: colors.campaign.bg }} />
+            <div className="w-3 h-3 rotate-45" style={{ background: colors.campaign.bg }} />
             <span className="text-ink-secondary">Campaign</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -370,11 +370,11 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
             <span className="text-ink-secondary">Fingerprint</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: colors.ip.bg }} />
+            <div className="w-2.5 h-2.5" style={{ background: colors.ip.bg }} />
             <span className="text-ink-secondary">IP Source</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.token.bg }} />
+            <div className="w-2.5 h-2.5" style={{ background: colors.token.bg }} />
             <span className="text-ink-secondary">Auth Token</span>
           </div>
         </div>

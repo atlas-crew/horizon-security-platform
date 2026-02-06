@@ -125,7 +125,7 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
                   title="Run query"
                 >
                   {runningId === query.id ? (
-                    <div className="w-4 h-4 border-2 border-ac-blue border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-ac-blue border-t-transparent animate-spin" />
                   ) : (
                     <Play className="w-4 h-4" />
                   )}

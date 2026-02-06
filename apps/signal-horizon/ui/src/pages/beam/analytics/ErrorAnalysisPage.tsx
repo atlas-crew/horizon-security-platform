@@ -184,15 +184,15 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-sky-500" />
+            <div className="w-3 h-3 bg-sky-500" />
             <span className="text-ink-secondary">4xx</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <div className="w-3 h-3 bg-red-500" />
             <span className="text-ink-secondary">5xx</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500" />
+            <div className="w-3 h-3 bg-purple-500" />
             <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
@@ -303,7 +303,7 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
           <div key={item.name} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div
-                className="w-3 h-3 rounded-full"
+                className="w-3 h-3"
                 style={{ backgroundColor: item.color }}
               />
               <span className="text-sm text-ink-secondary">{item.name}</span>

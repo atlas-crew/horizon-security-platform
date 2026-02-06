@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Activity,
@@ -294,7 +295,7 @@ export function ConnectivityPage(): React.ReactElement {
       {/* Connectivity Tests */}
       <section
         aria-labelledby="diagnostic-tests-heading"
-        className="bg-surface-card border border-border-subtle rounded-lg p-6"
+        className="bg-surface-card border border-border-subtle p-6"
       >
         <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
         {/* Live region for screen reader announcements */}
@@ -315,7 +316,7 @@ export function ConnectivityPage(): React.ReactElement {
                 key={test.id}
                 role="listitem"
                 aria-labelledby={`test-name-${test.id}`}
-                className="bg-surface-subtle border border-border-subtle rounded-lg p-4"
+                className="bg-surface-subtle border border-border-subtle p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1">
@@ -330,7 +331,7 @@ export function ConnectivityPage(): React.ReactElement {
                     disabled={isRunning || runningTest !== null}
                     aria-describedby={result ? testStatusId : undefined}
                     aria-busy={isRunning}
-                    className="px-3 py-1.5 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-sm font-medium rounded border border-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1.5 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-sm font-medium border border-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isRunning ? 'Running...' : 'Run Test'}
                   </button>
@@ -342,7 +343,7 @@ export function ConnectivityPage(): React.ReactElement {
                     id={testStatusId}
                     role="status"
                     aria-label={`${test.name} result: ${result.status}`}
-                    className={`mt-4 p-3 rounded border ${
+                    className={`mt-4 p-3  border ${
                     result.status === 'passed'
                       ? 'bg-status-success/10 border-status-success/20'
                       : result.status === 'failed'
@@ -404,7 +405,7 @@ export function ConnectivityPage(): React.ReactElement {
                           <div>Hops: <span className="text-ink-primary">{String(result.details.hopCount)}</span></div>
                           <div>Reached Target: <span className="text-ink-primary">{result.details.reachedTarget ? 'Yes' : 'No'}</span></div>
                           {Array.isArray(result.details.hops) && result.details.hops.length > 0 && (
-                            <div className="mt-2 font-mono text-[10px] max-h-24 overflow-y-auto bg-surface-base/50 rounded p-2">
+                            <div className="mt-2 font-mono text-[10px] max-h-24 overflow-y-auto bg-surface-base/50 p-2">
                               {(result.details.hops as Array<{ hop: number; host: string; ip: string | null; latency: string }>).slice(0, 8).map((hop, i) => (
                                 <div key={i} className="text-ink-muted">
                                   {String(hop.hop)}. {hop.ip || hop.host} ({hop.latency})
@@ -430,7 +431,7 @@ export function ConnectivityPage(): React.ReactElement {
       </section>
 
       {/* Sensor Connectivity Table */}
-      <div className="bg-surface-card border border-border-subtle rounded-lg overflow-hidden">
+      <div className="bg-surface-card border border-border-subtle overflow-hidden">
         <div className="p-6 border-b border-border-subtle">
           <h2 className="text-lg font-semibold text-ink-primary">Sensor Connectivity Status</h2>
         </div>
@@ -510,13 +511,9 @@ export function ConnectivityPage(): React.ReactElement {
               <XAxis dataKey="time" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(0, 87, 183, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
               />
               <Line
                 type="monotone"
@@ -545,13 +542,9 @@ export function ConnectivityPage(): React.ReactElement {
               <XAxis dataKey="day" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(227, 82, 5, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
                 cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
               />
               <Bar dataKey="reconnections" fill="url(#reconnectGradient)" name="Reconnections" radius={[0, 0, 0, 0]} />

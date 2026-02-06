@@ -58,14 +58,14 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
             className="sr-only peer"
             aria-label="Enable DLP Scanner"
           />
-          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-magenta"></div>
+          <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-ac-blue/20 peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after: after:h-5 after:w-5 after:transition-all peer-checked:bg-ac-magenta"></div>
         </label>
       </div>
 
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {hasErrors && (
-            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20">
               <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
               <span className="text-xs text-status-error">Configuration has validation errors</span>
             </div>
@@ -78,7 +78,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 type="checkbox"
                 checked={config.fast_mode}
                 onChange={(e) => onChange({ ...config, fast_mode: e.target.checked })}
-                className="w-4 h-4 rounded border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
               <div className="flex items-center gap-1">
                 <Zap className="w-3 h-3 text-ac-orange" />
@@ -90,7 +90,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 type="checkbox"
                 checked={config.scan_text_only}
                 onChange={(e) => onChange({ ...config, scan_text_only: e.target.checked })}
-                className="w-4 h-4 rounded border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
               <span className="text-xs text-ink-secondary">Scan text content only</span>
             </label>
@@ -113,7 +113,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 aria-invalid={!!validationErrors.max_scan_size}
                 aria-describedby={validationErrors.max_scan_size ? 'dlp-max-scan-size-error' : undefined}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.max_scan_size
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -138,7 +138,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 aria-invalid={!!validationErrors.max_body_inspection_bytes}
                 aria-describedby={validationErrors.max_body_inspection_bytes ? 'dlp-inspect-bytes-error' : undefined}
                 className={clsx(
-                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  "w-full px-3 py-2 bg-surface-base border  text-sm focus:outline-none transition-colors",
                   validationErrors.max_body_inspection_bytes
                     ? "border-status-error focus:border-status-error"
                     : "border-border-subtle focus:border-ac-blue"
@@ -160,7 +160,7 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                   ...config,
                   max_matches: parseIntSafe(e.target.value, config.max_matches),
                 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
             </div>
           </div>
@@ -174,11 +174,11 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
               value={config.custom_keywords.join(', ')}
               onChange={(e) => handleKeywordsChange(e.target.value)}
               placeholder="project-alpha, confidential, internal-only"
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
 
-          <div className="p-3 bg-surface-subtle rounded text-xs text-ink-muted">
+          <div className="p-3 bg-surface-subtle text-xs text-ink-muted">
             Detects: Credit cards, SSN, API keys, AWS credentials, passwords, private keys, JWT, IBAN, medical records
           </div>
         </div>

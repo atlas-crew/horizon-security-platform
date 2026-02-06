@@ -23,7 +23,7 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className={clsx(
-              "px-2 py-0.5 text-xs font-bold rounded-sm uppercase",
+              "px-2 py-0.5 text-xs font-bold  uppercase",
               method === 'GET' ? 'bg-method-get/10 text-method-get' :
               method === 'POST' ? 'bg-method-post/10 text-method-post' :
               'bg-surface-subtle text-ink-secondary'
@@ -56,12 +56,12 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
             </div>
             
             <div className="flex items-center gap-3 text-xs mt-2">
-              <div className="flex-1 bg-surface-base p-2 border border-border-subtle rounded text-ink-muted">
+              <div className="flex-1 bg-surface-base p-2 border border-border-subtle text-ink-muted">
                 <span className="block text-[10px] uppercase text-ink-muted mb-0.5">Expected</span>
                 <span className="font-mono text-green-600">{change.oldType || 'undefined'}</span>
               </div>
               <ArrowRight className="w-4 h-4 text-ink-muted" />
-              <div className="flex-1 bg-surface-base p-2 border border-border-subtle rounded text-ink-muted">
+              <div className="flex-1 bg-surface-base p-2 border border-border-subtle text-ink-muted">
                 <span className="block text-[10px] uppercase text-ink-muted mb-0.5">Actual</span>
                 <span className="font-mono text-red-500">{change.newType || 'undefined'}</span>
               </div>

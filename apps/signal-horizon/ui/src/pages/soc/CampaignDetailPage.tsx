@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import { useQuery } from '@tanstack/react-query';
 import {
   Target,
@@ -228,14 +229,9 @@ export default function CampaignDetailPage() {
               <XAxis dataKey="time" stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#001544',
-                  border: '1px solid rgba(0, 87, 183, 0.4)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  borderRadius: '0',
-                }}
-                labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                itemStyle={{ color: '#B0C4DE' }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                itemStyle={TOOLTIP_ITEM_STYLE}
               />
               <Area type="monotone" dataKey="volume" stroke="var(--ac-red)" fill="var(--ac-red)" fillOpacity={0.25} />
             </AreaChart>
@@ -412,7 +408,7 @@ function StatMini({
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className="w-10 h-10 rounded-full bg-surface-subtle flex items-center justify-center text-ink-muted">
+      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center text-ink-muted">
         <Icon className="w-5 h-5" />
       </div>
       <div>

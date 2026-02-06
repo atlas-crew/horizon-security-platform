@@ -232,7 +232,7 @@ export function HuntQueryBuilder({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSigmaModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border-subtle bg-surface-inset text-ink-secondary hover:border-border-strong rounded-sm hover:text-ink-primary transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border-subtle bg-surface-inset text-ink-secondary hover:border-border-strong hover:text-ink-primary transition-colors"
             >
               <FileText className="w-3 h-3" />
               Import Sigma Rule
@@ -240,7 +240,7 @@ export function HuntQueryBuilder({
             <button
               onClick={toggleMode}
               className={clsx(
-                "flex items-center gap-2 px-3 py-1.5 text-xs font-medium border transition-colors rounded-sm",
+                "flex items-center gap-2 px-3 py-1.5 text-xs font-medium border transition-colors ",
                 isPowerMode 
                   ? "bg-ac-blue/10 border-ac-blue text-ac-blue" 
                   : "bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong"
@@ -254,7 +254,7 @@ export function HuntQueryBuilder({
 
         {isPowerMode ? (
           <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="bg-surface-inset p-3 border border-ac-blue/20 rounded-sm">
+            <div className="bg-surface-inset p-3 border border-ac-blue/20">
                <p className="text-xs text-ink-secondary mb-2">
                  <span className="text-ac-blue font-bold">SQL Mode:</span> Write ClickHouse-compatible SQL queries directly. 
                  This allows for advanced aggregations and joins not possible in the visual builder.
@@ -374,7 +374,7 @@ export function HuntQueryBuilder({
                         : 'bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong'
                     )}
                   >
-                    <span className={clsx('w-2 h-2 rounded-full', severity.color)} />
+                    <span className={clsx('w-2 h-2', severity.color)} />
                     {severity.label}
                   </button>
                 ))}

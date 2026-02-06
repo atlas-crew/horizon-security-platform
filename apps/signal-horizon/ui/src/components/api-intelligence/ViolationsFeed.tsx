@@ -26,9 +26,9 @@ export function ViolationsFeed({ signals }: ViolationsFeedProps) {
 
 function ViolationCard({ signal }: { signal: ApiSignal }) {
   return (
-    <div className="p-3 bg-surface-subtle rounded border border-border-subtle">
+    <div className="p-3 bg-surface-subtle border border-border-subtle">
       <div className="flex justify-between items-start mb-1">
-        <span className="font-mono text-xs font-semibold text-ac-red bg-ac-red/10 px-1.5 py-0.5 rounded">
+        <span className="font-mono text-xs font-semibold text-ac-red bg-ac-red/10 px-1.5 py-0.5">
           {signal.metadata.violationType || 'SCHEMA_VIOLATION'}
         </span>
         <span className="text-[10px] text-ink-muted flex items-center gap-1">

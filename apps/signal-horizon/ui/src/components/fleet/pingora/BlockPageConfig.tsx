@@ -38,7 +38,7 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
               value={config.company_name || ''}
               onChange={(e) => onChange({ ...config, company_name: e.target.value || undefined })}
               placeholder="Your Company"
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
           <div className="space-y-1">
@@ -48,7 +48,7 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
               value={config.support_email || ''}
               onChange={(e) => onChange({ ...config, support_email: e.target.value || undefined })}
               placeholder="security@example.com"
-              className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+              className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:outline-none transition-colors"
             />
           </div>
         </div>
@@ -60,7 +60,7 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
             value={config.logo_url || ''}
             onChange={(e) => onChange({ ...config, logo_url: e.target.value || undefined })}
             placeholder="https://example.com/logo.png"
-            className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors"
+            className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors"
           />
         </div>
 
@@ -79,7 +79,7 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
                   type="checkbox"
                   checked={config[key as keyof BlockPageConfigData] as boolean}
                   onChange={(e) => onChange({ ...config, [key]: e.target.checked })}
-                  className="w-4 h-4 rounded border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                  className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
                 />
                 <span className="text-xs text-ink-secondary">{label}</span>
               </label>
@@ -95,7 +95,7 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
             onChange={(e) => onChange({ ...config, custom_css: e.target.value || undefined })}
             placeholder=".block-page { background: #1a1a2e; }"
             rows={3}
-            className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors resize-none"
+            className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-sm font-mono focus:border-ac-blue focus:outline-none transition-colors resize-none"
           />
         </div>
       </div>

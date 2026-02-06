@@ -33,7 +33,7 @@ export function CodeEditor({
   const extensions = [languageExtensions[language]()];
 
   return (
-    <div className={clsx('border border-border-subtle rounded-sm', className)}>
+    <div className={clsx('border border-border-subtle', className)}>
       <CodeMirror
         value={value}
         height={height}

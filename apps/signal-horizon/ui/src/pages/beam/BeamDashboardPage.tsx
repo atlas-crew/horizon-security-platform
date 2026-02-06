@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import {
   Shield,
   AlertTriangle,
@@ -128,11 +129,11 @@ function TrafficChart({ data }: TrafficChartProps) {
         <h3 className="text-lg font-semibold text-ink-primary">Traffic Overview</h3>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#0057B7]" />
+            <div className="w-3 h-3 bg-[#0057B7]" />
             <span className="text-ink-secondary">Requests</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#EF3340]" />
+            <div className="w-3 h-3 bg-[#EF3340]" />
             <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
@@ -163,15 +164,9 @@ function TrafficChart({ data }: TrafficChartProps) {
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-                color: '#fff',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
             />
             <Area
               type="monotone"
@@ -575,7 +570,7 @@ export default function BeamDashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 rounded-full bg-ac-green animate-pulse" aria-hidden="true" />
+            <span className="w-2 h-2 bg-ac-green animate-pulse" aria-hidden="true" />
             <span className="text-ac-green">Protected</span>
           </div>
         </div>

@@ -262,13 +262,13 @@ function RuleCard({
               onToggleEnabled();
             }}
             className={clsx(
-              'relative w-12 h-6 rounded-full transition-colors',
+              'relative w-12 h-6 transition-colors',
               rule.enabled ? 'bg-horizon-600' : 'bg-gray-600'
             )}
           >
             <span
               className={clsx(
-                'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
+                'absolute top-1 w-4 h-4 bg-white transition-transform',
                 rule.enabled ? 'left-7' : 'left-1'
               )}
             />

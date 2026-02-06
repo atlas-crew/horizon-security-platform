@@ -49,7 +49,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
           <select 
             value={listType}
             onChange={(e) => setListType(e.target.value as 'allow' | 'deny')}
-            className="bg-surface-base border border-border-subtle rounded px-3 py-2 text-sm focus:border-ac-blue focus:outline-none"
+            className="bg-surface-base border border-border-subtle px-3 py-2 text-sm focus:border-ac-blue focus:outline-none"
           >
             <option value="deny">Block (Deny)</option>
             <option value="allow">Allow</option>
@@ -60,12 +60,12 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
             value={newCidr}
             onChange={(e) => setNewCidr(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            className="flex-1 bg-surface-base border border-border-subtle rounded px-3 py-2 text-sm focus:border-ac-blue focus:outline-none font-mono"
+            className="flex-1 bg-surface-base border border-border-subtle px-3 py-2 text-sm focus:border-ac-blue focus:outline-none font-mono"
           />
           <button 
             onClick={handleAdd}
             disabled={!newCidr}
-            className="px-4 py-2 bg-surface-subtle border border-border-subtle rounded text-sm font-medium hover:bg-surface-card disabled:opacity-50"
+            className="px-4 py-2 bg-surface-subtle border border-border-subtle text-sm font-medium hover:bg-surface-card disabled:opacity-50"
           >
             Add
           </button>
@@ -79,7 +79,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
               <p className="text-xs text-ink-muted italic">No denied CIDRs</p>
             ) : (
               config.deny.map(cidr => (
-                <div key={cidr} className="flex justify-between items-center p-2 bg-ac-red/5 border border-ac-red/20 rounded text-xs">
+                <div key={cidr} className="flex justify-between items-center p-2 bg-ac-red/5 border border-ac-red/20 text-xs">
                   <span className="font-mono text-ink-primary">{cidr}</span>
                   <button onClick={() => handleRemove('deny', cidr)} className="text-ink-muted hover:text-ac-red"><X className="w-3 h-3" /></button>
                 </div>
@@ -93,7 +93,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
               <p className="text-xs text-ink-muted italic">No allowed CIDRs</p>
             ) : (
               config.allow.map(cidr => (
-                <div key={cidr} className="flex justify-between items-center p-2 bg-ac-green/5 border border-ac-green/20 rounded text-xs">
+                <div key={cidr} className="flex justify-between items-center p-2 bg-ac-green/5 border border-ac-green/20 text-xs">
                   <span className="font-mono text-ink-primary">{cidr}</span>
                   <button onClick={() => handleRemove('allow', cidr)} className="text-ink-muted hover:text-ac-green"><X className="w-3 h-3" /></button>
                 </div>

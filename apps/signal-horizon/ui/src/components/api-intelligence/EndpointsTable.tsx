@@ -74,7 +74,7 @@ function MethodBadge({ method }: { method: string }) {
   return (
     <span
       className={clsx(
-        'px-2 py-0.5 rounded',
+        'px-2 py-0.5',
         method === 'GET' && 'bg-ac-blue/10 text-ac-blue',
         method === 'POST' && 'bg-ac-green/10 text-ac-green',
         method === 'DELETE' && 'bg-ac-red/10 text-ac-red',
@@ -91,7 +91,7 @@ function RiskLevelBadge({ riskLevel }: { riskLevel: ApiEndpoint['riskLevel'] }) 
   return (
     <span
       className={clsx(
-        'px-2 py-0.5 text-xs rounded border',
+        'px-2 py-0.5 text-xs border',
         riskLevel === 'critical' && 'bg-ac-red/10 text-ac-red border-ac-red/30',
         riskLevel === 'high' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
         riskLevel === 'medium' && 'bg-ac-yellow/10 text-ac-yellow border-ac-yellow/30',

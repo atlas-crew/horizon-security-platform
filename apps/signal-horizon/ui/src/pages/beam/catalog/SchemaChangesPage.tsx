@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE } from '../../../lib/chartTheme';
 import {
   GitBranch,
   AlertTriangle,
@@ -369,12 +370,8 @@ export default function SchemaChangesPage() {
                 <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    borderColor: 'rgba(0, 87, 183, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  }}
-                  labelStyle={{ color: '#FFFFFF' }}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
                 />
                 {trendLabels.map((label, index) => (
                   <Line

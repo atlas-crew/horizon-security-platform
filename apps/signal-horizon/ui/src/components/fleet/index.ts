@@ -1,5 +1,6 @@
 export { SensorStatusBadge } from './SensorStatusBadge';
 export { MetricCard } from './MetricCard';
+export type { MetricCardProps, MetricCardVariant, MetricAccent } from './MetricCard';
 export { SensorTable } from './SensorTable';
 export { FleetErrorBoundary } from './FleetErrorBoundary';
 export { WebTerminal } from './WebTerminal';

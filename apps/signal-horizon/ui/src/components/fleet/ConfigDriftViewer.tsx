@@ -22,7 +22,7 @@ export function ConfigDriftViewer({
     <div className="space-y-4">
       {/* Drift Status Banner */}
       <div className={clsx(
-        "p-4 border rounded-sm flex items-center justify-between",
+        "p-4 border  flex items-center justify-between",
         driftDetected 
           ? "bg-ac-orange/10 border-ac-orange/30 text-ac-orange" 
           : "bg-ac-green/10 border-ac-green/30 text-ac-green"
@@ -40,7 +40,7 @@ export function ConfigDriftViewer({
         </div>
         
         {driftDetected && (
-          <button className="px-3 py-1.5 bg-surface-base border border-ac-orange/30 text-ink-primary text-xs font-medium rounded-sm hover:bg-surface-subtle transition-colors">
+          <button className="px-3 py-1.5 bg-surface-base border border-ac-orange/30 text-ink-primary text-xs font-medium hover:bg-surface-subtle transition-colors">
             Force Sync
           </button>
         )}
@@ -48,11 +48,11 @@ export function ConfigDriftViewer({
 
       {/* Editor Controls */}
       <div className="flex justify-end">
-        <div className="flex bg-surface-subtle p-1 rounded-sm border border-border-subtle">
+        <div className="flex bg-surface-subtle p-1 border border-border-subtle">
           <button
             onClick={() => setViewMode('split')}
             className={clsx(
-              "px-3 py-1 text-xs font-medium rounded-sm transition-colors",
+              "px-3 py-1 text-xs font-medium  transition-colors",
               viewMode === 'split' ? "bg-surface-base shadow-sm text-ink-primary" : "text-ink-secondary hover:text-ink-primary"
             )}
           >
@@ -61,7 +61,7 @@ export function ConfigDriftViewer({
           <button
             onClick={() => setViewMode('unified')}
             className={clsx(
-              "px-3 py-1 text-xs font-medium rounded-sm transition-colors",
+              "px-3 py-1 text-xs font-medium  transition-colors",
               viewMode === 'unified' ? "bg-surface-base shadow-sm text-ink-primary" : "text-ink-secondary hover:text-ink-primary"
             )}
           >
@@ -80,7 +80,7 @@ export function ConfigDriftViewer({
               Expected (Template)
             </span>
           </div>
-          <div className="flex-1 border border-border-subtle rounded-sm overflow-hidden">
+          <div className="flex-1 border border-border-subtle overflow-hidden">
             <CodeEditor
               value={expectedConfig}
               onChange={() => {}}
@@ -102,7 +102,7 @@ export function ConfigDriftViewer({
               </span>
             </div>
             <div className={clsx(
-              "flex-1 border rounded-sm overflow-hidden",
+              "flex-1 border  overflow-hidden",
               driftDetected ? "border-ac-orange/50" : "border-border-subtle"
             )}>
               <CodeEditor

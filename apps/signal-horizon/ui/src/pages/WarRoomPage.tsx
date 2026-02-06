@@ -88,7 +88,7 @@ export default function WarRoomPage() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full bg-ac-white/15 border-2 border-ac-white/30 flex items-center justify-center text-xs font-medium"
+                  className="w-8 h-8 bg-ac-white/15 border-2 border-ac-white/30 flex items-center justify-center text-xs font-medium"
                 >
                   U{i}
                 </div>
@@ -183,7 +183,7 @@ function ActivityItem({ activity }: { activity: Activity }) {
     <div className="flex gap-3">
       <div
         className={clsx(
-          'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0',
+          'w-8 h-8 flex items-center justify-center text-xs font-medium flex-shrink-0',
           isBot && 'bg-ac-blue/10 text-ac-blue',
           isSystem && 'bg-surface-subtle text-ink-muted',
           !isBot && !isSystem && 'bg-surface-subtle text-ink-primary'

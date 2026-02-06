@@ -208,7 +208,7 @@ export function FleetOverviewPage() {
         <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-ink-primary">Recent Alerts</h2>
-            <button className="text-sm text-ac-blue dark:text-ac-sky-light hover:underline">View All</button>
+            <button className="text-sm text-ac-blue dark:text-ac-sky-light hover:underline focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50">View All</button>
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts || []).length === 0 ? (
@@ -252,7 +252,7 @@ export function FleetOverviewPage() {
               value={filters.status || ''}
               onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
               aria-label="Filter sensors by status"
-              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base"
+              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50"
             >
               <option value="">All Status</option>
               <option value="online">Online</option>
@@ -288,7 +288,7 @@ function StatsCard({ icon: Icon, iconBg, iconColor, value, label, borderClassNam
 
 function QuickAction({ icon: Icon, title, description, onClick, accentClassName, iconClassName }: { icon: LucideIcon; title: string; description: string; onClick?: () => void; accentClassName: string; iconClassName: string }) {
   return (
-    <button onClick={onClick} className={`card border border-border-subtle border-l-2 p-4 text-left hover:bg-surface-subtle transition-colors group ${accentClassName}`}>
+    <button onClick={onClick} className={`card border border-border-subtle border-l-2 p-4 text-left hover:bg-surface-subtle transition-colors group focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50 ${accentClassName}`}>
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 border border-border-subtle bg-surface-subtle flex items-center justify-center">
           <Icon className={`w-5 h-5 ${iconClassName}`} />

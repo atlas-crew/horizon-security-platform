@@ -194,7 +194,7 @@ export function SensorKeysPage(): React.ReactElement {
       REVOKED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
     };
     return (
-      <span className={`px-2 py-1 text-xs font-medium rounded border ${styles[status]}`}>
+      <span className={`px-2 py-1 text-xs font-medium  border ${styles[status]}`}>
         {status}
       </span>
     );
@@ -211,7 +211,7 @@ export function SensorKeysPage(): React.ReactElement {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">
+        <div className="bg-red-500/10 border border-red-500/30 p-4 text-red-400">
           Failed to load API keys. Please try again.
         </div>
       </div>
@@ -228,7 +228,7 @@ export function SensorKeysPage(): React.ReactElement {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"
         >
           <Plus className="w-4 h-4" />
           Generate New Key
@@ -264,7 +264,7 @@ export function SensorKeysPage(): React.ReactElement {
       </div>
 
       {/* Keys Table */}
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
+      <div className="bg-gray-800/50 border border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-700/50">
@@ -320,7 +320,7 @@ export function SensorKeysPage(): React.ReactElement {
                     {key.sensor?.name || 'All Sensors'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <code className="text-xs font-mono text-gray-400 bg-gray-700 px-2 py-1 rounded">
+                    <code className="text-xs font-mono text-gray-400 bg-gray-700 px-2 py-1">
                       {key.keyPrefix}...
                     </code>
                   </td>
@@ -340,14 +340,14 @@ export function SensorKeysPage(): React.ReactElement {
                         <button
                           onClick={() => rotateMutation.mutate(key.id)}
                           disabled={rotateMutation.isPending}
-                          className="text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                          className="text-blue-400 hover:text-blue-300 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                           title="Rotate key"
                         >
                           <RotateCw className="w-4 h-4 inline" />
                         </button>
                         <button
                           onClick={() => setKeyToRevoke(key.id)}
-                          className="text-red-400 hover:text-red-300"
+                          className="text-red-400 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500/50"
                           title="Revoke key"
                         >
                           <Trash2 className="w-4 h-4 inline" />
@@ -388,25 +388,25 @@ export function SensorKeysPage(): React.ReactElement {
       {/* Generated Key Display (after rotation) */}
       {generatedKey && !isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold text-white mb-4">Key Rotated Successfully</h3>
             <p className="text-sm text-gray-400 mb-4">
               Save this key securely. It won't be shown again.
             </p>
-            <div className="bg-gray-900 border border-gray-700 rounded p-3 mb-4">
+            <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
               <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleCopyKey}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white"
+                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {copiedKey ? 'Copied!' : 'Copy'}
               </button>
               <button
                 onClick={() => setGeneratedKey(null)}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 Done
               </button>
@@ -418,7 +418,7 @@ export function SensorKeysPage(): React.ReactElement {
       {/* Revoke Confirmation Modal */}
       {keyToRevoke && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold text-white mb-2">Revoke API Key</h3>
             <p className="text-sm text-gray-400 mb-6">
               Are you sure you want to revoke this API key? This action cannot be undone and will
@@ -428,14 +428,14 @@ export function SensorKeysPage(): React.ReactElement {
               <button
                 onClick={() => setKeyToRevoke(null)}
                 disabled={revokeMutation.isPending}
-                className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50"
+                className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => revokeMutation.mutate(keyToRevoke)}
                 disabled={revokeMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500/50"
               >
                 {revokeMutation.isPending ? 'Revoking...' : 'Revoke Key'}
               </button>
@@ -495,27 +495,27 @@ function GenerateKeyModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
         {generatedKey ? (
           <>
             <h3 className="text-lg font-semibold text-white mb-4">API Key Generated</h3>
             <p className="text-sm text-gray-400 mb-4">
               Save this key securely. It won't be shown again.
             </p>
-            <div className="bg-gray-900 border border-gray-700 rounded p-3 mb-4">
+            <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
               <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={onCopyKey}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white"
+                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {copiedKey ? 'Copied!' : 'Copy'}
               </button>
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 Done
               </button>
@@ -532,7 +532,7 @@ function GenerateKeyModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., Production API Key"
                 />
               </div>
@@ -542,7 +542,7 @@ function GenerateKeyModal({
                   value={sensorId}
                   onChange={(e) => setSensorId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select a sensor</option>
                   {sensors.map((sensor) => (
@@ -557,7 +557,7 @@ function GenerateKeyModal({
                 <select
                   value={expiresIn}
                   onChange={(e) => setExpiresIn(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="30">30 days</option>
                   <option value="90">90 days</option>
@@ -575,7 +575,7 @@ function GenerateKeyModal({
                         type="checkbox"
                         checked={permissions.includes(perm.id)}
                         onChange={() => togglePermission(perm.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-600 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-blue-600 border-gray-600 focus:ring-blue-500"
                       />
                       <span className="text-sm text-white">{perm.label}</span>
                     </label>
@@ -587,14 +587,14 @@ function GenerateKeyModal({
                   type="button"
                   onClick={onClose}
                   disabled={isGenerating}
-                  className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50"
+                  className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isGenerating || !name || !sensorId || permissions.length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   {isGenerating ? 'Generating...' : 'Generate Key'}
                 </button>

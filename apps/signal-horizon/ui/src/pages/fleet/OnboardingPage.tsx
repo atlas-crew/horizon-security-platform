@@ -270,7 +270,7 @@ export function OnboardingPage(): React.ReactElement {
             <Clock className="w-4 h-4 inline-block mr-2" />
             Pending Sensors
             {(statsData?.pendingApprovals || 0) > 0 && (
-              <span className="ml-2 px-2 py-0.5 text-xs bg-ac-orange/10 text-ac-orange rounded-full">
+              <span className="ml-2 px-2 py-0.5 text-xs bg-ac-orange/10 text-ac-orange">
                 {statsData.pendingApprovals}
               </span>
             )}
@@ -493,7 +493,7 @@ export function OnboardingPage(): React.ReactElement {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-lg">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-ac-green/10 flex items-center justify-center">
+              <div className="w-10 h-10 bg-ac-green/10 flex items-center justify-center">
                 <Check className="w-5 h-5 text-ac-green" />
               </div>
               <div>
@@ -501,7 +501,7 @@ export function OnboardingPage(): React.ReactElement {
                 <p className="text-sm text-ink-secondary">Copy this token now. It won't be shown again.</p>
               </div>
             </div>
-            <div className="bg-surface-subtle border border-border-subtle p-4 rounded mb-4">
+            <div className="bg-surface-subtle border border-border-subtle p-4 mb-4">
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-sm font-mono text-ink-primary break-all">{generatedToken}</code>
                 <button
@@ -543,7 +543,7 @@ export function OnboardingPage(): React.ReactElement {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-ac-red/10 flex items-center justify-center">
+              <div className="w-10 h-10 bg-ac-red/10 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-ac-red" />
               </div>
               <div>

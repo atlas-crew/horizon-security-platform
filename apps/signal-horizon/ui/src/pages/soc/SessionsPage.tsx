@@ -267,7 +267,7 @@ function StatCard({
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center', tone, 'bg-surface-subtle')}>
+      <div className={clsx('w-10 h-10 flex items-center justify-center', tone, 'bg-surface-subtle')}>
         <Icon className="w-5 h-5" />
       </div>
       <div>

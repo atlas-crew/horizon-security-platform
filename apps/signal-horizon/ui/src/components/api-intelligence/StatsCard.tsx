@@ -17,7 +17,7 @@ export function StatsCard({ label, value, sublabel, icon: Icon, tone }: StatsCar
         <div className="text-2xl font-light text-ink-primary">{value}</div>
         <div className="text-xs text-ink-secondary mt-1">{sublabel}</div>
       </div>
-      <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center bg-surface-subtle", tone)}>
+      <div className={clsx("w-10 h-10  flex items-center justify-center bg-surface-subtle", tone)}>
         <Icon className="w-5 h-5" />
       </div>
     </div>

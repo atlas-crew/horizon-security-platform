@@ -138,6 +138,27 @@ describe('Telemetry routes', () => {
     expect(insertSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts legacy api keys when telemetry jwt secret is missing', async () => {
+    mockConfig.telemetry.jwtSecret = undefined;
+    const token = 'dev-dashboard-key';
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue({
+      id: 'ak-1',
+      tenantId: 'tenant-1',
+      isRevoked: false,
+      expiresAt: null,
+      scopes: ['signal:write'],
+    } as never);
+
+    const res = await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...payload, instance_id: 'sensor-x' })
+      .expect(202);
+
+    expect(res.body).toMatchObject({ inserted: 1 });
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects requests without a bearer token', async () => {
     const res = await request(app)
       .post('/_sensor/report')

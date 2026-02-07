@@ -144,6 +144,31 @@ export async function requireTelemetryJwt(
           };
         }
       }
+
+      // Legacy: tenant-scoped API keys.
+      const apiKey = await prisma.apiKey.findUnique({
+        where: { keyHash },
+        select: {
+          id: true,
+          tenantId: true,
+          isRevoked: true,
+          expiresAt: true,
+          scopes: true,
+        },
+      }).catch(() => null);
+
+      if (
+        apiKey
+        && !apiKey.isRevoked
+        && (!apiKey.expiresAt || apiKey.expiresAt > now)
+        && apiKey.scopes.includes('signal:write')
+      ) {
+        return {
+          tenantId: apiKey.tenantId,
+          sensorId: deriveSensorIdFromBody(req.body),
+          jti: apiKey.id,
+        };
+      }
     }
 
     res.status(503).json({ error: 'telemetry_jwt_missing' });

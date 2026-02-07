@@ -55,6 +55,7 @@ export { useFleetControl } from './useFleetControl';
 export { usePlaybooks } from './usePlaybooks';
 export { useBlocklist } from './useBlocklist';
 export { useOnboarding } from './useOnboarding';
+export { useConnectivity } from './useConnectivity';
 export type {
   TimeRange,
   SessionSearchQuery,

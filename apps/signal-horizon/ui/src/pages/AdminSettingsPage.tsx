@@ -31,7 +31,7 @@ import { clsx } from 'clsx';
 import { useTenantSettings, SharingPreference } from '../hooks/useTenantSettings';
 import { usePolicies } from '../hooks/fleet/usePolicies';
 import { useHubConfig, type HubConfig } from '../hooks/useHubConfig';
-import { useFleetControl, useSensors, usePlaybooks, useBlocklist, useOnboarding } from '../hooks/fleet';
+import { useFleetControl, useSensors, usePlaybooks, useBlocklist, useOnboarding, useConnectivity } from '../hooks/fleet';
 import { MetricCard } from '../components/fleet';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
@@ -74,6 +74,15 @@ const AdminSettingsPage: React.FC = () => {
   const { playbooks, isLoading: playbooksLoading } = usePlaybooks();
   const { stats: blocklistStats, addBlock, isAddingBlock } = useBlocklist();
   const { stats: onboardingStats, createToken, isCreatingToken } = useOnboarding();
+  const {
+    status: connectivityStatus,
+    isLoadingStatus: connectivityLoading,
+    runTest: runConnectivityTest,
+    isTesting: isRunningConnectivityTest,
+    testResult: connectivityTestResult,
+    testError: connectivityTestError,
+    refreshStatus: refreshConnectivityStatus,
+  } = useConnectivity();
 
   // Toast & ConfirmDialog state
   const { toast, Toasts } = useToast();
@@ -222,6 +231,23 @@ const AdminSettingsPage: React.FC = () => {
       toast.success('Token copied to clipboard.');
     } catch {
       toast.error('Failed to copy to clipboard.');
+    }
+  };
+
+  const extractHostname = (raw?: string | null) => {
+    if (!raw) return null;
+    try {
+      return new URL(raw).hostname;
+    } catch {
+      // Best-effort: allow "host:port" or bare hostname/IP.
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith('[')) {
+        const end = trimmed.indexOf(']');
+        if (end > 1) return trimmed.slice(1, end);
+      }
+      const parts = trimmed.split(':');
+      return parts.length === 2 ? parts[0] : trimmed;
     }
   };
 
@@ -778,44 +804,175 @@ const AdminSettingsPage: React.FC = () => {
             <div className="space-y-8 animate-in fade-in duration-300">
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
                 <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Synapse-Pingora Connectivity</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <label htmlFor="synapse-risk-server" className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Risk Server (Proxy)</label>
-                    <input id="synapse-risk-server" type="text" className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1" defaultValue="http://localhost:3000" />
+                {hubLoading ? (
+                  <div className="py-6 text-center text-ink-muted">Loading hub config...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Risk Server (Proxy)</label>
+                      <div className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono text-ink-muted break-all">
+                        {hubConfig?.riskServer?.url || 'Not configured'}
+                      </div>
+                      <div className="text-[10px] font-mono text-ink-muted uppercase tracking-widest">
+                        HOST: {extractHostname(hubConfig?.riskServer?.url) || 'N/A'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Synapse Direct</label>
+                      <div className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono text-ink-muted break-all">
+                        {hubConfig?.synapseDirect?.enabled ? (hubConfig?.synapseDirect?.url || 'Enabled') : 'Disabled'}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-mono text-ink-muted uppercase tracking-widest">
+                          HOST: {extractHostname(hubConfig?.synapseDirect?.url) || 'N/A'}
+                        </div>
+                        <span className={clsx(
+                          'text-[10px] font-mono uppercase tracking-widest px-2 py-1 border',
+                          hubConfig?.synapseDirect?.enabled
+                            ? 'border-status-success text-status-success'
+                            : 'border-border-subtle text-ink-muted'
+                        )}>
+                          {hubConfig?.synapseDirect?.enabled ? 'DIRECT_ENABLED' : 'DIRECT_DISABLED'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label htmlFor="synapse-admin-url" className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Synapse Admin URL</label>
-                    <input id="synapse-admin-url" type="text" className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1" defaultValue="http://localhost:8080" />
-                  </div>
-                </div>
+                )}
+
                 <div className="flex items-center gap-4 p-4 border border-ac-blue/20 bg-ac-blue/5">
                   <Activity className="w-5 h-5 text-ac-blue" />
-                  <p className="text-xs text-ink-secondary">When **Synapse Admin URL** is configured, the Hub will bypass the Risk Server for direct sensor introspection.</p>
+                  <p className="text-xs text-ink-secondary">
+                    Connectivity tests allow private targets only when they match configured hub endpoints (Risk Server / Synapse Direct).
+                  </p>
                 </div>
               </section>
 
               <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
-                <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Fleet Tunneling</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <div className="p-4 bg-surface-subtle border border-border-subtle space-y-3">
-                    <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Tunnel Ports</p>
-                    <div className="flex gap-2">
-                      <span className="bg-ac-navy text-white px-2 py-1 text-xs font-mono">3100 (WS)</span>
-                      <span className="bg-ac-navy text-white px-2 py-1 text-xs font-mono">8080 (Admin)</span>
+                <div className="flex items-center justify-between gap-4">
+                  <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Connectivity Status</h2>
+                  <button
+                    onClick={() => refreshConnectivityStatus()}
+                    disabled={connectivityLoading}
+                    className="h-10 px-4 bg-ac-navy text-white text-[10px] font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {connectivityLoading ? (
+                  <div className="py-10 text-center text-ink-muted">Loading connectivity...</div>
+                ) : connectivityStatus ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                      <div className="p-4 bg-surface-subtle border border-border-subtle space-y-2">
+                        <p className="text-[10px] font-bold text-ink-primary uppercase tracking-widest">Total</p>
+                        <p className="text-lg font-light text-ink-primary">{connectivityStatus.stats.total}</p>
+                      </div>
+                      <div className="p-4 bg-surface-subtle border border-border-subtle space-y-2">
+                        <p className="text-[10px] font-bold text-ink-primary uppercase tracking-widest">Online</p>
+                        <p className="text-lg font-light text-status-success">{connectivityStatus.stats.online}</p>
+                      </div>
+                      <div className="p-4 bg-surface-subtle border border-border-subtle space-y-2">
+                        <p className="text-[10px] font-bold text-ink-primary uppercase tracking-widest">Reconnecting</p>
+                        <p className="text-lg font-light text-ac-orange">{connectivityStatus.stats.reconnecting}</p>
+                      </div>
+                      <div className="p-4 bg-surface-subtle border border-border-subtle space-y-2">
+                        <p className="text-[10px] font-bold text-ink-primary uppercase tracking-widest">Offline</p>
+                        <p className="text-lg font-light text-status-error">{connectivityStatus.stats.offline}</p>
+                      </div>
+                      <div className="p-4 bg-surface-subtle border border-border-subtle space-y-2">
+                        <p className="text-[10px] font-bold text-ink-primary uppercase tracking-widest">Recent</p>
+                        <p className="text-lg font-light text-ink-primary">{connectivityStatus.stats.recentlyActive}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Offline Sensors</p>
+                        <div className="border border-border-subtle bg-surface-subtle max-h-56 overflow-auto">
+                          {(connectivityStatus.sensors.DISCONNECTED || []).slice(0, 20).map((s) => (
+                            <div key={s.id} className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+                              <span className="text-xs font-mono text-ink-primary">{s.name}</span>
+                              <span className="text-[10px] font-mono text-status-error uppercase">DISCONNECTED</span>
+                            </div>
+                          ))}
+                          {(connectivityStatus.sensors.DISCONNECTED || []).length === 0 && (
+                            <div className="px-4 py-6 text-xs text-ink-muted">No offline sensors.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Connectivity Diagnostics</p>
+                        <div className="border border-border-subtle bg-surface-subtle p-4 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[
+                              { label: 'Risk Server', host: extractHostname(hubConfig?.riskServer?.url) },
+                              { label: 'Synapse Direct', host: extractHostname(hubConfig?.synapseDirect?.url) },
+                            ].map((t) => (
+                              <div key={t.label} className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink-primary">{t.label}</span>
+                                  <span className="text-[10px] font-mono text-ink-muted">{t.host || 'N/A'}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {(['ping', 'dns', 'tls', 'traceroute'] as const).map((testType) => (
+                                    <button
+                                      key={testType}
+                                      onClick={async () => {
+                                        if (!t.host) return;
+                                        await runConnectivityTest({ testType, target: t.host });
+                                      }}
+                                      disabled={!t.host || isRunningConnectivityTest}
+                                      className="h-9 px-3 bg-ac-navy text-white text-[10px] font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                                    >
+                                      {testType}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {connectivityTestError && (
+                            <div className="p-3 border border-status-error/30 bg-status-error/5 text-xs text-status-error">
+                              {connectivityTestError.message}
+                            </div>
+                          )}
+
+                          {connectivityTestResult && (
+                            <div className="p-3 border border-border-subtle bg-surface-card space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono uppercase tracking-widest text-ink-muted">LAST_RESULT</span>
+                                <span className={clsx(
+                                  'text-[10px] font-mono uppercase tracking-widest',
+                                  connectivityTestResult.result.status === 'passed'
+                                    ? 'text-status-success'
+                                    : connectivityTestResult.result.status === 'failed'
+                                      ? 'text-ac-orange'
+                                      : 'text-status-error'
+                                )}>
+                                  {connectivityTestResult.result.status}
+                                </span>
+                              </div>
+                              <div className="text-xs font-mono text-ink-secondary break-all">
+                                {connectivityTestResult.result.testType} {connectivityTestResult.result.target}{' '}
+                                {connectivityTestResult.result.latencyMs != null ? `(${connectivityTestResult.result.latencyMs}ms)` : ''}
+                              </div>
+                              {connectivityTestResult.result.error && (
+                                <div className="text-xs text-status-error">{connectivityTestResult.result.error}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="p-4 bg-surface-subtle border border-border-subtle space-y-3">
-                    <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Active Tunnels</p>
-                    <p className="text-lg font-light text-ink-primary">12 / 15</p>
+                ) : (
+                  <div className="py-10 text-center text-ink-muted">
+                    Failed to load connectivity status.
                   </div>
-                  <div className="p-4 bg-surface-subtle border border-border-subtle space-y-3">
-                    <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Encryption</p>
-                    <span className="bg-status-success text-white px-2 py-1 text-xs font-bold uppercase">mTLS Active</span>
-                  </div>
-                </div>
-                <button className="h-12 px-6 bg-ac-navy text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1">
-                  Update Tunnel Configuration
-                </button>
+                )}
               </section>
             </div>
             </ErrorBoundary>

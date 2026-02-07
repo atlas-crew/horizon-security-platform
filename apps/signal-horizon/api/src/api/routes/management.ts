@@ -86,6 +86,58 @@ const BLOCKED_HOSTNAMES = [
   /^.*\.svc\.cluster\.local$/i,
 ];
 
+function stripPortFromHost(target: string): string {
+  // URL.hostname already strips ports, but callers may provide host:port.
+  // Handle bracketed IPv6: "[::1]:443" -> "::1"
+  const trimmed = target.trim();
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']');
+    if (end > 1) return trimmed.slice(1, end);
+  }
+
+  // If this is a pure IP (not host:port), keep it intact (IPv6 contains ':').
+  if (net.isIP(trimmed)) return trimmed;
+
+  const parts = trimmed.split(':');
+  if (parts.length === 2) return parts[0] || trimmed;
+  return trimmed;
+}
+
+/**
+ * Normalize a user-provided target to a bare hostname/IP.
+ * Accepts hostnames, IPs, host:port, and full URLs.
+ */
+export function normalizeConnectivityTarget(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.includes('://')) {
+    try {
+      return new URL(trimmed).hostname;
+    } catch {
+      // Fall through to non-URL normalization.
+    }
+  }
+
+  return stripPortFromHost(trimmed);
+}
+
+export function getAllowlistedConnectivityTargets(config: {
+  riskServer: { url: string };
+  synapseDirect: { url?: string; enabled: boolean };
+}): Set<string> {
+  const allow = new Set<string>();
+
+  const riskHost = normalizeConnectivityTarget(config.riskServer.url);
+  if (riskHost) allow.add(riskHost.toLowerCase());
+
+  const synapseHost = config.synapseDirect.url ? normalizeConnectivityTarget(config.synapseDirect.url) : undefined;
+  if (synapseHost) allow.add(synapseHost.toLowerCase());
+
+  return allow;
+}
+
 /**
  * Check if an IP address is private, reserved, or otherwise blocked
  */
@@ -208,17 +260,21 @@ function validateHostnameFormat(hostname: string): { valid: boolean; error?: str
 /**
  * Resolve hostname and validate the resolved IP (DNS rebinding protection)
  */
-async function resolveAndValidateTarget(target: string, logger: Logger): Promise<{ ip: string; hostname: string }> {
+async function resolveAndValidateTarget(
+  target: string,
+  logger: Logger,
+  opts: { allowPrivate: boolean }
+): Promise<{ ip: string; hostname: string }> {
   // If already an IP, validate directly
   if (net.isIP(target)) {
-    if (isBlockedIP(target)) {
+    if (!opts.allowPrivate && isBlockedIP(target)) {
       throw new Error('Target IP is blocked (private/reserved range)');
     }
     return { ip: target, hostname: target };
   }
 
   // Check if hostname is blocked
-  if (isBlockedHostname(target)) {
+  if (!opts.allowPrivate && isBlockedHostname(target)) {
     throw new Error('Target hostname is blocked');
   }
 
@@ -227,7 +283,7 @@ async function resolveAndValidateTarget(target: string, logger: Logger): Promise
     const { address } = await dns.lookup(target, { family: 4 });
 
     // Validate the resolved IP (prevents DNS rebinding)
-    if (isBlockedIP(address)) {
+    if (!opts.allowPrivate && isBlockedIP(address)) {
       logger.warn({ target, resolvedIP: address }, 'DNS resolved to blocked IP');
       throw new Error('Target resolves to blocked IP address');
     }
@@ -654,7 +710,8 @@ async function runTracerouteTest(target: string, resolvedIP: string, logger: Log
 async function runConnectivityTest(
   testType: string,
   target: string | undefined,
-  logger: Logger
+  logger: Logger,
+  opts: { allowPrivate: boolean }
 ): Promise<TestResult> {
   const testTarget = target || DEFAULT_TEST_TARGETS[testType as keyof typeof DEFAULT_TEST_TARGETS] || '8.8.8.8';
 
@@ -675,7 +732,7 @@ async function runConnectivityTest(
   activeTests++;
   try {
     // Resolve and validate target (DNS rebinding protection)
-    const { ip: resolvedIP, hostname } = await resolveAndValidateTarget(testTarget, logger);
+    const { ip: resolvedIP, hostname } = await resolveAndValidateTarget(testTarget, logger, opts);
 
     switch (testType) {
       case 'ping':
@@ -1135,6 +1192,10 @@ export function createManagementRoutes(
 
     try {
       const { testType, target } = req.body;
+      const normalizedTarget = normalizeConnectivityTarget(target);
+      const { config } = await import('../../config.js');
+      const allowlistedTargets = getAllowlistedConnectivityTargets(config);
+      const allowPrivate = normalizedTarget ? allowlistedTargets.has(normalizedTarget.toLowerCase()) : false;
 
       // Validate test type
       const validTestTypes = ['ping', 'dns', 'tls', 'traceroute'];
@@ -1151,8 +1212,18 @@ export function createManagementRoutes(
 
       // Validate target if provided
       if (target) {
+        if (!normalizedTarget) {
+          res.status(400).json({
+            type: 'https://api.signal-horizon.io/errors/validation-error',
+            title: 'Invalid target',
+            status: 400,
+            detail: 'Target must be a hostname, IP address, or URL',
+          });
+          return;
+        }
+
         // Hostname format and length validation
-        const validation = validateHostnameFormat(target);
+        const validation = validateHostnameFormat(normalizedTarget);
         if (!validation.valid) {
           res.status(400).json({
             type: 'https://api.signal-horizon.io/errors/validation-error',
@@ -1163,39 +1234,50 @@ export function createManagementRoutes(
           return;
         }
 
-        // Check if hostname is blocked
-        if (isBlockedHostname(target)) {
-          logger.warn({ clientIP, userId, target, testType }, 'Blocked hostname test attempt');
-          res.status(400).json({
-            type: 'https://api.signal-horizon.io/errors/ssrf-blocked',
-            title: 'Target blocked',
-            status: 400,
-            detail: 'This target hostname is not allowed',
-          });
-          return;
-        }
+        // SSRF protection: allow private targets only when explicitly allowlisted
+        // via configured hub endpoints (riskServer / synapseDirect).
+        if (!allowPrivate) {
+          // Check if hostname is blocked
+          if (isBlockedHostname(normalizedTarget)) {
+            logger.warn({ clientIP, userId, target: normalizedTarget, testType }, 'Blocked hostname test attempt');
+            res.status(400).json({
+              type: 'https://api.signal-horizon.io/errors/ssrf-blocked',
+              title: 'Target blocked',
+              status: 400,
+              detail: 'This target hostname is not allowed',
+            });
+            return;
+          }
 
-        // Check if IP is blocked (if target is an IP)
-        if (net.isIP(target) && isBlockedIP(target)) {
-          logger.warn({ clientIP, userId, target, testType }, 'Blocked IP test attempt');
-          res.status(400).json({
-            type: 'https://api.signal-horizon.io/errors/ssrf-blocked',
-            title: 'Target blocked',
-            status: 400,
-            detail: 'Private and reserved IP addresses are not allowed',
-          });
-          return;
+          // Check if IP is blocked (if target is an IP)
+          if (net.isIP(normalizedTarget) && isBlockedIP(normalizedTarget)) {
+            logger.warn({ clientIP, userId, target: normalizedTarget, testType }, 'Blocked IP test attempt');
+            res.status(400).json({
+              type: 'https://api.signal-horizon.io/errors/ssrf-blocked',
+              title: 'Target blocked',
+              status: 400,
+              detail: 'Private and reserved IP addresses are not allowed',
+            });
+            return;
+          }
         }
       }
 
       // Audit log: test initiated
       logger.info(
-        { clientIP, userId, testType, target: target || 'default', action: 'CONNECTIVITY_TEST_START' },
+        {
+          clientIP,
+          userId,
+          testType,
+          target: normalizedTarget || 'default',
+          allowPrivate,
+          action: 'CONNECTIVITY_TEST_START',
+        },
         'Connectivity test initiated'
       );
 
       // Run the actual test
-      const result = await runConnectivityTest(testType, target, logger);
+      const result = await runConnectivityTest(testType, normalizedTarget, logger, { allowPrivate });
 
       // Audit log: test completed
       logger.info(

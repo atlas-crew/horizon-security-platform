@@ -99,10 +99,6 @@ export async function requireTelemetryJwt(
   prisma?: PrismaClient
 ): Promise<TelemetryAuthContext | null> {
   const secret = config.telemetry.jwtSecret;
-  if (!secret) {
-    res.status(503).json({ error: 'telemetry_jwt_missing' });
-    return null;
-  }
 
   const authHeader = normalizeHeaderToken(req.headers.authorization);
   const bearerToken =
@@ -113,6 +109,46 @@ export async function requireTelemetryJwt(
     bearerToken ??
     normalizeHeaderToken(req.headers['x-api-key']) ??
     normalizeHeaderToken(req.headers['x-admin-key']);
+
+  if (!secret) {
+    // In dev/demo environments, allow sensor API keys even when JWT secret is not configured.
+    // If API key auth fails, preserve the original 503 to make the misconfig visible.
+    if (apiKeyToken && prisma) {
+      const keyHash = sha256Hex(apiKeyToken);
+      const now = new Date();
+
+      const sensorKey = await prisma.sensorApiKey.findFirst({
+        where: {
+          keyHash,
+          status: 'ACTIVE',
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        include: {
+          sensor: {
+            select: {
+              tenantId: true,
+              approvalStatus: true,
+            },
+          },
+        },
+      }).catch(() => null);
+
+      if (sensorKey) {
+        const allowed = Array.isArray(sensorKey.permissions) && sensorKey.permissions.includes('signal:write');
+        const approved = sensorKey.sensor.approvalStatus === 'APPROVED';
+        if (allowed && approved) {
+          return {
+            tenantId: sensorKey.sensor.tenantId,
+            sensorId: sensorKey.sensorId,
+            jti: sensorKey.id,
+          };
+        }
+      }
+    }
+
+    res.status(503).json({ error: 'telemetry_jwt_missing' });
+    return null;
+  }
 
   if (!apiKeyToken) {
     res.status(401).json({ error: 'unauthorized' });

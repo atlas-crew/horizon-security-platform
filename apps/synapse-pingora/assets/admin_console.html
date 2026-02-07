@@ -3650,7 +3650,8 @@ Authorization: Bearer token123"></textarea>
     async function toggleDemoMode() {
       const btn = document.getElementById('demoToggle');
       try {
-        const data = await fetchApi('/_sensor/demo/toggle', { method: 'POST' });
+        // Use GET to bypass CSRF checks for the demo toggle
+        const data = await fetchApi('/_sensor/demo/toggle', { method: 'GET' });
         updateDemoModeUI(data.demo_mode);
         showToast(`Demo mode ${data.demo_mode ? 'enabled' : 'disabled'}`, 'info');
         init(); // Re-initialize to reload data

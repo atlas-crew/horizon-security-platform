@@ -4385,21 +4385,24 @@ fn main() {
     }
 
     // Check for dev/demo modes via CLI flags or environment variables
-    let dev_mode = cli.dev || parse_bool_env("SYNAPSE_DEV");
+    let dev_mode_cli = cli.dev;
+    let dev_mode_env = parse_bool_env("SYNAPSE_DEV");
     let demo_mode = cli.demo || parse_bool_env("SYNAPSE_DEMO");
     let is_explicitly_non_production = parse_bool_env_neg("SYNAPSE_PRODUCTION")
         || std::env::var("NODE_ENV")
             .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
             .unwrap_or(false);
 
-    if dev_mode {
-        // SECURITY: Require explicit non-production environment for dev mode (secure-by-default)
-        // Dev mode bypasses authentication, so we need explicit confirmation this is not production
+    if dev_mode_cli {
+        // CLI --dev flag is explicit developer intent — enable directly
+        synapse_pingora::admin_server::enable_dev_mode();
+    } else if dev_mode_env {
+        // SECURITY: Env-var activation requires explicit non-production confirmation
         if is_explicitly_non_production {
             synapse_pingora::admin_server::enable_dev_mode();
         } else {
             tracing::error!(
-                "SECURITY: Dev mode requested but no explicit non-production environment detected. \
+                "SECURITY: SYNAPSE_DEV set but no explicit non-production environment detected. \
                  Dev mode DISABLED for safety. Set SYNAPSE_PRODUCTION=0 or NODE_ENV=development to enable."
             );
         }

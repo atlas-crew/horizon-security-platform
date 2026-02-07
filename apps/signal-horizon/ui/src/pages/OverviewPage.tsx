@@ -28,6 +28,7 @@ import {
   AlertFeedSkeleton,
   TableSkeleton,
 } from '../components/LoadingStates';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
@@ -251,9 +252,11 @@ export default function OverviewPage() {
         </section>
 
         {/* Threat Trajectory Feed */}
-        <Suspense fallback={<AlertFeedSkeleton />}>
-          <ThreatTrajectoryFeed threats={threats} alerts={alerts} />
-        </Suspense>
+        <ErrorBoundary fallback={<AlertFeedSkeleton />}>
+          <Suspense fallback={<AlertFeedSkeleton />}>
+            <ThreatTrajectoryFeed threats={threats} alerts={alerts} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -266,9 +269,11 @@ export default function OverviewPage() {
             </span>
           </div>
           <div className="card-body">
-            <Suspense fallback={<CampaignListSkeleton />}>
-              <ActiveCampaignList campaigns={campaigns} />
-            </Suspense>
+            <ErrorBoundary fallback={<CampaignListSkeleton />}>
+              <Suspense fallback={<CampaignListSkeleton />}>
+                <ActiveCampaignList campaigns={campaigns} />
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </section>
 

@@ -22,6 +22,12 @@ const severityBadgeColors: Record<Campaign['severity'], string> = {
   CRITICAL: 'text-ac-red bg-ac-red/15 border-ac-red/40',
 };
 
+// Hoisted animation variants to avoid re-allocation per render
+const campaignItemVariants = {
+  initial: { opacity: 0, x: -8 },
+  animate: { opacity: 1, x: 0 },
+};
+
 function formatRelativeTime(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const diffMin = Math.floor(diffMs / 60_000);
@@ -59,8 +65,8 @@ export function ActiveCampaignList({ campaigns }: ActiveCampaignListProps) {
           role="listitem"
           tabIndex={0}
           onKeyDown={handleKeyDown}
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={campaignItemVariants.initial}
+          animate={campaignItemVariants.animate}
           transition={{ delay: index * 0.05 }}
           className={clsx(
             'border-l-2 border border-border-subtle bg-surface-inset px-4 py-3',

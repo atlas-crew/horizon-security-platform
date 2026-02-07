@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
@@ -13,6 +13,12 @@ type TimelineEntry =
   | { kind: 'alert'; ts: number; data: ThreatAlert };
 
 const MAX_ITEMS = 15;
+
+// Hoisted animation variants to avoid re-allocation per render
+const feedItemVariants = {
+  initial: { opacity: 0, y: -4 },
+  animate: { opacity: 1, y: 0 },
+};
 
 function getRiskBadgeClass(score: number): string {
   if (score >= 80) return 'text-ac-red';
@@ -49,7 +55,7 @@ function formatTimestamp(ts: number): { display: string; iso: string } {
   };
 }
 
-function ThreatEntry({ threat, ts }: { threat: Threat; ts: number }) {
+const ThreatEntry = memo(function ThreatEntry({ threat, ts }: { threat: Threat; ts: number }) {
   const { display, iso } = formatTimestamp(ts);
   return (
     <div className="py-2 space-y-0.5">
@@ -66,9 +72,9 @@ function ThreatEntry({ threat, ts }: { threat: Threat; ts: number }) {
       </div>
     </div>
   );
-}
+});
 
-function AlertEntry({ alert, ts }: { alert: ThreatAlert; ts: number }) {
+const AlertEntry = memo(function AlertEntry({ alert, ts }: { alert: ThreatAlert; ts: number }) {
   const { display, iso } = formatTimestamp(ts);
   return (
     <div className="py-2 space-y-0.5">
@@ -79,7 +85,7 @@ function AlertEntry({ alert, ts }: { alert: ThreatAlert; ts: number }) {
       <div className="text-xs text-white/70">{alert.description}</div>
     </div>
   );
-}
+});
 
 export function ThreatTrajectoryFeed({ threats, alerts }: ThreatTrajectoryFeedProps) {
   const timeline = useMemo<TimelineEntry[]>(() => {
@@ -129,8 +135,8 @@ export function ThreatTrajectoryFeed({ threats, alerts }: ThreatTrajectoryFeedPr
             return (
               <motion.div
                 key={key}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={feedItemVariants.initial}
+                animate={feedItemVariants.animate}
                 transition={{ delay: index * 0.03 }}
               >
                 <div className="relative pl-4 border-l-2 border-ac-blue/30">

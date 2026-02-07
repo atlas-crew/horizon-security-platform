@@ -75,6 +75,10 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
       token = authHeader.split(' ')[1];
     } else if (req.cookies?.access_token) {
       token = req.cookies.access_token;
+    } else if (req.cookies?.horizon_api_key) {
+      token = req.cookies.horizon_api_key;
+    } else if (req.cookies?.api_key) {
+      token = req.cookies.api_key;
     }
 
     if (!token) {

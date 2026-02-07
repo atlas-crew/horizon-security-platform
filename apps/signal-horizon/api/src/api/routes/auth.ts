@@ -6,7 +6,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { config } from '../../config.js';
@@ -117,6 +117,68 @@ export function createAuthRoutes(
 ): Router {
   const router = Router();
   const log = logger.child({ module: 'auth' });
+
+  /**
+   * GET /api/v1/auth/dev/bootstrap
+   *
+   * Dev-only: mint a short-lived browser cookie containing an API key so the UI
+   * can call Hunt routes without shipping API keys in headers.
+   */
+  router.get('/dev/bootstrap', async (req: Request, res: Response) => {
+    if (!config.isDev) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+
+    const ipRaw = req.ip ?? req.headers['x-forwarded-for']?.toString() ?? '';
+    const ip = ipRaw.replace(/^::ffff:/, '');
+    if (ip !== '127.0.0.1' && ip !== '::1') {
+      res.status(403).json({ error: 'forbidden' });
+      return;
+    }
+
+    const tenantName = 'Dev Tenant';
+    const apiKeyName = 'dev-browser-cookie';
+    const scopes = ['hunt:read', 'hunt:execute', 'hunt:write'];
+
+    const tenant =
+      (await prisma.tenant.findFirst({ where: { name: tenantName }, orderBy: { createdAt: 'asc' } })) ??
+      (await prisma.tenant.create({ data: { name: tenantName } }));
+
+    const rawKey = `dev_${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`;
+    const keyHash = createHash('sha256').update(rawKey).digest('hex');
+
+    await prisma.apiKey.upsert({
+      where: {
+        tenantId_name: {
+          tenantId: tenant.id,
+          name: apiKeyName,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        name: apiKeyName,
+        keyHash,
+        scopes,
+      },
+      update: {
+        keyHash,
+        scopes,
+        isRevoked: false,
+        expiresAt: null,
+      },
+    });
+
+    res.cookie('horizon_api_key', rawKey, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ ok: true, tenantId: tenant.id });
+  });
 
   /**
    * POST /api/v1/auth/login

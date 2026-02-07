@@ -3,7 +3,7 @@
  * Provides methods for querying historical threat data
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { z } from 'zod';
 
 function normalizeApiBaseUrl(raw: string): string {
@@ -327,12 +327,13 @@ export function useHunt() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<HuntStatus | null>(null);
   const clearError = useCallback(() => setError(null), []);
+  const devAuthBootstrappedRef = useRef(false);
 
   // Helper for API calls
-	  const fetchApi = useCallback(async <T>(
-	    endpoint: string,
-	    options: RequestInit = {}
-	  ): Promise<T> => {
+		  const fetchApi = useCallback(async <T>(
+		    endpoint: string,
+		    options: RequestInit = {}
+		  ): Promise<T> => {
 	    const headers: Record<string, string> = {
 	      'Content-Type': 'application/json',
 	    };
@@ -340,19 +341,33 @@ export function useHunt() {
 	      headers.Authorization = `Bearer ${ENV_API_KEY}`;
 	    }
 
-	    const response = await fetch(`${API_BASE}${endpoint}`, {
-	      ...options,
-	      credentials: 'include',
-	      headers: {
-	        ...headers,
-	        ...options.headers,
-	      },
-	    });
+		    const url = `${API_BASE}${endpoint}`;
+		    const init: RequestInit = {
+		      ...options,
+		      credentials: 'include',
+		      headers: {
+		        ...headers,
+		        ...options.headers,
+		      },
+		    };
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `API error: ${response.status}`);
-    }
+		    const response = await fetch(url, init);
+
+		    // Dev QoL: if the UI has no API key env configured, bootstrap a cookie-based
+		    // api key once and retry (localhost + dev-only server route).
+		    if (response.status === 401 && !ENV_API_KEY && !devAuthBootstrappedRef.current) {
+		      devAuthBootstrappedRef.current = true;
+		      await fetch(`${API_BASE}/auth/dev/bootstrap`, { credentials: 'include' }).catch(() => null);
+		      const retry = await fetch(url, init);
+		      if (retry.ok) return retry.json();
+		      const retryErrorData = await retry.json().catch(() => ({}));
+		      throw new Error(retryErrorData.message || `API error: ${retry.status}`);
+		    }
+
+	    if (!response.ok) {
+	      const errorData = await response.json().catch(() => ({}));
+	      throw new Error(errorData.message || `API error: ${response.status}`);
+	    }
 
     return response.json();
   }, []);

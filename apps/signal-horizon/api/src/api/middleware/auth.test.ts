@@ -199,6 +199,37 @@ describe('Auth middleware JWT', () => {
       isFleetAdmin: false,
     });
   });
+
+  it('accepts api key from httpOnly cookie fallback (dev browser flow)', async () => {
+    const apiKey = 'dev-cookie-api-key';
+    const keyHash = createHash('sha256').update(apiKey).digest('hex');
+
+    vi.mocked(prisma.apiKey.findUnique).mockImplementation(async ({ where }) => {
+      if (where?.keyHash === keyHash) {
+        return {
+          id: 'api-key-1',
+          tenantId: 'tenant-1',
+          isRevoked: false,
+          expiresAt: null,
+          scopes: ['hunt:read'],
+          tenant: { id: 'tenant-1' },
+        } as never;
+      }
+      return null as never;
+    });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Cookie', `horizon_api_key=${apiKey}`)
+      .expect(200);
+
+    expect(res.body.auth).toMatchObject({
+      tenantId: 'tenant-1',
+      apiKeyId: 'api-key-1',
+      scopes: ['hunt:read'],
+      isFleetAdmin: false,
+    });
+  });
 });
 
 describe('Auth middleware epoch validation (labs-wqy1)', () => {

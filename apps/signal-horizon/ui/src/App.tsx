@@ -47,6 +47,7 @@ import HuntingPage from './pages/HuntingPage';
 import RequestTimelinePage from './pages/hunting/RequestTimelinePage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -94,10 +95,8 @@ const beamNavItems = [
   { path: '/beam/threats', icon: Target, label: 'Threats' },
 ];
 
-const settingsItems = [
-  { label: 'Sharing Preferences' },
-  { label: 'Auto-Block Rules' },
-  { label: 'API Access' },
+const settingsNavItems = [
+  { path: '/settings/admin', icon: Settings, label: 'Admin Settings' },
 ];
 
 function getInitialTheme(): 'light' | 'dark' {
@@ -394,15 +393,24 @@ function App() {
               <div>
                 <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Settings</p>
                 <div className="space-y-1">
-                  {settingsItems.map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center gap-3 px-3 py-2 text-sm text-ink-disabled cursor-not-allowed opacity-50"
-                      aria-disabled="true"
-                      title={`${item.label} (coming soon)`}
+                  {settingsNavItems.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      title={sidebarCollapsed ? item.label : undefined}
+                      className={({ isActive }) =>
+                        clsx(
+                          'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                          sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                          isActive
+                            ? 'bg-surface-card text-link border-link'
+                            : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
+                        )
+                      }
                     >
-                      {item.label}
-                    </div>
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      {!sidebarCollapsed && <span>{item.label}</span>}
+                    </NavLink>
                   ))}
                 </div>
               </div>
@@ -520,6 +528,7 @@ function App() {
                 <Route path="/auth-coverage" element={<Suspense fallback={<LoadingSpinner message="Loading auth coverage map..." size="lg" />}><SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support" element={<SupportPage />} />
+                <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
                 
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />

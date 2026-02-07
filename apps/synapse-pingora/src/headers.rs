@@ -198,6 +198,46 @@ pub fn apply_response_headers(header: &mut ResponseHeader, ops: &CompiledHeaderO
     }
 }
 
+#[inline]
+fn ensure_response_header(header: &mut ResponseHeader, name: &'static str, value: &'static str) {
+    if header.headers.get(name).is_some() {
+        return;
+    }
+
+    if let Err(err) = header.insert_header(name, value) {
+        debug!("Failed to set security header {}: {}", name, err);
+    }
+}
+
+/// Inject baseline security headers onto a response.
+///
+/// Notes:
+/// - Uses "set-if-missing" to avoid overriding application-owned policies.
+/// - HSTS is only injected when the downstream request is HTTPS.
+pub fn apply_security_response_headers(header: &mut ResponseHeader, is_https: bool) {
+    // HSTS is only meaningful over HTTPS; avoid emitting it for cleartext HTTP.
+    if is_https {
+        ensure_response_header(
+            header,
+            "strict-transport-security",
+            "max-age=31536000; includeSubDomains",
+        );
+    }
+
+    ensure_response_header(header, "x-content-type-options", "nosniff");
+    ensure_response_header(header, "x-frame-options", "DENY");
+    ensure_response_header(
+        header,
+        "referrer-policy",
+        "strict-origin-when-cross-origin",
+    );
+    ensure_response_header(
+        header,
+        "permissions-policy",
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +315,35 @@ mod tests {
             header.headers.get("x-set").unwrap().to_str().unwrap(),
             "set-value"
         );
+    }
+
+    #[test]
+    fn test_apply_security_response_headers_sets_missing_only() {
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+
+        apply_security_response_headers(&mut resp, false);
+        assert!(resp.headers.get("strict-transport-security").is_none());
+        assert_eq!(
+            resp.headers.get("x-content-type-options").unwrap().to_str().unwrap(),
+            "nosniff"
+        );
+        assert_eq!(
+            resp.headers.get("x-frame-options").unwrap().to_str().unwrap(),
+            "DENY"
+        );
+        assert_eq!(
+            resp.headers.get("referrer-policy").unwrap().to_str().unwrap(),
+            "strict-origin-when-cross-origin"
+        );
+        assert!(resp.headers.get("permissions-policy").is_some());
+
+        // Should not overwrite existing application value
+        resp.insert_header("x-frame-options", "SAMEORIGIN").unwrap();
+        apply_security_response_headers(&mut resp, true);
+        assert_eq!(
+            resp.headers.get("x-frame-options").unwrap().to_str().unwrap(),
+            "SAMEORIGIN"
+        );
+        assert!(resp.headers.get("strict-transport-security").is_some());
     }
 }

@@ -1740,6 +1740,42 @@ impl SynapseProxy {
         resp.insert_header("x-request-id", request_id)?;
         Ok(())
     }
+
+    fn is_https_request(session: &Session) -> bool {
+        let headers = &session.req_header().headers;
+
+        if let Some(xfp) = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim())
+        {
+            if xfp.eq_ignore_ascii_case("https") {
+                return true;
+            }
+        }
+
+        if let Some(xfs) = headers
+            .get("x-forwarded-ssl")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim())
+        {
+            if xfs.eq_ignore_ascii_case("on") {
+                return true;
+            }
+        }
+
+        if let Some(fwd) = headers
+            .get("forwarded")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_ascii_lowercase())
+        {
+            if fwd.contains("proto=https") {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 fn record_auth_coverage(
@@ -1867,6 +1903,7 @@ impl ProxyHttp for SynapseProxy {
                 // Send 429 Too Many Requests response
                 let mut resp = ResponseHeader::build(429, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("retry-after", "1")?;
 
@@ -1946,6 +1983,7 @@ impl ProxyHttp for SynapseProxy {
             // Send 429 Too Many Requests response
             let mut resp = ResponseHeader::build(429, None)?;
             Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+            headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
             resp.insert_header("content-type", "application/json")?;
             resp.insert_header("retry-after", "1")?;
 
@@ -2001,6 +2039,7 @@ impl ProxyHttp for SynapseProxy {
                                 let body = r#"{"error": "challenge_failed"}"#;
                                 let mut resp = ResponseHeader::build(403, None)?;
                                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                                 resp.insert_header("content-type", "application/json")?;
                                 resp.insert_header("content-length", body.len().to_string())?;
                                 session.write_response_header(Box::new(resp), false).await?;
@@ -2019,6 +2058,7 @@ impl ProxyHttp for SynapseProxy {
                                 let body = r#"{"error": "challenge_expired"}"#;
                                 let mut resp = ResponseHeader::build(403, None)?;
                                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                                 resp.insert_header("content-type", "application/json")?;
                                 resp.insert_header("content-length", body.len().to_string())?;
                                 session.write_response_header(Box::new(resp), false).await?;
@@ -2059,6 +2099,7 @@ impl ProxyHttp for SynapseProxy {
                                         let body = r#"{"error": "challenge_failed"}"#;
                                         let mut resp = ResponseHeader::build(403, None)?;
                                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                                         resp.insert_header("content-type", "application/json")?;
                                         resp.insert_header("content-length", body.len().to_string())?;
                                         session.write_response_header(Box::new(resp), false).await?;
@@ -2077,6 +2118,7 @@ impl ProxyHttp for SynapseProxy {
                                         let body = r#"{"error": "challenge_expired"}"#;
                                         let mut resp = ResponseHeader::build(403, None)?;
                                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                                         resp.insert_header("content-type", "application/json")?;
                                         resp.insert_header("content-length", body.len().to_string())?;
                                         session.write_response_header(Box::new(resp), false).await?;
@@ -2154,6 +2196,7 @@ impl ProxyHttp for SynapseProxy {
 
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "application/json")?;
                         
                         session.write_response_header(Box::new(resp), false).await?;
@@ -2186,6 +2229,7 @@ impl ProxyHttp for SynapseProxy {
                 let body = r#"{"error": "access_denied"}"#;
                 let mut resp = ResponseHeader::build(403, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("content-length", body.len().to_string())?;
                 session.write_response_header(Box::new(resp), false).await?;
@@ -2233,6 +2277,7 @@ impl ProxyHttp for SynapseProxy {
 
             let mut resp = ResponseHeader::build(http_status, None)?;
             Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+            headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
             resp.insert_header("content-type", "application/json")?;
 
             session.write_response_header(Box::new(resp), false).await?;
@@ -2287,6 +2332,7 @@ impl ProxyHttp for SynapseProxy {
                 // Return 404 (don't reveal trap existence)
                 let mut resp = ResponseHeader::build(404, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                 session.write_response_header(Box::new(resp), true).await?;
                 self.metrics_registry.record_blocked();
                 return Ok(true);
@@ -2403,6 +2449,7 @@ impl ProxyHttp for SynapseProxy {
                         let body = r#"{"error": "access_denied"}"#;
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "application/json")?;
                         resp.insert_header("content-length", body.len().to_string())?;
                         session.write_response_header(Box::new(resp), false).await?;
@@ -2644,6 +2691,7 @@ impl ProxyHttp for SynapseProxy {
                 let body = r#"{"error": "access_denied"}"#;
                 let mut resp = ResponseHeader::build(403, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("content-length", body.len().to_string())?;
                 session.write_response_header(Box::new(resp), false).await?;
@@ -2906,6 +2954,7 @@ impl ProxyHttp for SynapseProxy {
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "2")?;
@@ -2925,6 +2974,7 @@ impl ProxyHttp for SynapseProxy {
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "3")?;
@@ -2964,6 +3014,7 @@ impl ProxyHttp for SynapseProxy {
                         let body_len = block_html.len();
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("content-length", body_len.to_string())?;
                         resp.insert_header("x-challenge-level", "4")?;
@@ -3001,6 +3052,7 @@ impl ProxyHttp for SynapseProxy {
                         let body_len = html.len();
                         let mut resp = ResponseHeader::build(status_code, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("content-length", body_len.to_string())?;
                         resp.insert_header("x-challenge-level", "5")?;
@@ -3177,6 +3229,7 @@ impl ProxyHttp for SynapseProxy {
                     let body = r#"{"error": "access_denied"}"#;
                     let mut resp = ResponseHeader::build(403, None)?;
                     Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                    headers::apply_security_response_headers(&mut resp, Self::is_https_request(_session));
                     resp.insert_header("content-type", "application/json")?;
                     resp.insert_header("content-length", body.len().to_string())?;
                     _session.write_response_header(Box::new(resp), false).await?;
@@ -3517,11 +3570,12 @@ impl ProxyHttp for SynapseProxy {
     /// Response header filter - apply header manipulations
     async fn response_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()>
     {
+        headers::apply_security_response_headers(upstream_response, Self::is_https_request(session));
         upstream_response.insert_header("X-Request-ID", ctx.request_id.as_str())?;
         // Extract Content-Type for response schema validation
         ctx.response_content_type = upstream_response

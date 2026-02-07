@@ -157,6 +157,34 @@ harness = false
 name = "subsystems"
 harness = false
 
+[[bench]]
+name = "schema_bench"
+harness = false
+
+[[bench]]
+name = "bot_detection_bench"
+harness = false
+
+[[bench]]
+name = "response_scan_bench"
+harness = false
+
+[[bench]]
+name = "proxy_overhead_bench"
+harness = false
+
+[[bench]]
+name = "sustained_bench"
+harness = false
+
+[[bench]]
+name = "escalation_bench"
+harness = false
+
+[[bench]]
+name = "reload_bench"
+harness = false
+
 [profile.release]
 lto = "thin"  # Changed from "fat" to reduce memory usage during linking
 codegen-units = 1

@@ -1,0 +1,89 @@
+server:
+  http_addr: "0.0.0.0:6190"
+  workers: 0
+  shutdown_timeout_secs: 5
+  waf_threshold: 70
+  waf_enabled: true
+  log_level: "warn"
+
+sites:
+  - hostname: "site0.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8080
+  - hostname: "site1.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8081
+  - hostname: "site2.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8082
+  - hostname: "site3.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8083
+  - hostname: "site4.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8084
+  - hostname: "site5.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8085
+  - hostname: "site6.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8086
+  - hostname: "site7.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8087
+  - hostname: "site8.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8088
+  - hostname: "site9.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8089
+  - hostname: "site10.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8090
+  - hostname: "site11.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8091
+  - hostname: "site12.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8092
+  - hostname: "site13.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8093
+  - hostname: "site14.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8094
+  - hostname: "site15.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8095
+  - hostname: "site16.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8096
+  - hostname: "site17.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8097
+  - hostname: "site18.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8098
+  - hostname: "site19.example.com"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 8099

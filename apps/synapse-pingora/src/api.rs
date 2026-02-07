@@ -128,6 +128,10 @@ impl ApiHandler {
         ApiHandlerBuilder::default()
     }
 
+    pub fn access_lists(&self) -> Arc<RwLock<AccessListManager>> {
+        Arc::clone(&self.access_lists)
+    }
+
     /// Returns the DLP scanner (if configured).
     pub fn dlp_scanner(&self) -> Option<Arc<DlpScanner>> {
         self.dlp_scanner.as_ref().map(Arc::clone)

@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use sysinfo::System;
 use tokio::sync::{broadcast, mpsc};
 use tokio::sync::mpsc::error::TrySendError;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 
@@ -571,17 +572,18 @@ async fn connect_and_run(
     let mut had_connection = false;
 
     // Connect WebSocket
-    let request = match http::Request::builder()
-        .uri(&config.hub_url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
-        .body(())
-    {
+    let mut request = match config.hub_url.clone().into_client_request() {
         Ok(req) => req,
         Err(e) => {
             error!("Failed to build WebSocket request: {}", e);
             return ConnectionResult::Disconnected { had_connection };
         }
     };
+
+    // Optional header auth (the sensor still sends an explicit Auth message after connect).
+    if let Ok(value) = http::HeaderValue::from_str(&format!("Bearer {}", config.api_key)) {
+        request.headers_mut().insert(http::header::AUTHORIZATION, value);
+    }
 
     let ws_stream = match tokio_tungstenite::connect_async(request).await {
         Ok((stream, _)) => stream,

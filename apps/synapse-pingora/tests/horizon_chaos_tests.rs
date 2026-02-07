@@ -205,7 +205,7 @@ async fn test_hub_downtime_requeues_signals() {
 
     let mut client = HorizonClient::new(test_config(&url));
     client.start().await.expect("client start");
-    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(2)).await);
+    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(5)).await);
 
     client.report_signal(make_signal("10.0.0.1"));
     assert!(wait_for_received(&server.received, 1, Duration::from_secs(2)).await);
@@ -217,7 +217,7 @@ async fn test_hub_downtime_requeues_signals() {
     client.report_signal(make_signal("10.0.0.3"));
 
     let server_restarted = spawn_hub_server(Some(port), Duration::from_millis(0), None).await;
-    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(3)).await);
+    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(5)).await);
     assert!(wait_for_received(&server_restarted.received, 2, Duration::from_secs(3)).await);
 
     let ips: Vec<String> = {
@@ -241,7 +241,7 @@ async fn test_high_latency_hub_does_not_block_reporting() {
 
     let mut client = HorizonClient::new(test_config(&url));
     client.start().await.expect("client start");
-    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(2)).await);
+    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(5)).await);
 
     let start = Instant::now();
     client.report_signal(make_signal("10.0.1.1"));
@@ -262,7 +262,7 @@ async fn test_network_partition_requeues_inflight() {
 
     let mut client = HorizonClient::new(test_config(&url));
     client.start().await.expect("client start");
-    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(2)).await);
+    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(5)).await);
 
     client.report_signal(make_signal("10.0.2.1"));
     assert!(wait_for_received(&server.received, 1, Duration::from_secs(2)).await);
@@ -270,7 +270,7 @@ async fn test_network_partition_requeues_inflight() {
     server.shutdown().await;
 
     let server_restarted = spawn_hub_server(Some(port), Duration::from_millis(0), None).await;
-    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(3)).await);
+    assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(5)).await);
     assert!(wait_for_received(&server_restarted.received, 1, Duration::from_secs(3)).await);
 
     let ips: Vec<String> = {

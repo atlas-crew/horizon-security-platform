@@ -46,6 +46,11 @@ export class InMemorySensorMetricsStore implements SensorMetricsStore {
 
 /**
  * Redis-backed implementation of SensorMetricsStore for distributed dashboard metrics.
+ *
+ * Tenant isolation: Uses tenantId 'global' intentionally. Sensor metrics are
+ * ephemeral snapshots (5-minute TTL) keyed by globally-unique sensorId. Fleet-wide
+ * visibility is the product's core value prop. Tenant ownership is tracked in
+ * PostgreSQL (Sensor.tenantId); API access requires fleet:read scope.
  */
 export class RedisSensorMetricsStore implements SensorMetricsStore {
   private kv: RedisKv;

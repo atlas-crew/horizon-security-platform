@@ -52,6 +52,11 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Redis-backed implementation of BlocklistStore for distributed deployments.
+ *
+ * Tenant isolation: Uses tenantId 'global' intentionally. The blocklist cache
+ * is fleet-wide threat intelligence shared across tenants, modulated by each
+ * tenant's SharingPreference (CONTRIBUTE_AND_RECEIVE, RECEIVE_ONLY, etc.).
+ * Tenant-level access control is enforced at the Broadcaster/Aggregator layer.
  */
 export class RedisBlocklistStore implements BlocklistStore {
   private kv: RedisKv;

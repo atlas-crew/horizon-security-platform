@@ -62,6 +62,12 @@ function reconstituteDates(raw: any): SavedQuery {
 
 /**
  * Redis-backed implementation of SavedQueryStore for distributed deployments.
+ *
+ * Tenant isolation: Uses tenantId 'global' intentionally. Saved queries are
+ * user-scoped (createdBy field) rather than tenant-scoped. The API layer
+ * enforces tenant context at query execution time by overriding tenantId with
+ * the authenticated user's tenant (see hunt routes). Access requires hunt:read/
+ * hunt:write scopes; deletion requires operator role.
  */
 export class RedisSavedQueryStore implements SavedQueryStore {
   private kv: RedisKv;

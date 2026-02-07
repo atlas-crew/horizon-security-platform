@@ -2351,6 +2351,41 @@ impl ProxyHttp for SynapseProxy {
                     if crawler_result.bad_bot_match.is_some() && self.crawler_detector.should_block_bad_bots() {
                         let bot_name = crawler_result.bad_bot_match.as_deref().unwrap_or("unknown");
                         warn!("Blocking bad bot: {} from {}", bot_name, client_ip);
+
+                        let reason = format!("bad_bot:{}", bot_name);
+                        let detection = DetectionResult {
+                            blocked: true,
+                            risk_score: 100,
+                            matched_rules: vec![],
+                            entity_risk: 0.0,
+                            block_reason: Some(reason.clone()),
+                            detection_time_us: 0,
+                        };
+                        ctx.detection = Some(detection.clone());
+
+                        // Persist and report as a WAF block so Hub can pivot by request_id.
+                        self.record_waf_block_event(
+                            client_ip,
+                            method,
+                            &uri,
+                            &detection,
+                            ctx.fingerprint.as_ref(),
+                            &reason,
+                        );
+
+                        if self.telemetry_client.is_enabled() {
+                            let site = ctx.matched_site.as_ref()
+                                .map(|s| s.hostname.clone())
+                                .unwrap_or_else(|| "_default".to_string());
+                            let _ = self.telemetry_client.report(TelemetryEvent::WafBlock {
+                                request_id: Some(ctx.request_id.clone()),
+                                rule_id: format!("BAD_BOT:{}", bot_name),
+                                severity: "critical".to_string(),
+                                client_ip: client_ip.to_string(),
+                                site,
+                                path: uri.clone(),
+                            }).await;
+                        }
                         
                         self.block_log.record(BlockEvent::new(
                             client_ip.to_string(),
@@ -2358,7 +2393,7 @@ impl ProxyHttp for SynapseProxy {
                             uri.clone(),
                             100, // Max risk
                             vec![], // No rule ID for bot block
-                            format!("bad_bot:{}", bot_name),
+                            reason,
                             ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
                         ));
 

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { useHunt, type RequestTimelineEvent } from '../../hooks/useHunt';
+import { useHunt, type RecentRequest, type RequestTimelineEvent } from '../../hooks/useHunt';
 
 function summarizeEvent(e: RequestTimelineEvent): string {
   switch (e.kind) {
@@ -43,9 +43,11 @@ export default function RequestTimelinePage() {
   const { requestId: routeRequestId } = useParams();
   const navigate = useNavigate();
 
-  const { isLoading, error, clearError, getRequestTimeline } = useHunt();
+  const { isLoading, error, clearError, getRequestTimeline, getRecentRequests } = useHunt();
   const [requestId, setRequestId] = useState(routeRequestId ?? '');
   const [events, setEvents] = useState<RequestTimelineEvent[] | null>(null);
+  const [recent, setRecent] = useState<RecentRequest[] | null>(null);
+  const [recentError, setRecentError] = useState<string | null>(null);
 
   // Optional time window (ISO strings expected by API).
   const [startTime, setStartTime] = useState('');
@@ -54,6 +56,17 @@ export default function RequestTimelinePage() {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const canRun = requestId.trim().length > 0 && !isLoading;
+
+  const loadRecent = useCallback(async () => {
+    setRecentError(null);
+    try {
+      const data = await getRecentRequests(25);
+      setRecent(data);
+    } catch (err) {
+      setRecent([]);
+      setRecentError(err instanceof Error ? err.message : 'Failed to load recent request ids');
+    }
+  }, [getRecentRequests]);
 
   useEffect(() => {
     if (routeRequestId && routeRequestId !== requestId) {
@@ -84,6 +97,10 @@ export default function RequestTimelinePage() {
       void run(routeRequestId);
     }
   }, [routeRequestId, run]);
+
+  useEffect(() => {
+    void loadRecent();
+  }, [loadRecent]);
 
   const header = useMemo(() => {
     const id = requestId.trim();
@@ -155,6 +172,87 @@ export default function RequestTimelinePage() {
           </button>
         </div>
       )}
+
+      <div className="card">
+        <div className="card-header flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="font-medium text-ink-primary truncate">Recent</h2>
+            <p className="text-xs text-ink-muted mt-1">
+              Latest <span className="font-mono">request_id</span> values (ClickHouse).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadRecent()}
+            className="btn-outline h-9 px-3 text-sm inline-flex items-center gap-2"
+            aria-label="Refresh recent request ids"
+            title="Refresh recent"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+        <div className="card-body">
+          {recentError && (
+            <div className="text-sm text-ac-red">
+              {recentError}
+            </div>
+          )}
+
+          {!recent && (
+            <div className="text-sm text-ink-secondary">Loading…</div>
+          )}
+
+          {recent && recent.length === 0 && !recentError && (
+            <div className="text-sm text-ink-secondary">No recent request ids yet.</div>
+          )}
+
+          {recent && recent.length > 0 && (
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Recent request ids</caption>
+                <thead className="text-xs text-ink-muted border-b border-border-subtle">
+                  <tr>
+                    <th className="text-left py-2 pr-3">Time</th>
+                    <th className="text-left py-2 pr-3">request_id</th>
+                    <th className="text-left py-2 pr-3">Path</th>
+                    <th className="text-left py-2 pr-3">Status</th>
+                    <th className="text-left py-2 pr-3">WAF</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {recent.map((r) => (
+                    <tr key={r.requestId} className="align-top">
+                      <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-secondary">
+                        {new Date(r.lastSeenAt).toLocaleString()}
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/hunting/request/${encodeURIComponent(r.requestId)}`)}
+                          className="text-link hover:text-link-hover font-mono text-xs"
+                          title="Open timeline"
+                        >
+                          {r.requestId}
+                        </button>
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs text-ink-primary">
+                        {r.path}
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-primary">
+                        {r.statusCode}
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-primary">
+                        {r.wafAction ?? '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="card">
         <div className="card-header">

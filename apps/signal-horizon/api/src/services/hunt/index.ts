@@ -97,6 +97,15 @@ export type RequestTimelineEvent =
       ruleId: string | null;
     };
 
+export interface RecentRequest {
+  requestId: string;
+  lastSeenAt: Date;
+  sensorId: string;
+  path: string;
+  statusCode: number;
+  wafAction: string | null;
+}
+
 export interface CampaignTimelineEvent {
   timestamp: Date;
   campaignId: string;
@@ -491,6 +500,45 @@ export class HuntService {
 
     events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     return events;
+  }
+
+  async getRecentRequests(tenantId: string, limit: number = 25): Promise<RecentRequest[]> {
+    if (!this.clickhouse?.isEnabled()) {
+      this.logger.warn('ClickHouse not enabled, recent requests unavailable');
+      return [];
+    }
+
+    this.validateIdentifier(tenantId, 'tenantId');
+    const boundedLimit = this.validatePositiveInt(limit, 1, 200);
+
+    const rows = await this.clickhouse.queryWithParams<ClickHouseRecentRequestRow>(
+      `
+        SELECT
+          request_id,
+          max(timestamp) AS last_seen,
+          argMax(sensor_id, timestamp) AS sensor_id,
+          argMax(path, timestamp) AS path,
+          argMax(status_code, timestamp) AS status_code,
+          argMax(waf_action, timestamp) AS waf_action
+        FROM http_transactions
+        WHERE tenant_id = {tenantId:String}
+          AND request_id IS NOT NULL
+          AND request_id != ''
+        GROUP BY request_id
+        ORDER BY last_seen DESC
+        LIMIT {limit:UInt32}
+      `,
+      { tenantId, limit: boundedLimit }
+    );
+
+    return rows.map((row) => ({
+      requestId: row.request_id,
+      lastSeenAt: new Date(row.last_seen),
+      sensorId: row.sensor_id,
+      path: row.path,
+      statusCode: row.status_code,
+      wafAction: row.waf_action ?? null,
+    }));
   }
 
   /**
@@ -1023,6 +1071,15 @@ interface ClickHouseHttpTransactionRow {
   path: string;
   status_code: number;
   latency_ms: number;
+  waf_action: string | null;
+}
+
+interface ClickHouseRecentRequestRow {
+  request_id: string;
+  last_seen: string;
+  sensor_id: string;
+  path: string;
+  status_code: number;
   waf_action: string | null;
 }
 

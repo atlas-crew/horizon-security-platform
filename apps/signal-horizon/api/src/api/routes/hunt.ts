@@ -65,6 +65,10 @@ const RequestTimelineQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(5000).optional(),
 });
 
+const RecentRequestsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
 // =============================================================================
 // Route Factory
 // =============================================================================
@@ -258,6 +262,57 @@ export function createHuntRoutes(
       });
     } catch (error) {
       routeLogger.error({ error }, 'Request timeline query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/requests/recent
+   * List recent request_ids (for pivot UX).
+   *
+   * Security: Tenant isolation enforced - users can only query their own tenant's data.
+   */
+  router.get('/requests/recent', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.hunt, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const parsed = RecentRequestsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.status(503).json({
+          error: 'Historical queries not available',
+          message: 'ClickHouse is not enabled',
+        });
+        return;
+      }
+
+      const limit = parsed.data.limit ?? 25;
+      const data = await huntService.getRecentRequests(req.auth.tenantId, limit);
+
+      res.json({
+        success: true,
+        data,
+        meta: {
+          tenantId: req.auth.tenantId,
+          count: data.length,
+          limit,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Recent requests query failed');
       res.status(500).json({
         error: 'Query failed',
         message: error instanceof Error ? error.message : 'Unknown error',

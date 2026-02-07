@@ -135,6 +135,15 @@ export type RequestTimelineEvent =
       ruleId: string | null;
     };
 
+export interface RecentRequest {
+  requestId: string;
+  lastSeenAt: string;
+  sensorId: string;
+  path: string;
+  statusCode: number;
+  wafAction: string | null;
+}
+
 // =============================================================================
 // Zod Schemas for Validation
 // =============================================================================
@@ -287,6 +296,25 @@ const RequestTimelineResponseSchema = z.object({
     requestId: z.string(),
     tenantId: z.string(),
     count: z.number(),
+  }),
+});
+
+const RecentRequestSchema = z.object({
+  requestId: z.string(),
+  lastSeenAt: z.string(),
+  sensorId: z.string(),
+  path: z.string(),
+  statusCode: z.number(),
+  wafAction: z.string().nullable(),
+});
+
+const RecentRequestsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(RecentRequestSchema),
+  meta: z.object({
+    tenantId: z.string(),
+    count: z.number(),
+    limit: z.number(),
   }),
 });
 
@@ -562,6 +590,26 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getRecentRequests = useCallback(async (limit: number = 25): Promise<RecentRequest[]> => {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('limit', String(limit));
+      const url = `/hunt/requests/recent?${queryParams.toString()}`;
+      const data = await fetchApi<unknown>(url);
+
+      const result = RecentRequestsResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid recent requests response');
+      }
+
+      return result.data.data as RecentRequest[];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get recent requests';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
   return {
     // State
     isLoading,
@@ -578,6 +626,7 @@ export function useHunt() {
     runSavedQuery,
     deleteSavedQuery,
     getRequestTimeline,
+    getRecentRequests,
 
     // Helpers
     clearError,

@@ -6,6 +6,7 @@
 
 import type { Request, Response } from 'express';
 import type { PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { config } from '../../config.js';
 import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
 
@@ -13,6 +14,40 @@ export interface TelemetryAuthContext {
   tenantId: string;
   sensorId: string;
   jti: string;
+}
+
+function normalizeHeaderToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function deriveSensorIdFromBody(body: unknown): string {
+  if (!body || typeof body !== 'object') return 'unknown';
+
+  const asAny = body as Record<string, unknown>;
+  const direct =
+    normalizeHeaderToken(asAny.instance_id) ??
+    normalizeHeaderToken(asAny.sensorId);
+  if (direct) return direct.slice(0, 255);
+
+  const events = asAny.events;
+  if (Array.isArray(events) && events.length > 0) {
+    const first = events[0];
+    if (first && typeof first === 'object') {
+      const firstAny = first as Record<string, unknown>;
+      const fromEvent =
+        normalizeHeaderToken(firstAny.instance_id) ??
+        normalizeHeaderToken(firstAny.sensorId);
+      if (fromEvent) return fromEvent.slice(0, 255);
+    }
+  }
+
+  return 'unknown';
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 /**
@@ -69,31 +104,105 @@ export async function requireTelemetryJwt(
     return null;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const authHeader = normalizeHeaderToken(req.headers.authorization);
+  const bearerToken =
+    authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : null;
+  const apiKeyToken =
+    bearerToken ??
+    normalizeHeaderToken(req.headers['x-api-key']) ??
+    normalizeHeaderToken(req.headers['x-admin-key']);
+
+  if (!apiKeyToken) {
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
 
-  const token = authHeader.slice(7).trim();
-  const payload = parseJwt(token, secret, { audience: 'signal-horizon' });
+  const payload = parseJwt(apiKeyToken, secret, { audience: 'signal-horizon' });
   
-  if (!payload || !payload.jti) {
+  if (payload && payload.jti) {
+    if (await isTelemetryTokenRevoked(payload.jti, prisma)) {
+      res.status(401).json({ error: 'token_revoked' });
+      return null;
+    }
+
+    const tenantId = payload.tenantId ?? payload.tenant_id;
+    const sensorId = payload.sensorId ?? payload.sensor_id;
+    if (!tenantId || !sensorId) {
+      res.status(401).json({ error: 'unauthorized' });
+      return null;
+    }
+
+    return { tenantId, sensorId, jti: payload.jti };
+  }
+
+  // Fallback: accept sensor API keys (and legacy ApiKey) for telemetry ingest.
+  if (!prisma) {
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
 
-  if (await isTelemetryTokenRevoked(payload.jti, prisma)) {
-    res.status(401).json({ error: 'token_revoked' });
-    return null;
+  const keyHash = sha256Hex(apiKeyToken);
+  const now = new Date();
+
+  // Preferred: sensor-scoped keys (tenantId derived via sensor relation).
+  const sensorKey = await prisma.sensorApiKey.findFirst({
+    where: {
+      keyHash,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    include: {
+      sensor: {
+        select: {
+          tenantId: true,
+          approvalStatus: true,
+        },
+      },
+    },
+  }).catch(() => null);
+
+  if (sensorKey) {
+    const allowed = Array.isArray(sensorKey.permissions) && sensorKey.permissions.includes('signal:write');
+    const approved = sensorKey.sensor.approvalStatus === 'APPROVED';
+    if (!allowed || !approved) {
+      res.status(401).json({ error: 'unauthorized' });
+      return null;
+    }
+
+    return {
+      tenantId: sensorKey.sensor.tenantId,
+      sensorId: sensorKey.sensorId,
+      jti: sensorKey.id,
+    };
   }
 
-  const tenantId = payload.tenantId ?? payload.tenant_id;
-  const sensorId = payload.sensorId ?? payload.sensor_id;
-  if (!tenantId || !sensorId) {
-    res.status(401).json({ error: 'unauthorized' });
-    return null;
+  // Legacy: tenant-scoped API keys (sensorId is derived from payload instance_id).
+  const apiKey = await prisma.apiKey.findUnique({
+    where: { keyHash },
+    select: {
+      id: true,
+      tenantId: true,
+      isRevoked: true,
+      expiresAt: true,
+      scopes: true,
+    },
+  }).catch(() => null);
+
+  if (
+    apiKey
+    && !apiKey.isRevoked
+    && (!apiKey.expiresAt || apiKey.expiresAt > now)
+    && apiKey.scopes.includes('signal:write')
+  ) {
+    return {
+      tenantId: apiKey.tenantId,
+      sensorId: deriveSensorIdFromBody(req.body),
+      jti: apiKey.id,
+    };
   }
 
-  return { tenantId, sensorId, jti: payload.jti };
+  res.status(401).json({ error: 'unauthorized' });
+  return null;
 }

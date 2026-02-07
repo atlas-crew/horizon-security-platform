@@ -87,6 +87,12 @@ describe('Telemetry routes', () => {
     } as unknown as ClickHouseService;
 
     prisma = {
+      sensorApiKey: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+      apiKey: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
       tokenBlacklist: {
         findUnique: vi.fn().mockResolvedValue(null),
         findFirst: vi.fn().mockResolvedValue(null),
@@ -145,6 +151,29 @@ describe('Telemetry routes', () => {
 
     expect(res.body).toMatchObject({ inserted: 1 });
     expect(insertSpy).toHaveBeenCalled();
+  });
+
+  it('accepts requests with a valid sensor api key', async () => {
+    const token = 'sk-test-sensor-key';
+    vi.mocked(prisma.sensorApiKey.findFirst).mockResolvedValue({
+      id: 'sak-1',
+      sensorId: 'sensor-1',
+      permissions: ['signal:write', 'blocklist:read'],
+      status: 'ACTIVE',
+      expiresAt: null,
+      sensor: { tenantId: 'tenant-1', approvalStatus: 'APPROVED' },
+    } as never);
+
+    const res = await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload)
+      .expect(202);
+
+    expect(res.body).toMatchObject({ inserted: 1 });
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    const [rows] = insertSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({ tenant_id: 'tenant-1', sensor_id: 'sensor-1' });
   });
 
   it('prefers per-event request_id when provided', async () => {

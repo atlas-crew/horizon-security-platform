@@ -59,7 +59,8 @@ PARTITION BY toYYYYMM(timestamp)
 -- timestamp second (time-range filtering is most common)
 -- signal_type third (secondary filter)
 ORDER BY (tenant_id, timestamp, signal_type)
-TTL timestamp + INTERVAL 90 DAY
+-- ClickHouse 24.1 TTL expects DateTime/Date, not DateTime64.
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 
 
@@ -90,7 +91,7 @@ CREATE TABLE IF NOT EXISTS campaign_history (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (campaign_id, timestamp)
-TTL timestamp + INTERVAL 180 DAY
+TTL toDateTime(timestamp) + INTERVAL 180 DAY
 SETTINGS index_granularity = 4096;
 
 
@@ -119,7 +120,7 @@ CREATE TABLE IF NOT EXISTS blocklist_history (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, block_type, timestamp)
-TTL timestamp + INTERVAL 365 DAY
+TTL toDateTime(timestamp) + INTERVAL 365 DAY
 SETTINGS index_granularity = 4096;
 
 
@@ -144,7 +145,7 @@ CREATE TABLE IF NOT EXISTS http_transactions (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, timestamp, sensor_id)
-TTL timestamp + INTERVAL 30 DAY
+TTL toDateTime(timestamp) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
 -- =============================================================================
@@ -173,7 +174,7 @@ CREATE TABLE IF NOT EXISTS sensor_logs (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, timestamp, sensor_id, source)
-TTL timestamp + INTERVAL 30 DAY
+TTL toDateTime(timestamp) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
 
@@ -312,7 +313,7 @@ ORDER BY (sensor_id, day, rule_category)
 AS SELECT
     sensor_id,
     toDate(timestamp) AS day,
-    rule_category,
+    assumeNotNull(rule_category) AS rule_category,
     count() AS hit_count
 FROM actor_events
 WHERE rule_category IS NOT NULL
@@ -348,7 +349,7 @@ ENGINE = SummingMergeTree()
 ORDER BY (day, country)
 AS SELECT
     toDate(timestamp) AS day,
-    country,
+    assumeNotNull(country) AS country,
     count() AS block_count
 FROM blocks
 WHERE country IS NOT NULL
@@ -375,7 +376,7 @@ ENGINE = SummingMergeTree()
 ORDER BY (day, fingerprint)
 AS SELECT
     toDate(timestamp) AS day,
-    fingerprint,
+    assumeNotNull(fingerprint) AS fingerprint,
     uniqExact(actor_id) AS actor_count,
     uniqExact(sensor_id) AS sensor_count
 FROM actor_events

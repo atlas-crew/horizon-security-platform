@@ -207,6 +207,10 @@ function parseTelemetryPayload(
   log: Logger,
   requestId: string | null = null
 ): ParsedTelemetry {
+  // ClickHouse DateTime64(3) parses reliably with `YYYY-MM-DD HH:MM:SS.mmm` (UTC).
+  const formatClickhouseTimestamp = (timestampMs: number) =>
+    new Date(timestampMs).toISOString().replace('T', ' ').replace('Z', '');
+
   const entries = extractTelemetryEntries(payload);
   const rows: HttpTransactionRow[] = [];
   const logRows: LogEntryRow[] = [];
@@ -243,7 +247,7 @@ function parseTelemetryPayload(
       const instanceId = defaultSensorId;
 
       rows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)
@@ -276,7 +280,7 @@ function parseTelemetryPayload(
       const severity = severityRaw.toUpperCase();
 
       signalRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId,
@@ -313,7 +317,7 @@ function parseTelemetryPayload(
       const instanceId = defaultSensorId;
 
       signalRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId,
@@ -355,7 +359,7 @@ function parseTelemetryPayload(
       const success = Boolean(data.success);
 
       logRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId,
@@ -401,7 +405,7 @@ function parseTelemetryPayload(
       );
 
       logRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId,
@@ -446,7 +450,7 @@ function parseTelemetryPayload(
       );
 
       logRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId,
@@ -501,7 +505,7 @@ function parseTelemetryPayload(
       );
 
       logRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)
@@ -553,7 +557,7 @@ function parseTelemetryPayload(
 
       // 2. ClickHouse persistence
       signalRows.push({
-        timestamp: new Date(timestampMs).toISOString(),
+        timestamp: formatClickhouseTimestamp(timestampMs),
         tenant_id: tenantId,
         sensor_id: instanceId,
         request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)

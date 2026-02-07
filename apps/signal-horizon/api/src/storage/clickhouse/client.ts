@@ -161,7 +161,8 @@ export class ClickHouseService {
         clickhouse_settings: {
           // Async inserts for high throughput
           async_insert: 1,
-          wait_for_async_insert: 0,
+          // In dev/test we want insert errors surfaced immediately (prevents silent drops).
+          wait_for_async_insert: process.env.NODE_ENV === 'production' ? 0 : 1,
           // Query execution limits (prevents runaway queries)
           max_execution_time: this.queryTimeoutSec,
           max_result_rows: String(this.maxRowsLimit), // UInt64 requires string

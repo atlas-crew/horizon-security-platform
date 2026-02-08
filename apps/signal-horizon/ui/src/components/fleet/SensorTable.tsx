@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { SensorSummary } from '../../types/fleet';
 import { SensorStatusBadge } from './SensorStatusBadge';
-import { Settings } from 'lucide-react';
+import { Settings, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 interface SensorTableProps {
   sensors: SensorSummary[];
@@ -41,8 +41,12 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
   }, [sensors, sortField, sortDirection]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <span className="text-ink-muted">⇅</span>;
-    return <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>;
+    if (sortField !== field) return <ChevronsUpDown className="w-3 h-3 text-ink-muted" />;
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-3 h-3 text-ac-blue" />
+    ) : (
+      <ChevronDown className="w-3 h-3 text-ac-blue" />
+    );
   };
 
   const columns = [

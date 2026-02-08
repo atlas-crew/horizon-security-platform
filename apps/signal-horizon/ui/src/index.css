@@ -170,55 +170,55 @@
   .dark {
     color-scheme: dark;
 
-    /* Navy-based dark mode (Signal Horizon Design System)
-       War room aesthetic: Navy dominant, Magenta accents */
-    --surface-base: var(--ac-navy-darker);
-    --surface-subtle: var(--ac-navy-dark);
-    --surface-card: var(--ac-navy-medium);
-    --surface-inset: var(--ac-navy-darkest);
-    --surface-overlay: var(--ac-navy-dark);
-    --surface-hero: var(--ac-navy-dark);
+    /* Charcoal-based dark mode (Tactical Remediation)
+       Shifted from Navy to Charcoal/Zinc for better data contrast */
+    --surface-base: #09090b;   /* Zinc 950 */
+    --surface-subtle: #18181b; /* Zinc 900 */
+    --surface-card: #121212;   /* Deep Charcoal */
+    --surface-inset: #040405;
+    --surface-overlay: #18181b;
+    --surface-hero: var(--ac-navy); /* Keep Navy for brand headers */
 
-    --text-primary: #FFFFFF;
-    --text-secondary: #B0C4DE;
-    --text-muted: #7B8FA8;
+    --text-primary: #f4f4f5;   /* Zinc 100 */
+    --text-secondary: #a1a1aa; /* Zinc 400 */
+    --text-muted: #71717a;     /* Zinc 500 */
     --text-inverse: #001E62;
 
-    --link: #70BAF7;
-    --link-hover: #0057B7;
+    --link: #529EEC;           /* Sky Blue */
+    --link-hover: #7CBAFF;
 
-    --border-subtle: var(--ac-navy-light);
-    --border-strong: var(--ac-navy-lighter);
-    --border-inset: var(--ac-navy-medium);
+    --border-subtle: #27272a;  /* Zinc 800 */
+    --border-strong: #3f3f46;  /* Zinc 700 */
+    --border-inset: #09090b;
 
     --accent: #0057B7;
-    --accent-hover: #70BAF7;
+    --accent-hover: #529EEC;
     --focus-ring: #D62598;
 
-    --shadow-color: rgba(0, 0, 0, 0.5);
-    --shadow-color-strong: rgba(0, 0, 0, 0.7);
+    --shadow-color: rgba(0, 0, 0, 0.6);
+    --shadow-color-strong: rgba(0, 0, 0, 0.8);
 
     /* Chart tooltip tokens - dark mode */
-    --chart-tooltip-bg: #001544;
-    --chart-tooltip-border: rgba(0, 87, 183, 0.4);
-    --chart-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --chart-tooltip-bg: #18181b;
+    --chart-tooltip-border: #3f3f46;
+    --chart-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
     --chart-tooltip-label: #FFFFFF;
-    --chart-tooltip-item: #B0C4DE;
+    --chart-tooltip-item: #a1a1aa;
 
-    /* Depth effects - dark mode */
-    --glow-magenta: rgba(214, 37, 152, 0.5);
-    --glow-blue: rgba(0, 87, 183, 0.5);
-    --card-highlight: rgba(255, 255, 255, 0.08);
-    --card-shadow: rgba(0, 0, 0, 0.5);
-    --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+    /* Depth effects - dark mode desaturated */
+    --glow-magenta: rgba(214, 37, 152, 0.3);
+    --glow-blue: rgba(0, 87, 183, 0.3);
+    --card-highlight: rgba(255, 255, 255, 0.04);
+    --card-shadow: rgba(0, 0, 0, 0.6);
+    --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 
-    /* Gradient surfaces for depth */
-    --gradient-card: linear-gradient(165deg, rgba(26, 58, 126, 0.95) 0%, rgba(10, 42, 110, 0.98) 50%, rgba(0, 30, 98, 1) 100%);
-    --gradient-card-hover: linear-gradient(165deg, rgba(42, 74, 142, 0.95) 0%, rgba(26, 58, 126, 0.98) 50%, rgba(10, 42, 110, 1) 100%);
-    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.08) 0%, transparent 100%);
-    --gradient-inset: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, transparent 30%);
+    /* Gradient surfaces for desaturated depth */
+    --gradient-card: linear-gradient(165deg, #18181b 0%, #121212 100%);
+    --gradient-card-hover: linear-gradient(165deg, #27272a 0%, #18181b 100%);
+    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.05) 0%, transparent 100%);
+    --gradient-inset: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, transparent 30%);
     --gradient-hero: linear-gradient(180deg, #001E62 0%, #001544 100%);
-    --border-glow: 0 0 0 1px rgba(0, 87, 183, 0.3);
+    --border-glow: 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
   body {

@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Activity, Shield, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
@@ -35,15 +34,15 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
 
   return (
     <section 
-      className="bg-[#0A1A3A] border border-[#001E62]/60 flex flex-col h-full font-mono"
+      className="bg-surface-card border border-border-subtle flex flex-col h-full font-mono"
       aria-labelledby="feed-heading"
     >
-      <div className="px-4 py-3 border-b border-[#001E62]/60 flex items-center justify-between">
-        <h2 id="feed-heading" className="text-xs font-bold tracking-[0.2em] text-[#529EEC] uppercase flex items-center gap-2">
-          <span className="w-2 h-2 bg-[#529EEC] status-blink" />
+      <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+        <h2 id="feed-heading" className="text-xs font-bold tracking-[0.2em] text-ac-blue dark:text-ac-sky-blue uppercase flex items-center gap-2">
+          <span className="w-2 h-2 bg-ac-blue dark:bg-ac-sky-blue status-blink" />
           Threat Trajectory
         </h2>
-        <span className="text-[10px] text-white/40 uppercase tracking-tighter">Diagnostic Feed</span>
+        <span className="text-[10px] text-ink-muted uppercase tracking-tighter">Diagnostic Feed</span>
       </div>
 
       <div 
@@ -52,7 +51,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
         aria-live="polite"
       >
         {mergedFeed.length === 0 ? (
-          <div className="py-12 text-center text-white/30 text-xs">
+          <div className="py-12 text-center text-ink-muted text-xs">
             Awaiting signal correlation...
           </div>
         ) : (
@@ -61,7 +60,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
               {/* Timeline Dot */}
               <div 
                 className={clsx(
-                  'absolute -left-[7px] top-0 w-3 h-3 border-2 border-[#0A1A3A]',
+                  'absolute -left-[7px] top-0 w-3 h-3 border-2 border-surface-card',
                   item.type === 'alert' ? (
                     item.data.severity === 'CRITICAL' ? 'bg-ac-magenta' : 
                     item.data.severity === 'HIGH' ? 'bg-ac-orange' : 'bg-ac-blue'
@@ -71,7 +70,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
               />
 
               <div className="flex justify-between items-start mb-1.5">
-                <span className="text-[10px] text-white/40">
+                <span className="text-[10px] text-ink-secondary font-medium">
                   <ItemTime timestamp={item.timestamp} />
                 </span>
                 <span 
@@ -79,8 +78,8 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
                     'text-[9px] px-1.5 py-0.5 border font-bold uppercase tracking-tighter',
                     item.type === 'alert' ? (
                       item.data.severity === 'CRITICAL' ? 'text-ac-magenta border-ac-magenta/30 bg-ac-magenta/10' : 
-                      'text-[#529EEC] border-[#529EEC]/30 bg-[#529EEC]/10'
-                    ) : 'text-ac-blue-tint border-ac-blue-tint/30 bg-ac-blue-tint/10'
+                      'text-ac-sky-blue border-ac-sky-blue/30 bg-ac-sky-blue/10'
+                    ) : 'text-ac-blue-light border-ac-blue-light/30 bg-ac-blue-light/10'
                   )}
                   aria-label={`Type: ${item.type === 'alert' ? item.data.type : 'threat'}`}
                 >
@@ -89,21 +88,21 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-sm text-white/90 font-medium leading-tight">
+                <p className="text-sm text-ink-primary font-medium leading-tight">
                   {item.type === 'alert' ? item.data.title : item.data.threatType}
                 </p>
-                <p className="text-xs text-white/50 leading-relaxed truncate">
+                <p className="text-xs text-ink-primary leading-relaxed truncate font-medium">
                   {item.type === 'alert' ? item.data.description : `Indicator: ${item.data.indicator}`}
                 </p>
               </div>
 
               {item.type === 'threat' && (
                 <div className="mt-2 flex items-center gap-3">
-                  <div className="text-[9px] text-white/40 uppercase">
-                    Risk: <span className="text-white font-bold">{item.data.riskScore}%</span>
+                  <div className="text-[9px] text-ink-secondary font-bold uppercase">
+                    Risk: <span className="text-ink-primary font-bold">{item.data.riskScore}%</span>
                   </div>
-                  <div className="text-[9px] text-white/40 uppercase">
-                    Hits: <span className="text-white font-bold">{item.data.hitCount}</span>
+                  <div className="text-[9px] text-ink-secondary font-bold uppercase">
+                    Hits: <span className="text-ink-primary font-bold">{item.data.hitCount}</span>
                   </div>
                 </div>
               )}
@@ -112,8 +111,8 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
         )}
       </div>
 
-      <div className="px-4 py-2 bg-[#001E62]/20 border-t border-[#001E62]/40">
-        <button className="w-full py-2 text-[9px] font-bold text-[#529EEC] uppercase tracking-[0.2em] hover:text-white transition-colors">
+      <div className="px-4 py-2 bg-surface-subtle/50 border-t border-border-subtle">
+        <button className="w-full py-2 text-[9px] font-bold text-ac-blue dark:text-ac-sky-blue uppercase tracking-[0.2em] hover:text-ink-primary transition-colors">
           Access Full Terminal Feed &gt;
         </button>
       </div>

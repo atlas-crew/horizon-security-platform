@@ -33,6 +33,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { DemoModeControls } from './components/beam/DemoModeControls';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
+import { CommandPalette } from './components/ui/CommandPalette';
+import { ShortcutHelpModal } from './components/ui/ShortcutHelpModal';
 import OverviewPage from './pages/OverviewPage';
 import LiveMapPage from './pages/soc/LiveMapPage';
 import CampaignsPage from './pages/soc/CampaignsPage';
@@ -115,6 +117,8 @@ function App() {
   const threats = useHorizonStore((s) => s.threats);
   const alerts = useHorizonStore((s) => s.alerts);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme());
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('signal-horizon-sidebar-collapsed') === 'true';
@@ -155,10 +159,22 @@ function App() {
         e.preventDefault();
         toggleSidebar();
       }
-      // Ctrl+K / Cmd+K: focus search (placeholder for CommandPalette)
+      // Ctrl+K / Cmd+K: toggle CommandPalette
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        // CommandPalette not implemented yet - no-op
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+      // ? : show shortcuts help
+      if (
+        e.key === '?' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement) &&
+        !(e.target instanceof HTMLSelectElement)
+      ) {
+        setIsShortcutHelpOpen(true);
       }
       // / : focus search (like GitHub) - only if not in an input
       if (
@@ -170,7 +186,8 @@ function App() {
         !(e.target instanceof HTMLTextAreaElement) &&
         !(e.target instanceof HTMLSelectElement)
       ) {
-        // CommandPalette not implemented yet - no-op
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
       }
     };
     document.addEventListener('keydown', handler);
@@ -182,7 +199,20 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        theme={theme}
+        setTheme={setTheme}
+        toggleSidebar={toggleSidebar}
+      />
+      <ShortcutHelpModal
+        isOpen={isShortcutHelpOpen}
+        onClose={() => setIsShortcutHelpOpen(false)}
+      />
       {/* Skip to main content — WCAG 2.4.1 */}
+
+
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-ac-blue focus:text-white focus:outline-none"
@@ -195,9 +225,17 @@ function App() {
       <header className="h-14 border-b border-ac-navy-light bg-ac-navy relative z-10 surface-hero-gradient edge-highlight">
         <div className="h-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <span className="tracking-[0.2em] text-xs text-white/60">Atlas Crew</span>
-            </div>
+            <button
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 hover:bg-white/20 transition-colors text-white hover:text-white"
+              title="Open Command Palette (Ctrl+K)"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="text-[10px] uppercase tracking-widest font-bold">Search</span>
+              <kbd className="ml-2 px-1.5 py-0.5 bg-white/10 border border-white/20 text-[9px] font-sans text-white/90">
+                {navigator.platform?.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+              </kbd>
+            </button>
             {/* Status Indicators - Tactical Display */}
             <div className="hidden lg:flex items-center gap-6">
               <div className="flex items-center gap-2">

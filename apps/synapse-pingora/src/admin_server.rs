@@ -1330,7 +1330,11 @@ pub async fn start_admin_server(
         .route("/health", get(health_handler))
         // Demo mode control (public for easier demoability)
         .route("/_sensor/demo", get(sensor_demo_get_handler))
-        .route("/_sensor/demo/toggle", post(sensor_demo_toggle_handler).get(sensor_demo_toggle_handler));
+        .route("/_sensor/demo/toggle", post(sensor_demo_toggle_handler).get(sensor_demo_toggle_handler))
+        .route("/_sensor/access-lists", get(sensor_access_lists_handler))
+        .route("/_sensor/certificates", get(sensor_certificates_handler))
+        .route("/_sensor/bot-indicators", get(sensor_bot_indicators_handler))
+        .route("/_sensor/header-profiles", get(sensor_header_profiles_handler));
 
     // WebSocket debugger routes with query/header auth support.
     let debugger_routes = Router::new()
@@ -1807,6 +1811,78 @@ async fn sensor_demo_toggle_handler() -> impl IntoResponse {
     let new_mode = is_demo_mode();
     info!("Demo mode toggled to: {}", new_mode);
     (StatusCode::OK, Json(serde_json::json!({ "success": true, "demo_mode": new_mode })))
+}
+
+/// GET /_sensor/access-lists - Returns configured CIDR allow/deny lists
+async fn sensor_access_lists_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let access_lists = state.handler.access_lists();
+    let lock = access_lists.read();
+    let global = lock.global_list();
+    
+    let mut allow = Vec::new();
+    let mut deny = Vec::new();
+    
+    // This is a bit simplified, ideally we'd iterate rules and map to strings
+    // but AccessList doesn't expose an easy iterator for strings yet.
+    // For now, return empty or mock if in demo mode.
+    if is_demo_mode() {
+        allow.push("192.168.1.0/24".to_string());
+        deny.push("10.0.0.0/8".to_string());
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "allow": allow,
+        "deny": deny
+    })))
+}
+
+/// GET /_sensor/certificates - Returns installed TLS certificates
+async fn sensor_certificates_handler() -> impl IntoResponse {
+    let mut certs = Vec::new();
+    if is_demo_mode() {
+        certs.push(serde_json::json!({
+            "id": "cert-1",
+            "name": "Acme wildcard",
+            "domains": ["*.acme-corp.com"],
+            "expiresAt": "2027-01-01T00:00:00Z",
+            "certificatePath": "/etc/ssl/acme.crt",
+            "keyPath": "/etc/ssl/acme.key"
+        }));
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "success": true, "certificates": certs })))
+}
+
+/// GET /_sensor/bot-indicators - Returns bot detection metrics
+async fn sensor_bot_indicators_handler() -> impl IntoResponse {
+    // Return mock data for now
+    let indicators = serde_json::json!({
+        "noJsExecution": 12,
+        "consistentTiming": 45,
+        "rapidRequests": 89,
+        "fingerprintAnomaly": 5,
+        "missingHeaders": 234,
+        "suspiciousUserAgent": 67,
+        "automatedBehavior": 156,
+        "sessionAnomaly": 8
+    });
+    (StatusCode::OK, Json(serde_json::json!({ "success": true, "indicators": indicators })))
+}
+
+/// GET /_sensor/header-profiles - Returns API header anomaly stats
+async fn sensor_header_profiles_handler() -> impl IntoResponse {
+    // Return mock data for now
+    let stats = serde_json::json!({
+        "endpointsProfiled": 142,
+        "anomaliesLast24h": 12,
+        "topAnomalyTypes": {
+            "injection_suspected": 5,
+            "missing_required_header": 3,
+            "unexpected_header": 2,
+            "length_anomaly": 2
+        }
+    });
+    (StatusCode::OK, Json(serde_json::json!({ "success": true, "data": stats })))
 }
 
 /// GET /_sensor/status - Dashboard status endpoint

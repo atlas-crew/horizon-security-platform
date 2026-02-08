@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { Breadcrumb } from '../../components/ui/Breadcrumb';
+import { CopyButton } from '../../components/ui/CopyButton';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchActorDetail, fetchActorTimeline } from '../../hooks/soc/api';
@@ -124,7 +125,10 @@ export default function ActorDetailPage() {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/actors" className="text-sm text-link hover:text-link-hover">Back to Actors</Link>
-          <h1 className="text-3xl font-light text-ink-primary mt-2">{actor.actorId}</h1>
+          <div className="flex items-center gap-3 mt-2">
+            <h1 className="text-3xl font-light text-ink-primary">{actor.actorId}</h1>
+            <CopyButton value={actor.actorId} />
+          </div>
           <p className="text-ink-secondary mt-1">First seen {new Date(actor.firstSeen).toLocaleString()}</p>
         </div>
         <div className="flex items-center gap-2">

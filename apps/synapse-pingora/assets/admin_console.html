@@ -4592,9 +4592,13 @@ Authorization: Bearer token123"></textarea>
 
     // Access tab
     async function loadAccessList() {
-      const site = document.getElementById('accessSiteSelect').value;
-      const allowList = document.getElementById('allowList');
-      const denyList = document.getElementById('denyList');
+      const siteSelect = document.getElementById('accessSiteSelect');
+      if (!siteSelect) return;
+      const site = siteSelect.value;
+      const allowList = document.getElementById('allowCidrList');
+      const denyList = document.getElementById('denyCidrList');
+
+      if (!allowList || !denyList) return;
 
       allowList.innerHTML = '<div class="empty-state"><div class="empty-state-text">No allow rules configured</div></div>';
       denyList.innerHTML = '<div class="empty-state"><div class="empty-state-text">No deny rules configured</div></div>';

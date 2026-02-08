@@ -438,7 +438,7 @@ function AttackMap({
 
   return (
     <div
-      className="relative h-72 overflow-hidden border border-border-subtle bg-surface-inset"
+      className="relative h-72 overflow-hidden border border-border-subtle bg-[#050505]"
       role="img"
       aria-label="Stylized world map with live attack activity"
     >
@@ -446,11 +446,11 @@ function AttackMap({
         className="absolute inset-0"
         style={{
           backgroundImage: [
-            'radial-gradient(circle at 18% 30%, rgba(0, 87, 183, 0.16), transparent 45%)',
-            'radial-gradient(circle at 72% 42%, rgba(227, 82, 5, 0.16), transparent 45%)',
-            'radial-gradient(circle at 55% 75%, rgba(0, 177, 64, 0.12), transparent 38%)',
-            'linear-gradient(180deg, rgba(0, 30, 98, 0.04), rgba(0, 30, 98, 0))',
-            'radial-gradient(circle at 1px 1px, rgba(0, 87, 183, 0.22) 1px, transparent 0)',
+            'radial-gradient(circle at 18% 30%, rgba(0, 87, 183, 0.08), transparent 45%)',
+            'radial-gradient(circle at 72% 42%, rgba(227, 82, 5, 0.08), transparent 45%)',
+            'radial-gradient(circle at 55% 75%, rgba(0, 177, 64, 0.05), transparent 38%)',
+            'linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0))',
+            'radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0)',
           ].join(','),
           backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 18px 18px',
           backgroundPosition: 'center, center, center, center, 0 0',
@@ -461,20 +461,18 @@ function AttackMap({
         className="absolute inset-0 h-full w-full"
         viewBox={`0 0 ${mapWidth} ${mapHeight}`}
         preserveAspectRatio="xMidYMid meet"
-        style={{ color: 'var(--ac-blue)' }}
       >
-        <g opacity="0.35" fill="currentColor">
+        <g opacity="0.25" fill="#3f3f46">
           <path d={landPath} />
         </g>
 
-        <g opacity="0.18" fill="none" stroke="currentColor" strokeWidth="0.6">
+        <g opacity="0.15" fill="none" stroke="#52525b" strokeWidth="0.5">
           <path d="M 0 200 Q 250 120 500 200 T 1000 200" />
           <path d="M 0 320 Q 250 250 500 320 T 1000 320" />
           <path d="M 180 0 Q 220 120 180 260 T 180 520" />
           <path d="M 500 0 Q 540 120 500 260 T 500 520" />
           <path d="M 820 0 Q 860 120 820 260 T 820 520" />
         </g>
-
       </svg>
 
       <svg
@@ -595,18 +593,41 @@ function StatCard({
   tone: string;
   description?: string;
 }) {
+  const isCritical = tone.includes('red') || (typeof value === 'number' && value > 0 && label.includes('Active Campaigns'));
+  const isWarning = tone.includes('orange');
+
   return (
     <article
-      className="card p-4 flex items-center justify-between"
+      className={clsx(
+        'card p-4 flex items-center justify-between transition-all duration-300',
+        isCritical && 'border-ac-red/50 shadow-[0_0_15px_rgba(239,51,64,0.15)] dark:bg-ac-red/5',
+        isWarning && 'border-ac-orange/50 shadow-[0_0_15px_rgba(227,82,5,0.1)]'
+      )}
       aria-label={`${label}: ${value.toLocaleString()}`}
       tabIndex={0}
     >
       <div>
-        <div className="text-xs tracking-[0.18em] uppercase text-ink-muted" title={description}>{label}</div>
-        <div className="text-2xl font-light text-ink-primary">{value}</div>
-        {sublabel && <div className="text-xs text-ink-muted mt-1">{sublabel}</div>}
+        <div className="text-[10px] font-bold tracking-[0.18em] uppercase text-ink-muted" title={description}>{label}</div>
+        <div className={clsx('text-2xl font-light mt-0.5', isCritical ? 'text-ac-red' : isWarning ? 'text-ac-orange' : 'text-ink-primary')}>
+          {value}
+        </div>
+        {sublabel && (
+          <div className={clsx(
+            "text-[10px] mt-1 uppercase tracking-wider font-medium",
+            sublabel.toLowerCase().includes('offline') ? 'text-ac-orange' :
+            sublabel.toLowerCase().includes('critical') ? 'text-ac-red' :
+            'text-ink-secondary'
+          )}>
+            {sublabel}
+          </div>
+        )}
       </div>
-      <div className={clsx('w-10 h-10 border border-border-subtle flex items-center justify-center', tone)}>
+      <div className={clsx(
+        'w-10 h-10 border flex items-center justify-center transition-colors',
+        isCritical ? 'border-ac-red/30 bg-ac-red/10 text-ac-red' :
+        isWarning ? 'border-ac-orange/30 bg-ac-orange/10 text-ac-orange' :
+        'border-border-subtle bg-surface-subtle text-ink-muted'
+      )}>
         <Icon className="w-5 h-5" />
       </div>
     </article>

@@ -6,10 +6,13 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useContextualCommands } from '../hooks/useContextualCommands';
+import { useToast } from '../components/ui/Toast';
 import {
   Users,
   Clock,
   Send,
+  UserPlus,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
@@ -65,6 +68,24 @@ export default function WarRoomPage() {
   const { id } = useParams();
   const [message, setMessage] = useState('');
   const [activePlaybook, setActivePlaybook] = useState<Playbook | null>(null);
+  const { toast } = useToast();
+
+  useContextualCommands([
+    {
+      id: 'warroom-invite',
+      label: 'Invite Participant',
+      icon: UserPlus,
+      metadata: 'Add a team member to this War Room',
+      onSelect: () => toast.success('Invitation link copied to clipboard'),
+    },
+    {
+      id: 'warroom-playbook',
+      label: 'Execute Emergency Playbook',
+      icon: Shield,
+      metadata: 'Trigger rapid response workflow',
+      onSelect: () => toast.info('Selecting emergency playbook...'),
+    }
+  ]);
 
   const handlePlaybookComplete = () => {
     // In a real app, this would add an activity log

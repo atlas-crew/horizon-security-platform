@@ -96,7 +96,7 @@ use synapse_pingora::signals::auth_coverage::ResponseClass;
 use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::trap::{TrapConfig, TrapMatcher};
-use synapse_pingora::block_log::{BlockLog, BlockEvent};
+use synapse_pingora::block_log::{BlockLog, BlockEvent, IpAnonymization};
 use synapse_pingora::correlation::CampaignManager;
 use synapse_pingora::shadow::{ShadowMirrorManager, MirrorPayload};
 
@@ -4748,8 +4748,14 @@ fn main() {
         }
     }
 
-    // Create shared BlockLog for both admin API and proxy
-    let shared_block_log = Arc::new(BlockLog::default());
+    // Create shared BlockLog for both admin API and proxy.
+    // Optional privacy control for dashboard visibility:
+    // - SYNAPSE_BLOCK_LOG_IP_ANON=none|truncate|hmac
+    // - SYNAPSE_BLOCK_LOG_IP_SALT=... (required for hmac)
+    let shared_block_log = Arc::new(BlockLog::new_with_ip_anonymization(
+        1000,
+        IpAnonymization::from_env(),
+    ));
 
     // Restore campaigns from snapshot if available
     if let Some(ref snapshot) = loaded_snapshot {

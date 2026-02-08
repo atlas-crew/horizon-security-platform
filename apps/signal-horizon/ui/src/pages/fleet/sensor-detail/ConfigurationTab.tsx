@@ -33,7 +33,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
   const isTunnelActive = Boolean(sensor?.tunnelActive);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { toast, Toasts } = useToast();
+  const { toast } = useToast();
   const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
 
   const {
@@ -214,7 +214,6 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
 
   return (
     <div className="space-y-6">
-      {Toasts}
       {/* Config Tabs — ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
         <div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">

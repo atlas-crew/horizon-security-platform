@@ -31,6 +31,7 @@ import signalHorizonLogoLight from './assets/brand/signal-logo-light.svg';
 import signalHorizonLogoDark from './assets/brand/signal-logo-dark.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
+import { ToastProvider } from './components/ui/Toast';
 import { DemoModeControls } from './components/beam/DemoModeControls';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import { CommandPalette } from './components/ui/CommandPalette';
@@ -198,6 +199,7 @@ function App() {
   const ThemeIcon = themeIcon;
 
   return (
+    <ToastProvider>
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
       <CommandPalette
         isOpen={isCommandPaletteOpen}
@@ -583,6 +585,7 @@ function App() {
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }
 

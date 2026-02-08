@@ -19,10 +19,12 @@ interface CommandState {
 
 export const useCommandStore = create<CommandState>((set) => ({
   contextualCommands: [],
-  registerCommands: (commands) => 
-    set((state) => ({
-      contextualCommands: [...state.contextualCommands, ...commands]
-    })),
+  registerCommands: (commands) =>
+    set((state) => {
+      const map = new Map(state.contextualCommands.map(c => [c.id, c]));
+      commands.forEach(c => map.set(c.id, c));
+      return { contextualCommands: [...map.values()] };
+    }),
   unregisterCommands: (ids) =>
     set((state) => ({
       contextualCommands: state.contextualCommands.filter((c) => !ids.includes(c.id))

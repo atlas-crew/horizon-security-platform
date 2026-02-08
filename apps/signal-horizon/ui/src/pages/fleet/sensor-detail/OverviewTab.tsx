@@ -23,7 +23,7 @@ interface OverviewTabProps {
 
 export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }: OverviewTabProps) {
   const meta = sensor.metadata || {};
-  const { toast, Toasts } = useToast();
+  const { toast } = useToast();
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     description: string;
@@ -80,7 +80,6 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
 
   return (
     <div className="space-y-6">
-      {Toasts}
       <ConfirmDialog
         open={confirmAction !== null}
         title={confirmAction?.title ?? ''}

@@ -93,7 +93,7 @@ const AdminSettingsPage: React.FC = () => {
   } = useConnectivity();
 
   // Toast & ConfirmDialog state
-  const { toast, Toasts } = useToast();
+  const { toast } = useToast();
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -1537,7 +1537,6 @@ const AdminSettingsPage: React.FC = () => {
           onCancel={closeConfirm}
         />
       )}
-      {Toasts}
     </div>
   );
 };

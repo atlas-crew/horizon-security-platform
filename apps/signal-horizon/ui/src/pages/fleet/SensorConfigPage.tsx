@@ -99,7 +99,7 @@ export function SensorConfigPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { toast, Toasts } = useToast();
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('guided');
   const [configJson, setConfigJson] = useState('');
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfigData>(defaultAdvancedConfig);
@@ -210,7 +210,6 @@ export function SensorConfigPage() {
 
   return (
     <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">
-      {Toasts}
       {/* Header */}
       <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-card">
         <div>

@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useContext, createContext } from 'react';
 import { createPortal } from 'react-dom';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type ToastVariant = 'success' | 'error' | 'info';
+export type ToastVariant = 'success' | 'error' | 'info';
 
-interface ToastEntry {
+export interface ToastEntry {
   id: number;
   message: string;
   variant: ToastVariant;
@@ -93,49 +93,24 @@ function ToastContainer({ toasts, dismiss }: { toasts: ToastEntry[]; dismiss: (i
   );
 }
 
-// ─── CSS (injected once) ─────────────────────────────────────────────────────
+// ─── Context ─────────────────────────────────────────────────────────────────
 
-let styleInjected = false;
-
-function injectToastStyles() {
-  if (styleInjected || typeof document === 'undefined') return;
-  styleInjected = true;
-
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes toast-slide-in {
-      from { opacity: 0; transform: translateX(100%); }
-      to   { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes toast-slide-out {
-      from { opacity: 1; transform: translateX(0); }
-      to   { opacity: 0; transform: translateX(100%); }
-    }
-    .toast-enter {
-      animation: toast-slide-in 200ms ease-out forwards;
-    }
-    .toast-exit {
-      animation: toast-slide-out 200ms ease-in forwards;
-    }
-  `;
-  document.head.appendChild(style);
+interface ToastMethods {
+  success: (message: string) => void;
+  error: (message: string) => void;
+  info: (message: string) => void;
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
+const ToastContext = createContext<{ toast: ToastMethods } | null>(null);
 
-export function useToast() {
+// ─── Provider ────────────────────────────────────────────────────────────────
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const nextId = useRef(0);
 
-  // Inject the CSS keyframe styles once on first mount
-  useEffect(() => {
-    injectToastStyles();
-  }, []);
-
   const dismiss = useCallback((id: number) => {
-    // Start the exit animation
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
-    // Remove after animation completes
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, EXIT_ANIMATION_MS);
@@ -146,7 +121,6 @@ export function useToast() {
       const id = nextId.current++;
       setToasts((prev) => [...prev, { id, message, variant, exiting: false }]);
 
-      // Auto-dismiss
       setTimeout(() => {
         dismiss(id);
       }, AUTO_DISMISS_MS);
@@ -163,7 +137,22 @@ export function useToast() {
     [show],
   );
 
-  const container = <ToastContainer toasts={toasts} dismiss={dismiss} />;
+  const value = useMemo(() => ({ toast }), [toast]);
 
-  return { toast, Toasts: container };
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
+    </ToastContext.Provider>
+  );
+}
+
+// ─── Hook ────────────────────────────────────────────────────────────────────
+
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  if (!ctx) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return ctx;
 }

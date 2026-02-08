@@ -93,7 +93,7 @@ export function CommandPalette({
   const [searchResults, setSearchResults] = useState<CommandItem[]>([]);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const navigate = useNavigate();
-  const { toast, Toasts } = useToast();
+  const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
@@ -262,8 +262,8 @@ export function CommandPalette({
           icon: config.icon,
           metadata: `Execute ${verb} operation on ${object}`,
           onSelect: () => {
+            if (!window.confirm(`Confirm: ${verb} ${object}?`)) return;
             toast.success(`Executing: ${verb} ${object}`);
-            // In a real app, call API here
           }
         }];
       }
@@ -647,7 +647,6 @@ export function CommandPalette({
           </div>
         )}
       </AnimatePresence>
-      {Toasts}
     </>
   );
 }

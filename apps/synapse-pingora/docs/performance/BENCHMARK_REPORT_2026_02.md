@@ -939,9 +939,9 @@ The `campaign_manager` shows an unusual pattern: 2-thread performance (24.6 ms) 
 
 ## Appendix: Historical Reports
 
-- [January 2026 -- Bimodal Performance Discovery](./BENCHMARK_REPORT_2026_01.md)
-- [Goblins DLP Report](./GOBLINS_REPORT.md)
+- [January 2026 -- Bimodal Performance Discovery](../archive/performance/BENCHMARK_REPORT_2026_01.md)
+- [Goblins DLP Report](../archive/performance/GOBLINS_REPORT.md)
 - [Benchmark Methodology](./BENCHMARK_METHODOLOGY.md)
-- [Benchmark Cost Breakdown](./BENCHMARK_COST_BREAKDOWN.md)
-- [Optimization Plan (Bulk)](./OPTIMIZATION_PLAN_BULK.md)
+- [Benchmark Cost Breakdown](../archive/performance/BENCHMARK_COST_BREAKDOWN.md)
+- [Optimization Plan (Bulk)](../archive/performance/OPTIMIZATION_PLAN_BULK.md)
 - [Reproducing Benchmarks](./REPRODUCING_BENCHMARKS.md)

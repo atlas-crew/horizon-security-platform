@@ -212,7 +212,7 @@ Benchmarks include correctness gates to ensure measured code paths are exercisin
 
 ## Historical Reports
 
-*   [January 2026 - Bimodal Performance Discovery](./BENCHMARK_REPORT_2026_01.md)
+*   [January 2026 - Bimodal Performance Discovery](../archive/performance/BENCHMARK_REPORT_2026_01.md)
 *   [February 2026 - Comprehensive Suite Report](./BENCHMARK_REPORT_2026_02.md)
 
 ## Adding New Benchmarks

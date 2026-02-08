@@ -83,6 +83,8 @@ pub struct TokenBucket {
     last_refill: AtomicU64,
     /// Start time for timestamp calculation
     start_time: Instant,
+    /// Last access time (nanos since start) for LRU eviction (SP-001)
+    last_access: AtomicU64,
 }
 
 impl TokenBucket {
@@ -95,6 +97,7 @@ impl TokenBucket {
             refill_rate: rps as u64,
             last_refill: AtomicU64::new(0),
             start_time: Instant::now(),
+            last_access: AtomicU64::new(0),
         }
     }
 
@@ -102,6 +105,10 @@ impl TokenBucket {
     ///
     /// Uses atomic CAS loop with proper memory ordering to prevent race conditions.
     pub fn try_acquire(&self) -> bool {
+        // Update last access time for LRU eviction (SP-001)
+        let now_nanos = self.start_time.elapsed().as_nanos() as u64;
+        self.last_access.store(now_nanos, Ordering::Relaxed);
+
         // First refill based on elapsed time
         self.refill();
 
@@ -227,6 +234,11 @@ impl TokenBucket {
         self.refill();
         self.tokens.load(Ordering::Acquire)
     }
+
+    /// Returns the last access time in nanoseconds since bucket creation.
+    pub fn last_access_nanos(&self) -> u64 {
+        self.last_access.load(Ordering::Relaxed)
+    }
 }
 
 /// Per-key rate limiter (e.g., by IP address).
@@ -279,12 +291,18 @@ impl KeyedRateLimiter {
         {
             let mut buckets = self.buckets.write();
 
-            // Evict old entries if over limit
+            // SP-001: LRU eviction — remove least-recently-accessed entries when at capacity.
+            // Previous approach used arbitrary HashMap iteration order; now we sort by
+            // last_access timestamp and evict the stalest 10%.
             if buckets.len() >= self.max_keys {
-                warn!("Rate limiter at capacity, evicting old entries");
-                // Simple eviction: remove first 10% of entries
-                let to_remove: Vec<_> = buckets.keys().take(self.max_keys / 10).cloned().collect();
-                for k in to_remove {
+                warn!("Rate limiter at capacity ({}), evicting stale entries", buckets.len());
+                let evict_count = self.max_keys / 10;
+                let mut entries: Vec<_> = buckets
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.last_access.load(Ordering::Relaxed)))
+                    .collect();
+                entries.sort_unstable_by_key(|&(_, ts)| ts);
+                for (k, _) in entries.into_iter().take(evict_count) {
                     buckets.remove(&k);
                 }
             }

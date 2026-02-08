@@ -201,7 +201,9 @@ app.use(cors({
 }));
 // Parse cookies before auth middleware so req.cookies is available (labs-n6nf)
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
+// SH-004: Reduced from 10mb — most API payloads are well under 1MB.
+// File upload routes use multipart (not JSON) and have their own limits.
+app.use(express.json({ limit: '2mb' }));
 // JSON depth limiting to prevent stack overflow attacks (WS4-003)
 app.use(jsonDepthLimit(20));
 app.use(pinoHttp({

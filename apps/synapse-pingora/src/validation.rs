@@ -528,8 +528,13 @@ fn is_private_or_internal_ip(ip: &std::net::IpAddr) -> bool {
             if ipv4.is_unspecified() {
                 return true;
             }
-            // Documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)
             let octets = ipv4.octets();
+            // SP-003: Shared Address Space (100.64.0.0/10, RFC 6598)
+            // Used by carrier-grade NAT; not classified as "private" by std
+            if octets[0] == 100 && (octets[1] & 0xC0) == 64 {
+                return true;
+            }
+            // Documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)
             if (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
                 || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
                 || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
@@ -946,6 +951,19 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
         assert!(validate_upstream("169.254.169.254:80").is_err());
         // Other link-local
         assert!(validate_upstream("169.254.0.1:80").is_err());
+    }
+
+    /// SECURITY TEST (SP-003): Verify RFC 6598 shared address space is blocked.
+    #[test]
+    fn test_ssrf_rfc6598_shared_address_blocked() {
+        // 100.64.0.0/10 — carrier-grade NAT shared address space
+        assert!(validate_upstream("100.64.0.1:80").is_err());
+        assert!(validate_upstream("100.127.255.255:443").is_err());
+        assert!(validate_upstream("100.100.100.100:8080").is_err());
+        // Just outside the range — 100.128.0.0 should be allowed
+        assert!(validate_upstream("100.128.0.1:80").is_ok());
+        // Just below the range — 100.63.255.255 should be allowed
+        assert!(validate_upstream("100.63.255.255:80").is_ok());
     }
 
     /// SECURITY TEST: Verify public IPs are allowed.

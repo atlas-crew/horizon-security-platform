@@ -102,10 +102,14 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const relativePath = id.replace(/:/g, path.sep) + '.md';
-    const fullPath = path.join(SITE_ROOT, relativePath);
 
-    // Security check: ensure the path is within SITE_ROOT
-    if (!fullPath.startsWith(SITE_ROOT)) {
+    // SH-001: Use path.resolve() for canonicalization to prevent path traversal
+    // path.join resolves '..' internally but startsWith on non-canonical paths
+    // can have edge cases. path.resolve + separator suffix ensures safety.
+    const resolvedRoot = path.resolve(SITE_ROOT);
+    const resolvedPath = path.resolve(SITE_ROOT, relativePath);
+
+    if (!resolvedPath.startsWith(resolvedRoot + path.sep)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }

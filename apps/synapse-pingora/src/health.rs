@@ -3,7 +3,7 @@
 //! Provides service status reporting compatible with the `/_sensor/status` nginx pattern.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -48,8 +48,8 @@ pub struct BackendStats {
     pub failed_responses: u64,
     /// Average response time in microseconds
     pub avg_response_time_us: u64,
-    /// Recent response times for calculating rolling average
-    recent_times: Vec<u64>,
+    /// Recent response times for calculating rolling average (SP-002: VecDeque for O(1) front removal)
+    recent_times: VecDeque<u64>,
     /// Whether backend is currently healthy
     pub healthy: bool,
 }
@@ -61,7 +61,7 @@ impl Default for BackendStats {
             successful_responses: 0,
             failed_responses: 0,
             avg_response_time_us: 0,
-            recent_times: Vec::with_capacity(MAX_RESPONSE_HISTORY),
+            recent_times: VecDeque::with_capacity(MAX_RESPONSE_HISTORY),
             healthy: true,
         }
     }
@@ -78,11 +78,11 @@ impl BackendStats {
             self.failed_responses += 1;
         }
 
-        // Update rolling average
+        // Update rolling average (SP-002: O(1) pop_front instead of O(n) remove(0))
         if self.recent_times.len() >= MAX_RESPONSE_HISTORY {
-            self.recent_times.remove(0);
+            self.recent_times.pop_front();
         }
-        self.recent_times.push(response_time_us);
+        self.recent_times.push_back(response_time_us);
 
         // Calculate average
         if !self.recent_times.is_empty() {

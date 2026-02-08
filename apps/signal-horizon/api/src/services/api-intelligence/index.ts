@@ -622,7 +622,12 @@ export class APIIntelligenceService extends EventEmitter {
   }
 
   /**
-   * Get top violating endpoints
+   * Get top violating endpoints.
+   *
+   * SECURITY INVARIANT (SH-002): Uses Prisma.sql tagged template literals for
+   * parameterized queries. All interpolated values (tenantId, since) are bound
+   * as parameters, NOT concatenated into the SQL string. Do NOT replace
+   * Prisma.sql with raw string interpolation or template literals.
    */
   private async getTopViolatingEndpoints(
     tenantId: string,
@@ -697,7 +702,10 @@ export class APIIntelligenceService extends EventEmitter {
   }
 
   /**
-   * Get violation trends by day
+   * Get violation trends by day.
+   *
+   * SECURITY INVARIANT (SH-002): Uses Prisma.sql tagged template literals for
+   * parameterized queries. See getTopViolatingEndpoints for details.
    */
   async getViolationTrends(tenantId: string, days: number): Promise<ViolationTrend[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

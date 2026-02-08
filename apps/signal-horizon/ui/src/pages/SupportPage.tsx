@@ -580,26 +580,26 @@ Track these metrics:
   // DOMPurify prevents XSS attacks from malicious markdown content
   const sanitizedHtml = useMemo(() => {
     const rawHtml = marked.parse(content) as string;
+    // SH-003: Explicit allowlists for defense-in-depth XSS prevention.
+    // FORBID_TAGS ensures script/iframe are blocked even if DOMPurify defaults change.
     return DOMPurify.sanitize(rawHtml, {
-      // Allow mermaid diagram divs
-      ADD_TAGS: ['div', 'svg', 'path', 'rect', 'polyline'],
-      ADD_ATTR: [
-        'class',
-        'data-code',
-        'aria-label',
-        'viewBox',
-        'fill',
-        'stroke',
-        'stroke-width',
-        'd',
-        'points',
-        'x',
-        'y',
-        'width',
-        'height',
-        'rx',
+      ALLOWED_TAGS: [
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'p', 'a', 'code', 'pre', 'ul', 'ol', 'li',
+        'table', 'tr', 'td', 'th', 'thead', 'tbody',
+        'strong', 'em', 'b', 'i', 'blockquote', 'img', 'br', 'hr',
+        'div', 'span',
+        // Mermaid SVG elements
+        'svg', 'g', 'path', 'rect', 'text', 'line', 'circle', 'polyline',
       ],
-      // Allow safe URI schemes for links
+      ALLOWED_ATTR: [
+        'href', 'src', 'alt', 'title',
+        'class', 'id', 'data-code', 'aria-label',
+        // SVG attributes for mermaid diagrams
+        'viewBox', 'fill', 'stroke', 'stroke-width',
+        'd', 'points', 'x', 'y', 'width', 'height', 'rx',
+      ],
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select'],
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
     });
   }, [content]);

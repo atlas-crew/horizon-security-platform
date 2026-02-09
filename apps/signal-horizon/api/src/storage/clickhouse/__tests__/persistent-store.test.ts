@@ -105,6 +105,45 @@ describe('FileRetryStore', () => {
     await expect(fs.stat(filePath)).rejects.toBeDefined();
   });
 
+  it('save() handles large item arrays', async () => {
+    tmpDir = await mkTmpDir();
+    const filePath = path.join(tmpDir, 'items.json');
+
+    const largeData = Array.from({ length: 2000 }).map((_, i) => ({
+      timestamp: new Date().toISOString(),
+      tenant_id: 't1',
+      sensor_id: 's1',
+      request_id: 'r1',
+      signal_type: 'TEST',
+      source_ip: `1.2.3.${i % 255}`,
+      fingerprint: `fp-${i}`,
+      anon_fingerprint: 'anon'.padEnd(64, '0'),
+      severity: 'HIGH',
+      confidence: 1,
+      event_count: 1,
+      metadata: '{}',
+    }));
+
+    const items: BufferedItem[] = [
+      {
+        type: 'signal',
+        data: largeData as any,
+        attempts: 1,
+        nextRetryAt: 0,
+        addedAt: 0,
+      },
+    ];
+
+    const store = new FileRetryStore(filePath, createMockLogger());
+    await store.save(items);
+
+    const raw = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as BufferedItem[];
+    expect(parsed[0]?.type).toBe('signal');
+    expect(Array.isArray((parsed[0] as any).data)).toBe(true);
+    expect(((parsed[0] as any).data as any[]).length).toBe(2000);
+  });
+
   it('load() deletes file after successful read', async () => {
     tmpDir = await mkTmpDir();
     const filePath = path.join(tmpDir, 'items.json');

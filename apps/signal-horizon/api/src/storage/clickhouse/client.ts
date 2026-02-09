@@ -607,6 +607,9 @@ export class ClickHouseService {
     if (!this.client) {
       throw new Error('ClickHouse client is not available (closed)');
     }
+    if (!Number.isFinite(batchSize) || !Number.isInteger(batchSize) || batchSize <= 0) {
+      throw new Error('batchSize must be a positive integer');
+    }
 
     return this.withQueryTelemetry(
       'queryStream',

@@ -97,6 +97,27 @@ describe('ClickHouseService constructor', () => {
     expect(args.request_timeout).toBe(35000);
   });
 
+  it('passes compression settings to createClient when enabled', () => {
+    (createClient as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    new ClickHouseService(
+      {
+        host: 'localhost',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: true,
+        maxOpenConnections: 1,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    const args = (createClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as any;
+    expect(args.compression).toEqual({ request: true, response: true });
+  });
+
   it('clamps maxInFlightStreamQueries to [1, maxInFlightQueries]', () => {
     const svcLow = new ClickHouseService(
       {

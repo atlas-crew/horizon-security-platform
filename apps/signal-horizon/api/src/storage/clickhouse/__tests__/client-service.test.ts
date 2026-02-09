@@ -110,7 +110,7 @@ describe('ClickHouseService (direct)', () => {
     (svc as any).client = fakeClient;
 
     const sql1 = `SELECT 1 AS ok; /* x' OR 1=1 */`;
-    const sql2 = `SELECT * FROM users WHERE name = 'x' OR 1=1;`;
+    const sql2 = `SELECT 1; DROP TABLE users; --`;
 
     const rows1 = await svc.query<{ ok: number }>(sql1);
     const rows2 = await svc.query<{ ok: number }>(sql2);
@@ -269,6 +269,27 @@ describe('ClickHouseService (direct)', () => {
     await expect(svc.queryOneWithParams<{ ok: boolean }>('SELECT 1', {})).resolves.toEqual({
       ok: true,
     });
+  });
+
+  it('queryOne/queryOneWithParams throw when disabled', async () => {
+    const svc = createService(false);
+    await expect(svc.queryOne('SELECT 1')).rejects.toThrow(/not enabled/i);
+    await expect(svc.queryOneWithParams('SELECT 1', {})).rejects.toThrow(/not enabled/i);
+  });
+
+  it('queryOne/queryOneWithParams throw when client is closed', async () => {
+    const svc = createService(false);
+    (svc as any).enabled = true;
+
+    const fakeClient = {
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    (svc as any).client = fakeClient;
+
+    await svc.close();
+
+    await expect(svc.queryOne('SELECT 1')).rejects.toThrow(/not available|closed/i);
+    await expect(svc.queryOneWithParams('SELECT 1', {})).rejects.toThrow(/not available|closed/i);
   });
 
   it('insertSignalEvents()/insertHttpTransactions()/insertLogEntries increment success/failure metrics', async () => {
@@ -496,6 +517,46 @@ describe('ClickHouseService (direct)', () => {
     );
   });
 
+  it('queryStream() throws if batchSize is <= 0', async () => {
+    const svc = createService(false);
+    (svc as any).enabled = true;
+    (svc as any).client = { query: vi.fn() };
+
+    await expect(svc.queryStream('SELECT 1', 0, async () => {})).rejects.toThrow(/batchSize/i);
+    await expect(svc.queryStream('SELECT 1', -1, async () => {})).rejects.toThrow(/batchSize/i);
+  });
+
+  it('queryStream() rejects NaN/Infinity/fractional batchSize', async () => {
+    const svc = createService(false);
+    (svc as any).enabled = true;
+    (svc as any).client = { query: vi.fn() };
+
+    await expect(svc.queryStream('SELECT 1', Number.NaN, async () => {})).rejects.toThrow(/batchSize/i);
+    await expect(svc.queryStream('SELECT 1', Number.POSITIVE_INFINITY, async () => {})).rejects.toThrow(
+      /batchSize/i
+    );
+    await expect(svc.queryStream('SELECT 1', 1.5, async () => {})).rejects.toThrow(/batchSize/i);
+  });
+
+  it('insert methods no-op when enabled but client is null (post-close race)', async () => {
+    const successIncSpy = vi.spyOn(metrics.clickhouseInsertSuccess, 'inc');
+    const failIncSpy = vi.spyOn(metrics.clickhouseInsertFailed, 'inc');
+
+    const svc = createService(false);
+    (svc as any).enabled = true;
+    (svc as any).client = null;
+
+    await expect(svc.insertSignalEvents([createSignal()])).resolves.toBeUndefined();
+    await expect(svc.insertCampaignEvent({} as any)).resolves.toBeUndefined();
+    await expect(svc.insertBlocklistEvent({} as any)).resolves.toBeUndefined();
+    await expect(svc.insertBlocklistEvents([{} as any])).resolves.toBeUndefined();
+    await expect(svc.insertHttpTransactions([createTxn()])).resolves.toBeUndefined();
+    await expect(svc.insertLogEntries([createLog()])).resolves.toBeUndefined();
+
+    expect(successIncSpy).not.toHaveBeenCalled();
+    expect(failIncSpy).not.toHaveBeenCalled();
+  });
+
   it('queryStream() passes per-query clickhouse_settings to the underlying client', async () => {
     const svc = createService(false);
     (svc as any).enabled = true;
@@ -575,6 +636,20 @@ describe('ClickHouseService (direct)', () => {
 
     await expect(svc.ping()).resolves.toBe(false);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('close() is safe to call multiple times', async () => {
+    const svc = createService(false);
+    (svc as any).enabled = true;
+
+    const fakeClient = {
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    (svc as any).client = fakeClient;
+
+    await expect(svc.close()).resolves.toBeUndefined();
+    await expect(svc.close()).resolves.toBeUndefined();
+    expect(fakeClient.close).toHaveBeenCalledTimes(1);
   });
 
   it('query() errors are descriptive after close()', async () => {

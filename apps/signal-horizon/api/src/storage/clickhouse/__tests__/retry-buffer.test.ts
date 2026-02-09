@@ -235,6 +235,29 @@ describe('ClickHouseRetryBuffer', () => {
       expect(buffer.getStats().bufferedCount).toBe(1);
     });
 
+    it('buffers campaign events when write fails with a non-Error rejection', async () => {
+      (clickhouse.insertCampaignEvent as ReturnType<typeof vi.fn>).mockRejectedValueOnce('boom');
+
+      const event: CampaignHistoryRow = {
+        timestamp: new Date().toISOString(),
+        campaign_id: 'campaign-1',
+        tenant_id: 'test-tenant',
+        request_id: 'r1',
+        event_type: 'created',
+        name: 'Test Campaign',
+        status: 'active',
+        severity: 'HIGH',
+        is_cross_tenant: 0,
+        tenants_affected: 1,
+        confidence: 0.9,
+        metadata: '{}',
+      };
+
+      const result = await buffer.insertCampaignEvent(event);
+      expect(result).toBe(false);
+      expect(buffer.getStats().bufferedCount).toBe(1);
+    });
+
     it('buffers blocklist events when write fails', async () => {
       (clickhouse.insertBlocklistEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('Timeout')
@@ -598,6 +621,20 @@ describe('ClickHouseRetryBuffer', () => {
 
       expect(result.succeeded).toBe(0);
       expect(result.failed).toBe(0);
+    });
+
+    it('flush() on empty buffer does not poison future buffering (labs-mmft)', async () => {
+      (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('fail')
+      );
+
+      // Empty flush should not leave the buffer in a "flushing" state.
+      await expect(buffer.flush()).resolves.toEqual({ succeeded: 0, failed: 0 });
+
+      const ok = await buffer.insertSignalEvents([createTestSignal()]);
+      expect(ok).toBe(false);
+      expect(buffer.getStats().bufferedCount).toBe(1);
+      expect(buffer.getStats().droppedItems).toBe(0);
     });
   });
 

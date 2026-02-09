@@ -85,13 +85,28 @@ export class ClickHouseRetryBuffer {
   private config: RetryBufferConfig;
   private persistentStore: IRetryPersistentStore | null = null;
 
+  // Concurrency model:
+  // - `runExclusive()` is a lightweight async mutex for buffer-draining operations (retry/stop/flush).
+  // - `isProcessing` is a fast-reject gate so interval ticks don't queue up behind the mutex.
+  // - `isFlushing` routes new failed writes to DLQ during shutdown flush (timer is stopped).
+
+  /**
+   * Serializes buffer-draining operations (processRetries/stop/flush) to prevent
+   * double-processing and shutdown races.
+   */
+  private opTail: Promise<void> = Promise.resolve();
+
   /** 
    * Internal buffer of items awaiting retry.
    * Uses discriminated union to maintain type safety across different event types.
    */
   private buffer: BufferedItem[] = [];
   private retryTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Fast-reject gate for interval re-entry + observable state via getStats().
+  // `runExclusive()` is the mutex for buffer-draining operations.
   private isProcessing = false;
+  private isFlushing = false;
 
   // Statistics
   private totalAttempts = 0;
@@ -111,46 +126,72 @@ export class ClickHouseRetryBuffer {
     this.persistentStore = persistentStore;
   }
 
+  private async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.opTail;
+    let release: (() => void) | undefined;
+    this.opTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release?.();
+    }
+  }
+
   /**
    * Start the background retry processor
    */
   async start(): Promise<void> {
-    if (this.retryTimer) return;
+    await this.runExclusive(async () => {
+      if (this.retryTimer) return;
 
-    // Load from persistent store if available (labs-mmft.8)
-    if (this.persistentStore) {
-      try {
-        const loadedItems = await this.persistentStore.load();
-        if (loadedItems.length > 0) {
-          this.logger.info({ count: loadedItems.length }, 'Loaded telemetry items from persistent store');
-          this.buffer = [...loadedItems, ...this.buffer].slice(0, this.config.maxBufferSize);
+      // Load from persistent store if available (labs-mmft.8)
+      if (this.persistentStore) {
+        try {
+          const loadedItems = await this.persistentStore.load();
+          if (loadedItems.length > 0) {
+            this.logger.info(
+              { count: loadedItems.length },
+              'Loaded telemetry items from persistent store'
+            );
+            this.buffer = [...loadedItems, ...this.buffer].slice(0, this.config.maxBufferSize);
+          }
+        } catch (error) {
+          this.logger.error({ error }, 'Failed to load telemetry items from persistent store');
         }
-      } catch (error) {
-        this.logger.error({ error }, 'Failed to load telemetry items from persistent store');
       }
-    }
 
-    this.retryTimer = setInterval(() => {
-      void this.processRetries();
-    }, this.config.retryIntervalMs);
+      this.retryTimer = setInterval(() => {
+        void this.processRetries();
+      }, this.config.retryIntervalMs);
 
-    this.logger.info(
-      { config: this.config, persistent: !!this.persistentStore },
-      'ClickHouse retry buffer started'
-    );
+      this.logger.info(
+        { config: this.config, persistent: !!this.persistentStore },
+        'ClickHouse retry buffer started'
+      );
+    });
   }
 
   /**
    * Stop the background retry processor
    */
   async stop(): Promise<void> {
+    await this.runExclusive(async () => {
+      await this.stopUnlocked(true);
+    });
+  }
+
+  private async stopUnlocked(persist: boolean): Promise<void> {
     if (this.retryTimer) {
       clearInterval(this.retryTimer);
       this.retryTimer = null;
     }
 
     // Save to persistent store if available (labs-mmft.8)
-    if (this.persistentStore && this.buffer.length > 0) {
+    if (persist && this.persistentStore && this.buffer.length > 0) {
       try {
         await this.persistentStore.save(this.buffer);
         this.logger.info({ count: this.buffer.length }, 'Saved telemetry items to persistent store');
@@ -260,6 +301,22 @@ export class ClickHouseRetryBuffer {
   private bufferForRetry(item: Pick<BufferedItem, 'type' | 'data'>): void {
     const now = Date.now();
 
+    if (this.isFlushing) {
+      // Flush is a shutdown-only path. Buffering during flush would leave items stranded
+      // (background timer is stopped). DLQ it instead to avoid silent loss.
+      this.droppedItems++;
+      this.logToDeadLetterQueue(
+        {
+          ...item,
+          attempts: 1,
+          nextRetryAt: now,
+          addedAt: now,
+        } as BufferedItem,
+        'flush_in_progress'
+      );
+      return;
+    }
+
     // Check buffer capacity
     if (this.buffer.length >= this.config.maxBufferSize) {
       // Evict oldest item
@@ -303,76 +360,82 @@ export class ClickHouseRetryBuffer {
   private async processRetries(): Promise<void> {
     if (this.isProcessing || this.buffer.length === 0) return;
 
+    // Note: this is intentionally set before acquiring `runExclusive()` so interval ticks
+    // don't pile up if a shutdown flush is holding the mutex.
     this.isProcessing = true;
     const now = Date.now();
 
     try {
-      // Find items ready for retry (sorted by next retry time)
-      const readyItems = this.buffer
-        .filter(item => item.nextRetryAt <= now)
-        .slice(0, this.config.retryBatchSize);
+      await this.runExclusive(async () => {
+        // Find items ready for retry (sorted by next retry time)
+        const readyItems = this.buffer
+          .filter(item => item.nextRetryAt <= now)
+          .slice(0, this.config.retryBatchSize);
 
-      if (readyItems.length === 0) return;
+        if (readyItems.length === 0) return;
 
-      this.logger.debug(
-        { count: readyItems.length, bufferSize: this.buffer.length },
-        'Processing retry batch'
-      );
+        this.logger.debug(
+          { count: readyItems.length, bufferSize: this.buffer.length },
+          'Processing retry batch'
+        );
 
-      for (let i = 0; i < readyItems.length; i++) {
-        const item = readyItems[i];
-        this.totalAttempts++;
+        for (let i = 0; i < readyItems.length; i++) {
+          const item = readyItems[i];
+          this.totalAttempts++;
 
-        let timerId: NodeJS.Timeout | undefined;
-        try {
-          // Add timeout to individual retry to prevent stalling the background process
-          const retryTimeoutMs = 10000; // 10s timeout
-          const timeoutPromise = new Promise((_, reject) => {
-            timerId = setTimeout(() => reject(new Error(`Retry timed out after ${retryTimeoutMs}ms`)), retryTimeoutMs);
-          });
+          let timerId: NodeJS.Timeout | undefined;
+          try {
+            // Add timeout to individual retry to prevent stalling the background process
+            const retryTimeoutMs = 10000; // 10s timeout
+            const timeoutPromise = new Promise((_, reject) => {
+              timerId = setTimeout(
+                () => reject(new Error(`Retry timed out after ${retryTimeoutMs}ms`)),
+                retryTimeoutMs
+              );
+            });
 
-          await Promise.race([
-            this.retryItem(item),
-            timeoutPromise
-          ]);
+            await Promise.race([
+              this.retryItem(item),
+              timeoutPromise
+            ]);
 
-          // Remove immediately to free buffer capacity during long batches
-          const bufferIndex = this.buffer.indexOf(item);
-          if (bufferIndex !== -1) {
-            this.buffer.splice(bufferIndex, 1);
-          }
-          this.successfulRetries++;
-        } catch (error) {
-          item.attempts++;
-          this.failedRetries++;
-
-          if (item.attempts >= this.config.maxRetries) {
-            // Max retries exceeded - remove immediately
+            // Remove immediately to free buffer capacity during long batches
             const bufferIndex = this.buffer.indexOf(item);
             if (bufferIndex !== -1) {
               this.buffer.splice(bufferIndex, 1);
             }
-            this.droppedItems++;
-            this.logToDeadLetterQueue(item, 'max_retries_exceeded', error);
-          } else {
-            // Schedule next retry with exponential backoff
-            const delay = Math.min(
-              this.config.initialDelayMs * Math.pow(2, item.attempts - 1),
-              this.config.maxDelayMs
-            );
-            item.nextRetryAt = now + delay;
-            this.logger.debug(
-              { type: item.type, attempts: item.attempts, nextDelayMs: delay, error },
-              'Scheduled retry with backoff'
-            );
-          }
-        } finally {
-          if (timerId) {
-            clearTimeout(timerId);
+            this.successfulRetries++;
+          } catch (error) {
+            item.attempts++;
+            this.failedRetries++;
+
+            if (item.attempts >= this.config.maxRetries) {
+              // Max retries exceeded - remove immediately
+              const bufferIndex = this.buffer.indexOf(item);
+              if (bufferIndex !== -1) {
+                this.buffer.splice(bufferIndex, 1);
+              }
+              this.droppedItems++;
+              this.logToDeadLetterQueue(item, 'max_retries_exceeded', error);
+            } else {
+              // Schedule next retry with exponential backoff
+              const delay = Math.min(
+                this.config.initialDelayMs * Math.pow(2, item.attempts - 1),
+                this.config.maxDelayMs
+              );
+              item.nextRetryAt = now + delay;
+              this.logger.debug(
+                { type: item.type, attempts: item.attempts, nextDelayMs: delay, error },
+                'Scheduled retry with backoff'
+              );
+            }
+          } finally {
+            if (timerId) {
+              clearTimeout(timerId);
+            }
           }
         }
-      }
-
+      });
     } finally {
       this.isProcessing = false;
     }
@@ -448,47 +511,83 @@ export class ClickHouseRetryBuffer {
    * Accepts an optional timeout to prevent hanging during shutdown.
    */
   async flush(timeoutMs = 5000): Promise<{ succeeded: number; failed: number }> {
-    await this.stop(); // Stop background processing
-
     let succeeded = 0;
     let failed = 0;
-
-    const items = [...this.buffer];
-    if (items.length === 0) {
-      return { succeeded, failed };
-    }
-
-    const flushWork = async () => {
-      for (const item of items) {
-        try {
-          await this.retryItem(item);
-          succeeded++;
-        } catch {
-          failed++;
-        }
-      }
-    };
+    let completed = 0;
 
     try {
-      await Promise.race([
-        flushWork(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Flush timed out after ${timeoutMs}ms`)), timeoutMs)
-        ),
-      ]);
-    } catch (error) {
-      const remaining = items.length - succeeded - failed;
-      failed += remaining;
-      this.logger.warn(
-        { error: error instanceof Error ? error.message : error, succeeded, failed, remaining },
-        'Retry buffer flush timed out, some items were not flushed'
-      );
+      const itemsToFlush = await this.runExclusive(async () => {
+        this.isFlushing = true;
+        // Stop background processing, but do not persist: flush() is attempting delivery.
+        await this.stopUnlocked(false);
+        const items = [...this.buffer];
+        this.buffer = [];
+        return items;
+      });
+
+      if (itemsToFlush.length === 0) {
+        this.logger.info({ succeeded, failed }, 'Flushed retry buffer');
+        return { succeeded, failed };
+      }
+
+      let timedOut = false;
+      let timeoutId: NodeJS.Timeout | undefined;
+
+      const flushWork = async () => {
+        for (const item of itemsToFlush) {
+          if (timedOut) return;
+          try {
+            await this.retryItem(item);
+            if (!timedOut) {
+              succeeded++;
+            }
+          } catch {
+            if (!timedOut) {
+              failed++;
+            }
+          } finally {
+            if (!timedOut) {
+              completed++;
+            }
+          }
+        }
+      };
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`Flush timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+
+      try {
+        await Promise.race([flushWork(), timeoutPromise]);
+      } catch (error) {
+        // Items not reached by the loop are effectively dropped; DLQ them so loss is observable.
+        const cutoff = completed;
+        const unprocessed = itemsToFlush.slice(cutoff);
+        for (const item of unprocessed) {
+          this.droppedItems++;
+          this.logToDeadLetterQueue(item, 'flush_timeout');
+        }
+
+        const remaining = itemsToFlush.length - succeeded - failed;
+        failed += Math.max(0, remaining);
+        this.logger.warn(
+          { error: error instanceof Error ? error.message : error, succeeded, failed, remaining },
+          'Retry buffer flush timed out, some items were not flushed'
+        );
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      this.logger.info({ succeeded, failed }, 'Flushed retry buffer');
+      return { succeeded, failed };
+    } finally {
+      this.isFlushing = false;
     }
-
-    this.buffer = [];
-    this.logger.info({ succeeded, failed }, 'Flushed retry buffer');
-
-    return { succeeded, failed };
   }
 
   /**

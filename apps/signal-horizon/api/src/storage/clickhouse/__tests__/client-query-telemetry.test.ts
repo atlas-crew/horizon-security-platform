@@ -391,4 +391,50 @@ describe('ClickHouseService query telemetry/backpressure', () => {
     expect(total).toBe(5);
     expect(batches).toEqual([2, 2, 1]);
   });
+
+  it('accumulates batches across multiple stream chunks', async () => {
+    const svc = createTestService({ maxInFlightQueries: 1, maxInFlightStreamQueries: 1 });
+    (svc as any).queryLimiter = new AsyncSemaphore(1);
+    (svc as any).streamLimiter = new AsyncSemaphore(1);
+
+    const fakeClient = {
+      query: vi.fn().mockResolvedValue({
+        stream: async function* () {
+          yield [{ json: () => ({ n: 1 }) }, { json: () => ({ n: 2 }) }];
+          yield [{ json: () => ({ n: 3 }) }];
+          yield [{ json: () => ({ n: 4 }) }, { json: () => ({ n: 5 }) }];
+        },
+      }),
+    };
+    (svc as any).client = fakeClient;
+
+    const batches: number[] = [];
+    const total = await svc.queryStream('SELECT 1', 2, async (rows) => {
+      batches.push(rows.length);
+    });
+
+    expect(total).toBe(5);
+    expect(batches).toEqual([2, 2, 1]);
+  });
+
+  it('returns 0 and does not call onBatch when stream yields no rows', async () => {
+    const svc = createTestService({ maxInFlightQueries: 1, maxInFlightStreamQueries: 1 });
+    (svc as any).queryLimiter = new AsyncSemaphore(1);
+    (svc as any).streamLimiter = new AsyncSemaphore(1);
+
+    const fakeClient = {
+      query: vi.fn().mockResolvedValue({
+        stream: async function* () {
+          // no yields
+        },
+      }),
+    };
+    (svc as any).client = fakeClient;
+
+    const onBatch = vi.fn(async () => {});
+    const total = await svc.queryStream('SELECT 1', 2, onBatch);
+
+    expect(total).toBe(0);
+    expect(onBatch).not.toHaveBeenCalled();
+  });
 });

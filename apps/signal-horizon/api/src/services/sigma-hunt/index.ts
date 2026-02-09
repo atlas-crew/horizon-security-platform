@@ -169,7 +169,9 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
   if (whereClause.length > 20_000) throw new Error('Sigma WHERE clause too large');
 
   // Reject obvious injection vectors outside string literals.
-  const stripped = stripSingleQuotedLiterals(whereClause).toLowerCase();
+  // Normalize whitespace so tabs/newlines can't bypass fragment checks.
+  const stripped = stripSingleQuotedLiterals(whereClause).replace(/\s+/g, ' ').toLowerCase();
+
   const forbiddenFragments = [
     ';',
     '--',
@@ -189,10 +191,30 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
     ' system ',
     ' union ',
   ];
+
+  // ClickHouse table functions / external data sources (SSRF/exfiltration risk).
+  // Use regex so whitespace like `remote (` can't bypass checks.
+  const forbiddenCalls = [
+    'remote',
+    'url',
+    'file',
+    's3',
+    'hdfs',
+    'jdbc',
+    'mysql',
+    'postgresql',
+    'input',
+    'odbc',
+  ];
+
   for (const frag of forbiddenFragments) {
     if (stripped.includes(frag)) {
       throw new Error(`Sigma WHERE clause contains forbidden fragment: ${frag.trim()}`);
     }
+  }
+  for (const call of forbiddenCalls) {
+    const re = new RegExp(`\\b${call}\\s*\\(`, 'i');
+    if (re.test(stripped)) throw new Error(`Sigma WHERE clause contains forbidden fragment: ${call}(`);
   }
 
   // Basic sanity: must reference only known table columns and safe functions.
@@ -501,4 +523,3 @@ export class SigmaHuntService {
     return false;
   }
 }
-

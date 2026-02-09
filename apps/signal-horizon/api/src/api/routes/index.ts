@@ -191,13 +191,15 @@ export function createApiRouter(
     intelService: options.intelService,
   }));
 
+  // Mount sigma hunt routes if SigmaHuntService is provided (independent of HuntService).
+  if (options.sigmaHuntService) {
+    router.use('/hunt/sigma', createHuntSigmaRoutes(prisma, logger, options.sigmaHuntService));
+    logger.info('Sigma hunt routes mounted at /api/v1/hunt/sigma');
+  }
+
   // Mount hunt routes if HuntService is provided
   if (options.huntService) {
     router.use('/hunt', createHuntRoutes(prisma, logger, options.huntService));
-    if (options.sigmaHuntService) {
-      router.use('/hunt/sigma', createHuntSigmaRoutes(prisma, logger, options.sigmaHuntService));
-      logger.info('Sigma hunt routes mounted at /api/v1/hunt/sigma');
-    }
     logger.info('Hunt routes mounted at /api/v1/hunt');
   }
 

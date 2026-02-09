@@ -69,6 +69,31 @@ describe('extractAndValidateSigmaWhereClause', () => {
   it('rejects templates not matching expected shape', () => {
     expect(() => extractAndValidateSigmaWhereClause('SELECT 1')).toThrow();
   });
+
+  it('rejects semicolons', () => {
+    const sql = `SELECT * FROM signal_events WHERE 1=1; ORDER BY timestamp DESC LIMIT 1000`;
+    expect(() => extractAndValidateSigmaWhereClause(sql)).toThrow(/forbidden fragment/i);
+  });
+
+  it('rejects UNION even with tab/newline separators', () => {
+    const sql = `SELECT * FROM signal_events WHERE 1=1\tUNION\nSELECT 1 ORDER BY timestamp DESC LIMIT 1000`;
+    expect(() => extractAndValidateSigmaWhereClause(sql)).toThrow(/forbidden fragment/i);
+  });
+
+  it('rejects ClickHouse external table functions', () => {
+    const sql = `SELECT * FROM signal_events WHERE remote('host', 'db', 't') = 1 ORDER BY timestamp DESC LIMIT 1000`;
+    expect(() => extractAndValidateSigmaWhereClause(sql)).toThrow(/remote\(/i);
+  });
+
+  it('rejects ClickHouse external table functions with whitespace before paren', () => {
+    const sql = `SELECT * FROM signal_events WHERE remote ('host', 'db', 't') = 1 ORDER BY timestamp DESC LIMIT 1000`;
+    expect(() => extractAndValidateSigmaWhereClause(sql)).toThrow(/remote\(/i);
+  });
+
+  it('rejects backticks', () => {
+    const sql = `SELECT * FROM signal_events WHERE \`x\` = 1 ORDER BY timestamp DESC LIMIT 1000`;
+    expect(() => extractAndValidateSigmaWhereClause(sql)).toThrow(/forbidden character/i);
+  });
 });
 
 describe('SigmaHuntService', () => {
@@ -136,4 +161,3 @@ describe('SigmaHuntService', () => {
     expect(leads[0]?.pivot.requestId).toBe('req_1');
   });
 });
-

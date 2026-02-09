@@ -5,6 +5,8 @@ import type { Logger } from 'pino';
 import request from '../../__tests__/test-request.js';
 import { createHuntSigmaRoutes } from './hunt-sigma.js';
 import type { SigmaHuntService } from '../../services/sigma-hunt/index.js';
+import { SigmaHuntService as RealSigmaHuntService } from '../../services/sigma-hunt/index.js';
+import type { RedisKv } from '../../storage/redis/kv.js';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -25,6 +27,56 @@ const injectAuth = (tenantId: string, scopes: string[]) => {
 describe('Hunt Sigma Routes', () => {
   let app: Express;
   let sigma: SigmaHuntService;
+
+  const createMemoryKv = (): RedisKv => {
+    const kv = new Map<string, string>();
+    const sets = new Map<string, Set<string>>();
+    return {
+      get: async (key) => kv.get(key) ?? null,
+      set: async (key, value) => {
+        kv.set(key, value);
+        return true;
+      },
+      del: async (key) => {
+        const existed = kv.delete(key);
+        sets.delete(key);
+        return existed ? 1 : 0;
+      },
+      incr: async (key) => {
+        const next = (parseInt(kv.get(key) ?? '0', 10) || 0) + 1;
+        kv.set(key, String(next));
+        return next;
+      },
+      incrby: async (key, amount) => {
+        const next = (parseInt(kv.get(key) ?? '0', 10) || 0) + amount;
+        kv.set(key, String(next));
+        return next;
+      },
+      mget: async (keys) => keys.map((k) => kv.get(k) ?? null),
+      sadd: async (key, ...members) => {
+        const set = sets.get(key) ?? new Set<string>();
+        let added = 0;
+        for (const m of members) {
+          if (!set.has(m)) {
+            set.add(m);
+            added += 1;
+          }
+        }
+        sets.set(key, set);
+        return added;
+      },
+      srem: async (key, ...members) => {
+        const set = sets.get(key);
+        if (!set) return 0;
+        let removed = 0;
+        for (const m of members) {
+          if (set.delete(m)) removed += 1;
+        }
+        return removed;
+      },
+      smembers: async (key) => Array.from(sets.get(key) ?? []),
+    };
+  };
 
   beforeEach(() => {
     sigma = {
@@ -74,6 +126,59 @@ describe('Hunt Sigma Routes', () => {
     expect(res.body).toMatchObject({ success: true, data: { id: 'rule-1' } });
   });
 
+  it('POST /api/v1/hunt/sigma/rules requires hunt:write scope', async () => {
+    const scopedApp = express();
+    scopedApp.use(express.json());
+    scopedApp.use(injectAuth('tenant-1', ['hunt:read']));
+    scopedApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, sigma));
+
+    await request(scopedApp)
+      .post('/api/v1/hunt/sigma/rules')
+      .send({ name: 'curl', sqlTemplate: 'SELECT * FROM signal_events WHERE 1=1 ORDER BY timestamp DESC LIMIT 1000' })
+      .expect(403);
+  });
+
+  it('POST /api/v1/hunt/sigma/rules rejects malicious sqlTemplate', async () => {
+    const kv = createMemoryKv();
+    const real = new RealSigmaHuntService(kv, mockLogger as any, null);
+
+    const realApp = express();
+    realApp.use(express.json());
+    realApp.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write']));
+    realApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, real as any));
+
+    await request(realApp)
+      .post('/api/v1/hunt/sigma/rules')
+      .send({
+        name: 'evil',
+        sqlTemplate: "SELECT * FROM signal_events WHERE remote('h','d','t') = 1 ORDER BY timestamp DESC LIMIT 1000",
+      })
+      .expect(400);
+  });
+
+  it('POST /api/v1/hunt/sigma/rules returns 500 for unexpected errors', async () => {
+    const boom = {
+      ...sigma,
+      createRule: vi.fn().mockRejectedValue(new Error('Redis is down')),
+    } as unknown as SigmaHuntService;
+
+    const boomApp = express();
+    boomApp.use(express.json());
+    boomApp.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write']));
+    boomApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, boom));
+
+    const res = await request(boomApp)
+      .post('/api/v1/hunt/sigma/rules')
+      .send({
+        name: 'curl',
+        sqlTemplate: 'SELECT * FROM signal_events WHERE 1=1 ORDER BY timestamp DESC LIMIT 1000',
+      })
+      .expect(500);
+
+    expect(res.body).toMatchObject({ error: 'Failed to create sigma rule' });
+    expect(res.body.message).toBeUndefined();
+  });
+
   it('GET /api/v1/hunt/sigma/leads lists leads', async () => {
     await request(app).get('/api/v1/hunt/sigma/leads?limit=50').expect(200);
     expect(vi.mocked(sigma.listLeads)).toHaveBeenCalledWith('tenant-1', 50);
@@ -101,4 +206,3 @@ describe('Hunt Sigma Routes', () => {
     expect(vi.mocked(sigma.ackLead)).toHaveBeenCalledWith('tenant-1', 'lead-1');
   });
 });
-

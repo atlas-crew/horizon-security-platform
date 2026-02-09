@@ -77,16 +77,21 @@ function parseMap(map: Record<string, any>): string {
   const parts = [];
   for (const [field, value] of Object.entries(map)) {
     const col = mapFieldToColumn(field);
-    
+
+    // ClickHouse note:
+    // - `source_ip` is stored as IPv4 type (numeric). For exact matches, we cast the *value* via `toIPv4(...)`
+    //   so ClickHouse can use native IPv4 comparisons (and indexes).
+    // - For wildcard patterns, we must cast the *column* to string via `IPv4NumToString(source_ip)` to apply ILIKE.
+    //   This is slower (can't use an index) but is necessary for pattern matching.
     if (Array.isArray(value)) {
       // field: [val1, val2] -> IN or OR
       if (value.some(v => typeof v === 'string' && v.includes('*'))) {
          // Wildcards present -> OR LIKE
-         const likes = value.map(v => {
+        const likes = value.map((v) => {
           const pattern = escapeSql(String(v)).replace(/\*/g, '%');
           if (col === 'source_ip') return `IPv4NumToString(source_ip) ILIKE '${pattern}'`;
           return `${col} ILIKE '${pattern}'`;
-         });
+        });
          parts.push(`(${likes.join(' OR ')})`);
       } else {
         // Exact match list -> IN

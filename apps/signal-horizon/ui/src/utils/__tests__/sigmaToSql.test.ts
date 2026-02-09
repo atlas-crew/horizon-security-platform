@@ -28,6 +28,44 @@ detection:
     expect(sql).toContain("source_ip = toIPv4('192.168.1.1')");
   });
 
+  it('handles wildcard IP pattern (single)', () => {
+    const sigma = `
+detection:
+  selection:
+    src_ip: '192.168.*'
+  condition: selection
+`;
+    const sql = convertSigmaToSql(sigma);
+    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '192.168.%'");
+  });
+
+  it('handles IP list with IN clause', () => {
+    const sigma = `
+detection:
+  selection:
+    src_ip:
+      - '10.0.0.1'
+      - '10.0.0.2'
+  condition: selection
+`;
+    const sql = convertSigmaToSql(sigma);
+    expect(sql).toContain("source_ip IN (toIPv4('10.0.0.1'), toIPv4('10.0.0.2'))");
+  });
+
+  it('handles wildcard IP list', () => {
+    const sigma = `
+detection:
+  selection:
+    src_ip:
+      - '192.168.*'
+      - '10.*'
+  condition: selection
+`;
+    const sql = convertSigmaToSql(sigma);
+    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '192.168.%'");
+    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '10.%'");
+  });
+
   it('handles multiple values in selection (OR logic)', () => {
     const sigma = `
 detection:

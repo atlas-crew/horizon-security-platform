@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synapse Admin Console</title>
+    <style>
+      :root {
+        --navy: #001e62;
+        --blue: #0057b7;
+        --magenta: #d62598;
+        --ink: #0b1220;
+        --muted: #5b6b86;
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --border: rgba(0, 30, 98, 0.15);
+      }
+      * { box-sizing: border-box; border-radius: 0 !important; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+        color: var(--ink);
+        background: linear-gradient(135deg, rgba(0, 87, 183, 0.08), rgba(214, 37, 152, 0.05)) , var(--bg);
+      }
+      header {
+        padding: 24px;
+        border-bottom: 1px solid var(--border);
+        background: #fff;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--navy);
+      }
+      .sub {
+        margin-top: 8px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      main {
+        padding: 24px;
+        max-width: 980px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      @media (min-width: 860px) {
+        .grid { grid-template-columns: 1fr 1fr; }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        padding: 16px;
+      }
+      .card h2 {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--navy);
+      }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--navy);
+        padding: 10px 12px;
+        font-weight: 700;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      button.primary {
+        border-color: rgba(0, 87, 183, 0.45);
+      }
+      button.danger {
+        border-color: rgba(214, 37, 152, 0.55);
+        color: var(--magenta);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      pre {
+        margin: 12px 0 0 0;
+        padding: 12px;
+        border: 1px solid var(--border);
+        background: #0b1020;
+        color: #e6edf7;
+        overflow: auto;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .hint { color: var(--muted); font-size: 12px; }
+      a { color: var(--blue); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Synapse Admin Console</h1>
+      <div class="sub">Local UI for admin endpoints</div>
+    </header>
+    <main>
+      <div class="grid">
+        <section class="card">
+          <h2>Actions</h2>
+          <div class="row">
+            <button class="primary" data-method="POST" data-path="/reload">Reload</button>
+            <button class="danger" data-method="POST" data-path="/restart">Restart</button>
+            <button data-method="POST" data-path="/test">Test Config</button>
+          </div>
+          <div class="hint" style="margin-top: 10px;">
+            These calls hit the admin server directly. In dev mode, this file is loaded from disk at
+            <code>assets/admin_console.html</code>.
+          </div>
+          <pre id="out-actions">{}</pre>
+        </section>
+
+        <section class="card">
+          <h2>Read</h2>
+          <div class="row">
+            <button data-method="GET" data-path="/health">Health</button>
+            <button data-method="GET" data-path="/stats">Stats</button>
+            <button data-method="GET" data-path="/sites">Sites</button>
+            <button data-method="GET" data-path="/metrics">Metrics</button>
+          </div>
+          <pre id="out-read">{}</pre>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>Console</h2>
+        <div class="hint">
+          Tip: open devtools network tab. Metrics endpoint returns plaintext.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      async function call(path, method) {
+        const res = await fetch(path, { method });
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        const text = await res.text();
+        if (contentType.includes('json')) {
+          try { return JSON.parse(text); } catch { return { raw: text }; }
+        }
+        return { status: res.status, text };
+      }
+
+      function setOut(id, payload) {
+        const el = document.getElementById(id);
+        el.textContent = JSON.stringify(payload, null, 2);
+      }
+
+      document.querySelectorAll('button[data-path]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const path = btn.getAttribute('data-path');
+          const method = btn.getAttribute('data-method') || 'GET';
+          const outId = method === 'GET' ? 'out-read' : 'out-actions';
+          btn.disabled = true;
+          try {
+            setOut(outId, { pending: true, method, path });
+            const data = await call(path, method);
+            setOut(outId, { ok: true, method, path, data });
+          } catch (err) {
+            setOut(outId, { ok: false, method, path, error: String(err) });
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
+

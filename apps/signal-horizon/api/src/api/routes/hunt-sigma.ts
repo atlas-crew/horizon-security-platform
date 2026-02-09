@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { authorize } from '../middleware/auth.js';
-import type { SigmaHuntService } from '../../services/sigma-hunt/index.js';
+import { SigmaValidationError, type SigmaHuntService } from '../../services/sigma-hunt/index.js';
 
 const CreateRuleSchema = z.object({
   name: z.string().min(1).max(120),
@@ -39,16 +39,6 @@ export function createHuntSigmaRoutes(
 ): Router {
   const router = Router();
   const routeLogger = logger.child({ route: 'hunt-sigma' });
-
-  const isLikelyValidationError = (error: unknown): boolean => {
-    if (!(error instanceof Error)) return false;
-    return /^Sigma /.test(error.message)
-      || /forbidden fragment/i.test(error.message)
-      || /forbidden character/i.test(error.message)
-      || /must match: SELECT \*/i.test(error.message)
-      || /name is required/i.test(error.message)
-      || /description too long/i.test(error.message);
-  };
 
   router.get('/rules', authorize(prisma, { scopes: 'hunt:read' }), async (req: Request, res: Response) => {
     try {
@@ -82,10 +72,10 @@ export function createHuntSigmaRoutes(
       res.status(201).json({ success: true, data: rule });
     } catch (error) {
       routeLogger.error({ error }, 'Failed to create sigma rule');
-      if (isLikelyValidationError(error)) {
+      if (error instanceof SigmaValidationError) {
         res.status(400).json({
           error: 'Failed to create sigma rule',
-          message: error instanceof Error ? error.message : 'Invalid sigma rule',
+          message: 'Invalid sigma rule',
         });
         return;
       }

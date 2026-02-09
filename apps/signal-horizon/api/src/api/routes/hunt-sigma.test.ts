@@ -147,13 +147,15 @@ describe('Hunt Sigma Routes', () => {
     realApp.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write']));
     realApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, real as any));
 
-    await request(realApp)
+    const res = await request(realApp)
       .post('/api/v1/hunt/sigma/rules')
       .send({
         name: 'evil',
         sqlTemplate: "SELECT * FROM signal_events WHERE remote('h','d','t') = 1 ORDER BY timestamp DESC LIMIT 1000",
       })
       .expect(400);
+
+    expect(res.body).toMatchObject({ error: 'Failed to create sigma rule', message: 'Invalid sigma rule' });
   });
 
   it('POST /api/v1/hunt/sigma/rules rejects backticks (400)', async () => {
@@ -165,13 +167,15 @@ describe('Hunt Sigma Routes', () => {
     realApp.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write']));
     realApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, real as any));
 
-    await request(realApp)
+    const res = await request(realApp)
       .post('/api/v1/hunt/sigma/rules')
       .send({
         name: 'evil-backtick',
         sqlTemplate: 'SELECT * FROM signal_events WHERE `x` = 1 ORDER BY timestamp DESC LIMIT 1000',
       })
       .expect(400);
+
+    expect(res.body).toMatchObject({ error: 'Failed to create sigma rule', message: 'Invalid sigma rule' });
   });
 
   it('POST /api/v1/hunt/sigma/rules returns 500 for unexpected errors', async () => {

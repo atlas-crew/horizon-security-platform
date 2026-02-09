@@ -15,6 +15,13 @@ import type { RedisKv } from '../../storage/redis/kv.js';
 import { buildRedisKey } from '../../storage/redis/keys.js';
 import { jsonDecode, jsonEncode } from '../../storage/redis/json.js';
 
+export class SigmaValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SigmaValidationError';
+  }
+}
+
 export type SigmaRule = {
   id: string;
   tenantId: string;
@@ -154,19 +161,21 @@ function stripSingleQuotedLiterals(sql: string): string {
 
 export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string {
   const trimmed = stripLeadingComments(sqlTemplate);
-  if (trimmed.length === 0) throw new Error('Sigma SQL template is empty');
-  if (trimmed.length > 50_000) throw new Error('Sigma SQL template too large');
+  if (trimmed.length === 0) throw new SigmaValidationError('Sigma SQL template is empty');
+  if (trimmed.length > 50_000) throw new SigmaValidationError('Sigma SQL template too large');
 
   const match = trimmed.match(
     /^select\s+\*\s+from\s+signal_events\s+where\s+([\s\S]+?)\s+order\s+by\s+timestamp\s+desc\s+limit\s+\d+\s*$/i
   );
   if (!match) {
-    throw new Error('Sigma SQL template must match: SELECT * FROM signal_events WHERE ... ORDER BY timestamp DESC LIMIT N');
+    throw new SigmaValidationError(
+      'Sigma SQL template must match: SELECT * FROM signal_events WHERE ... ORDER BY timestamp DESC LIMIT N'
+    );
   }
 
   const whereClause = (match[1] ?? '').trim();
-  if (!whereClause) throw new Error('Sigma SQL template WHERE clause is empty');
-  if (whereClause.length > 20_000) throw new Error('Sigma WHERE clause too large');
+  if (!whereClause) throw new SigmaValidationError('Sigma SQL template WHERE clause is empty');
+  if (whereClause.length > 20_000) throw new SigmaValidationError('Sigma WHERE clause too large');
 
   // Reject obvious injection vectors outside string literals.
   // Normalize whitespace so tabs/newlines can't bypass fragment checks.
@@ -211,17 +220,17 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
 
   for (const frag of forbiddenFragments) {
     if (stripped.includes(frag)) {
-      throw new Error(`Sigma WHERE clause contains forbidden fragment: ${frag.trim()}`);
+      throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${frag.trim()}`);
     }
   }
   for (const call of forbiddenCalls) {
     const re = new RegExp(`\\b${call}\\s*\\(`, 'i');
-    if (re.test(stripped)) throw new Error(`Sigma WHERE clause contains forbidden fragment: ${call}(`);
+    if (re.test(stripped)) throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${call}(`);
   }
 
   // Basic sanity: must reference only known table columns and safe functions.
   // We keep this loose to avoid breaking legitimate Sigma rules, but disallow backticks.
-  if (stripped.includes('`')) throw new Error('Sigma WHERE clause contains forbidden character: `');
+  if (stripped.includes('`')) throw new SigmaValidationError('Sigma WHERE clause contains forbidden character: `');
 
   return whereClause;
 }
@@ -245,9 +254,11 @@ export class SigmaHuntService {
   ) {}
 
   async createRule(tenantId: string, input: CreateSigmaRuleInput): Promise<SigmaRule> {
-    if (!tenantId) throw new Error('tenantId is required');
-    if (!input.name || input.name.length > 120) throw new Error('name is required (max 120 chars)');
-    if (input.description && input.description.length > 2000) throw new Error('description too long (max 2000 chars)');
+    if (!tenantId) throw new SigmaValidationError('tenantId is required');
+    if (!input.name || input.name.length > 120) throw new SigmaValidationError('name is required (max 120 chars)');
+    if (input.description && input.description.length > 2000) {
+      throw new SigmaValidationError('description too long (max 2000 chars)');
+    }
 
     const whereClause = extractAndValidateSigmaWhereClause(input.sqlTemplate);
     const now = new Date().toISOString();

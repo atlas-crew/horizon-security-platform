@@ -36,7 +36,8 @@ detection:
   condition: selection
 `;
     const sql = convertSigmaToSql(sigma);
-    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '192.168.%'");
+    expect(sql).toContain("source_ip >= toIPv4('192.168.0.0')");
+    expect(sql).toContain("source_ip <= toIPv4('192.168.255.255')");
   });
 
   it('handles IP list with IN clause', () => {
@@ -62,8 +63,10 @@ detection:
   condition: selection
 `;
     const sql = convertSigmaToSql(sigma);
-    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '192.168.%'");
-    expect(sql).toContain("IPv4NumToString(source_ip) ILIKE '10.%'");
+    expect(sql).toContain("source_ip >= toIPv4('192.168.0.0')");
+    expect(sql).toContain("source_ip <= toIPv4('192.168.255.255')");
+    expect(sql).toContain("source_ip >= toIPv4('10.0.0.0')");
+    expect(sql).toContain("source_ip <= toIPv4('10.255.255.255')");
   });
 
   it('handles multiple values in selection (OR logic)', () => {

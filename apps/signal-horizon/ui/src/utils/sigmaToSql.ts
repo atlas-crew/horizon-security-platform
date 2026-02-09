@@ -73,31 +73,93 @@ function parseSelection(selection: any): string {
 /**
  * Parses a map of field:value pairs into SQL (AND logic)
  */
+const IP_COLUMNS = new Set(['source_ip']);
+
+function parseIpv4Octets(raw: string): number[] | null {
+  const parts = raw.split('.');
+  if (parts.length !== 4) return null;
+  const octets: number[] = [];
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null;
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    octets.push(n);
+  }
+  return octets;
+}
+
+function parseIpv4PrefixWildcard(raw: string): { low: string; high: string } | null {
+  // Only optimize simple octet-aligned prefix wildcards: "10.*", "10.0.*", "10.0.1.*"
+  if (!raw.endsWith('.*')) return null;
+  if (raw.indexOf('*') !== raw.length - 1) return null;
+
+  const prefix = raw.slice(0, -2); // trim trailing ".*"
+  const parts = prefix.split('.');
+  if (parts.length < 1 || parts.length > 3) return null;
+
+  const fixed: number[] = [];
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null;
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    fixed.push(n);
+  }
+
+  const low = [...fixed, ...Array(4 - fixed.length).fill(0)].join('.');
+  const high = [...fixed, ...Array(4 - fixed.length).fill(255)].join('.');
+  return { low, high };
+}
+
+function escapeLikePattern(raw: string): string {
+  return escapeSql(raw).replace(/\*/g, '%');
+}
+
+function formatSourceIpExact(raw: string): string {
+  // Prefer the typed IPv4 comparison when possible (best performance / indexing).
+  if (parseIpv4Octets(raw)) {
+    return `source_ip = toIPv4('${escapeSql(raw)}')`;
+  }
+  // Fallback: avoid ClickHouse runtime error for invalid IP literals.
+  return `IPv4NumToString(source_ip) = '${escapeSql(raw)}'`;
+}
+
+function formatSourceIpIn(rawValues: unknown[]): string {
+  const candidates = rawValues.map((v) => String(v));
+  const valid = candidates.filter((v) => parseIpv4Octets(v));
+  if (valid.length === 0) return '0';
+  const values = valid.map((v) => `toIPv4('${escapeSql(v)}')`).join(', ');
+  return `source_ip IN (${values})`;
+}
+
+function formatSourceIpWildcard(raw: string): string {
+  // Fast-path for simple prefix wildcards: turn into a numeric range comparison.
+  const range = parseIpv4PrefixWildcard(raw);
+  if (range) {
+    return `(source_ip >= toIPv4('${range.low}') AND source_ip <= toIPv4('${range.high}'))`;
+  }
+  // Otherwise fall back to string cast + ILIKE for arbitrary wildcard patterns.
+  return `IPv4NumToString(source_ip) ILIKE '${escapeLikePattern(raw)}'`;
+}
+
 function parseMap(map: Record<string, any>): string {
   const parts = [];
   for (const [field, value] of Object.entries(map)) {
     const col = mapFieldToColumn(field);
 
-    // ClickHouse note:
-    // - `source_ip` is stored as IPv4 type (numeric). For exact matches, we cast the *value* via `toIPv4(...)`
-    //   so ClickHouse can use native IPv4 comparisons (and indexes).
-    // - For wildcard patterns, we must cast the *column* to string via `IPv4NumToString(source_ip)` to apply ILIKE.
-    //   This is slower (can't use an index) but is necessary for pattern matching.
     if (Array.isArray(value)) {
       // field: [val1, val2] -> IN or OR
       if (value.some(v => typeof v === 'string' && v.includes('*'))) {
          // Wildcards present -> OR LIKE
         const likes = value.map((v) => {
-          const pattern = escapeSql(String(v)).replace(/\*/g, '%');
-          if (col === 'source_ip') return `IPv4NumToString(source_ip) ILIKE '${pattern}'`;
-          return `${col} ILIKE '${pattern}'`;
+          const raw = String(v);
+          if (IP_COLUMNS.has(col)) return formatSourceIpWildcard(raw);
+          return `${col} ILIKE '${escapeLikePattern(raw)}'`;
         });
          parts.push(`(${likes.join(' OR ')})`);
       } else {
         // Exact match list -> IN
-        if (col === 'source_ip') {
-          const values = value.map(v => `toIPv4('${escapeSql(String(v))}')`).join(', ');
-          parts.push(`source_ip IN (${values})`);
+        if (IP_COLUMNS.has(col)) {
+          parts.push(formatSourceIpIn(value));
         } else {
           const values = value.map(v => `'${escapeSql(String(v))}'`).join(', ');
           parts.push(`${col} IN (${values})`);
@@ -107,18 +169,11 @@ function parseMap(map: Record<string, any>): string {
       // Single value
       const strVal = String(value);
       if (strVal.includes('*')) {
-        const pattern = escapeSql(strVal).replace(/\*/g, '%');
-        if (col === 'source_ip') {
-          parts.push(`IPv4NumToString(source_ip) ILIKE '${pattern}'`);
-        } else {
-          parts.push(`${col} ILIKE '${pattern}'`);
-        }
+        if (IP_COLUMNS.has(col)) parts.push(formatSourceIpWildcard(strVal));
+        else parts.push(`${col} ILIKE '${escapeLikePattern(strVal)}'`);
       } else {
-        if (col === 'source_ip') {
-          parts.push(`source_ip = toIPv4('${escapeSql(strVal)}')`);
-        } else {
-          parts.push(`${col} = '${escapeSql(strVal)}'`);
-        }
+        if (IP_COLUMNS.has(col)) parts.push(formatSourceIpExact(strVal));
+        else parts.push(`${col} = '${escapeSql(strVal)}'`);
       }
     }
   }

@@ -47,6 +47,17 @@ describe('FileRetryStore', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it('load() returns [] on empty file and logs error', async () => {
+    tmpDir = await mkTmpDir();
+    const filePath = path.join(tmpDir, 'empty.json');
+    await fs.writeFile(filePath, '', 'utf8');
+
+    const logger = createMockLogger();
+    const store = new FileRetryStore(filePath, logger);
+    await expect(store.load()).resolves.toEqual([]);
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it('load() returns [] on non-array JSON and logs error', async () => {
     tmpDir = await mkTmpDir();
     const filePath = path.join(tmpDir, 'items.json');

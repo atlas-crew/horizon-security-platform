@@ -60,6 +60,50 @@ afterEach(() => {
 });
 
 describe('ClickHouseService query telemetry/backpressure', () => {
+  it('acquirePermit() returns null when limiter is null', async () => {
+    const svc = createTestService();
+
+    const release = await (svc as any).acquirePermit({
+      limiter: null,
+      op: 'query',
+      queue: 'query',
+      timeoutError: 'nope',
+    });
+
+    expect(release).toBeNull();
+  });
+
+  it('acquirePermit() propagates non-timeout errors and decrements queue depth', async () => {
+    vi.useFakeTimers();
+
+    const incSpy = vi.spyOn(metrics.clickhouseQueryQueueDepth, 'inc');
+    const decSpy = vi.spyOn(metrics.clickhouseQueryQueueDepth, 'dec');
+
+    const svc = createTestService();
+    (svc as any).queueTimeoutMs = 1000;
+
+    const limiter = {
+      getAvailable: () => 0,
+      acquire: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+
+    const err = await (svc as any)
+      .acquirePermit({
+        limiter,
+        op: 'query',
+        queue: 'query',
+        timeoutError: 'timeout',
+      })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(String((err as Error).message)).toMatch(/boom/i);
+    expect(incSpy).toHaveBeenCalledWith({ op: 'query', queue: 'query' });
+    expect(decSpy).toHaveBeenCalledWith({ op: 'query', queue: 'query' });
+
+    vi.useRealTimers();
+  });
+
   it('clears permit acquisition timeout on success (no timer leaks)', async () => {
     vi.useFakeTimers();
     const setSpy = vi.spyOn(globalThis, 'setTimeout');
@@ -390,6 +434,62 @@ describe('ClickHouseService query telemetry/backpressure', () => {
 
     expect(total).toBe(5);
     expect(batches).toEqual([2, 2, 1]);
+  });
+
+  it('batches streamed rows when batchSize is 1', async () => {
+    const svc = createTestService({ maxInFlightQueries: 1, maxInFlightStreamQueries: 1 });
+    (svc as any).queryLimiter = new AsyncSemaphore(1);
+    (svc as any).streamLimiter = new AsyncSemaphore(1);
+
+    const fakeClient = {
+      query: vi.fn().mockResolvedValue({
+        stream: async function* () {
+          yield [
+            { json: () => ({ n: 1 }) },
+            { json: () => ({ n: 2 }) },
+            { json: () => ({ n: 3 }) },
+          ];
+        },
+      }),
+    };
+    (svc as any).client = fakeClient;
+
+    const batches: number[] = [];
+    const total = await svc.queryStream('SELECT 1', 1, async (rows) => {
+      batches.push(rows.length);
+    });
+
+    expect(total).toBe(3);
+    expect(batches).toEqual([1, 1, 1]);
+  });
+
+  it('flushes a single batch when batchSize is larger than the dataset', async () => {
+    const svc = createTestService({ maxInFlightQueries: 1, maxInFlightStreamQueries: 1 });
+    (svc as any).queryLimiter = new AsyncSemaphore(1);
+    (svc as any).streamLimiter = new AsyncSemaphore(1);
+
+    const fakeClient = {
+      query: vi.fn().mockResolvedValue({
+        stream: async function* () {
+          yield [
+            { json: () => ({ n: 1 }) },
+            { json: () => ({ n: 2 }) },
+            { json: () => ({ n: 3 }) },
+            { json: () => ({ n: 4 }) },
+            { json: () => ({ n: 5 }) },
+          ];
+        },
+      }),
+    };
+    (svc as any).client = fakeClient;
+
+    const batches: number[] = [];
+    const total = await svc.queryStream('SELECT 1', 1000, async (rows) => {
+      batches.push(rows.length);
+    });
+
+    expect(total).toBe(5);
+    expect(batches).toEqual([5]);
   });
 
   it('accumulates batches across multiple stream chunks', async () => {

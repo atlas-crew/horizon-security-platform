@@ -271,6 +271,19 @@ describe('ClickHouseRetryBuffer (edges)', () => {
     expect(largeArg.payload).toBeUndefined();
   });
 
+  it('getStats().oldestItemAge is null when buffer is empty', () => {
+    const buffer = new ClickHouseRetryBuffer(clickhouse, logger, {
+      retryIntervalMs: 100,
+      initialDelayMs: 0,
+      maxDelayMs: 1000,
+      maxRetries: 5,
+      retryBatchSize: 1,
+      maxBufferSize: 100,
+    });
+
+    expect(buffer.getStats().oldestItemAge).toBeNull();
+  });
+
   it('getStats().oldestItemAge matches elapsed time since first add', async () => {
     (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('fail')
@@ -315,6 +328,72 @@ describe('ClickHouseRetryBuffer (edges)', () => {
     await vi.advanceTimersByTimeAsync(10000);
     await p;
     expect(buffer.getStats().isProcessing).toBe(false);
+  });
+
+  it('processRetries() only retries items that are ready (mixed nextRetryAt)', async () => {
+    (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('fail-1'))
+      .mockRejectedValueOnce(new Error('fail-2'))
+      .mockRejectedValueOnce(new Error('fail-3'))
+      .mockResolvedValue(undefined);
+
+    const buffer = new ClickHouseRetryBuffer(clickhouse, logger, {
+      retryIntervalMs: 100,
+      initialDelayMs: 0,
+      maxDelayMs: 1000,
+      maxRetries: 5,
+      retryBatchSize: 10,
+      maxBufferSize: 100,
+    });
+
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r1' })]);
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r2' })]);
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r3' })]);
+
+    const items = (buffer as any).buffer as BufferedItem[];
+    expect(items.length).toBe(3);
+    items[0]!.nextRetryAt = 0;
+    items[1]!.nextRetryAt = 500;
+    items[2]!.nextRetryAt = 1000;
+
+    vi.setSystemTime(500);
+    await (buffer as any).processRetries();
+
+    // Only 2 items should have been retried and removed.
+    expect((clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mock.calls.length).toBe(5);
+    expect(buffer.getBufferSize()).toBe(1);
+    const remaining = ((buffer as any).buffer as BufferedItem[])[0] as any;
+    expect(remaining.data?.[0]?.request_id).toBe('r3');
+  });
+
+  it('processRetries() respects retryBatchSize cap', async () => {
+    (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('fail-1'))
+      .mockRejectedValueOnce(new Error('fail-2'))
+      .mockRejectedValueOnce(new Error('fail-3'))
+      .mockResolvedValue(undefined);
+
+    const buffer = new ClickHouseRetryBuffer(clickhouse, logger, {
+      retryIntervalMs: 100,
+      initialDelayMs: 0,
+      maxDelayMs: 1000,
+      maxRetries: 5,
+      retryBatchSize: 1,
+      maxBufferSize: 100,
+    });
+
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r1' })]);
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r2' })]);
+    await buffer.insertSignalEvents([createTestSignal({ request_id: 'r3' })]);
+
+    const items = (buffer as any).buffer as BufferedItem[];
+    for (const item of items) item.nextRetryAt = 0;
+
+    vi.setSystemTime(0);
+    await (buffer as any).processRetries();
+
+    expect((clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mock.calls.length).toBe(4);
+    expect(buffer.getBufferSize()).toBe(2);
   });
 
   it('processRetries() enforces per-item timeout for hanging retry', async () => {

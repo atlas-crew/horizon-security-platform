@@ -166,10 +166,14 @@ export class ClickHouseService {
     );
 
     if (enabled) {
+      // Support IPv6 hosts (e.g. ::1) by wrapping in brackets for URL formatting.
+      const hostForUrl =
+        config.host.includes(':') && !config.host.startsWith('[') ? `[${config.host}]` : config.host;
+
       this.queryLimiter = new AsyncSemaphore(Math.max(1, maxInFlightQueries));
       this.streamLimiter = new AsyncSemaphore(maxInFlightStreamQueries);
       this.client = createClient({
-        url: `http://${config.host}:${config.port}`,
+        url: `http://${hostForUrl}:${config.port}`,
         database: config.database,
         username: config.username,
         password: config.password,

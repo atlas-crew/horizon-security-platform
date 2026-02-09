@@ -623,6 +623,27 @@ describe('ClickHouseRetryBuffer', () => {
       expect(result.failed).toBe(0);
     });
 
+    it('routes new failed writes to DLQ when flush is in progress', async () => {
+      (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('fail')
+      );
+
+      // Simulate the shutdown-only "flush in progress" state (timer stopped, buffer cleared).
+      (buffer as any).isFlushing = true;
+
+      const ok = await buffer.insertSignalEvents([createTestSignal()]);
+      expect(ok).toBe(false);
+
+      const stats = buffer.getStats();
+      expect(stats.bufferedCount).toBe(0);
+      expect(stats.droppedItems).toBe(1);
+
+      const dlqCall = (logger.error as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[0] as any)?.dlq === true && (c[0] as any)?.reason === 'flush_in_progress'
+      );
+      expect(dlqCall).toBeTruthy();
+    });
+
     it('flush() on empty buffer does not poison future buffering (labs-mmft)', async () => {
       (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('fail')

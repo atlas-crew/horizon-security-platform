@@ -118,6 +118,90 @@ describe('ClickHouseService constructor', () => {
     expect(args.compression).toEqual({ request: true, response: true });
   });
 
+  it('passes compression settings to createClient when compression is false', () => {
+    (createClient as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    new ClickHouseService(
+      {
+        host: 'localhost',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: false,
+        maxOpenConnections: 1,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    const args = (createClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as any;
+    expect(args.compression).toEqual({ request: false, response: false });
+  });
+
+  it('formats url with IPv6 host using brackets', () => {
+    (createClient as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    new ClickHouseService(
+      {
+        host: '::1',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: false,
+        maxOpenConnections: 1,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    const args = (createClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as any;
+    expect(args.url).toBe('http://[::1]:8123');
+  });
+
+  it('does not wrap IPv4 hosts in brackets', () => {
+    (createClient as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    new ClickHouseService(
+      {
+        host: '192.168.1.1',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: false,
+        maxOpenConnections: 1,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    const args = (createClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as any;
+    expect(args.url).toBe('http://192.168.1.1:8123');
+  });
+
+  it('does not double-wrap already bracketed IPv6 hosts', () => {
+    (createClient as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+    new ClickHouseService(
+      {
+        host: '[::1]',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: false,
+        maxOpenConnections: 1,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    const args = (createClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as any;
+    expect(args.url).toBe('http://[::1]:8123');
+  });
+
   it('clamps maxInFlightStreamQueries to [1, maxInFlightQueries]', () => {
     const svcLow = new ClickHouseService(
       {
@@ -234,6 +318,26 @@ describe('ClickHouseService constructor', () => {
     );
 
     expect((svc as any).queueTimeoutMs).toBe(15000);
+  });
+
+  it('uses queueTimeoutSec when provided (override queryTimeoutSec default)', () => {
+    const svc = new ClickHouseService(
+      {
+        host: 'localhost',
+        port: 8123,
+        database: 'test',
+        username: 'test',
+        password: 'test',
+        compression: false,
+        maxOpenConnections: 1,
+        queryTimeoutSec: 10,
+        queueTimeoutSec: 20,
+      } as any,
+      createMockLogger(),
+      true
+    );
+
+    expect((svc as any).queueTimeoutMs).toBe(20000);
   });
 
   it('defaults maxInFlightStreamQueries to min(2, maxInFlightQueries)', () => {

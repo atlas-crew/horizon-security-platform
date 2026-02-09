@@ -137,6 +137,40 @@ describe('ClickHouseService (direct)', () => {
     );
   });
 
+  it('query() still increments raw query counter when permit acquisition times out', async () => {
+    vi.useFakeTimers();
+
+    const rawCallsSpy = vi.spyOn(metrics.clickhouseRawQueriesTotal, 'inc');
+
+    const svc = createService(false);
+    (svc as any).enabled = true;
+    (svc as any).queueTimeoutMs = 50;
+
+    const fakeClient = {
+      query: vi.fn(),
+    };
+    (svc as any).client = fakeClient;
+
+    (svc as any).queryLimiter = {
+      getAvailable: () => 0,
+      acquire: ({ signal }: { signal: AbortSignal }) =>
+        new Promise<() => void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+    };
+
+    const p = svc.query('SELECT 1').catch((e) => e);
+    await vi.advanceTimersByTimeAsync(60);
+    const err = await p;
+
+    expect(err).toBeInstanceOf(Error);
+    expect(String((err as Error).message)).toMatch(/permit wait timed out/i);
+    expect(rawCallsSpy).toHaveBeenCalledTimes(1);
+    expect(fakeClient.query).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   it('queryWithParams() passes query_params to the underlying client', async () => {
     const rawCallsSpy = vi.spyOn(metrics.clickhouseRawQueriesTotal, 'inc');
 
@@ -768,6 +802,7 @@ describe('ClickHouseService (direct)', () => {
       expires_at: null,
     };
 
+    await expect(svc.insertBlocklistEvent(block)).resolves.toBeUndefined();
     await expect(svc.insertBlocklistEvents([block])).resolves.toBeUndefined();
     await expect(svc.insertHttpTransactions([createTxn()])).resolves.toBeUndefined();
     await expect(svc.insertLogEntries([createLog()])).resolves.toBeUndefined();

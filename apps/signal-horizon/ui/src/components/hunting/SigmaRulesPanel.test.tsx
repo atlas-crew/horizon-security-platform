@@ -54,6 +54,21 @@ describe('SigmaRulesPanel', () => {
     expect(screen.getByText('true')).toBeInTheDocument();
   });
 
+  it('shows error when getSigmaRules fails', async () => {
+    const getSigmaRules = vi.fn().mockRejectedValue(new Error('load failed'));
+    render(
+      <SigmaRulesPanel
+        historicalEnabled={true}
+        getSigmaRules={getSigmaRules}
+        updateSigmaRule={vi.fn()}
+        deleteSigmaRule={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(getSigmaRules).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/load failed/i)).toBeInTheDocument();
+  });
+
   it('toggles enabled by calling updateSigmaRule and updating the row', async () => {
     const rule = makeRule({ id: 'rule-2', enabled: false });
     const getSigmaRules = vi.fn().mockResolvedValue([rule]);
@@ -124,4 +139,3 @@ describe('SigmaRulesPanel', () => {
     await waitFor(() => expect(getSigmaRules).toHaveBeenCalledTimes(2));
   });
 });
-

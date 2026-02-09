@@ -571,6 +571,11 @@ const SigmaRulesResponseSchema = z.object({
   }),
 });
 
+const UpdateSigmaRuleResponseSchema = z.object({
+  success: z.boolean(),
+  data: SigmaRuleSchema,
+});
+
 const SigmaLeadSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
@@ -1058,6 +1063,39 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const updateSigmaRule = useCallback(async (
+    id: string,
+    params: { name?: string; description?: string; enabled?: boolean }
+  ): Promise<SigmaRule> => {
+    try {
+      const data = await fetchApi<unknown>(`/hunt/sigma/rules/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: params,
+      });
+      const result = UpdateSigmaRuleResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid update sigma rule response');
+      }
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update sigma rule';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const deleteSigmaRule = useCallback(async (id: string): Promise<void> => {
+    try {
+      await fetchApi(`/hunt/sigma/rules/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete sigma rule';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
   const getSigmaLeads = useCallback(async (limit: number = 200): Promise<SigmaLead[]> => {
     try {
       const queryParams = new URLSearchParams();
@@ -1140,6 +1178,8 @@ export function useHunt() {
     getFleetFingerprintIntelligence,
     getSigmaRules,
     createSigmaRule,
+    updateSigmaRule,
+    deleteSigmaRule,
     getSigmaLeads,
     ackSigmaLead,
 

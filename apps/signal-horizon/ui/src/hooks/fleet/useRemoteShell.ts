@@ -19,29 +19,6 @@ import type {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
-/**
- * Fetch a short-lived WebSocket ticket from the API (labs-n6nf).
- * The ticket is used to authenticate the WebSocket connection since
- * httpOnly cookies cannot be passed in WS handshakes.
- */
-async function fetchWsTicket(): Promise<string | null> {
-  try {
-    const headers: Record<string, string> = { 'Accept': 'application/json' };
-    if (API_KEY && API_KEY !== 'dev-dashboard-key') {
-      headers['Authorization'] = `Bearer ${API_KEY}`;
-    }
-    const res = await fetch(`${API_URL}/api/v1/auth/ws-ticket`, {
-      headers,
-      credentials: 'include',
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.ticket ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /** Default reconnection options */
 const DEFAULT_RECONNECT_OPTIONS: ShellReconnectOptions = {
   maxAttempts: 10,
@@ -353,7 +330,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         }
 
         if (message.type === 'auth-error') {
-          const authError = (message as unknown as { error?: string }).error || 'Authentication failed';
+          const authError = message.error || message.payload?.error || 'Authentication failed';
           setError(authError);
           setStatus('error');
           resetReconnectState();
@@ -664,27 +641,6 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     pendingInitOptionsRef.current = null;
     isCleaningUpRef.current = false;
   }, [cleanup, clearTimers, resetReconnectState]);
-
-  /**
-   * Send input to the shell (base64 encoded)
-   */
-  const sendInput = useCallback(
-    (data: string) => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        console.warn('[RemoteShell] Cannot send - not connected');
-        return;
-      }
-
-      const message: ShellMessage = {
-        type: 'shell-data',
-        sessionId: session?.id || '',
-        payload: { data },
-      };
-
-      wsRef.current.send(JSON.stringify(message));
-    },
-    [session?.id]
-  );
 
   /**
    * Send terminal resize event

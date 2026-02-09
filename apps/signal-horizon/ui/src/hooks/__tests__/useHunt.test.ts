@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useHunt } from '../useHunt';
 import { apiFetch } from '../../lib/api';
 
@@ -38,17 +38,17 @@ describe('useHunt', () => {
         }
       };
 
-      vi.mocked(apiFetch).mockResolvedValue(mockResult);
+	      vi.mocked(apiFetch).mockResolvedValue(mockResult);
 
-      const { result } = renderHook(() => useHunt());
-      
-      let huntRes;
-      await act(async () => {
-        huntRes = await result.current.queryTimeline({
-          startTime: '2021-01-01T00:00:00Z',
-          endTime: '2021-01-01T01:00:00Z',
-        });
-      });
+	      const { result } = renderHook(() => useHunt());
+	      
+	      let huntRes: any;
+	      await act(async () => {
+	        huntRes = await result.current.queryTimeline({
+	          startTime: '2021-01-01T00:00:00Z',
+	          endTime: '2021-01-01T01:00:00Z',
+	        });
+	      });
 
       expect(apiFetch).toHaveBeenCalledWith('/hunt/query', expect.objectContaining({
         method: 'POST',
@@ -57,10 +57,11 @@ describe('useHunt', () => {
         })
       }));
 
-      expect(huntRes.signals).toHaveLength(1);
-      expect(huntRes.total).toBe(1);
-      expect(result.current.isLoading).toBe(false);
-    });
+	      expect(huntRes).toBeTruthy();
+	      expect(huntRes.signals).toHaveLength(1);
+	      expect(huntRes.total).toBe(1);
+	      expect(result.current.isLoading).toBe(false);
+	    });
 
     it('sets error state when query fails', async () => {
       vi.mocked(apiFetch).mockRejectedValue(new Error('Database timeout'));

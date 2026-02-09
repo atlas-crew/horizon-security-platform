@@ -79,7 +79,6 @@ export default function RequestTimelinePage() {
     if (routeRequestId && routeRequestId !== requestId) {
       setRequestId(routeRequestId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeRequestId]);
 
   const run = useCallback(async (id: string) => {

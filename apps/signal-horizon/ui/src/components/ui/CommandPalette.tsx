@@ -1,20 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search,
-  LayoutDashboard,
-  Globe,
-  Target,
-  UserPlus,
-  Activity,
-  Server,
-  Shield,
-  Package,
-  Settings,
-  HelpCircle,
-  BookOpen,
-  Command as CommandIcon,
+	import {
+	  Search,
+	  LayoutDashboard,
+	  Globe,
+	  Target,
+	  UserPlus,
+	  Activity,
+	  Server,
+	  Package,
+	  Settings,
+	  HelpCircle,
+	  BookOpen,
+	  Command as CommandIcon,
   ArrowRight,
   Sun,
   Moon,
@@ -29,15 +28,15 @@ import {
   ShieldCheck,
   RotateCw,
   MoveRight,
-  Zap,
-  BarChart3,
-} from 'lucide-react';
+	  Zap,
+	  BarChart3,
+	} from 'lucide-react';
 import { clsx } from 'clsx';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { useHorizonStore } from '../../stores/horizonStore';
-import { usePlaybooks, type Playbook } from '../../hooks/fleet/usePlaybooks';
+import { usePlaybooks } from '../../hooks/fleet/usePlaybooks';
 import { fetchActors, fetchSessions } from '../../hooks/soc/api';
 import { apiFetch } from '../../lib/api';
 import { useToast } from './Toast';
@@ -453,15 +452,15 @@ export function CommandPalette({
     }));
   }, [recentItems, navigate]);
 
-  const filteredItems = useMemo(() => {
-    const pageCommandItems = contextualCommands.map(c => ({
-      ...c,
-      category: 'Page Actions' as const,
-    }));
-    const staticItems = [...navigationItems, ...actionItems];
-    
-    if (!query) {
-      return [...pageCommandItems, ...recentCommandItems, ...staticItems];
+	  const filteredItems = useMemo<CommandItem[]>(() => {
+	    const pageCommandItems = contextualCommands.map((c) => ({
+	      ...c,
+	      category: 'Page Actions' as const,
+	    })) as CommandItem[];
+	    const staticItems = [...navigationItems, ...actionItems];
+	    
+	    if (!query) {
+	      return [...pageCommandItems, ...recentCommandItems, ...staticItems];
     }
 
     if (smartAnswers.length > 0) {
@@ -484,7 +483,7 @@ export function CommandPalette({
     );
 
     return [...filteredPageCommands, ...searchResults, ...filteredStatic];
-  }, [query, searchResults, recentCommandItems, commandItems, smartAnswers, contextualCommands, theme, navigate, setTheme, toggleSidebar]);
+	  }, [query, searchResults, recentCommandItems, commandItems, smartAnswers, contextualCommands, theme, navigate, setTheme, toggleSidebar]);
 
   useEffect(() => {
     setSelectedIndex(0);

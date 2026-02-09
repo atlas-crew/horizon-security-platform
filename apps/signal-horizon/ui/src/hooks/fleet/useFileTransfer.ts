@@ -550,7 +550,6 @@ export function useFileTransfer(options: UseFileTransferOptions): UseFileTransfe
       abortControllersRef.current.clear();
     };
     // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reload when sensorId changes
@@ -559,7 +558,6 @@ export function useFileTransfer(options: UseFileTransferOptions): UseFileTransfe
     setFiles([]);
     setFilesError(null);
     navigateTo(normalizePath(initialPath));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sensorId]);
 
   return {

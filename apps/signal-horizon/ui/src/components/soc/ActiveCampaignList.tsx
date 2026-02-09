@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Globe, Shield, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Globe, Shield, TrendingUp } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import type { Campaign } from '../../stores/horizonStore';
@@ -95,7 +95,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
                   {campaign.severity}
                 </span>
                 {campaign.isCrossTenant && (
-                  <Globe className="w-3.5 h-3.5 text-ac-blue-tint" title="Cross-tenant campaign" />
+                  <Globe className="w-3.5 h-3.5 text-ac-blue-tint" aria-label="Cross-tenant campaign" role="img" />
                 )}
               </div>
               <div className="flex items-center gap-4 text-[10px] text-ink-muted group-hover:text-white/60">

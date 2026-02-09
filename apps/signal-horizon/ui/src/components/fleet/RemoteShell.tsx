@@ -4,9 +4,6 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import { X, Activity, WifiOff, Loader2, AlertCircle, Clock, RefreshCw } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 import { useRemoteShell } from '../../hooks/fleet/useRemoteShell';
@@ -69,25 +66,12 @@ export function RemoteShell({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
-  const [remainingTime, setRemainingTime] = useState<number | null>(null);
-  const [exitCode, setExitCode] = useState<number | null>(null);
+	  const [remainingTime, setRemainingTime] = useState<number | null>(null);
+	  const [exitCode, setExitCode] = useState<number | null>(null);
 
-  /**
-   * Handle incoming data from the shell
-   * Data arrives base64 encoded
-   * 
-   * Note: This is now handled internally by useRemoteShell, but we keep this callback
-   * if we need to intercept data for other purposes (logging, etc).
-   * For now, it's unused by the hook's new implementation but passed for compatibility if needed.
-   * Actually, useRemoteShell doesn't use onData anymore in the new implementation.
-   */
-  const handleData = useCallback((_data: string) => {
-    // No-op: handled by hook
-  }, []);
-
-  /**
-   * Handle shell exit
-   */
+	  /**
+	   * Handle shell exit
+	   */
   const handleExit = useCallback((code: number) => {
     setExitCode(code);
   }, []);

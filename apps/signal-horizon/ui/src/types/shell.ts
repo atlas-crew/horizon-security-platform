@@ -49,8 +49,9 @@ export interface ShellMessage {
 
 /** Incoming shell message from server */
 export interface ShellServerMessage {
-  type: 'shell-data' | 'shell-exit' | 'shell-error' | 'shell-ready' | 'pong';
+  type: 'shell-data' | 'shell-exit' | 'shell-error' | 'shell-ready' | 'pong' | 'auth-success' | 'auth-error';
   sessionId?: string;
+  error?: string;
   payload?: {
     data?: string;
     code?: number;

@@ -281,19 +281,25 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
   }, []);
 
   // Deep merge helper
-  function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-    const result = { ...target };
-    for (const key in source) {
-      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        result[key] = deepMerge(
-          (target[key] || {}) as Record<string, unknown>,
-          source[key] as Record<string, unknown>
-        ) as T[Extract<keyof T, string>];
-      } else if (source[key] !== undefined) {
-        result[key] = source[key] as T[Extract<keyof T, string>];
+  function deepMerge<T>(target: T, source: unknown): T {
+    if (!source || typeof source !== 'object') return target;
+    const out: any = { ...(target as any) };
+    for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
+      const prev = out[key];
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        prev &&
+        typeof prev === 'object' &&
+        !Array.isArray(prev)
+      ) {
+        out[key] = deepMerge(prev, value);
+      } else if (value !== undefined) {
+        out[key] = value;
       }
     }
-    return result;
+    return out as T;
   }
 
   // Update YAML when config changes in visual mode

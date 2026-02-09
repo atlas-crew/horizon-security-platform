@@ -159,7 +159,6 @@ describe('useRemoteShell reconnect', () => {
     const { result } = renderHook(() =>
       useRemoteShell({
         sensorId: 'sensor-1',
-        onData: vi.fn(),
         webSocketFactory,
         reconnectOptions: { baseDelay: 10, maxDelay: 10 },
       })
@@ -219,7 +218,6 @@ describe('useRemoteShell reconnect', () => {
     const { result } = renderHook(() =>
       useRemoteShell({
         sensorId: 'sensor-1',
-        onData: vi.fn(),
         webSocketFactory,
         reconnectOptions: { baseDelay: 10, maxDelay: 10 },
       })
@@ -285,7 +283,6 @@ describe('useRemoteShell reconnect', () => {
       const { result } = renderHook(() =>
         useRemoteShell({
           sensorId: 'sensor-1',
-          onData: vi.fn(),
           webSocketFactory,
           reconnectOptions: { baseDelay: 5, maxDelay: 5 },
         })

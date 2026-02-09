@@ -47,12 +47,12 @@ const mockSchemaChanges = { changes: [], total: 0, limit: 20, offset: 0 };
 const mockDriftTrends = { days: 7, limit: 5, trends: [] };
 
 // Robust mock setup that satisfies all Zod schemas
-const setupApiMocks = (overrides = {}) => {
+const setupApiMocks = (overrides: Record<string, unknown> = {}) => {
   vi.mocked(apiFetch).mockImplementation((url) => {
     if (url.includes('/api-intelligence/stats')) return Promise.resolve(mockStats);
     if (url.includes('/api-intelligence/endpoints')) {
-        if (overrides['/endpoints']) return Promise.resolve(overrides['/endpoints']);
-        return Promise.resolve(mockEndpoints);
+      if (overrides['/endpoints']) return Promise.resolve(overrides['/endpoints'] as any);
+      return Promise.resolve(mockEndpoints);
     }
     if (url.includes('/api-intelligence/signals')) return Promise.resolve(mockSignals);
     if (url.includes('/api-intelligence/inventory')) return Promise.resolve(mockInventory);

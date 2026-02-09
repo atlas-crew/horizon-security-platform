@@ -38,14 +38,14 @@ type PolicyTemplateInput = {
 };
 
 async function createPolicyTemplate(input: PolicyTemplateInput) {
-  return apiFetch('/fleet/policies', { method: 'POST', body: input });
+  return apiFetch<PolicyTemplate>('/fleet/policies', { method: 'POST', body: input });
 }
 
 async function updatePolicyTemplate(params: {
   id: string;
   input: Partial<PolicyTemplateInput>;
 }) {
-  return apiFetch(`/fleet/policies/${params.id}`, { method: 'PUT', body: params.input });
+  return apiFetch<PolicyTemplate>(`/fleet/policies/${params.id}`, { method: 'PUT', body: params.input });
 }
 
 async function deletePolicyTemplate(id: string) {
@@ -54,7 +54,7 @@ async function deletePolicyTemplate(id: string) {
 }
 
 async function clonePolicyTemplate(params: { id: string; name: string }) {
-  return apiFetch(`/fleet/policies/${params.id}/clone`, { method: 'POST', body: { name: params.name } });
+  return apiFetch<PolicyTemplate>(`/fleet/policies/${params.id}/clone`, { method: 'POST', body: { name: params.name } });
 }
 
 export function usePolicies() {

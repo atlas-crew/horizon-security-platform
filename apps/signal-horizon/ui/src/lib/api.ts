@@ -138,7 +138,7 @@ async function buildApiError(response: Response): Promise<ApiError> {
  * - Otherwise relies on the httpOnly access_token cookie (set by /auth/login).
  *   `credentials: 'include'` ensures cookies are sent with every request.
  */
-export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+export async function apiFetch<T = any>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { signal, method = 'GET', body, headers: extraHeaders } = options;
 
   const headers: Record<string, string> = {

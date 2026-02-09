@@ -7,6 +7,7 @@ import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
 import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
+import YAML from 'yaml';
 
 interface ConfigTemplate {
   id: string;
@@ -17,6 +18,11 @@ interface ConfigTemplate {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ConfigTemplateDetail extends ConfigTemplate {
+  config: Record<string, unknown>;
+  hash: string;
 }
 
 interface SyncStatus {
@@ -49,6 +55,10 @@ async function fetchTemplates(): Promise<ConfigTemplate[]> {
   return data.templates || [];
 }
 
+async function fetchTemplateDetail(templateId: string): Promise<ConfigTemplateDetail> {
+  return apiFetch<ConfigTemplateDetail>(`/fleet/config/templates/${templateId}`);
+}
+
 async function fetchSyncStatus(): Promise<SyncStatus> {
   return apiFetch<SyncStatus>('/fleet/config/sync-status');
 }
@@ -61,16 +71,34 @@ async function pushConfig(templateId: string, sensorIds: string[]): Promise<void
   await apiFetch('/fleet/config/push', { method: 'POST', body: { templateId, sensorIds } });
 }
 
+type TemplateEditorMode = 'create' | 'edit';
+
+function parseYamlConfig(yamlText: string): Record<string, unknown> {
+  const parsed = YAML.parse(yamlText);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Config must be a YAML mapping (object at root)');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export function ConfigManagerPage() {
   const queryClient = useQueryClient();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [envFilter, setEnvFilter] = useState<'all' | 'production' | 'staging' | 'dev'>('all');
+
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateModalMode, setTemplateModalMode] = useState<TemplateEditorMode>('create');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [pushTemplateId, setPushTemplateId] = useState<string | null>(null);
+  const [pushSelectedSensors, setPushSelectedSensors] = useState<Set<string>>(new Set());
   
   // Create Modal State
   const [newName, setNewName] = useState('');
-  const [newEnv, setNewEnv] = useState('production');
+  const [newEnv, setNewEnv] = useState<'production' | 'staging' | 'dev'>('production');
   const [newDesc, setNewDesc] = useState('');
   const [newConfig, setNewConfig] = useState(getDefaultConfigYaml);
 
@@ -118,6 +146,65 @@ export function ConfigManagerPage() {
       pushConfig(templateId, sensorIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'config'] });
+      toast.success('Config push queued.');
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to push config');
+    },
+  });
+
+  const templateCreateMutation = useMutation({
+    mutationFn: async (input: {
+      name: string;
+      description?: string;
+      environment: 'production' | 'staging' | 'dev';
+      config: Record<string, unknown>;
+    }) => apiFetch<ConfigTemplateDetail>('/fleet/config/templates', { method: 'POST', body: input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'config', 'templates'] });
+      toast.success('Template created.');
+      setShowTemplateModal(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to create template');
+    },
+  });
+
+  const templateUpdateMutation = useMutation({
+    mutationFn: async (params: {
+      id: string;
+      updates: Partial<{
+        name: string;
+        description?: string;
+        environment: 'production' | 'staging' | 'dev';
+        config: Record<string, unknown>;
+      }>;
+    }) =>
+      apiFetch<ConfigTemplateDetail>(`/fleet/config/templates/${params.id}`, {
+        method: 'PUT',
+        body: params.updates,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'config', 'templates'] });
+      toast.success('Template updated.');
+      setShowTemplateModal(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to update template');
+    },
+  });
+
+  const templateDeleteMutation = useMutation({
+    mutationFn: async (id: string) =>
+      apiFetch<void>(`/fleet/config/templates/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'config', 'templates'] });
+      toast.success('Template deleted.');
+      setShowTemplateModal(false);
+      if (selectedTemplate === editingTemplateId) setSelectedTemplate(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to delete template');
     },
   });
 
@@ -162,6 +249,118 @@ export function ConfigManagerPage() {
     return details?.details?.changeCount ?? details?.details?.changes?.length ?? 0;
   };
 
+  const filteredTemplates = useMemo(() => {
+    if (envFilter === 'all') return templates;
+    return templates.filter((t) => t.environment === envFilter);
+  }, [templates, envFilter]);
+
+  const allSensorIds = useMemo(() => sensors.map((s: any) => String(s.id)), [sensors]);
+
+  const openCreateModal = () => {
+    setTemplateModalMode('create');
+    setEditingTemplateId(null);
+    setNewName('');
+    setNewDesc('');
+    setNewEnv('production');
+    setNewConfig(getDefaultConfigYaml);
+    setShowTemplateModal(true);
+  };
+
+  const openEditModal = async (id: string) => {
+    setTemplateModalMode('edit');
+    setEditingTemplateId(id);
+    setShowTemplateModal(true);
+
+    if (isDemoMode) {
+      const demoTemplate: any = (getDemoData(scenario).fleet.configTemplates || []).find(
+        (t: any) => t.id === id
+      );
+      if (!demoTemplate) return;
+      setNewName(demoTemplate.name ?? '');
+      setNewDesc(demoTemplate.description ?? '');
+      setNewEnv((demoTemplate.environment ?? 'production') as any);
+      try {
+        setNewConfig(YAML.stringify(demoTemplate.config ?? {}, { indent: 2 }));
+      } catch {
+        setNewConfig(getDefaultConfigYaml);
+      }
+      return;
+    }
+
+    try {
+      const detail = await fetchTemplateDetail(id);
+      setNewName(detail.name ?? '');
+      setNewDesc(detail.description ?? '');
+      setNewEnv((detail.environment ?? 'production') as any);
+      setNewConfig(YAML.stringify(detail.config ?? {}, { indent: 2 }));
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load template');
+    }
+  };
+
+  const submitTemplateModal = async () => {
+    if (isDemoMode) {
+      toast.error('Template mutations are disabled in demo mode.');
+      return;
+    }
+
+    const name = newName.trim();
+    if (!name) {
+      toast.error('Name is required');
+      return;
+    }
+
+    let config: Record<string, unknown>;
+    try {
+      config = parseYamlConfig(newConfig);
+    } catch (err: any) {
+      toast.error(err?.message || 'Invalid YAML config');
+      return;
+    }
+
+    if (templateModalMode === 'create') {
+      await templateCreateMutation.mutateAsync({
+        name,
+        description: newDesc.trim() ? newDesc.trim() : undefined,
+        environment: newEnv,
+        config,
+      });
+      return;
+    }
+
+    if (!editingTemplateId) return;
+    await templateUpdateMutation.mutateAsync({
+      id: editingTemplateId,
+      updates: {
+        name,
+        description: newDesc.trim() ? newDesc.trim() : undefined,
+        environment: newEnv,
+        config,
+      },
+    });
+  };
+
+  const openPushModal = (templateId: string) => {
+    setPushTemplateId(templateId);
+    setPushSelectedSensors(new Set());
+    setShowPushModal(true);
+  };
+
+  const submitPushModal = async () => {
+    if (isDemoMode) {
+      toast.error('Config pushes are disabled in demo mode.');
+      return;
+    }
+    if (!pushTemplateId) return;
+    const ids = Array.from(pushSelectedSensors);
+    if (ids.length === 0) {
+      toast.error('Select at least one sensor');
+      return;
+    }
+    await pushMutation.mutateAsync({ templateId: pushTemplateId, sensorIds: ids });
+    setShowPushModal(false);
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -172,7 +371,8 @@ export function ConfigManagerPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={openCreateModal}
+          disabled={isDemoMode}
           className="btn-primary h-12 px-6 text-sm"
         >
           Create Template
@@ -369,7 +569,11 @@ export function ConfigManagerPage() {
             {['all', 'production', 'staging', 'dev'].map((env) => (
               <button
                 key={env}
-                className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                type="button"
+                onClick={() => setEnvFilter(env as any)}
+                className={`px-3 py-1 text-xs font-medium border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+                  envFilter === env ? 'bg-surface-subtle text-ink-primary' : 'text-ink-secondary'
+                }`}
               >
                 {env}
               </button>
@@ -379,13 +583,13 @@ export function ConfigManagerPage() {
 
         {templatesLoading ? (
           <div className="p-12 text-center text-ink-muted">Loading templates...</div>
-        ) : templates.length === 0 ? (
+        ) : filteredTemplates.length === 0 ? (
           <div className="p-12 text-center text-ink-muted">
             No templates found. Create your first template to get started.
           </div>
         ) : (
           <div className="divide-y divide-border-subtle">
-            {templates.map((template) => (
+            {filteredTemplates.map((template) => (
               <div
                 key={template.id}
                 role="button"
@@ -431,15 +635,38 @@ export function ConfigManagerPage() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        pushMutation.mutate({ templateId: template.id, sensorIds: [] });
+                        if (isDemoMode) {
+                          toast.error('Config pushes are disabled in demo mode.');
+                          return;
+                        }
+                        if (allSensorIds.length === 0) {
+                          toast.error('No sensors available');
+                          return;
+                        }
+                        pushMutation.mutate({ templateId: template.id, sensorIds: allSensorIds });
                       }}
-                      disabled={pushMutation.isPending}
+                      disabled={pushMutation.isPending || isDemoMode || allSensorIds.length === 0}
                       className="px-3 py-1.5 text-sm font-medium text-ac-white bg-ac-blue hover:bg-ac-blue-dark disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                     >
                       {pushMutation.isPending ? 'Pushing...' : 'Push to All'}
                     </button>
                     <button
                       type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPushModal(template.id);
+                      }}
+                      disabled={isDemoMode}
+                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                    >
+                      Push to Selected
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(template.id);
+                      }}
                       className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                     >
                       Edit
@@ -499,16 +726,128 @@ export function ConfigManagerPage() {
         )}
       </div>
 
-      {/* Create Modal Placeholder */}
-      {showCreateModal && (
+      {/* Push Modal */}
+      {showPushModal && (
         <div
           className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="create-template-title"
+          aria-labelledby="push-config-title"
         >
           <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
-            <h2 id="create-template-title" className="text-xl font-light text-ink-primary mb-4">Create Configuration Template</h2>
+            <h2 id="push-config-title" className="text-xl font-light text-ink-primary mb-4">
+              Push Template To Sensors
+            </h2>
+
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
+                Target Sensors
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPushSelectedSensors(new Set(sensors.map((s: any) => String(s.id))))}
+                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPushSelectedSensors(new Set())}
+                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="border border-border-subtle bg-surface-base flex-1 overflow-auto">
+              <table className="min-w-full divide-y divide-border-subtle">
+                <thead className="bg-surface-subtle">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Select
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Sensor
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {sensors.map((sensor: any) => (
+                    <tr key={sensor.id} className="hover:bg-surface-subtle">
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={pushSelectedSensors.has(String(sensor.id))}
+                          onChange={() => {
+                            setPushSelectedSensors((prev) => {
+                              const next = new Set(prev);
+                              const id = String(sensor.id);
+                              if (next.has(id)) next.delete(id);
+                              else next.add(id);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 text-ac-blue border-border-subtle"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="font-medium text-ink-primary">{sensor.name}</div>
+                        <div className="text-xs text-ink-muted font-mono">{sensor.id}</div>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-ink-secondary">
+                        {sensor.connectionState || 'UNKNOWN'}
+                      </td>
+                    </tr>
+                  ))}
+                  {sensors.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-ink-muted" colSpan={3}>
+                        No sensors available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowPushModal(false)}
+                className="btn-outline h-10 px-4 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={pushMutation.isPending || sensors.length === 0}
+                onClick={submitPushModal}
+                className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
+              >
+                {pushMutation.isPending ? 'Pushing...' : 'Push'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div
+          className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="template-modal-title"
+        >
+          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
+            <h2 id="template-modal-title" className="text-xl font-light text-ink-primary mb-4">
+              {templateModalMode === 'create' ? 'Create Configuration Template' : 'Edit Configuration Template'}
+            </h2>
             
             <div className="grid grid-cols-3 gap-6 flex-1 overflow-hidden">
               {/* Left Column: Metadata */}
@@ -527,7 +866,7 @@ export function ConfigManagerPage() {
                   <label className="block text-sm font-medium text-ink-secondary mb-1">Environment</label>
                   <select 
                     value={newEnv}
-                    onChange={(e) => setNewEnv(e.target.value)}
+                    onChange={(e) => setNewEnv(e.target.value as any)}
                     className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
                   >
                     <option value="dev">Development</option>
@@ -560,13 +899,44 @@ export function ConfigManagerPage() {
 
             <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border-subtle">
               <button
-                onClick={() => setShowCreateModal(false)}
+                type="button"
+                onClick={() => setShowTemplateModal(false)}
                 className="btn-outline h-10 px-4 text-sm"
               >
                 Cancel
               </button>
-              <button className="btn-primary h-10 px-4 text-sm">
-                Create Template
+              {templateModalMode === 'edit' && (
+                <button
+                  type="button"
+                  disabled={isDemoMode || templateDeleteMutation.isPending || !editingTemplateId}
+                  onClick={() => {
+                    if (!editingTemplateId) return;
+                    const ok = window.confirm('Delete this template? This cannot be undone.');
+                    if (!ok) return;
+                    templateDeleteMutation.mutate(editingTemplateId);
+                  }}
+                  className="h-10 px-4 text-sm font-medium border border-ac-red text-ac-red hover:bg-ac-red hover:text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                >
+                  {templateDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={
+                  isDemoMode ||
+                  templateCreateMutation.isPending ||
+                  templateUpdateMutation.isPending
+                }
+                onClick={submitTemplateModal}
+                className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
+              >
+                {templateModalMode === 'create'
+                  ? templateCreateMutation.isPending
+                    ? 'Creating...'
+                    : 'Create Template'
+                  : templateUpdateMutation.isPending
+                    ? 'Saving...'
+                    : 'Save Changes'}
               </button>
             </div>
           </div>

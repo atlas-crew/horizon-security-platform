@@ -1470,9 +1470,13 @@
     transition: all 0.2s ease;
   }
 
-  .code-block-wrapper:hover .copy-btn {
-    opacity: 1;
-  }
+	  .code-block-wrapper:hover .copy-btn {
+	    opacity: 1;
+	  }
+
+	  .code-block-wrapper:focus-within .copy-btn {
+	    opacity: 1;
+	  }
 
   .copy-btn:hover {
     background: rgba(255, 255, 255, 0.15);

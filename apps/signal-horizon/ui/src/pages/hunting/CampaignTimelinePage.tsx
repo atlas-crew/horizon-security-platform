@@ -136,8 +136,11 @@ export default function CampaignTimelinePage() {
         <div className="card-body">
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-4">
-              <label className="block text-xs text-ink-muted mb-1 font-mono">campaign_id</label>
+              <label htmlFor="campaign-id" className="block text-xs text-ink-muted mb-1 font-mono">
+                campaign_id
+              </label>
               <input
+                id="campaign-id"
                 className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
                 value={campaignId}
                 onChange={(e) => setCampaignId(e.target.value)}
@@ -146,8 +149,11 @@ export default function CampaignTimelinePage() {
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-xs text-ink-muted mb-1 font-mono">startTime (optional)</label>
+              <label htmlFor="start-time" className="block text-xs text-ink-muted mb-1 font-mono">
+                startTime (optional)
+              </label>
               <input
+                id="start-time"
                 className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -156,8 +162,11 @@ export default function CampaignTimelinePage() {
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-xs text-ink-muted mb-1 font-mono">endTime (optional)</label>
+              <label htmlFor="end-time" className="block text-xs text-ink-muted mb-1 font-mono">
+                endTime (optional)
+              </label>
               <input
+                id="end-time"
                 className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries } from '../components/hunting';
+import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -26,6 +26,7 @@ export default function HuntingPage() {
     getTenantBaselines,
     getAnomalies,
     getLowAndSlowIps,
+    getFleetFingerprintIntelligence,
     clearError,
   } = useHunt();
 
@@ -201,14 +202,21 @@ export default function HuntingPage() {
       />
 
       {status?.isFleetAdmin ? (
-        <LowAndSlowPanel
-          historicalEnabled={status?.historical ?? false}
-          getLowAndSlowIps={getLowAndSlowIps}
-        />
+        <>
+          <LowAndSlowPanel
+            historicalEnabled={status?.historical ?? false}
+            getLowAndSlowIps={getLowAndSlowIps}
+          />
+          <FleetIntelligencePanel
+            historicalEnabled={status?.historical ?? false}
+            getFleetFingerprintIntelligence={getFleetFingerprintIntelligence}
+            onPivotFingerprint={(fp) => handleRunExample(`fingerprint:\"${fp}\"`)}
+          />
+        </>
       ) : (
         <div className="border border-border-subtle bg-surface-card p-4">
           <div className="text-sm text-ink-secondary">
-            Low And Slow is admin-only intelligence.
+            Fleet intelligence panels are admin-only.
           </div>
         </div>
       )}

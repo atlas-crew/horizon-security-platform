@@ -70,6 +70,13 @@ const LowAndSlowQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional().default(100),
 });
 
+const FleetFingerprintIntelQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).optional().default(30),
+  minTenants: z.coerce.number().int().min(2).max(10000).optional().default(3),
+  minSensors: z.coerce.number().int().min(2).max(10000).optional().default(5),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(100),
+});
+
 const RequestIdSchema = z
   .string()
   .min(1)
@@ -567,6 +574,61 @@ export function createHuntRoutes(
       });
     } catch (error) {
       routeLogger.error({ error }, 'Low-and-slow query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/fleet-intel/fingerprints
+   * Cross-tenant ("fleet") intelligence: anonymized fingerprints observed across many tenants/sensors.
+   *
+   * Security: Admin-only (cross-tenant by design).
+   */
+  router.get('/fleet-intel/fingerprints', authorize(prisma, { scopes: 'hunt:read', role: 'admin' }), rateLimiters.aggregations, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const parsed = FleetFingerprintIntelQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.json({
+          success: true,
+          data: [],
+          meta: {
+            ...parsed.data,
+            count: 0,
+            historical: false,
+          },
+        });
+        return;
+      }
+
+      const data = await huntService.getFleetFingerprintIntelligence(parsed.data);
+
+      res.json({
+        success: true,
+        data,
+        meta: {
+          ...parsed.data,
+          count: data.length,
+          historical: true,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Fleet fingerprint intelligence query failed');
       res.status(500).json({
         error: 'Query failed',
         message: error instanceof Error ? error.message : 'Unknown error',

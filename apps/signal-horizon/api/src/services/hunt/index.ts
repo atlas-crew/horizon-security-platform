@@ -168,6 +168,18 @@ export interface LowAndSlowIpCandidate {
   tenantsHit: number;
 }
 
+export interface FleetFingerprintCandidate {
+  anonFingerprint: string;
+  tenantsHit: number;
+  sensorsHit: number;
+  totalSignals: number;
+  firstSeen: Date;
+  lastSeen: Date;
+  signalTypes: string[];
+  tenantIds: string[];
+  sensorIds: string[];
+}
+
 export interface SavedQuery {
   id: string;
   name: string;
@@ -744,6 +756,71 @@ export class HuntService {
       maxDailySignals: r.max_daily_signals,
       totalSignals: r.total_signals,
       tenantsHit: r.tenants_hit,
+    }));
+  }
+
+  /**
+   * Fleet-wide intelligence: anonymized fingerprints seen across many tenants/sensors.
+   * NOTE: Cross-tenant by design; treat as admin-only intelligence.
+   */
+  async getFleetFingerprintIntelligence(params?: {
+    days?: number;
+    minTenants?: number;
+    minSensors?: number;
+    limit?: number;
+  }): Promise<FleetFingerprintCandidate[]> {
+    if (!this.clickhouse?.isEnabled()) return [];
+
+    const days = this.validatePositiveInt(params?.days ?? 30, 1, 365);
+    const minTenants = this.validatePositiveInt(params?.minTenants ?? 3, 2, 10000);
+    const minSensors = this.validatePositiveInt(params?.minSensors ?? 5, 2, 10000);
+    const limit = this.validatePositiveInt(params?.limit ?? 100, 1, 1000);
+
+    const zeroFp = ''.padEnd(64, '0');
+
+    const sql = `
+      SELECT
+        anon_fingerprint,
+        uniqExact(tenant_id) AS tenants_hit,
+        uniqExact(sensor_id) AS sensors_hit,
+        count() AS total_signals,
+        min(timestamp) AS first_seen,
+        max(timestamp) AS last_seen,
+        groupUniqArray(10)(signal_type) AS signal_types,
+        groupUniqArray(10)(tenant_id) AS tenant_ids,
+        groupUniqArray(10)(sensor_id) AS sensor_ids
+      FROM signal_events
+      WHERE timestamp >= toDateTime64(now(), 3) - INTERVAL {days:UInt32} DAY
+        AND anon_fingerprint != {zeroFp:String}
+      GROUP BY anon_fingerprint
+      HAVING tenants_hit >= {minTenants:UInt32}
+        OR sensors_hit >= {minSensors:UInt32}
+      ORDER BY tenants_hit DESC, sensors_hit DESC, total_signals DESC
+      LIMIT {limit:UInt32}
+    `;
+
+    const rows = await this.clickhouse.queryWithParams<{
+      anon_fingerprint: string;
+      tenants_hit: number;
+      sensors_hit: number;
+      total_signals: string;
+      first_seen: string;
+      last_seen: string;
+      signal_types: string[];
+      tenant_ids: string[];
+      sensor_ids: string[];
+    }>(sql, { days, minTenants, minSensors, limit, zeroFp });
+
+    return rows.map((r) => ({
+      anonFingerprint: r.anon_fingerprint,
+      tenantsHit: r.tenants_hit,
+      sensorsHit: r.sensors_hit,
+      totalSignals: parseInt(r.total_signals, 10),
+      firstSeen: new Date(r.first_seen),
+      lastSeen: new Date(r.last_seen),
+      signalTypes: r.signal_types ?? [],
+      tenantIds: r.tenant_ids ?? [],
+      sensorIds: r.sensor_ids ?? [],
     }));
   }
 

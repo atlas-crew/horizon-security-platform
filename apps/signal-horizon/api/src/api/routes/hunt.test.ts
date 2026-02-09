@@ -48,6 +48,7 @@ describe('Hunt Routes', () => {
       getHourlyStats: vi.fn(),
       getIpActivity: vi.fn(),
       getLowAndSlowIps: vi.fn(),
+      getFleetFingerprintIntelligence: vi.fn(),
       getSavedQueries: vi.fn(),
       saveQuery: vi.fn(),
       getSavedQuery: vi.fn(),
@@ -255,6 +256,62 @@ describe('Hunt Routes', () => {
       success: true,
       data: [{ sourceIp: '203.0.113.10' }],
       meta: { days: 90, minDistinctDays: 5, maxSignalsPerDay: 10, limit: 25, historical: true, count: 1 },
+    });
+  });
+
+  it('GET /api/v1/hunt/fleet-intel/fingerprints requires admin role', async () => {
+    const response = await request(app)
+      .get('/api/v1/hunt/fleet-intel/fingerprints')
+      .expect(403);
+
+    expect(response.body).toMatchObject({
+      title: 'Forbidden',
+      detail: expect.stringContaining('Requires admin role'),
+      code: 'INSUFFICIENT_ROLE',
+    });
+  });
+
+  it('GET /api/v1/hunt/fleet-intel/fingerprints returns candidates for admin', async () => {
+    const adminApp = express();
+    adminApp.use(express.json());
+    adminApp.use((req: Request, _res: Response, next: NextFunction) => {
+      req.auth = {
+        tenantId: 'tenant-1',
+        scopes: ['hunt:read', 'fleet:admin'],
+        isFleetAdmin: true,
+      } as unknown as typeof req.auth;
+      next();
+    });
+    adminApp.use('/api/v1/hunt', createHuntRoutes({} as PrismaClient, mockLogger, huntService));
+
+    vi.mocked(huntService.getFleetFingerprintIntelligence).mockResolvedValue([
+      {
+        anonFingerprint: 'a'.repeat(64),
+        tenantsHit: 4,
+        sensorsHit: 9,
+        totalSignals: 120,
+        firstSeen: new Date('2025-01-01T00:00:00.000Z'),
+        lastSeen: new Date('2025-01-02T00:00:00.000Z'),
+        signalTypes: ['IP_THREAT'],
+        tenantIds: ['tenant-a', 'tenant-b'],
+        sensorIds: ['sensor-1'],
+      },
+    ] as never);
+
+    const response = await request(adminApp)
+      .get('/api/v1/hunt/fleet-intel/fingerprints?days=30&minTenants=3&minSensors=5&limit=25')
+      .expect(200);
+
+    expect(vi.mocked(huntService.getFleetFingerprintIntelligence)).toHaveBeenCalledWith({
+      days: 30,
+      minTenants: 3,
+      minSensors: 5,
+      limit: 25,
+    });
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [{ anonFingerprint: 'a'.repeat(64) }],
+      meta: { days: 30, minTenants: 3, minSensors: 5, limit: 25, historical: true, count: 1 },
     });
   });
 

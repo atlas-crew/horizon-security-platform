@@ -97,6 +97,18 @@ export interface LowAndSlowIpCandidate {
   tenantsHit: number;
 }
 
+export interface FleetFingerprintCandidate {
+  anonFingerprint: string;
+  tenantsHit: number;
+  sensorsHit: number;
+  totalSignals: number;
+  firstSeen: string;
+  lastSeen: string;
+  signalTypes: string[];
+  tenantIds: string[];
+  sensorIds: string[];
+}
+
 export interface IpActivity {
   totalHits: number;
   tenantsHit: number;
@@ -472,6 +484,31 @@ const LowAndSlowResponseSchema = z.object({
     days: z.number(),
     minDistinctDays: z.number(),
     maxSignalsPerDay: z.number(),
+    limit: z.number(),
+    count: z.number(),
+    historical: z.boolean(),
+  }),
+});
+
+const FleetFingerprintCandidateSchema = z.object({
+  anonFingerprint: z.string().length(64),
+  tenantsHit: z.number(),
+  sensorsHit: z.number(),
+  totalSignals: z.number(),
+  firstSeen: z.string(),
+  lastSeen: z.string(),
+  signalTypes: z.array(z.string()),
+  tenantIds: z.array(z.string()),
+  sensorIds: z.array(z.string()),
+});
+
+const FleetFingerprintIntelResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(FleetFingerprintCandidateSchema),
+  meta: z.object({
+    days: z.number(),
+    minTenants: z.number(),
+    minSensors: z.number(),
     limit: z.number(),
     count: z.number(),
     historical: z.boolean(),
@@ -861,6 +898,33 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getFleetFingerprintIntelligence = useCallback(async (params: {
+    days?: number;
+    minTenants?: number;
+    minSensors?: number;
+    limit?: number;
+  } = {}): Promise<{ candidates: FleetFingerprintCandidate[]; meta: { days: number; minTenants: number; minSensors: number; limit: number; count: number; historical: boolean } }> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.days !== undefined) queryParams.set('days', String(params.days));
+      if (params.minTenants !== undefined) queryParams.set('minTenants', String(params.minTenants));
+      if (params.minSensors !== undefined) queryParams.set('minSensors', String(params.minSensors));
+      if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
+
+      const data = await fetchApi<unknown>(`/hunt/fleet-intel/fingerprints${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
+      const result = FleetFingerprintIntelResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid fleet fingerprint intel response');
+      }
+
+      return { candidates: result.data.data, meta: result.data.meta };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get fleet fingerprint intel';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
   const getRecentRequests = useCallback(async (limit: number = 25): Promise<RecentRequest[]> => {
     try {
       const queryParams = new URLSearchParams();
@@ -903,6 +967,7 @@ export function useHunt() {
     getTenantBaselines,
     getAnomalies,
     getLowAndSlowIps,
+    getFleetFingerprintIntelligence,
 
     // Helpers
     clearError,

@@ -873,6 +873,66 @@ describe('HuntService', () => {
   });
 
   // ===========================================================================
+  // getFleetFingerprintIntelligence
+  // ===========================================================================
+
+  describe('getFleetFingerprintIntelligence', () => {
+    it('should return empty array when ClickHouse disabled', async () => {
+      const result = await huntService.getFleetFingerprintIntelligence();
+      expect(result).toEqual([]);
+    });
+
+    it('should query signal_events and map candidates', async () => {
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
+        {
+          anon_fingerprint: 'a'.repeat(64),
+          tenants_hit: 4,
+          sensors_hit: 9,
+          total_signals: '120',
+          first_seen: '2025-01-01 00:00:00.000',
+          last_seen: '2025-01-02 00:00:00.000',
+          signal_types: ['IP_THREAT'],
+          tenant_ids: ['tenant-a', 'tenant-b'],
+          sensor_ids: ['sensor-1'],
+        },
+      ]);
+
+      const result = await huntServiceWithClickHouse.getFleetFingerprintIntelligence({
+        days: 30,
+        minTenants: 3,
+        minSensors: 5,
+        limit: 25,
+      });
+
+      const [sql, params] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0] ?? [];
+      expect(String(sql)).toContain('FROM signal_events');
+      expect(String(sql)).toContain('uniqExact(tenant_id)');
+      expect(String(sql)).toContain('uniqExact(sensor_id)');
+      expect(String(sql)).toContain('anon_fingerprint != {zeroFp:String}');
+      expect(params).toMatchObject({ days: 30, minTenants: 3, minSensors: 5, limit: 25 });
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          anonFingerprint: 'a'.repeat(64),
+          tenantsHit: 4,
+          sensorsHit: 9,
+          totalSignals: 120,
+          signalTypes: ['IP_THREAT'],
+          tenantIds: ['tenant-a', 'tenant-b'],
+          sensorIds: ['sensor-1'],
+        }),
+      ]);
+    });
+
+    it('should validate inputs', async () => {
+      await expect(huntServiceWithClickHouse.getFleetFingerprintIntelligence({ days: 0 })).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getFleetFingerprintIntelligence({ minTenants: 1 })).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getFleetFingerprintIntelligence({ minSensors: 1 })).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getFleetFingerprintIntelligence({ limit: 50000 })).rejects.toThrow();
+    });
+  });
+
+  // ===========================================================================
   // Tenant Isolation (Negative Tests)
   // ===========================================================================
 

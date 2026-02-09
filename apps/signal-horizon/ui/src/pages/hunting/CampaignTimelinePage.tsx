@@ -3,11 +3,19 @@
  * Correlates ClickHouse rows by campaign_id across campaign_history.
  */
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type CampaignTimelineEvent } from '../../hooks/useHunt';
+import { formatIsoOrInvalid } from '../../utils';
+
+function formatConfidenceOrNa(confidence: unknown): string {
+  if (typeof confidence !== 'number') return 'n/a';
+  if (!Number.isFinite(confidence)) return 'n/a';
+  if (confidence < 0 || confidence > 1) return 'n/a';
+  return confidence.toFixed(2);
+}
 
 export default function CampaignTimelinePage() {
   useDocumentTitle('Campaign Timeline');
@@ -19,6 +27,10 @@ export default function CampaignTimelinePage() {
   const [campaignId, setCampaignId] = useState(routeCampaignId ?? '');
   const [events, setEvents] = useState<CampaignTimelineEvent[] | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const runSeqRef = useRef(0);
+  const skipAutoRunIdRef = useRef<string | null>(null);
+  const submitInFlightRef = useRef(false);
+  const lastAutoRunIdRef = useRef<string | null>(null);
 
   // Optional time window (ISO strings expected by API).
   const [startTime, setStartTime] = useState('');
@@ -26,6 +38,8 @@ export default function CampaignTimelinePage() {
 
   const canRun = campaignId.trim().length > 0 && !isLoading;
 
+  // One-way sync from route param into the input field.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (routeCampaignId && routeCampaignId !== campaignId) {
       setCampaignId(routeCampaignId);
@@ -33,6 +47,7 @@ export default function CampaignTimelinePage() {
   }, [routeCampaignId]);
 
   const run = useCallback(async (id: string) => {
+    const seq = ++runSeqRef.current;
     clearError();
     setLocalError(null);
     try {
@@ -40,8 +55,10 @@ export default function CampaignTimelinePage() {
         startTime: startTime.trim() || undefined,
         endTime: endTime.trim() || undefined,
       });
+      if (seq !== runSeqRef.current) return;
       setEvents(res.events);
     } catch (err) {
+      if (seq !== runSeqRef.current) return;
       setEvents(null);
       setLocalError(err instanceof Error ? err.message : 'Campaign timeline query failed');
     }
@@ -50,6 +67,13 @@ export default function CampaignTimelinePage() {
   // Auto-run when deep-linked.
   useEffect(() => {
     if (routeCampaignId) {
+      if (skipAutoRunIdRef.current === routeCampaignId) {
+        skipAutoRunIdRef.current = null;
+        lastAutoRunIdRef.current = routeCampaignId;
+        return;
+      }
+      if (lastAutoRunIdRef.current === routeCampaignId) return;
+      lastAutoRunIdRef.current = routeCampaignId;
       void run(routeCampaignId);
     }
   }, [routeCampaignId, run]);
@@ -63,8 +87,16 @@ export default function CampaignTimelinePage() {
     e.preventDefault();
     const id = campaignId.trim();
     if (!id) return;
+    if (isLoading) return;
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    skipAutoRunIdRef.current = id;
     navigate(`/hunting/campaign/${encodeURIComponent(id)}`);
-    await run(id);
+    try {
+      await run(id);
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleCopy = async () => {
@@ -228,14 +260,14 @@ export default function CampaignTimelinePage() {
                   {events.map((e, idx) => (
                     <tr key={`${e.timestamp}-${idx}`} className="border-b border-border-subtle">
                       <td className="py-2 pr-3 font-mono text-ink-secondary whitespace-nowrap">
-                        {new Date(e.timestamp).toISOString()}
+                        {formatIsoOrInvalid(e.timestamp)}
                       </td>
                       <td className="py-2 pr-3 font-mono text-xs">{e.eventType}</td>
                       <td className="py-2 pr-3">{e.name}</td>
                       <td className="py-2 pr-3 font-mono text-xs">{e.status}</td>
                       <td className="py-2 pr-3 font-mono text-xs">{e.severity}</td>
                       <td className="py-2 pr-3 text-right font-mono">{e.tenantsAffected}</td>
-                      <td className="py-2 text-right font-mono">{e.confidence.toFixed(2)}</td>
+                      <td className="py-2 text-right font-mono">{formatConfidenceOrNa(e.confidence)}</td>
                     </tr>
                   ))}
                 </tbody>

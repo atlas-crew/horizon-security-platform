@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListChecks, RefreshCw, Trash2 } from 'lucide-react';
 import type { SigmaRule } from '../../hooks/useHunt';
+import { formatIsoOrInvalid } from '../../utils';
 import { LoadingSpinner } from '../LoadingStates';
 
 interface SigmaRulesPanelProps {
@@ -62,6 +63,8 @@ export function SigmaRulesPanel({
   }, [historicalEnabled, refresh, refreshNonce]);
 
   const handleToggleEnabled = async (rule: SigmaRule) => {
+    if (loading) return;
+    if (busyRuleId === rule.id) return;
     setBusyRuleId(rule.id);
     setError(null);
     try {
@@ -75,6 +78,8 @@ export function SigmaRulesPanel({
   };
 
   const handleDelete = async (rule: SigmaRule) => {
+    if (loading) return;
+    if (busyRuleId === rule.id) return;
     const ok = window.confirm(`Delete Sigma rule "${rule.name}"?`);
     if (!ok) return;
 
@@ -171,7 +176,7 @@ export function SigmaRulesPanel({
                           </details>
                         </td>
                         <td className="py-2 pr-3 font-mono text-ink-secondary whitespace-nowrap">
-                          {new Date(r.updatedAt).toISOString()}
+                          {formatIsoOrInvalid(r.updatedAt)}
                         </td>
                         <td className="py-2 pr-3 font-mono text-xs whitespace-nowrap">
                           {r.enabled ? 'true' : 'false'}
@@ -209,4 +214,3 @@ export function SigmaRulesPanel({
     </div>
   );
 }
-

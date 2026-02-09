@@ -5,6 +5,27 @@
 
 function normalizeApiBaseUrl(raw: string): string {
   const trimmed = raw.replace(/\/+$/, '');
+
+  // Accept misconfigured inputs like "http://host:3100/api/v1/management" and normalize back to "/api/v1".
+  try {
+    const url = new URL(trimmed);
+    const path = url.pathname.replace(/\/+$/, '');
+    if (path.includes('/api/v1')) {
+      url.pathname = '/api/v1';
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    }
+    if (path.includes('/api')) {
+      url.pathname = '/api/v1';
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    }
+  } catch {
+    // Non-URL (shouldn't happen for VITE_API_URL), fall back to suffix logic.
+  }
+
   if (trimmed.endsWith('/api/v1')) return trimmed;
   if (trimmed.endsWith('/api')) return `${trimmed}/v1`;
   return `${trimmed}/api/v1`;
@@ -16,8 +37,38 @@ export const API_KEY = ENV_API_KEY || 'dev-dashboard-key';
 
 interface FetchOptions {
   signal?: AbortSignal;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  headers?: Record<string, string>;
+}
+
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function getCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const parts = document.cookie.split(';');
+  for (const part of parts) {
+    const [k, ...rest] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(rest.join('='));
+  }
+  return undefined;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
+}
+
+function generateRequestNonce(): string {
+  // Server expects 16-64 chars; hex(16 bytes) = 32 chars, matches /^[a-zA-Z0-9-]+$/.
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    return bytesToHex(buf);
+  }
+  // Fallback for older runtimes (shouldn't happen in modern browsers).
+  return `${Date.now()}${Math.random().toString(16).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32).padEnd(16, '0');
 }
 
 /**
@@ -88,15 +139,26 @@ async function buildApiError(response: Response): Promise<ApiError> {
  *   `credentials: 'include'` ensures cookies are sent with every request.
  */
 export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { signal, method = 'GET', body } = options;
+  const { signal, method = 'GET', body, headers: extraHeaders } = options;
 
   const headers: Record<string, string> = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
   };
 
-  // Programmatic API key is opt-in via env. Browser sessions rely on cookies.
-  if (ENV_API_KEY) headers.Authorization = `Bearer ${ENV_API_KEY}`;
+  // Programmatic API key is used if available. Browser sessions rely on cookies.
+  if (API_KEY) headers.Authorization = `Bearer ${API_KEY}`;
+  if (extraHeaders) Object.assign(headers, extraHeaders);
+
+  // Replay-protection + CSRF for mutation endpoints.
+  if (MUTATION_METHODS.has(method)) {
+    if (!headers['X-Request-Nonce']) headers['X-Request-Nonce'] = generateRequestNonce();
+    if (!headers['X-Request-Timestamp']) headers['X-Request-Timestamp'] = String(Date.now());
+
+    // Double-submit CSRF cookie pattern (server sets csrf-token cookie on reads).
+    const csrf = getCookie('csrf-token');
+    if (csrf && !headers['X-CSRF-Token']) headers['X-CSRF-Token'] = csrf;
+  }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method,
@@ -110,7 +172,17 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
     throw await buildApiError(response);
   }
 
-  return response.json();
+  // Some endpoints may respond with 204 or empty body.
+  if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
+  if (!text) return undefined as T;
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.toLowerCase().includes('json')) {
+    return JSON.parse(text) as T;
+  }
+  return text as unknown as T;
 }
 
 /**

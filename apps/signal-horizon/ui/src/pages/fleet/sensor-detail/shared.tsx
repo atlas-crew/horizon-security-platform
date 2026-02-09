@@ -1,119 +1,66 @@
 import { type LucideIcon } from 'lucide-react';
-
-// ======================== API Config ========================
-
-export const API_BASE = import.meta.env.VITE_API_URL || '';
-export const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-
-export const authHeaders = {
-  Authorization: `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../../lib/api';
 
 // ======================== API Functions ========================
 
 export async function fetchSensorDetail(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch sensor details');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}`);
 }
 
 export async function fetchSystemInfo(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/system`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch system info');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/system`);
 }
 
 export async function fetchPerformance(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/performance`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch performance');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/performance`);
 }
 
 export async function fetchNetwork(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/network`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch network');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/network`);
 }
 
 export async function fetchProcesses(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/processes`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch processes');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/processes`);
 }
 
 export async function runDiagnostics(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/diagnostics/run`, {
-    method: 'POST',
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to run diagnostics');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/diagnostics/run`, { method: 'POST' });
 }
 
 export async function fetchKernelConfig(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config?section=kernel`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to fetch kernel config');
-  return response.json();
+  return apiFetch(`/synapse/${id}/config?section=kernel`);
 }
 
 export async function updateKernelConfig(id: string, params: Record<string, string>, persist: boolean) {
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config`, {
+  return apiFetch(`/synapse/${id}/config`, {
     method: 'PUT',
-    headers: authHeaders,
-    body: JSON.stringify({
+    body: {
       section: 'kernel',
       config: { params, persist },
-    }),
+    },
   });
-  if (!response.ok) throw new Error('Failed to update kernel config');
-  return response.json();
 }
 
 export async function fetchSystemConfig(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to fetch system config');
-  return response.json();
+  return apiFetch(`/synapse/${id}/config`);
 }
 
 export async function fetchCommandHistory(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/commands?limit=100&offset=0`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to fetch command history');
-  const data = await response.json();
+  const data: any = await apiFetch(`/fleet/commands?limit=100&offset=0`);
   const commands = (data?.commands || []).filter((command: any) => command.sensorId === id);
   return { ...data, commands };
 }
 
 export async function fetchPingoraConfig(id: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch Pingora config');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/config/pingora`);
 }
 
 export async function updatePingoraConfig(id: string, config: any) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify(config),
-  });
-  if (!response.ok) throw new Error('Failed to update Pingora config');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/config/pingora`, { method: 'POST', body: config });
 }
 
 export async function runPingoraAction(id: string, action: 'test' | 'reload' | 'restart') {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/actions/pingora`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ action }),
-  });
-  if (!response.ok) throw new Error('Failed to run Pingora action');
-  return response.json();
+  return apiFetch(`/fleet/sensors/${id}/actions/pingora`, { method: 'POST', body: { action } });
 }
 
 // ======================== Helper Components ========================

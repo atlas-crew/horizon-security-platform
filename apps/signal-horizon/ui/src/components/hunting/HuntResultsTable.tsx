@@ -192,16 +192,26 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                 <React.Fragment key={signal.id}>
                   <tr 
                     className={clsx(
-                      "cursor-pointer hover:bg-surface-subtle transition-colors",
+                      "cursor-pointer hover:bg-surface-subtle transition-colors focus:outline-none focus:bg-surface-subtle focus:ring-1 focus:ring-inset focus:ring-ac-blue",
                       expandedId === signal.id && "bg-surface-subtle"
                     )}
                     onClick={() => toggleExpand(signal.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleExpand(signal.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-expanded={expandedId === signal.id}
+                    aria-label={`${getSignalTypeLabel(signal.signalType)} from ${signal.sourceIp || 'unknown IP'} at ${formatTimestamp(signal.timestamp)}`}
                   >
                     <td className="text-center">
                       {expandedId === signal.id ? (
-                        <ChevronDown className="w-4 h-4 text-ink-muted" />
+                        <ChevronDown className="w-4 h-4 text-ink-muted" aria-hidden="true" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-ink-muted" />
+                        <ChevronRight className="w-4 h-4 text-ink-muted" aria-hidden="true" />
                       )}
                     </td>
                     <td className="text-sm text-ink-muted whitespace-nowrap">

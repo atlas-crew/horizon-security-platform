@@ -152,7 +152,14 @@ export default function WarRoomPage() {
             <MetricTile label="MITIGATION RATE" value="94%" tone="bg-ac-green" />
             <MetricTile label="NEW INDICATORS" value="03" tone="bg-ac-orange" isWarning />
           </div>
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
+          <div 
+            className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-atomic="false"
+            aria-label="Activity feed"
+          >
             {mockActivities.map((activity) => (
               <ActivityItem key={activity.id} activity={activity} />
             ))}

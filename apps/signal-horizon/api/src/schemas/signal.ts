@@ -195,6 +195,10 @@ export const SensorAuthPayloadSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format'),
   /** Protocol version for wire-format negotiation (e.g., "1.0") */
   protocolVersion: z.string().max(32).optional(),
+  /** Sensor fingerprint for identity verification (optional; required once a sensor has enrolled a fingerprint) */
+  fingerprint: FingerprintSchema.optional(),
+  /** Registration token for secure enrollment of new sensors */
+  registrationToken: z.string().min(1).optional(),
 }).refine(data => data.apiKey || data.token, {
   message: "Either apiKey or token must be provided",
   path: ["apiKey"]

@@ -2,10 +2,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+import { apiFetch } from '../../lib/api';
 
 interface Rule {
   id: string;
@@ -29,15 +26,11 @@ interface RuleSyncStatus {
 type RolloutStrategy = 'immediate' | 'canary' | 'scheduled';
 
 async function fetchRules(): Promise<Rule[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/rules`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch rules');
-  return response.json();
+  return apiFetch<Rule[]>('/fleet/rules');
 }
 
 async function fetchRuleSyncStatus(): Promise<RuleSyncStatus[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/rules/sync-status`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch sync status');
-  return response.json();
+  return apiFetch<RuleSyncStatus[]>('/fleet/rules/sync-status');
 }
 
 async function pushRules(
@@ -45,12 +38,7 @@ async function pushRules(
   sensorIds: string[],
   strategy: RolloutStrategy
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/rules/push`, {
-    method: 'POST',
-    headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ruleIds, sensorIds, strategy }),
-  });
-  if (!response.ok) throw new Error('Failed to push rules');
+  await apiFetch('/fleet/rules/push', { method: 'POST', body: { ruleIds, sensorIds, strategy } });
 }
 
 export function RuleDistributionPage() {

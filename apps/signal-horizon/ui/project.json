@@ -55,6 +55,12 @@
         "command": "vitest",
         "cwd": "apps/signal-horizon/ui"
       }
+    },
+    "site-scan": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/signal-horizon/ui/scripts/site-scan.mjs"
+      }
     }
   }
 }

@@ -5,13 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../lib/api';
 
 export interface RegistrationToken {
   id: string;
@@ -33,26 +27,19 @@ export interface OnboardingStats {
 }
 
 async function fetchTokens(): Promise<RegistrationToken[]> {
-  const response = await fetch(`${API_BASE}/onboarding/tokens`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch registration tokens');
-  const data = await response.json();
-  return data.tokens || [];
+  const data = await apiFetch<{ tokens?: RegistrationToken[] }>('/onboarding/tokens');
+  return Array.isArray(data.tokens) ? data.tokens : [];
 }
 
 async function fetchStats(): Promise<OnboardingStats> {
-  const response = await fetch(`${API_BASE}/onboarding/stats`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch onboarding stats');
-  return response.json();
+  return apiFetch<OnboardingStats>('/onboarding/stats');
 }
 
 async function createToken(name: string): Promise<RegistrationToken> {
-  const response = await fetch(`${API_BASE}/onboarding/tokens`, {
+  return apiFetch<RegistrationToken>('/onboarding/tokens', {
     method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ name, maxUses: 10, expiresIn: 30 }), // Default to 10 uses, 30 days
+    body: { name, maxUses: 10, expiresIn: 30 }, // Default to 10 uses, 30 days
   });
-  if (!response.ok) throw new Error('Failed to create token');
-  return response.json();
 }
 
 export function useOnboarding() {

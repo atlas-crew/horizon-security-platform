@@ -33,10 +33,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { MetricCard } from '../../components/fleet';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+import { apiFetch } from '../../lib/api';
 
 interface ConnectivityStats {
   total: number;
@@ -97,12 +94,10 @@ export function ConnectivityPage(): React.ReactElement {
   }, []);
 
   // Fetch connectivity stats
-  const { data: statsData } = useQuery({
+  const { data: statsData } = useQuery<any>({
     queryKey: ['connectivity-stats'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/connectivity`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch connectivity stats');
-      return response.json();
+      return apiFetch('/management/connectivity');
     },
     refetchInterval: 30000,
   });
@@ -116,7 +111,7 @@ export function ConnectivityPage(): React.ReactElement {
       total: statsData.stats.total || 0,
       online: statsData.stats.online || 0,
       offline: statsData.stats.offline || 0,
-      degraded: statsData.stats.degraded || 0,
+      degraded: statsData.stats.reconnecting || 0,
       avgLatency: 45, // Simulated
       uptime: 99.9, // Simulated
     };
@@ -126,25 +121,31 @@ export function ConnectivityPage(): React.ReactElement {
   const { data: sensorConnectivity = [] } = useQuery<SensorConnectivity[]>({
     queryKey: ['sensor-connectivity'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/connectivity`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch sensor connectivity');
-      const data = await response.json();
+      const data = await apiFetch<any>('/management/connectivity');
       // Transform sensor data to connectivity format
       const allSensors = [
         ...(data.sensors?.CONNECTED || []),
         ...(data.sensors?.DISCONNECTED || []),
-        ...(data.sensors?.DEGRADED || []),
-        ...(data.sensors?.UNKNOWN || []),
+        ...(data.sensors?.RECONNECTING || []),
       ];
-      return allSensors.map((s: { id: string; name: string; connectionState: string; lastHeartbeat: string | null }) => ({
+      return allSensors.map((s: { id: string; name: string; connectionState: string; lastHeartbeat: string | null }) => {
+        const status =
+          s.connectionState === 'CONNECTED'
+            ? 'connected'
+            : s.connectionState === 'RECONNECTING'
+              ? 'degraded'
+              : 'disconnected';
+
+        return ({
         sensorId: s.id,
         sensorName: s.name,
-        status: s.connectionState.toLowerCase() as 'connected' | 'disconnected' | 'degraded',
+        status,
         latency: Math.floor(Math.random() * 100),
         lastHeartbeat: s.lastHeartbeat,
         reconnects: Math.floor(Math.random() * 5),
         packetLoss: Math.random() * 2,
-      }));
+      });
+      });
     },
     refetchInterval: 15000,
   });
@@ -152,14 +153,11 @@ export function ConnectivityPage(): React.ReactElement {
   // Run connectivity test mutation with AbortController support
   const testMutation = useMutation({
     mutationFn: async ({ testId, signal }: { testId: string; signal: AbortSignal }) => {
-      const response = await fetch(`${API_BASE}/management/connectivity/test`, {
+      return apiFetch<any>('/management/connectivity/test', {
         method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testType: testId }),
+        body: { testType: testId },
         signal,
       });
-      if (!response.ok) throw new Error('Test failed');
-      return response.json();
     },
   });
 

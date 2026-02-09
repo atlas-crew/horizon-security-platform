@@ -650,6 +650,229 @@ describe('HuntService', () => {
   });
 
   // ===========================================================================
+  // getTenantBaselines
+  // ===========================================================================
+
+  describe('getTenantBaselines', () => {
+    it('should return empty array when ClickHouse disabled', async () => {
+      const result = await huntService.getTenantBaselines('tenant-1');
+      expect(result).toEqual([]);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('should calculate baselines from ClickHouse', async () => {
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
+        {
+          signal_type: 'IP_THREAT',
+          avg_count: 10.5,
+          stddev_count: 2.1,
+          max_count: 25,
+          observation_count: '720',
+        },
+        {
+          signal_type: 'BOT_SIGNATURE',
+          avg_count: 5.0,
+          stddev_count: 1.2,
+          max_count: 12,
+          observation_count: '720',
+        },
+      ]);
+
+      const result = await huntServiceWithClickHouse.getTenantBaselines('tenant-1', 30);
+
+      // Regression guard: baselines must be computed on per-hour totals (sum across severities),
+      // not on per-severity rows.
+      const [sql] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0] ?? [];
+      expect(String(sql)).toContain('sum(signal_count) AS hour_total');
+      expect(String(sql)).toContain('GROUP BY hour, signal_type');
+      expect(String(sql)).toContain('hour < toStartOfHour(now())');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        signalType: 'IP_THREAT',
+        avgHourlyCount: 10.5,
+        stddevHourlyCount: 2.1,
+        maxHourlyCount: 25,
+        observationCount: 720,
+      });
+    });
+
+    it('should validate inputs', async () => {
+      await expect(huntServiceWithClickHouse.getTenantBaselines('invalid; sql', 30)).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getTenantBaselines('tenant-1', 0)).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getTenantBaselines('tenant-1', 100)).rejects.toThrow();
+    });
+  });
+
+  // ===========================================================================
+  // getAnomalies
+  // ===========================================================================
+
+  describe('getAnomalies', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should identify anomalies based on z-score', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-06-15T12:34:56.000Z'));
+
+      // Setup baselines
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([ // baselines
+          {
+            signal_type: 'IP_THREAT',
+            avg_count: 10,
+            stddev_count: 2,
+            max_count: 20,
+            observation_count: '720',
+          },
+        ])
+        .mockResolvedValueOnce([ // recent stats (current hour)
+          {
+            hour: '2024-06-15T11:00:00.000Z',
+            tenant_id: 'tenant-1',
+            signal_type: 'IP_THREAT',
+            severity: 'HIGH',
+            signal_count: 20, // (20 - 10) / 2 = 5 sigma
+            total_events: 100,
+            unique_ips: 10,
+            unique_fingerprints: 5,
+          },
+        ]);
+
+      const anomalies = await huntServiceWithClickHouse.getAnomalies('tenant-1', 2.0);
+
+      // Regression guard: recent query must target the most recent complete hour (11:00Z here),
+      // not include the current partial hour.
+      const [, params] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[1] ?? [];
+      expect(params).toBeTruthy();
+      const p = params as Record<string, unknown>;
+      expect(p.startTime).toBe(p.endTime);
+      expect(String(p.startTime)).toContain('2024-06-15 11:00:00.000');
+
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0]).toMatchObject({
+        signalType: 'IP_THREAT',
+        currentCount: 20,
+        expectedAvg: 10,
+        deviation: 5,
+        severity: 'MEDIUM', // 5 is borderline MEDIUM/HIGH in logic: deviation > 5 ? HIGH
+      });
+    });
+
+    it('should categorize severity correctly', async () => {
+      // Mocking 6 sigma anomaly
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([
+          { signal_type: 'IP_THREAT', avg_count: 10, stddev_count: 2, max_count: 20, observation_count: '720' },
+        ])
+        .mockResolvedValueOnce([
+          { hour: '...', tenant_id: 'tenant-1', signal_type: 'IP_THREAT', severity: 'HIGH', signal_count: 24 }, // (24-10)/2 = 7 sigma
+        ]);
+
+      const anomalies = await huntServiceWithClickHouse.getAnomalies('tenant-1', 2.0);
+      expect(anomalies[0].severity).toBe('HIGH');
+    });
+
+    it('should aggregate multiple severity rows for the same signal type', async () => {
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([
+          { signal_type: 'IP_THREAT', avg_count: 10, stddev_count: 2, max_count: 20, observation_count: '720' },
+        ])
+        .mockResolvedValueOnce([
+          { hour: '...', tenant_id: 'tenant-1', signal_type: 'IP_THREAT', severity: 'HIGH', signal_count: 10 },
+          { hour: '...', tenant_id: 'tenant-1', signal_type: 'IP_THREAT', severity: 'MEDIUM', signal_count: 10 },
+        ]);
+
+      const anomalies = await huntServiceWithClickHouse.getAnomalies('tenant-1', 2.0);
+      // Total count should be 20. (20-10)/2 = 5 sigma.
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0].currentCount).toBe(20);
+      expect(anomalies[0].deviation).toBe(5);
+    });
+
+    it('should handle zero stddev with high deviation spike', async () => {
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([
+          { signal_type: 'IP_THREAT', avg_count: 5, stddev_count: 0, max_count: 5, observation_count: '720' },
+        ])
+        .mockResolvedValueOnce([
+          { hour: '...', tenant_id: 'tenant-1', signal_type: 'IP_THREAT', severity: 'HIGH', signal_count: 10 },
+        ]);
+
+      const anomalies = await huntServiceWithClickHouse.getAnomalies('tenant-1', 2.0);
+      expect(anomalies).toHaveLength(1);
+      expect(anomalies[0].deviation).toBe(10.0);
+      expect(anomalies[0].severity).toBe('HIGH');
+    });
+
+    it('should return empty array when no anomalies found', async () => {
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([
+          { signal_type: 'IP_THREAT', avg_count: 10, stddev_count: 2, max_count: 20, observation_count: '720' },
+        ])
+        .mockResolvedValueOnce([
+          { hour: '...', tenant_id: 'tenant-1', signal_type: 'IP_THREAT', severity: 'HIGH', signal_count: 12 }, // 1 sigma
+        ]);
+
+      const anomalies = await huntServiceWithClickHouse.getAnomalies('tenant-1', 2.0);
+      expect(anomalies).toHaveLength(0);
+    });
+  });
+
+  // ===========================================================================
+  // getLowAndSlowIps
+  // ===========================================================================
+
+  describe('getLowAndSlowIps', () => {
+    it('should return empty array when ClickHouse disabled', async () => {
+      const result = await huntService.getLowAndSlowIps();
+      expect(result).toEqual([]);
+    });
+
+    it('should query ip_daily_mv and map candidates', async () => {
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
+        {
+          source_ip: '203.0.113.10',
+          days_seen: '12',
+          max_daily_signals: 7,
+          total_signals: 40,
+          tenants_hit: 3,
+        },
+      ]);
+
+      const result = await huntServiceWithClickHouse.getLowAndSlowIps({
+        days: 90,
+        minDistinctDays: 5,
+        maxSignalsPerDay: 10,
+        limit: 25,
+      });
+
+      const [sql, params] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0] ?? [];
+      expect(String(sql)).toContain('FROM ip_daily_mv');
+      expect(String(sql)).toContain('countMerge(signal_count_state)');
+      expect(params).toMatchObject({ days: 90, minDistinctDays: 5, maxSignalsPerDay: 10, limit: 25 });
+
+      expect(result).toEqual([
+        {
+          sourceIp: '203.0.113.10',
+          daysSeen: 12,
+          maxDailySignals: 7,
+          totalSignals: 40,
+          tenantsHit: 3,
+        },
+      ]);
+    });
+
+    it('should validate inputs', async () => {
+      await expect(huntServiceWithClickHouse.getLowAndSlowIps({ days: 0 })).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getLowAndSlowIps({ maxSignalsPerDay: 0 })).rejects.toThrow();
+      await expect(huntServiceWithClickHouse.getLowAndSlowIps({ limit: 50000 })).rejects.toThrow();
+    });
+  });
+
+  // ===========================================================================
   // Tenant Isolation (Negative Tests)
   // ===========================================================================
 
@@ -845,7 +1068,7 @@ describe('HuntService', () => {
   // ===========================================================================
 
   describe('getRequestTimeline', () => {
-    it('should query ClickHouse across http/log/signal tables and merge sorted by timestamp', async () => {
+    it('should query ClickHouse across http/log/signal/actor/session and merge sorted by timestamp', async () => {
       vi.mocked(mockClickHouse.queryWithParams)
         .mockResolvedValueOnce([
           {
@@ -893,20 +1116,55 @@ describe('HuntService', () => {
             client_ip: '203.0.113.10',
             rule_id: null,
           },
+        ])
+        .mockResolvedValueOnce([
+          {
+            timestamp: '2024-06-15 11:59:01.500',
+            sensor_id: 'sensor-1',
+            actor_id: 'actor-1',
+            request_id: 'req_123',
+            event_type: 'risk_increase',
+            risk_score: 42,
+            risk_delta: 5,
+            rule_id: '941100',
+            rule_category: 'waf',
+            ip: '203.0.113.10',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            timestamp: '2024-06-15 11:59:01.250',
+            sensor_id: 'sensor-1',
+            session_id: 'sess-1',
+            actor_id: 'actor-1',
+            request_id: 'req_123',
+            event_type: 'actor_bound',
+            request_count: 3,
+          },
         ]);
 
       const events = await huntServiceWithClickHouse.getRequestTimeline('tenant-1', 'req_123');
 
-      expect(mockClickHouse.queryWithParams).toHaveBeenCalledTimes(3);
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalledTimes(5);
       const [sql0, params0] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0] ?? [];
       expect(sql0 as string).toContain('FROM http_transactions');
       expect((params0 as Record<string, unknown>).tenantId).toBe('tenant-1');
       expect((params0 as Record<string, unknown>).requestId).toBe('req_123');
 
-      expect(events).toHaveLength(3);
+      const [sql3] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[3] ?? [];
+      expect(sql3 as string).toContain('FROM actor_events');
+      expect(sql3 as string).toContain('sensor_id IN {sensorIds:Array(String)}');
+
+      const [sql4] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[4] ?? [];
+      expect(sql4 as string).toContain('FROM session_events');
+      expect(sql4 as string).toContain('sensor_id IN {sensorIds:Array(String)}');
+
+      expect(events).toHaveLength(5);
       expect(events[0]).toMatchObject({ kind: 'http_transaction', requestId: 'req_123' });
       expect(events[1]).toMatchObject({ kind: 'signal_event', requestId: 'req_123' });
-      expect(events[2]).toMatchObject({ kind: 'sensor_log', requestId: 'req_123' });
+      expect(events[2]).toMatchObject({ kind: 'session_event', requestId: 'req_123' });
+      expect(events[3]).toMatchObject({ kind: 'actor_event', requestId: 'req_123' });
+      expect(events[4]).toMatchObject({ kind: 'sensor_log', requestId: 'req_123' });
     });
   });
 

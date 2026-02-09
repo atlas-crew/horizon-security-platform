@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Shield,
   Share2,
@@ -141,6 +142,10 @@ const AdminSettingsPage: React.FC = () => {
   const [apparatusFlags, setApparatusFlags] = useState({
     deceptiveEndpoints: true,
   });
+
+  // Sensor selection for diagnostics
+  const [selectedDiagSensors, setSelectedDiagSensors] = useState<string[]>([]);
+  const [diagSource, setDiagSource] = useState<'hub' | 'sensors'>('hub');
 
   // Refs for form inputs (replacing document.getElementById)
   const portRef = useRef<HTMLInputElement>(null);
@@ -429,10 +434,33 @@ const AdminSettingsPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Navigation */}
         <aside className="w-full lg:w-64 flex-shrink-0">
-          <nav className="flex flex-col space-y-1">
+          <nav 
+            className="flex flex-col space-y-1"
+            role="tablist"
+            aria-label="Settings categories"
+            onKeyDown={(e) => {
+              const activeIndex = tabs.findIndex(t => t.id === activeTab);
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const next = tabs[(activeIndex + 1) % tabs.length];
+                setActiveTab(next.id);
+                document.getElementById(`tab-${next.id}`)?.focus();
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prev = tabs[(activeIndex - 1 + tabs.length) % tabs.length];
+                setActiveTab(prev.id);
+                document.getElementById(`tab-${prev.id}`)?.focus();
+              }
+            }}
+          >
             {tabs.map((tab) => (
               <button
                 key={tab.id}
+                id={`tab-${tab.id}`}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 className={clsx(
                   'flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all border-l-4',
@@ -453,8 +481,12 @@ const AdminSettingsPage: React.FC = () => {
               <Key className="w-4 h-4" />
               <span className="text-xs font-bold uppercase tracking-widest">Quick Access</span>
             </div>
-            <a href="/fleet/keys" className="block text-xs hover:text-ac-sky-blue transition-colors">Manage Sensor API Keys</a>
-            <a href="/fleet/connectivity" className="block text-xs hover:text-ac-sky-blue transition-colors">Network Diagnostics</a>
+            <Link to="/fleet/keys" className="block text-xs hover:text-ac-sky-blue transition-colors">
+              Manage Sensor API Keys
+            </Link>
+            <Link to="/fleet/connectivity" className="block text-xs hover:text-ac-sky-blue transition-colors">
+              Network Diagnostics
+            </Link>
           </div>
         </aside>
 
@@ -462,7 +494,13 @@ const AdminSettingsPage: React.FC = () => {
         <main className="flex-1 min-w-0">
           {activeTab === 'tenant' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-tenant"
+              role="tabpanel"
+              aria-labelledby="tab-tenant"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Collective Defense & Privacy</h2>
@@ -608,7 +646,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'policies' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-policies"
+              role="tabpanel"
+              aria-labelledby="tab-policies"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Security Policy Templates</h2>
@@ -775,7 +819,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'automation' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-automation"
+              role="tabpanel"
+              aria-labelledby="tab-automation"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Active Blocklist</h2>
@@ -891,7 +941,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'fleet' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-fleet"
+              role="tabpanel"
+              aria-labelledby="tab-fleet"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                 <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight mb-6">Fleet-Wide Actions</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1066,7 +1122,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'synapse' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-synapse"
+              role="tabpanel"
+              aria-labelledby="tab-synapse"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
                 <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Synapse-Pingora Connectivity</h2>
                 {hubLoading ? (
@@ -1074,7 +1136,7 @@ const AdminSettingsPage: React.FC = () => {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Risk Server (Proxy)</label>
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Signal Hub (Upstream)</label>
                       <div className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono text-ink-muted break-all">
                         {hubConfig?.riskServer?.url || 'Not configured'}
                       </div>
@@ -1107,7 +1169,7 @@ const AdminSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-4 p-4 border border-ac-blue/20 bg-ac-blue/5">
                   <Activity className="w-5 h-5 text-ac-blue" />
                   <p className="text-xs text-ink-secondary">
-                    Connectivity tests allow private targets only when they match configured hub endpoints (Risk Server / Synapse Direct).
+                    Connectivity tests allow private targets only when they match configured hub endpoints (Signal Hub / Synapse Direct).
                   </p>
                 </div>
               </section>
@@ -1167,12 +1229,82 @@ const AdminSettingsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Connectivity Diagnostics</p>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">Connectivity Diagnostics</p>
+                          <div className="flex items-center gap-2 bg-surface-subtle p-1 border border-border-subtle rounded">
+                            <button
+                              onClick={() => setDiagSource('hub')}
+                              className={clsx(
+                                "px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                diagSource === 'hub' ? "bg-ac-navy text-white" : "text-ink-muted hover:text-ink-primary"
+                              )}
+                            >
+                              Local Hub
+                            </button>
+                            <button
+                              onClick={() => setDiagSource('sensors')}
+                              className={clsx(
+                                "px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                diagSource === 'sensors' ? "bg-ac-navy text-white" : "text-ink-muted hover:text-ink-primary"
+                              )}
+                            >
+                              Remote Sensors
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="border border-border-subtle bg-surface-subtle p-4 space-y-4">
+                          {diagSource === 'sensors' && (
+                            <div className="space-y-3 pb-4 border-b border-border-subtle">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Target Selection</span>
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => setSelectedDiagSensors(sensors.filter(s => s.status === 'online').map(s => s.id))}
+                                    className="text-[9px] font-bold text-ac-blue uppercase tracking-widest hover:underline"
+                                  >
+                                    All Online
+                                  </button>
+                                  <span className="text-border-subtle">|</span>
+                                  <button 
+                                    onClick={() => setSelectedDiagSensors([])}
+                                    className="text-[9px] font-bold text-ink-muted uppercase tracking-widest hover:underline"
+                                  >
+                                    Clear
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="max-h-32 overflow-y-auto grid grid-cols-2 gap-2 pr-2 custom-scrollbar">
+                                {sensors.filter(s => s.status === 'online').map(sensor => (
+                                  <label key={sensor.id} className="flex items-center gap-2 p-2 bg-surface-card border border-border-subtle cursor-pointer hover:border-ac-blue/50 transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      className="w-3 h-3 accent-ac-blue"
+                                      checked={selectedDiagSensors.includes(sensor.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedDiagSensors(prev => [...prev, sensor.id]);
+                                        } else {
+                                          setSelectedDiagSensors(prev => prev.filter(id => id !== sensor.id));
+                                        }
+                                      }}
+                                    />
+                                    <span className="text-[10px] font-mono truncate text-ink-primary">{sensor.name}</span>
+                                  </label>
+                                ))}
+                                {sensors.filter(s => s.status === 'online').length === 0 && (
+                                  <div className="col-span-2 py-4 text-center text-[10px] text-ink-muted italic border border-dashed border-border-subtle">
+                                    No online sensors available for remote testing.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
-                              { label: 'Risk Server', host: extractHostname(hubConfig?.riskServer?.url) },
+                              { label: 'Signal Hub', host: extractHostname(hubConfig?.riskServer?.url) },
                               { label: 'Synapse Direct', host: extractHostname(hubConfig?.synapseDirect?.url) },
                             ].map((t) => (
                               <div key={t.label} className="space-y-2">
@@ -1186,9 +1318,28 @@ const AdminSettingsPage: React.FC = () => {
                                       key={testType}
                                       onClick={async () => {
                                         if (!t.host) return;
-                                        await runConnectivityTest({ testType, target: t.host });
+                                        if (diagSource === 'sensors' && selectedDiagSensors.length === 0) {
+                                          toast.error('Please select at least one sensor for remote testing.');
+                                          return;
+                                        }
+
+                                        try {
+                                          const result = await runConnectivityTest({ 
+                                            testType, 
+                                            target: t.host,
+                                            sensorIds: diagSource === 'sensors' ? selectedDiagSensors : undefined
+                                          });
+                                          
+                                          if (diagSource === 'sensors') {
+                                            toast.success(`Remote ${testType} command dispatched to ${selectedDiagSensors.length} sensors.`);
+                                          } else {
+                                            toast.success(`Local ${testType} test completed: ${result.result.status.toUpperCase()}`);
+                                          }
+                                        } catch (err) {
+                                          toast.error(`Connectivity test failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                                        }
                                       }}
-                                      disabled={!t.host || isRunningConnectivityTest}
+                                      disabled={!t.host || isRunningConnectivityTest || (diagSource === 'sensors' && sensors.filter(s => s.status === 'online').length === 0)}
                                       className="h-9 px-3 bg-ac-navy text-white text-[10px] font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
                                     >
                                       {testType}
@@ -1245,7 +1396,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'apparatus' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-apparatus"
+              role="tabpanel"
+              aria-labelledby="tab-apparatus"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Red Team Panel */}
                 <section className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
@@ -1347,7 +1504,13 @@ const AdminSettingsPage: React.FC = () => {
 
           {activeTab === 'system' && (
             <ErrorBoundary>
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div 
+              id="panel-system"
+              role="tabpanel"
+              aria-labelledby="tab-system"
+              tabIndex={0}
+              className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
+            >
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                 <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight mb-8">Hub Runtime Configuration</h2>
 

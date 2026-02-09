@@ -62,7 +62,7 @@ export default function SessionDetailPage() {
     if (!session) return [];
     return [
       { label: 'Requests', value: session.requestCount },
-      { label: 'Hijack Alerts', value: session.hijackAlerts.length },
+      { label: 'Hijack Alerts', value: session.hijackAlerts?.length ?? 0 },
       { label: 'Last Activity', value: new Date(session.lastActivity).toLocaleTimeString() },
       { label: 'Status', value: session.isSuspicious ? 'Suspicious' : 'Active' },
     ];
@@ -162,13 +162,13 @@ export default function SessionDetailPage() {
       <section className="card">
         <div className="card-header flex items-center justify-between">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Hijack Alerts</div>
-          <div className="text-xs text-ink-muted">{session.hijackAlerts.length} alerts</div>
+          <div className="text-xs text-ink-muted">{session.hijackAlerts?.length ?? 0} alerts</div>
         </div>
         <div className="card-body space-y-3">
-          {session.hijackAlerts.length === 0 && (
+          {(session.hijackAlerts?.length ?? 0) === 0 && (
             <div className="text-ink-muted">No hijack alerts for this session.</div>
           )}
-          {session.hijackAlerts.map((alert, index) => (
+          {(session.hijackAlerts ?? []).map((alert, index) => (
             <div key={`${alert.alertType}-${index}`} className="flex flex-wrap items-center gap-3">
               <div
                 className={clsx(

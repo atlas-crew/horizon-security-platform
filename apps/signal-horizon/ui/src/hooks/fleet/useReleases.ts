@@ -7,9 +7,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100';
-const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+import { apiFetch } from '../../lib/api';
 
 // ============================================================================
 // Types
@@ -107,128 +105,81 @@ export interface UseReleasesResult {
 // API Functions
 // ============================================================================
 
-function getAuthHeaders(): HeadersInit {
-  return {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Content-Type': 'application/json',
-  };
-}
-
 async function fetchReleases(): Promise<Release[]> {
-  const response = await fetch(`${API_URL}/api/v1/fleet/releases`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch releases: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.releases || data;
+  const data = await apiFetch<{ releases?: Release[] } | Release[]>('/releases');
+  return Array.isArray(data) ? data : (data.releases ?? []);
 }
 
 async function createReleaseApi(input: CreateReleaseInput): Promise<Release> {
-  // If uploading a file, use FormData
   if (input.binaryFile) {
-    const formData = new FormData();
-    formData.append('version', input.version);
-    formData.append('changelog', input.changelog);
-    formData.append('binary', input.binaryFile);
-    if (input.sha256) {
-      formData.append('sha256', input.sha256);
-    }
-
-    const response = await fetch(`${API_URL}/api/v1/fleet/releases`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Failed to create release: ${response.status}`);
-    }
-
-    return response.json();
+    throw new Error('Binary file upload is not supported by the dev hub API (use binaryUrl).');
   }
 
-  // Otherwise, use JSON
-  const response = await fetch(`${API_URL}/api/v1/fleet/releases`, {
+  return apiFetch<Release>('/releases', {
     method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
+    body: {
       version: input.version,
       changelog: input.changelog,
       binaryUrl: input.binaryUrl,
       sha256: input.sha256,
-    }),
+      // API requires size; provide a reasonable default if omitted.
+      size: (input as any).size ?? 48_102_400,
+    },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to create release: ${response.status}`);
-  }
-
-  return response.json();
 }
 
 async function deleteReleaseApi(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/fleet/releases/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to delete release: ${response.status}`);
-  }
+  await apiFetch<void>(`/releases/${id}`, { method: 'DELETE' });
 }
 
 async function fetchRollouts(): Promise<Rollout[]> {
-  const response = await fetch(`${API_URL}/api/v1/fleet/rollouts`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-  });
+  const data = await apiFetch<any>('/releases/rollouts');
+  const items: any[] = Array.isArray(data) ? data : (data.rollouts ?? []);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch rollouts: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.rollouts || data;
+  // API returns a lightweight list; normalize to the UI Rollout contract.
+  return items.map((r) => ({
+    id: String(r.id),
+    releaseId: String(r.releaseId),
+    // list endpoint doesn't include expanded release object; keep minimal placeholder
+    release: (r.release ??
+      ({
+        id: String(r.releaseId),
+        version: String(r.releaseVersion ?? ''),
+        changelog: '',
+        binaryUrl: '',
+        sha256: '',
+        size: 0,
+        createdAt: '',
+        createdBy: '',
+      } as Release)) as any,
+    strategy: r.strategy as RolloutStrategy,
+    status: r.status as RolloutStatus,
+    targetTags: Array.isArray(r.targetTags) ? r.targetTags : [],
+    batchSize: Number(r.batchSize ?? 0),
+    batchDelay: Number(r.batchDelay ?? 0),
+    startedAt: r.startedAt ?? undefined,
+    completedAt: r.completedAt ?? undefined,
+    progress: Array.isArray(r.progress)
+      ? r.progress
+      : [], // list endpoint does not include progress
+  })) as Rollout[];
 }
 
 async function startRolloutApi(releaseId: string, config: RolloutConfig): Promise<Rollout> {
-  const response = await fetch(`${API_URL}/api/v1/fleet/rollouts`, {
+  // Hub API starts a rollout at /releases/:id/rollout
+  return apiFetch<Rollout>(`/releases/${releaseId}/rollout`, {
     method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
-      releaseId,
-      ...config,
-    }),
+    body: {
+      strategy: config.strategy,
+      targetTags: config.targetTags,
+      batchSize: config.batchSize,
+      batchDelay: config.batchDelay,
+    },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to start rollout: ${response.status}`);
-  }
-
-  return response.json();
 }
 
 async function cancelRolloutApi(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/fleet/rollouts/${id}/cancel`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to cancel rollout: ${response.status}`);
-  }
+  await apiFetch<void>(`/releases/rollouts/${id}/cancel`, { method: 'POST' });
 }
 
 // ============================================================================

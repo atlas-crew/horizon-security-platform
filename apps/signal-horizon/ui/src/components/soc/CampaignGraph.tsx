@@ -4,6 +4,7 @@ import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
+import { apiFetch, API_KEY } from '../../lib/api';
 
 cytoscape.use(fcose);
 
@@ -12,19 +13,10 @@ interface CampaignGraphProps {
   sensorId?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-
-const authHeaders = {
-  Authorization: `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-  'X-Admin-Key': API_KEY, // P0: Added for sensor:read scope authentication
-};
-
 async function fetchGraphData(sensorId: string, campaignId: string) {
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${sensorId}/campaigns/${campaignId}/graph`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch graph data');
-  const result = await response.json();
+  const result = await apiFetch<any>(`/synapse/${sensorId}/campaigns/${campaignId}/graph`, {
+    headers: { 'X-Admin-Key': API_KEY },
+  });
   return result.data;
 }
 
@@ -80,7 +72,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
           // Try to get graph for specific campaign, or default to camp-001
           graphData = demoData.fleet.campaignGraphs[campaignId] || demoData.fleet.campaignGraphs['camp-001'];
         } else {
-          const targetSensorId = sensorId || 'synapse-pingora';
+          const targetSensorId = sensorId || 'synapse-pingora-1';
           graphData = await fetchGraphData(targetSensorId, campaignId);
         }
 

@@ -1,6 +1,6 @@
 /**
  * Request Timeline Pivot Page
- * Correlates ClickHouse rows by request_id across http_transactions/signal_events/sensor_logs.
+ * Correlates ClickHouse rows by request_id across http_transactions/signal_events/sensor_logs/actor_events/session_events.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -8,6 +8,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type RecentRequest, type RequestTimelineEvent } from '../../hooks/useHunt';
+import RequestTimelineGraph from '../../components/hunting/RequestTimelineGraph';
 
 function summarizeEvent(e: RequestTimelineEvent): string {
   switch (e.kind) {
@@ -17,6 +18,10 @@ function summarizeEvent(e: RequestTimelineEvent): string {
       return `${e.signalType} severity=${e.severity} ip=${e.sourceIp} count=${e.eventCount}`;
     case 'sensor_log':
       return `[${e.level}] ${e.source}: ${e.message}`;
+    case 'actor_event':
+      return `${e.eventType} actor=${e.actorId} risk=${e.riskScore} (${e.riskDelta >= 0 ? '+' : ''}${e.riskDelta}) ip=${e.ip}`;
+    case 'session_event':
+      return `${e.eventType} session=${e.sessionId} actor=${e.actorId} requests=${e.requestCount}`;
     default:
       return 'unknown';
   }
@@ -54,6 +59,8 @@ export default function RequestTimelinePage() {
   const [endTime, setEndTime] = useState('');
   const [limit, setLimit] = useState<number>(500);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [view, setView] = useState<'graph' | 'table'>('graph');
+  const [timelineNote, setTimelineNote] = useState<string | null>(null);
 
   const canRun = requestId.trim().length > 0 && !isLoading;
 
@@ -78,6 +85,7 @@ export default function RequestTimelinePage() {
   const run = useCallback(async (id: string) => {
     clearError();
     setLocalError(null);
+    setTimelineNote(null);
     try {
       const res = await getRequestTimeline(id, {
         startTime: startTime.trim() || undefined,
@@ -85,6 +93,9 @@ export default function RequestTimelinePage() {
         limit,
       });
       setEvents(res.events);
+      if (res.events.length >= Math.max(1, limit)) {
+        setTimelineNote('Results may be truncated. Reduce limit or narrow the time window for full fidelity.');
+      }
     } catch (err) {
       setEvents(null);
       setLocalError(err instanceof Error ? err.message : 'Request timeline query failed');
@@ -333,11 +344,39 @@ export default function RequestTimelinePage() {
             <h2 className="font-medium text-ink-primary truncate">Timeline</h2>
             <p className="text-xs text-ink-muted mt-1 font-mono truncate">{header}</p>
           </div>
-          <div className="text-xs text-ink-muted font-mono">
-            {events ? `${events.length} events` : 'no data'}
+          <div className="flex items-center gap-3">
+            <div className="inline-flex border border-border-subtle bg-surface-inset">
+              <button
+                type="button"
+                onClick={() => setView('graph')}
+                className={view === 'graph'
+                  ? 'h-8 px-3 text-[10px] font-mono bg-ac-navy text-white'
+                  : 'h-8 px-3 text-[10px] font-mono text-ink-secondary hover:text-ink-primary'}
+              >
+                Graph
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('table')}
+                className={view === 'table'
+                  ? 'h-8 px-3 text-[10px] font-mono bg-ac-navy text-white'
+                  : 'h-8 px-3 text-[10px] font-mono text-ink-secondary hover:text-ink-primary'}
+              >
+                Table
+              </button>
+            </div>
+            <div className="text-xs text-ink-muted font-mono whitespace-nowrap">
+              {events ? `${events.length} events` : 'no data'}
+            </div>
           </div>
         </div>
         <div className="card-body">
+          {timelineNote && (
+            <div className="mb-3 text-xs text-ac-orange border border-ac-orange/30 bg-ac-orange/10 p-3">
+              {timelineNote}
+            </div>
+          )}
+
           {!events && (
             <div className="text-sm text-ink-secondary">
               Enter a <span className="font-mono">request_id</span> and run.
@@ -351,40 +390,50 @@ export default function RequestTimelinePage() {
           )}
 
           {events && events.length > 0 && (
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Request timeline events correlated by request id</caption>
-                <thead className="text-xs text-ink-muted border-b border-border-subtle">
-                  <tr>
-                    <th className="text-left py-2 pr-3">Time</th>
-                    <th className="text-left py-2 pr-3">Kind</th>
-                    <th className="text-left py-2 pr-3">Summary</th>
-                    <th className="text-left py-2 pr-3">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                  {events.map((e, idx) => (
-                    <tr key={`${e.kind}-${e.timestamp}-${idx}`} className="align-top">
-                      <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-secondary">
-                        {new Date(e.timestamp).toLocaleString()}
-                      </td>
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        <span className="px-2 py-1 border border-border-subtle bg-surface-inset text-xs font-mono">
-                          {e.kind}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3 text-ink-primary">
-                        <span className="font-mono text-xs">{summarizeEvent(e)}</span>
-                      </td>
-                      <td className="py-2 pr-3">
-                        {e.kind === 'signal_event' && jsonDetails('metadata', e.metadata)}
-                        {e.kind === 'sensor_log' && jsonDetails('fields', e.fields)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {view === 'graph' && (
+                <RequestTimelineGraph events={events} />
+              )}
+
+              {view === 'table' && (
+                <div className="overflow-auto">
+                  <table className="w-full text-sm">
+                    <caption className="sr-only">Request timeline events correlated by request id</caption>
+                    <thead className="text-xs text-ink-muted border-b border-border-subtle">
+                      <tr>
+                        <th className="text-left py-2 pr-3">Time</th>
+                        <th className="text-left py-2 pr-3">Kind</th>
+                        <th className="text-left py-2 pr-3">Summary</th>
+                        <th className="text-left py-2 pr-3">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {events.map((e, idx) => (
+                        <tr key={`${e.kind}-${e.timestamp}-${idx}`} className="align-top">
+                          <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-secondary">
+                            {new Date(e.timestamp).toLocaleString()}
+                          </td>
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            <span className="px-2 py-1 border border-border-subtle bg-surface-inset text-xs font-mono">
+                              {e.kind}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-ink-primary">
+                            <span className="font-mono text-xs">{summarizeEvent(e)}</span>
+                          </td>
+                          <td className="py-2 pr-3">
+                            {e.kind === 'signal_event' && jsonDetails('metadata', e.metadata)}
+                            {e.kind === 'sensor_log' && jsonDetails('fields', e.fields)}
+                            {e.kind === 'actor_event' && jsonDetails('actor', { actorId: e.actorId, ruleId: e.ruleId, ruleCategory: e.ruleCategory })}
+                            {e.kind === 'session_event' && jsonDetails('session', { sessionId: e.sessionId, actorId: e.actorId })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -22,14 +22,7 @@ import {
   runDiagnostics,
   type TabType,
 } from './sensor-detail';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-
-const authHeaders = {
-  Authorization: `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../lib/api';
 
 export function SensorDetailPage() {
   useDocumentTitle('Sensor Detail');
@@ -81,11 +74,7 @@ export function SensorDetailPage() {
   // Mutations
   const restartMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/actions/restart`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!response.ok) throw new Error('Failed to restart sensor');
+      await apiFetch(`/fleet/sensors/${id}/actions/restart`, { method: 'POST' });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id] }),
   });

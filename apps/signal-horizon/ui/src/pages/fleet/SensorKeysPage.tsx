@@ -9,10 +9,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Key, Plus, RotateCw, Trash2, Copy, Check, AlertTriangle, Clock, Shield } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+import { apiFetch } from '../../lib/api';
 
 interface SensorKey {
   id: string;
@@ -62,9 +59,7 @@ export function SensorKeysPage(): React.ReactElement {
   const { data: keysData, isLoading, error } = useQuery({
     queryKey: ['sensor-keys'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/keys`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch keys');
-      return response.json();
+      return apiFetch('/management/keys');
     },
   });
 
@@ -74,9 +69,7 @@ export function SensorKeysPage(): React.ReactElement {
   const { data: sensorsData } = useQuery({
     queryKey: ['sensors-list'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/fleet/sensors`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch sensors');
-      return response.json();
+      return apiFetch('/fleet/sensors');
     },
   });
 
@@ -85,15 +78,9 @@ export function SensorKeysPage(): React.ReactElement {
   // Generate key mutation
   const generateMutation = useMutation({
     mutationFn: async (request: NewKeyRequest) => {
-      const response = await fetch(`${API_BASE}/management/keys`, {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-      if (!response.ok) throw new Error('Failed to generate key');
-      return response.json();
+      return apiFetch('/management/keys', { method: 'POST', body: request });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['sensor-keys'] });
       setGeneratedKey(data.key);
     },
@@ -102,15 +89,9 @@ export function SensorKeysPage(): React.ReactElement {
   // Rotate key mutation
   const rotateMutation = useMutation({
     mutationFn: async (keyId: string) => {
-      const response = await fetch(`${API_BASE}/management/keys/${keyId}/rotate`, {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (!response.ok) throw new Error('Failed to rotate key');
-      return response.json();
+      return apiFetch(`/management/keys/${keyId}/rotate`, { method: 'POST', body: {} });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['sensor-keys'] });
       setGeneratedKey(data.key);
     },
@@ -119,12 +100,7 @@ export function SensorKeysPage(): React.ReactElement {
   // Revoke key mutation
   const revokeMutation = useMutation({
     mutationFn: async (keyId: string) => {
-      const response = await fetch(`${API_BASE}/management/keys/${keyId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-      });
-      if (!response.ok) throw new Error('Failed to revoke key');
-      return response.json();
+      return apiFetch(`/management/keys/${keyId}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sensor-keys'] });

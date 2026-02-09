@@ -41,7 +41,7 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
 
   const suspiciousSessions = sessions.filter((session) => session.isSuspicious).length;
   const activeSessions = sessions.filter((session) => session.lastActivity > now - 30 * 60 * 1000).length;
-  const hijackAlerts = sessions.reduce((count, session) => count + session.hijackAlerts.length, 0);
+  const hijackAlerts = sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0);
 
   return {
     sessions,
@@ -97,7 +97,7 @@ export default function SessionsPage() {
         new Date(session.lastActivity).toISOString(),
         session.requestCount,
         session.isSuspicious ? 'YES' : 'NO',
-        session.hijackAlerts.length,
+        session.hijackAlerts?.length ?? 0,
         session.boundIp ?? '',
         session.boundJa4 ?? '',
       ])
@@ -146,7 +146,7 @@ export default function SessionsPage() {
         <StatCard
           icon={Shield}
           label="Hijack Alerts"
-          value={stats?.hijackAlerts ?? sessions.reduce((count, session) => count + session.hijackAlerts.length, 0)}
+          value={stats?.hijackAlerts ?? sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)}
           tone="text-ac-red"
         />
       </section>
@@ -213,7 +213,7 @@ export default function SessionsPage() {
                         {new Date(session.lastActivity).toLocaleString()}
                       </td>
                       <td className="text-ink-secondary">{session.requestCount}</td>
-                      <td className="text-ink-secondary">{session.hijackAlerts.length}</td>
+                      <td className="text-ink-secondary">{session.hijackAlerts?.length ?? 0}</td>
                       <td>
                         <span
                           className={clsx(

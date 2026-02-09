@@ -12,7 +12,8 @@ export default defineConfig({
   server: {
     port: 5180,
     proxy: {
-      '/api': {
+      // Only proxy the API namespace; do not catch UI routes like "/api-intelligence".
+      '/api/v1': {
         target: 'http://localhost:3100',
         changeOrigin: true,
       },

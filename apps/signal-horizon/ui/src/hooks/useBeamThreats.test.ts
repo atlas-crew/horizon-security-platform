@@ -5,6 +5,28 @@ import { useBeamThreats } from './useBeamThreats';
 // Mock fetch globally
 const mockFetch = vi.fn();
 
+function mockJsonResponse(data: unknown) {
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: { get: () => 'application/json' },
+    json: async () => data,
+    text: async () => JSON.stringify(data),
+  };
+}
+
+function mockErrorResponse(status: number, statusText: string, data: unknown = {}) {
+  return {
+    ok: false,
+    status,
+    statusText,
+    headers: { get: () => 'application/json' },
+    json: async () => data,
+    text: async () => JSON.stringify(data),
+  };
+}
+
 describe('useBeamThreats', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,10 +78,7 @@ describe('useBeamThreats', () => {
 
   describe('successful data fetching', () => {
     it('should fetch threats data successfully', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -74,10 +93,7 @@ describe('useBeamThreats', () => {
     });
 
     it('should call the correct API endpoint', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -92,10 +108,7 @@ describe('useBeamThreats', () => {
     });
 
     it('should pass queryParams to API call', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       renderHook(() =>
         useBeamThreats({ queryParams: { limit: 20, severity: 'CRITICAL' }, pollingInterval: 0 })
@@ -134,11 +147,7 @@ describe('useBeamThreats', () => {
     });
 
     it('should handle HTTP 401 errors', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized'
-      });
+      mockFetch.mockResolvedValue(mockErrorResponse(401, 'Unauthorized', { error: 'Unauthorized' }));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -184,10 +193,7 @@ describe('useBeamThreats', () => {
         pagination: { total: 3, limit: 50, offset: 0, hasMore: false }
       };
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => dataWithMultipleBlocks
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(dataWithMultipleBlocks));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -203,10 +209,7 @@ describe('useBeamThreats', () => {
 
   describe('data transformation', () => {
     it('should transform API blocks to BlockedRequest format', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -228,10 +231,7 @@ describe('useBeamThreats', () => {
 
   describe('recentEvents derivation', () => {
     it('should derive recentEvents from blocks', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 
@@ -246,10 +246,7 @@ describe('useBeamThreats', () => {
 
   describe('pagination', () => {
     it('should maintain pagination state', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => mockThreatsData
-      });
+      mockFetch.mockResolvedValue(mockJsonResponse(mockThreatsData));
 
       const { result } = renderHook(() => useBeamThreats({ pollingInterval: 0 }));
 

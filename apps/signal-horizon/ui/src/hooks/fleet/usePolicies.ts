@@ -5,16 +5,7 @@
  */
 
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY =
-  import.meta.env.VITE_API_KEY ||
-  import.meta.env.VITE_HORIZON_API_KEY ||
-  'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../lib/api';
 
 export interface PolicyTemplate {
   id: string;
@@ -30,17 +21,13 @@ export interface PolicyTemplate {
 }
 
 async function fetchPolicies(): Promise<PolicyTemplate[]> {
-  const response = await fetch(`${API_BASE}/fleet/policies`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch policy templates');
-  const data = await response.json();
-  return data.templates || [];
+  const data = await apiFetch<{ templates?: PolicyTemplate[] }>('/fleet/policies');
+  return Array.isArray(data.templates) ? data.templates : [];
 }
 
 async function fetchDefaults(): Promise<PolicyTemplate[]> {
-  const response = await fetch(`${API_BASE}/fleet/policies/defaults`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch default policy templates');
-  const data = await response.json();
-  return data.templates || [];
+  const data = await apiFetch<{ templates?: PolicyTemplate[] }>('/fleet/policies/defaults');
+  return Array.isArray(data.templates) ? data.templates : [];
 }
 
 type PolicyTemplateInput = {
@@ -51,57 +38,23 @@ type PolicyTemplateInput = {
 };
 
 async function createPolicyTemplate(input: PolicyTemplateInput) {
-  const response = await fetch(`${API_BASE}/fleet/policies`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message || body?.error || 'Failed to create policy template');
-  }
-  return response.json();
+  return apiFetch('/fleet/policies', { method: 'POST', body: input });
 }
 
 async function updatePolicyTemplate(params: {
   id: string;
   input: Partial<PolicyTemplateInput>;
 }) {
-  const response = await fetch(`${API_BASE}/fleet/policies/${params.id}`, {
-    method: 'PUT',
-    headers: authHeaders,
-    body: JSON.stringify(params.input),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message || body?.error || 'Failed to update policy template');
-  }
-  return response.json();
+  return apiFetch(`/fleet/policies/${params.id}`, { method: 'PUT', body: params.input });
 }
 
 async function deletePolicyTemplate(id: string) {
-  const response = await fetch(`${API_BASE}/fleet/policies/${id}`, {
-    method: 'DELETE',
-    headers: authHeaders,
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message || body?.error || 'Failed to delete policy template');
-  }
+  await apiFetch(`/fleet/policies/${id}`, { method: 'DELETE' });
   return true;
 }
 
 async function clonePolicyTemplate(params: { id: string; name: string }) {
-  const response = await fetch(`${API_BASE}/fleet/policies/${params.id}/clone`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ name: params.name }),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message || body?.error || 'Failed to clone policy template');
-  }
-  return response.json();
+  return apiFetch(`/fleet/policies/${params.id}/clone`, { method: 'POST', body: { name: params.name } });
 }
 
 export function usePolicies() {

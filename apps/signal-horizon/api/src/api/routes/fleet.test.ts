@@ -109,6 +109,9 @@ describe('Fleet Routes', () => {
         findUnique: vi.fn(),
         count: vi.fn(),
       } as unknown as PrismaClient['sensor'],
+      signal: {
+        findMany: vi.fn(),
+      } as unknown as PrismaClient['signal'],
       fleetCommand: {
         findMany: vi.fn(),
         findFirst: vi.fn(),
@@ -243,6 +246,47 @@ describe('Fleet Routes', () => {
       await request(app)
         .get('/fleet/sensors/sensor-1')
         .expect(403);
+    });
+  });
+
+  describe('GET /fleet/sensors/:sensorId/signals', () => {
+    it('should return recent signals for a sensor', async () => {
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(createMockSensor());
+      vi.mocked(mockPrisma.signal!.findMany).mockResolvedValue([
+        {
+          id: 'sig-1',
+          createdAt: new Date(),
+          sensorId: 'sensor-1',
+          signalType: 'threat',
+          sourceIp: '1.2.3.4',
+          anonFingerprint: 'fp-1',
+          severity: 'high',
+          confidence: 0.9,
+          eventCount: 1,
+          metadata: { test: true },
+        } as any,
+      ]);
+
+      const res = await request(app)
+        .get('/fleet/sensors/sensor-1/signals?limit=1')
+        .expect(200);
+
+      expect(res.body.signals).toHaveLength(1);
+      expect(vi.mocked(mockPrisma.signal!.findMany)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-1', sensorId: 'sensor-1' }),
+        })
+      );
+    });
+
+    it('should enforce tenant isolation via requireTenant', async () => {
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(createMockSensor({ tenantId: 'other-tenant' }));
+
+      await request(app)
+        .get('/fleet/sensors/sensor-1/signals')
+        .expect(403);
+
+      expect(vi.mocked(mockPrisma.signal!.findMany)).not.toHaveBeenCalled();
     });
   });
 

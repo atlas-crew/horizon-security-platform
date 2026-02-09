@@ -251,10 +251,17 @@ export class SensorGateway {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const token = url.searchParams.get('token') || req.headers.authorization?.replace('Bearer ', '');
 
+      // labs-8awg: Support first-message auth protocol. 
+      // Mandatory auth is enforced in handleConnection/handleAuth within 10s.
+      // Pre-validation here is an optimization but should not block if credentials aren't in headers/query.
       if (!token) {
-        this.logger.warn({ ip: socket.remoteAddress }, 'Rejected unauthenticated sensor connection');
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        socket.destroy();
+        this.logger.debug(
+          { ip: socket.remoteAddress, url: req.url },
+          'No token provided during sensor WebSocket upgrade; allowing connection to proceed to first-message auth'
+        );
+        this.wss.handleUpgrade(req, socket, head, (ws) => {
+          this.wss?.emit('connection', ws, req);
+        });
         return;
       }
 
@@ -332,9 +339,15 @@ export class SensorGateway {
 
       throw new Error('Invalid credentials');
     } catch (error) {
-      this.logger.warn({ ip: socket.remoteAddress, error }, 'Sensor WebSocket upgrade authentication failed');
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
+      // labs-8awg: Even if pre-validation fails (invalid token), allow connection to proceed
+      // to handleConnection. The mandatory auth message must still be sent within 10s.
+      this.logger.debug(
+        { ip: socket.remoteAddress, url: req.url, error: (error as Error).message },
+        'Sensor WebSocket pre-validation failed; deferring to first-message auth'
+      );
+      this.wss.handleUpgrade(req, socket, head, (ws) => {
+        this.wss?.emit('connection', ws, req);
+      });
     }
   }
 
@@ -835,10 +848,17 @@ export class SensorGateway {
 
       // Update last used timestamp if API key was used
       if (apiKeyId) {
-        await this.prisma.apiKey.update({
-          where: { id: apiKeyId },
-          data: { lastUsedAt: new Date() },
-        });
+        if (apiKeySource === 'sensor') {
+          await this.prisma.sensorApiKey.update({
+            where: { id: apiKeyId },
+            data: { lastUsedAt: new Date() },
+          });
+        } else if (apiKeySource === 'legacy') {
+          await this.prisma.apiKey.update({
+            where: { id: apiKeyId },
+            data: { lastUsedAt: new Date() },
+          });
+        }
       }
 
       // Determine capabilities based on approval status

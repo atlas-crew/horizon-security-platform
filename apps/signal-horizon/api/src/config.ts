@@ -112,7 +112,7 @@ const envSchema = z.object({
   CLICKHOUSE_USER: z.string().default('default'),
   CLICKHOUSE_PASSWORD: z.string().default('clickhouse'),
   CLICKHOUSE_COMPRESSION: booleanString('true'),
-  CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 100).catch(10),
+  CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 200).catch(25),
 }).refine((data) => {
   // Production-only security checks (labs-mmft.6, labs-msll)
   if (data.NODE_ENV === 'production') {

@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useCallback, Suspense, useMemo, useState, lazy } from 'react';
 import {
   LayoutDashboard,
@@ -112,6 +112,7 @@ function getInitialTheme(): 'light' | 'dark' {
 }
 
 function App() {
+  const location = useLocation();
   const { connect, isConnected, connectionState } = useWebSocket();
   const sensorCount = useHorizonStore((s) => s.sensorStats.CONNECTED || 0);
   const campaigns = useHorizonStore((s) => s.campaigns);
@@ -546,7 +547,8 @@ function App() {
             isReconnecting={connectionState === 'connecting'}
           />
 
-          <ErrorBoundary>
+          {/* Reset the global error boundary on navigation so sidebar links can recover after a bad page render. */}
+          <ErrorBoundary key={location.pathname}>
             <Suspense fallback={<LoadingSpinner message="Loading Signal Horizon..." size="lg" />}>
               <Routes>
                 <Route path="/" element={<SignalHorizonPageWrapper><OverviewPage /></SignalHorizonPageWrapper>} />
@@ -567,7 +569,7 @@ function App() {
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
                 <Route path="/auth-coverage" element={<Suspense fallback={<LoadingSpinner message="Loading auth coverage map..." size="lg" />}><SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
-                <Route path="/support" element={<SupportPage />} />
+                <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
                 
                 {fleetRoutes.map((route) => (

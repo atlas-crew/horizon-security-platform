@@ -6,13 +6,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../lib/api';
 
 // =============================================================================
 // Type Definitions
@@ -56,48 +50,26 @@ export interface WithdrawalRequest {
 // =============================================================================
 
 async function fetchSettings(): Promise<TenantSettings> {
-  const response = await fetch(`${API_BASE}/tenant/settings`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch tenant settings');
-  return response.json();
+  return apiFetch<TenantSettings>('/tenant/settings');
 }
 
 async function updateSettings(
   preference: SharingPreference,
   idempotencyKey: string
 ): Promise<TenantSettings> {
-  const response = await fetch(`${API_BASE}/tenant/settings`, {
+  return apiFetch<TenantSettings>('/tenant/settings', {
     method: 'PATCH',
-    headers: {
-      ...authHeaders,
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify({ sharingPreference: preference }),
+    body: { sharingPreference: preference },
+    headers: { 'Idempotency-Key': idempotencyKey },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || errorData.error || 'Failed to update settings');
-  }
-  return response.json();
 }
 
 async function recordConsent(consent: ConsentRequest): Promise<any> {
-  const response = await fetch(`${API_BASE}/tenant/consent`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify(consent),
-  });
-  if (!response.ok) throw new Error('Failed to record consent');
-  return response.json();
+  return apiFetch('/tenant/consent', { method: 'POST', body: consent });
 }
 
 async function requestWithdrawal(request: WithdrawalRequest): Promise<any> {
-  const response = await fetch(`${API_BASE}/tenant/withdrawal-request`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) throw new Error('Failed to process withdrawal request');
-  return response.json();
+  return apiFetch('/tenant/withdrawal-request', { method: 'POST', body: request });
 }
 
 // =============================================================================

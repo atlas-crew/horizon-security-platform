@@ -4,10 +4,7 @@ import { MetricCard } from '../../components/fleet';
 import { SynapseConfigEditor, getDefaultConfigYaml } from '../../components/fleet/SynapseConfigEditor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+import { apiFetch } from '../../lib/api';
 
 interface ConfigTemplate {
   id: string;
@@ -46,33 +43,20 @@ interface ConfigAuditResponse {
 }
 
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/config/templates`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch templates');
-  const data = await response.json();
+  const data = await apiFetch<any>('/fleet/config/templates');
   return data.templates || [];
 }
 
 async function fetchSyncStatus(): Promise<SyncStatus> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/config/sync-status`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch sync status');
-  return response.json();
+  return apiFetch<SyncStatus>('/fleet/config/sync-status');
 }
 
 async function fetchConfigAudit(): Promise<ConfigAuditResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/config/audit?limit=25&offset=0`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to fetch config audit logs');
-  return response.json();
+  return apiFetch<ConfigAuditResponse>('/fleet/config/audit?limit=25&offset=0');
 }
 
 async function pushConfig(templateId: string, sensorIds: string[]): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/config/push`, {
-    method: 'POST',
-    headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ templateId, sensorIds }),
-  });
-  if (!response.ok) throw new Error('Failed to push config');
+  await apiFetch('/fleet/config/push', { method: 'POST', body: { templateId, sensorIds } });
 }
 
 export function ConfigManagerPage() {
@@ -226,15 +210,22 @@ export function ConfigManagerPage() {
         ) : (
           <div className="divide-y divide-border-subtle">
             {templates.map((template) => (
-              <button
+              <div
                 key={template.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 aria-pressed={selectedTemplate === template.id}
                 aria-label={`Select template: ${template.name}`}
                 className={`w-full p-6 text-left hover:bg-surface-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-inset ${
                   selectedTemplate === template.id ? 'bg-ac-blue/10' : ''
                 }`}
                 onClick={() => setSelectedTemplate(template.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedTemplate(template.id);
+                  }
+                }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -279,7 +270,7 @@ export function ConfigManagerPage() {
                     </button>
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}

@@ -13,6 +13,7 @@ import {
   Package,
   Settings,
   HelpCircle,
+  BookOpen,
   Command as CommandIcon,
   ArrowRight,
   Sun,
@@ -355,7 +356,7 @@ export function CommandPalette({
                 },
               });
             });
-          } catch (e) { /* ignore */ }
+          } catch (e) { console.debug('Sensor search failed:', e); }
 
           // 4. Search API Endpoints
           try {
@@ -376,7 +377,32 @@ export function CommandPalette({
                 },
               });
             });
-          } catch (e) { /* ignore */ }
+          } catch (e) { console.debug('API search failed:', e); }
+
+          // 5. Search Documentation
+          try {
+            const docsResp = await apiFetch<any[]>(`/docs/search?q=${encodeURIComponent(query)}`);
+            if (signal.aborted) return;
+            docsResp.forEach((doc: any) => {
+              const isHighConfidence = doc.title.toLowerCase().includes(query.toLowerCase());
+              results.push({
+                id: `doc-${doc.id}`,
+                label: `Docs: ${doc.title}`,
+                category: isHighConfidence ? 'Smart Answer' : 'Quick Search',
+                icon: BookOpen,
+                metadata: `${doc.category}${isHighConfidence ? '' : ` · ${doc.snippet.substring(0, 40)}...`}`,
+                onSelect: () => {
+                  addToRecent({ id: doc.id, label: doc.title, path: `/support/${doc.id}`, type: 'page' });
+                  navigate(`/support/${doc.id}`);
+                },
+                renderAnswer: isHighConfidence ? () => (
+                  <div className="mt-2 p-3 bg-ac-blue/5 border-l-2 border-ac-blue rounded-r text-[11px] leading-relaxed text-ink-secondary italic">
+                    {doc.snippet}
+                  </div>
+                ) : undefined
+              });
+            });
+          } catch (e) { console.debug('Docs search failed:', e); }
 
         } else {
           // Demo mode mock results
@@ -410,7 +436,7 @@ export function CommandPalette({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, sensorId, isDemoMode, navigate, addToRecent, commandItems.length, smartAnswers.length]);
+  }, [query, sensorId, isDemoMode, navigate, addToRecent, commandItems, smartAnswers.length]);
 
   const recentCommandItems = useMemo<CommandItem[]>(() => {
     return recentItems.map(item => ({
@@ -518,6 +544,10 @@ export function CommandPalette({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -20 }}
               className="w-full max-w-2xl bg-surface-card border border-border-strong shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[70vh] scanlines"
+              role="combobox"
+              aria-expanded={isOpen}
+              aria-haspopup="listbox"
+              aria-controls="command-palette-listbox"
             >
               <div className="flex items-center px-4 border-b border-border-subtle bg-surface-subtle/50">
                 {isSearching ? (
@@ -532,15 +562,24 @@ export function CommandPalette({
                   className="w-full h-14 px-4 bg-transparent text-ink-primary focus:outline-none text-lg font-light"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  role="textbox"
+                  aria-autocomplete="list"
+                  aria-controls="command-palette-listbox"
+                  aria-activedescendant={filteredItems[selectedIndex] ? `option-${filteredItems[selectedIndex].id}` : undefined}
                 />
                 <div className="flex items-center gap-1.5 px-2 py-1 border border-border-subtle rounded text-[10px] text-ink-muted uppercase tracking-widest bg-surface-base">
                   ESC
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-2 space-y-4">
+              <div 
+                id="command-palette-listbox"
+                className="flex-1 overflow-y-auto p-2 space-y-4"
+                role="listbox"
+                aria-label="Commands and search results"
+              >
                 {filteredItems.length === 0 ? (
-                  <div className="py-12 text-center">
+                  <div className="py-12 text-center" role="option" aria-selected="false">
                     <p className="text-ink-secondary">No results found for "{query}"</p>
                   </div>
                 ) : (
@@ -550,8 +589,11 @@ export function CommandPalette({
                       if (categoryItems.length === 0) return null;
 
                       return (
-                        <div key={category} className="space-y-1">
-                          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted flex items-center justify-between">
+                        <div key={category} className="space-y-1" role="group" aria-labelledby={`category-${category}`}>
+                          <div 
+                            id={`category-${category}`}
+                            className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted flex items-center justify-between"
+                          >
                             <div className="flex items-center gap-2">
                               {category === 'Recent' && <History className="w-3 h-3 text-ac-sky-blue" />}
                               {category === 'Command' && <CommandIcon className="w-3 h-3 text-ac-magenta" />}
@@ -573,6 +615,9 @@ export function CommandPalette({
                             return (
                               <div key={item.id} className="space-y-1">
                                 <button
+                                  id={`option-${item.id}`}
+                                  role="option"
+                                  aria-selected={isSelected}
                                   className={clsx(
                                     'w-full flex items-center justify-between px-3 py-3 text-sm transition-colors group text-left',
                                     isSelected

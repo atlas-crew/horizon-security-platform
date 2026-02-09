@@ -47,10 +47,13 @@ describe('Hunt Routes', () => {
       getRecentRequests: vi.fn(),
       getHourlyStats: vi.fn(),
       getIpActivity: vi.fn(),
+      getLowAndSlowIps: vi.fn(),
       getSavedQueries: vi.fn(),
       saveQuery: vi.fn(),
       getSavedQuery: vi.fn(),
       deleteSavedQuery: vi.fn(),
+      getTenantBaselines: vi.fn(),
+      getAnomalies: vi.fn(),
     } as unknown as HuntService;
 
     app = express();
@@ -143,6 +146,118 @@ describe('Hunt Routes', () => {
     });
   });
 
+  it('GET /api/v1/hunt/baselines uses authenticated tenant', async () => {
+    vi.mocked(huntService.getTenantBaselines).mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/baselines?days=45')
+      .expect(200);
+
+    expect(vi.mocked(huntService.getTenantBaselines)).toHaveBeenCalledWith('tenant-1', 45);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [],
+      meta: { tenantId: 'tenant-1', lookbackDays: 45, historical: true },
+    });
+  });
+
+  it('GET /api/v1/hunt/baselines returns graceful empty response when ClickHouse disabled', async () => {
+    vi.mocked(huntService.isHistoricalEnabled).mockReturnValue(false);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/baselines')
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [],
+      meta: { historical: false },
+    });
+  });
+
+  it('GET /api/v1/hunt/anomalies uses authenticated tenant', async () => {
+    vi.mocked(huntService.getAnomalies).mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/anomalies?zScore=3.5')
+      .expect(200);
+
+    expect(vi.mocked(huntService.getAnomalies)).toHaveBeenCalledWith('tenant-1', 3.5);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [],
+      meta: { tenantId: 'tenant-1', zScoreThreshold: 3.5, historical: true },
+    });
+  });
+
+  it('GET /api/v1/hunt/anomalies returns graceful empty response when ClickHouse disabled', async () => {
+    vi.mocked(huntService.isHistoricalEnabled).mockReturnValue(false);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/anomalies')
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [],
+      meta: { historical: false },
+    });
+  });
+
+  it('GET /api/v1/hunt/anomalies rejects invalid zScore', async () => {
+    const response = await request(app)
+      .get('/api/v1/hunt/anomalies?zScore=100')
+      .expect(400);
+
+    expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+  });
+
+  it('GET /api/v1/hunt/low-and-slow requires admin role', async () => {
+    const response = await request(app)
+      .get('/api/v1/hunt/low-and-slow')
+      .expect(403);
+
+    expect(response.body).toMatchObject({
+      title: 'Forbidden',
+      detail: expect.stringContaining('Requires admin role'),
+      code: 'INSUFFICIENT_ROLE',
+    });
+  });
+
+  it('GET /api/v1/hunt/low-and-slow returns candidates for admin', async () => {
+    const adminApp = express();
+    adminApp.use(express.json());
+    adminApp.use((req: Request, _res: Response, next: NextFunction) => {
+      req.auth = {
+        tenantId: 'tenant-1',
+        scopes: ['hunt:read', 'fleet:admin'],
+        isFleetAdmin: true,
+      } as unknown as typeof req.auth;
+      next();
+    });
+    adminApp.use('/api/v1/hunt', createHuntRoutes({} as PrismaClient, mockLogger, huntService));
+
+    vi.mocked(huntService.getLowAndSlowIps).mockResolvedValue([
+      { sourceIp: '203.0.113.10', daysSeen: 12, maxDailySignals: 7, totalSignals: 40, tenantsHit: 3 },
+    ]);
+
+    const response = await request(adminApp)
+      .get('/api/v1/hunt/low-and-slow?days=90&minDistinctDays=5&maxSignalsPerDay=10&limit=25')
+      .expect(200);
+
+    expect(vi.mocked(huntService.getLowAndSlowIps)).toHaveBeenCalledWith({
+      days: 90,
+      minDistinctDays: 5,
+      maxSignalsPerDay: 10,
+      limit: 25,
+    });
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [{ sourceIp: '203.0.113.10' }],
+      meta: { days: 90, minDistinctDays: 5, maxSignalsPerDay: 10, limit: 25, historical: true, count: 1 },
+    });
+  });
+
   it('GET /api/v1/hunt/request/:requestId enforces tenant isolation', async () => {
     vi.mocked(huntService.getRequestTimeline).mockResolvedValue([]);
 
@@ -209,15 +324,22 @@ describe('Hunt Routes', () => {
     });
   });
 
-  it('GET /api/v1/hunt/requests/recent returns 503 when ClickHouse disabled', async () => {
+  it('GET /api/v1/hunt/requests/recent returns empty list when ClickHouse disabled', async () => {
     vi.mocked(huntService.isHistoricalEnabled).mockReturnValue(false);
 
     const response = await request(app)
       .get('/api/v1/hunt/requests/recent')
-      .expect(503);
+      .expect(200);
 
     expect(response.body).toMatchObject({
-      error: 'Historical queries not available',
+      success: true,
+      data: [],
+      meta: {
+        tenantId: 'tenant-1',
+        count: 0,
+        limit: 25,
+        historical: false,
+      },
     });
     expect(huntService.getRecentRequests).not.toHaveBeenCalled();
   });

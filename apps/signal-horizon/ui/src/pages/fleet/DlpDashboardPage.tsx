@@ -4,13 +4,7 @@ import { MetricCard } from '../../components/fleet';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-
-const authHeaders = {
-  Authorization: `Bearer ${API_KEY}`,
-};
+import { apiFetch } from '../../lib/api';
 
 interface DlpStats {
   totalScans: number;
@@ -29,17 +23,13 @@ interface DlpViolation {
 }
 
 async function fetchDlpStats(): Promise<DlpStats> {
-  const sensorId = 'synapse-pingora';
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${sensorId}/proxy/_sensor/dlp/stats`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch DLP stats');
-  return response.json();
+  const sensorId = 'synapse-pingora-1';
+  return apiFetch<DlpStats>(`/synapse/${sensorId}/proxy/_sensor/dlp/stats`);
 }
 
 async function fetchDlpViolations(): Promise<{ violations: DlpViolation[] }> {
-  const sensorId = 'synapse-pingora';
-  const response = await fetch(`${API_BASE}/api/v1/synapse/${sensorId}/proxy/_sensor/dlp/violations`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch DLP violations');
-  return response.json();
+  const sensorId = 'synapse-pingora-1';
+  return apiFetch<{ violations: DlpViolation[] }>(`/synapse/${sensorId}/proxy/_sensor/dlp/violations`);
 }
 
 export function DlpDashboardPage() {

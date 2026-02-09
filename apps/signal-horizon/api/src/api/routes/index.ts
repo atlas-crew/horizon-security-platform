@@ -122,10 +122,12 @@ export function createApiRouter(
   // Apply global rate limiting to all authenticated routes (labs-mmft.7)
   router.use(rateLimiters.global);
 
-  // Apply auth-specific rate limits before auth middleware (labs-tj9l)
-  router.use(authRateLimiters.ipBurst);
-  router.use(authRateLimiters.ipFailures);
-  router.use(authRateLimiters.keyFailures);
+  // Apply auth-specific rate limits only to auth endpoints (labs-tj9l).
+  // These limiters use skipSuccessfulRequests; if mounted globally they'd treat any 4xx/5xx
+  // (including "Cannot GET" 404s) as "failed auth" and can block unrelated API calls in dev.
+  router.use('/auth', authRateLimiters.ipBurst);
+  router.use('/auth', authRateLimiters.ipFailures);
+  router.use('/auth', authRateLimiters.keyFailures);
 
   // Mount Auth routes (handled its own auth for public endpoints)
   router.use('/auth', createAuthRoutes(prisma, logger, userAuthService, authMiddleware));
@@ -162,6 +164,7 @@ export function createApiRouter(
       '/docs',                      // Documentation (read-only)
       '/csrf-token',                // CSRF token endpoint itself
       '/onboarding',                // Onboarding uses API keys, not cookies
+      '/hunt',                      // Hunt queries use bearer auth; treat as CSRF-resistant
       /^\/auth\/login/,             // Public auth
       /^\/auth\/refresh/,           // Public auth
       /^\/fleet\/.*\/files/,        // File uploads use multipart + auth
@@ -213,7 +216,9 @@ export function createApiRouter(
   logger.info('Tunnel routes mounted at /api/v1/tunnel');
 
   // Mount Management routes for API keys and connectivity
-  router.use('/management', createManagementRoutes(prisma, logger));
+  router.use('/management', createManagementRoutes(prisma, logger, {
+    fleetCommander: options.fleetCommander,
+  }));
   logger.info('Management routes mounted at /api/v1/management');
 
   // Mount Tenant routes for settings
@@ -230,7 +235,9 @@ export function createApiRouter(
 
   // Mount Synapse proxy routes for sensor introspection
   if (options.synapseProxy) {
-    router.use('/synapse', createSynapseRoutes(options.synapseProxy, logger));
+    router.use('/synapse', createSynapseRoutes(options.synapseProxy, logger, {
+      fleetIntelService: options.fleetIntelService,
+    }));
     logger.info('Synapse routes mounted at /api/v1/synapse');
   }
 

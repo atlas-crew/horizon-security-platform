@@ -50,6 +50,34 @@
         "cwd": "apps/signal-horizon/api"
       }
     },
+    "db:reset": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate reset --force --skip-seed",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:reseed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate reset --force --skip-seed && tsx prisma/seed.ts",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:reseed:medium": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate reset --force --skip-seed && tsx prisma/seed.ts --profile=medium",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:reseed:large": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate reset --force --skip-seed && tsx prisma/seed.ts --profile=large",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
     "db:studio": {
       "executor": "nx:run-commands",
       "options": {

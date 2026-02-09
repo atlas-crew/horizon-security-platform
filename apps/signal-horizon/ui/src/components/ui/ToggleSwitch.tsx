@@ -11,7 +11,12 @@ interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  /** Visible label or descriptive text for screen readers */
   label?: string;
+  /** ID of an element that labels this toggle */
+  'aria-labelledby'?: string;
+  /** Explicit ARIA label if no visible label is provided */
+  'aria-label'?: string;
   /** Size variant */
   size?: 'sm' | 'md';
 }
@@ -21,8 +26,15 @@ export function ToggleSwitch({
   onChange,
   disabled = false,
   label,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-label': ariaLabel,
   size = 'md',
 }: ToggleSwitchProps) {
+  // Enforce accessibility labels in development
+  if (process.env.NODE_ENV === 'development' && !label && !ariaLabel && !ariaLabelledBy) {
+    console.warn('ToggleSwitch requires a "label", "aria-label", or "aria-labelledby" prop for accessibility.');
+  }
+
   const sizeStyles = size === 'sm'
     ? { track: 'w-10 h-5', thumb: 'w-3 h-3', on: 'translate-x-5', off: 'translate-x-1' }
     : { track: 'w-12 h-6', thumb: 'w-4 h-4', on: 'translate-x-6', off: 'translate-x-1' };
@@ -32,7 +44,8 @@ export function ToggleSwitch({
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
+      aria-label={ariaLabel || label}
+      aria-labelledby={ariaLabelledBy}
       onClick={() => onChange(!checked)}
       disabled={disabled}
       className={clsx(

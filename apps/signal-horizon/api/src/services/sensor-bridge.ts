@@ -13,6 +13,7 @@
 
 import WebSocket from 'ws';
 import type { Logger } from 'pino';
+import { createHash } from 'node:crypto';
 
 interface SensorBridgeConfig {
   /** Signal Horizon WebSocket URL (e.g., ws://localhost:3200/ws/sensors) */
@@ -118,9 +119,19 @@ export class SensorBridge {
     if (this.isShuttingDown) return;
 
     try {
-      this.logger.info({ url: this.config.hubWsUrl }, 'Connecting to Signal Horizon...');
+      const hubUrl = new URL(this.config.hubWsUrl);
+      // Prefer query token to survive WS proxies that strip Authorization headers in upgrades.
+      hubUrl.searchParams.set('token', this.config.apiKey);
+      this.logger.info(
+        {
+          url: hubUrl.toString().replace(this.config.apiKey, '[REDACTED]'),
+          tokenLen: this.config.apiKey.length,
+          hasTokenParam: hubUrl.searchParams.has('token'),
+        },
+        'Connecting to Signal Horizon...'
+      );
 
-      this.ws = new WebSocket(this.config.hubWsUrl, {
+      this.ws = new WebSocket(hubUrl.toString(), {
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
         },
@@ -173,6 +184,10 @@ export class SensorBridge {
 
   private sendAuth(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const fingerprint = createHash('sha256')
+      .update(`${this.config.sensorId}:${this.config.apiKey}`)
+      .digest('hex')
+      .slice(0, 32);
 
     const authMessage = {
       type: 'auth',
@@ -181,6 +196,8 @@ export class SensorBridge {
         sensorId: this.config.sensorId,
         sensorName: this.config.sensorName,
         version: '1.0.0-bridge',
+        fingerprint,
+        protocolVersion: '1.0',
       },
     };
 

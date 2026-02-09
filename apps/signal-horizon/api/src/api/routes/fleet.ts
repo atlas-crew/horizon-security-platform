@@ -42,6 +42,10 @@ const ListSensorsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+const ListSensorSignalsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 /**
  * Safe config value schema - prevents dangerous nested structures and control characters.
  */
@@ -80,6 +84,11 @@ const UpdateConfigTemplateBodySchema = CreateConfigTemplateBodySchema.partial();
 const PushConfigBodySchema = z.object({
   templateId: z.string(),
   sensorIds: z.string().array().min(1),
+});
+
+const TriggerUpdateBodySchema = z.object({
+  sensorIds: z.string().array().min(1),
+  version: z.string().min(1).max(50),
 });
 
 const ConfigAuditQuerySchema = z.object({
@@ -258,7 +267,8 @@ const COMMAND_PAYLOAD_SCHEMAS: Record<typeof VALID_COMMAND_TYPES[number], z.ZodS
  */
 const SendCommandBodySchema = z.object({
   commandType: z.enum(VALID_COMMAND_TYPES),
-  sensorIds: z.array(z.string().uuid()).min(1).max(1000),
+  // Sensor IDs are not guaranteed to be UUIDs (demo sensors, cuid(), custom IDs).
+  sensorIds: z.array(z.string().min(1)).min(1).max(1000),
   payload: z.record(z.unknown()), // Validated below based on commandType
 }).superRefine((data, ctx) => {
   // Validate payload against the command-specific schema
@@ -399,7 +409,7 @@ export function createFleetRoutes(
    * GET /api/v1/fleet/metrics
    * Get fleet-wide aggregated metrics
    */
-  router.get('/', requireScope('fleet:read'), async (_req, res) => {
+  const fleetMetricsHandler = async (_req: any, res: any) => {
     try {
       if (!fleetAggregator) {
         res
@@ -417,7 +427,221 @@ export function createFleetRoutes(
         message: getErrorMessage(error),
       });
     }
+  };
+
+  router.get('/metrics', requireScope('fleet:read'), fleetMetricsHandler);
+  // Back-compat: older clients called GET /fleet for metrics.
+  router.get('/', requireScope('fleet:read'), fleetMetricsHandler);
+
+  /**
+   * GET /api/v1/fleet/health
+   * Compatibility endpoint for FleetHealthPage summary cards.
+   */
+  router.get('/health', requireScope('fleet:read'), async (req, res) => {
+    try {
+      const auth = req.auth!;
+      const sensors = await prisma.sensor.findMany({
+        where: { tenantId: auth.tenantId },
+        select: { id: true, name: true, connectionState: true, lastHeartbeat: true },
+      });
+
+      const now = Date.now();
+      const warningThreshold = 2 * 60 * 1000;
+      const offlineThreshold = 5 * 60 * 1000;
+      let onlineCount = 0;
+      let warningCount = 0;
+      let offlineCount = 0;
+
+      for (const sensor of sensors) {
+        const lastHeartbeat = sensor.lastHeartbeat ? new Date(sensor.lastHeartbeat).getTime() : 0;
+        const timeSinceHeartbeat = now - lastHeartbeat;
+        if (sensor.connectionState === 'DISCONNECTED' || timeSinceHeartbeat > offlineThreshold) {
+          offlineCount++;
+        } else if (timeSinceHeartbeat > warningThreshold) {
+          warningCount++;
+        } else {
+          onlineCount++;
+        }
+      }
+
+      const recentFailures = await prisma.fleetCommand.findMany({
+        where: {
+          sensor: { tenantId: auth.tenantId },
+          status: 'failed',
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      res.json({
+        overallScore: sensors.length > 0 ? Math.round((onlineCount / sensors.length) * 100) : 100,
+        criticalAlerts: offlineCount,
+        warningAlerts: warningCount,
+        recentIncidents: recentFailures.map((cmd) => ({
+          id: cmd.id,
+          sensorId: cmd.sensorId,
+          type: cmd.commandType,
+          message: cmd.error ?? 'Command failed',
+          timestamp: cmd.createdAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to get fleet health summary');
+      res.status(500).json({
+        error: 'Failed to get fleet health summary',
+        message: getErrorMessage(error),
+      });
+    }
   });
+
+  // ======================== Sensor Updates (Compatibility) ========================
+
+  /**
+   * GET /api/v1/fleet/updates/versions
+   * Compatibility endpoint for FleetUpdatesPage.
+   */
+  router.get('/updates/versions', requireScope('fleet:read'), async (req, res) => {
+    try {
+      const auth = req.auth!;
+
+      const sensors = await prisma.sensor.findMany({
+        where: { tenantId: auth.tenantId },
+        select: { id: true, name: true, version: true },
+        orderBy: { name: 'asc' },
+      });
+
+      const latestRelease = await prisma.release.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: { version: true },
+      });
+
+      const updates = await prisma.sensorUpdate.findMany({
+        where: { sensorId: { in: sensors.map((s) => s.id) } },
+        orderBy: { scheduledFor: 'desc' },
+      });
+
+      const latestBySensor = new Map<string, typeof updates[number]>();
+      for (const u of updates) {
+        if (!latestBySensor.has(u.sensorId)) latestBySensor.set(u.sensorId, u);
+      }
+
+      const latestVersion = latestRelease?.version ?? null;
+
+      res.json(
+        sensors.map((s) => {
+          const u = latestBySensor.get(s.id);
+          const currentVersion = s.version ?? 'unknown';
+          const targetVersion =
+            u?.toVersion ?? (latestVersion && currentVersion !== latestVersion ? latestVersion : undefined);
+
+          let updateStatus: 'up_to_date' | 'update_available' | 'updating' | 'failed' = 'up_to_date';
+          const status = String(u?.status ?? '').toLowerCase();
+          if (status === 'in_progress' || status === 'updating' || status === 'downloading') updateStatus = 'updating';
+          else if (status === 'failed') updateStatus = 'failed';
+          else if (targetVersion && targetVersion !== currentVersion) updateStatus = 'update_available';
+
+          const lastUpdatedDate = u?.completedAt ?? u?.startedAt ?? u?.scheduledFor ?? null;
+
+          return {
+            sensorId: s.id,
+            name: s.name,
+            currentVersion,
+            targetVersion,
+            updateStatus,
+            lastUpdated: lastUpdatedDate ? lastUpdatedDate.toISOString() : undefined,
+          };
+        })
+      );
+    } catch (error) {
+      logger.error({ error }, 'Failed to get update versions');
+      res.status(500).json({
+        error: 'Failed to get update versions',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/fleet/updates/available
+   * Compatibility endpoint for FleetUpdatesPage.
+   */
+  router.get('/updates/available', requireScope('fleet:read'), async (_req, res) => {
+    try {
+      const releases = await prisma.release.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      res.json(
+        releases.map((r) => ({
+          version: r.version,
+          releaseDate: r.createdAt.toISOString(),
+          changelog: String(r.changelog ?? '')
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .slice(0, 12),
+          critical: false,
+        }))
+      );
+    } catch (error) {
+      logger.error({ error }, 'Failed to get available updates');
+      res.status(500).json({
+        error: 'Failed to get available updates',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
+  /**
+   * POST /api/v1/fleet/updates/trigger
+   * Compatibility endpoint for FleetUpdatesPage.
+   */
+  router.post(
+    '/updates/trigger',
+    rateLimiters.fleetCommand,
+    requireScope('fleet:write'),
+    validateBody(TriggerUpdateBodySchema),
+    async (req, res) => {
+      try {
+        const auth = req.auth!;
+        const { sensorIds, version } = req.body as z.infer<typeof TriggerUpdateBodySchema>;
+
+        const sensors = await prisma.sensor.findMany({
+          where: { tenantId: auth.tenantId, id: { in: sensorIds } },
+          select: { id: true, version: true },
+        });
+        if (sensors.length !== sensorIds.length) {
+          res.status(400).json({ error: 'Some sensors not found or do not belong to your tenant' });
+          return;
+        }
+
+        const now = new Date();
+        for (const s of sensors) {
+          await prisma.sensorUpdate.create({
+            data: {
+              sensorId: s.id,
+              fromVersion: s.version ?? 'unknown',
+              toVersion: version,
+              status: 'scheduled',
+              scheduledFor: now,
+              rollbackAvailable: true,
+              logs: 'scheduled via fleet updates ui',
+            },
+          });
+        }
+
+        res.status(202).json({ success: true, scheduled: sensors.length, version });
+      } catch (error) {
+        logger.error({ error }, 'Failed to trigger update');
+        res.status(500).json({
+          error: 'Failed to trigger update',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
 
   /**
    * GET /api/v1/fleet/overview
@@ -671,6 +895,59 @@ export function createFleetRoutes(
         logger.error({ error }, 'Failed to get sensor details');
         res.status(500).json({
           error: 'Failed to get sensor details',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/fleet/sensors/:sensorId/signals
+   * List recent signals for a sensor (Postgres source-of-truth).
+   */
+  router.get(
+    '/sensors/:sensorId/signals',
+    requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
+    validateParams(SensorIdParamSchema),
+    validateQuery(ListSensorSignalsQuerySchema),
+    async (req, res) => {
+      try {
+        const { sensorId } = req.params;
+        const { limit } = req.query as z.infer<typeof ListSensorSignalsQuerySchema>;
+        const tenantId = req.auth?.tenantId;
+
+        if (!tenantId) {
+          sendProblem(res, 401, 'Not authenticated', {
+            code: 'AUTH_REQUIRED',
+            instance: req.originalUrl,
+          });
+          return;
+        }
+
+	        const signals = await prisma.signal.findMany({
+	          where: { tenantId, sensorId },
+	          orderBy: { createdAt: 'desc' },
+	          take: limit,
+	          select: {
+	            id: true,
+	            createdAt: true,
+	            sensorId: true,
+	            signalType: true,
+	            sourceIp: true,
+	            anonFingerprint: true,
+	            severity: true,
+	            confidence: true,
+	            eventCount: true,
+	            metadata: true,
+	          },
+	        });
+
+        res.json({ signals });
+      } catch (error) {
+        logger.error({ error }, 'Failed to list sensor signals');
+        res.status(500).json({
+          error: 'Failed to list sensor signals',
           message: getErrorMessage(error),
         });
       }
@@ -1943,6 +2220,65 @@ const SensorLogsQuerySchema = z.object({
       const status = await ruleDistributor.getRuleSyncStatus(auth.tenantId);
 
       res.json({ status });
+    } catch (error) {
+      logger.error({ error }, 'Failed to get rule sync status');
+      res.status(500).json({
+        error: 'Failed to get rule sync status',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/fleet/rules
+   * Compatibility endpoint: provides a synthetic rule catalog so the UI can render
+   * without relying on live sensor-side rule definitions.
+   */
+  router.get('/rules', requireScope('fleet:read'), async (_req, res) => {
+    res.json([
+      {
+        id: 'rule-sqli-001',
+        name: 'SQL Injection Protection',
+        description: 'Detects common SQL injection patterns in request parameters and bodies.',
+        severity: 'critical',
+        enabled: true,
+        category: 'injection',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'rule-xss-001',
+        name: 'XSS Protection',
+        description: 'Detects common cross-site scripting payloads.',
+        severity: 'high',
+        enabled: true,
+        category: 'xss',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'rule-rate-001',
+        name: 'Credential Stuffing Rate Control',
+        description: 'Mitigates credential stuffing bursts via adaptive rate limiting.',
+        severity: 'medium',
+        enabled: true,
+        category: 'rate-limit',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+  });
+
+  /**
+   * GET /api/v1/fleet/rules/sync-status
+   * Compatibility endpoint: UI expects an array (not wrapped object).
+   */
+  router.get('/rules/sync-status', requireScope('fleet:read'), async (req, res) => {
+    try {
+      if (!ruleDistributor) {
+        res.status(503).json({ error: 'Rule distributor service not available' });
+        return;
+      }
+      const auth = req.auth!;
+      const status = await ruleDistributor.getRuleSyncStatus(auth.tenantId);
+      res.json(status);
     } catch (error) {
       logger.error({ error }, 'Failed to get rule sync status');
       res.status(500).json({

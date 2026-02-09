@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { HuntQueryBuilder, HuntResultsTable, SavedQueries } from '../components/hunting';
+import { BehavioralAnomaliesPanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -23,6 +23,9 @@ export default function HuntingPage() {
     saveQuery,
     runSavedQuery,
     deleteSavedQuery,
+    getTenantBaselines,
+    getAnomalies,
+    getLowAndSlowIps,
     clearError,
   } = useHunt();
 
@@ -190,6 +193,25 @@ export default function HuntingPage() {
         historicalEnabled={status?.historical ?? false}
         externalQuery={activeExampleQuery}
       />
+
+      <BehavioralAnomaliesPanel
+        historicalEnabled={status?.historical ?? false}
+        getTenantBaselines={getTenantBaselines}
+        getAnomalies={getAnomalies}
+      />
+
+      {status?.isFleetAdmin ? (
+        <LowAndSlowPanel
+          historicalEnabled={status?.historical ?? false}
+          getLowAndSlowIps={getLowAndSlowIps}
+        />
+      ) : (
+        <div className="border border-border-subtle bg-surface-card p-4">
+          <div className="text-sm text-ink-secondary">
+            Low And Slow is admin-only intelligence.
+          </div>
+        </div>
+      )}
 
       <HuntResultsTable result={result} isLoading={isLoading} />
 

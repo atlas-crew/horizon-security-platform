@@ -5,16 +5,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { z } from 'zod';
-
-function normalizeApiBaseUrl(raw: string): string {
-  const trimmed = raw.replace(/\/+$/, '');
-  if (trimmed.endsWith('/api/v1')) return trimmed;
-  if (trimmed.endsWith('/api')) return `${trimmed}/v1`;
-  return `${trimmed}/api/v1`;
-}
-
-const API_BASE = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:3100');
-const ENV_API_KEY = import.meta.env.VITE_HORIZON_API_KEY || import.meta.env.VITE_API_KEY || '';
+import { apiFetch } from '../lib/api';
 
 // =============================================================================
 // Types
@@ -56,6 +47,7 @@ export interface HuntResult {
 
 export interface HuntStatus {
   historical: boolean;
+  isFleetAdmin: boolean;
   routingThreshold: string;
   description: string;
 }
@@ -79,6 +71,30 @@ export interface HourlyStats {
   totalEvents: number;
   uniqueIps: number;
   uniqueFingerprints: number;
+}
+
+export interface TenantBaseline {
+  signalType: string;
+  avgHourlyCount: number;
+  stddevHourlyCount: number;
+  maxHourlyCount: number;
+  observationCount: number;
+}
+
+export interface TenantAnomaly {
+  signalType: string;
+  currentCount: number;
+  expectedAvg: number;
+  deviation: number;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface LowAndSlowIpCandidate {
+  sourceIp: string;
+  daysSeen: number;
+  maxDailySignals: number;
+  totalSignals: number;
+  tenantsHit: number;
 }
 
 export interface IpActivity {
@@ -145,6 +161,29 @@ export type RequestTimelineEvent =
       latencyMs: number | null;
       clientIp: string | null;
       ruleId: string | null;
+    }
+  | {
+      kind: 'actor_event';
+      timestamp: string;
+      sensorId: string;
+      actorId: string;
+      requestId: string;
+      eventType: string;
+      riskScore: number;
+      riskDelta: number;
+      ruleId: string | null;
+      ruleCategory: string | null;
+      ip: string;
+    }
+  | {
+      kind: 'session_event';
+      timestamp: string;
+      sensorId: string;
+      sessionId: string;
+      actorId: string;
+      requestId: string;
+      eventType: string;
+      requestCount: number;
     };
 
 export interface RecentRequest {
@@ -188,6 +227,7 @@ const HuntResultSchema = z.object({
 
 const HuntStatusSchema = z.object({
   historical: z.boolean(),
+  isFleetAdmin: z.boolean().optional().default(false),
   routingThreshold: z.string(),
   description: z.string(),
 });
@@ -283,7 +323,7 @@ const SingleSavedQueryResponseSchema = z.object({
 const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('http_transaction'),
-    timestamp: z.string(),
+    timestamp: z.string().datetime(),
     tenantId: z.string(),
     sensorId: z.string(),
     requestId: z.string(),
@@ -296,7 +336,7 @@ const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('signal_event'),
-    timestamp: z.string(),
+    timestamp: z.string().datetime(),
     tenantId: z.string(),
     sensorId: z.string(),
     requestId: z.string(),
@@ -309,7 +349,7 @@ const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('sensor_log'),
-    timestamp: z.string(),
+    timestamp: z.string().datetime(),
     tenantId: z.string(),
     sensorId: z.string(),
     requestId: z.string(),
@@ -324,6 +364,29 @@ const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
     latencyMs: z.number().nullable(),
     clientIp: z.string().nullable(),
     ruleId: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal('actor_event'),
+    timestamp: z.string().datetime(),
+    sensorId: z.string(),
+    actorId: z.string(),
+    requestId: z.string(),
+    eventType: z.string(),
+    riskScore: z.number(),
+    riskDelta: z.number(),
+    ruleId: z.string().nullable(),
+    ruleCategory: z.string().nullable(),
+    ip: z.string(),
+  }),
+  z.object({
+    kind: z.literal('session_event'),
+    timestamp: z.string().datetime(),
+    sensorId: z.string(),
+    sessionId: z.string(),
+    actorId: z.string(),
+    requestId: z.string(),
+    eventType: z.string(),
+    requestCount: z.number(),
   }),
 ]);
 
@@ -356,6 +419,65 @@ const RecentRequestsResponseSchema = z.object({
   }),
 });
 
+const TenantBaselineSchema = z.object({
+  signalType: z.string(),
+  avgHourlyCount: z.number(),
+  stddevHourlyCount: z.number(),
+  maxHourlyCount: z.number(),
+  observationCount: z.number(),
+});
+
+const TenantBaselinesResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(TenantBaselineSchema),
+  meta: z.object({
+    tenantId: z.string(),
+    lookbackDays: z.number(),
+    count: z.number(),
+    historical: z.boolean(),
+  }),
+});
+
+const TenantAnomalySchema = z.object({
+  signalType: z.string(),
+  currentCount: z.number(),
+  expectedAvg: z.number(),
+  deviation: z.number(),
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+});
+
+const TenantAnomaliesResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(TenantAnomalySchema),
+  meta: z.object({
+    tenantId: z.string(),
+    zScoreThreshold: z.number(),
+    count: z.number(),
+    historical: z.boolean(),
+  }),
+});
+
+const LowAndSlowIpSchema = z.object({
+  sourceIp: z.string(),
+  daysSeen: z.number(),
+  maxDailySignals: z.number(),
+  totalSignals: z.number(),
+  tenantsHit: z.number(),
+});
+
+const LowAndSlowResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(LowAndSlowIpSchema),
+  meta: z.object({
+    days: z.number(),
+    minDistinctDays: z.number(),
+    maxSignalsPerDay: z.number(),
+    limit: z.number(),
+    count: z.number(),
+    historical: z.boolean(),
+  }),
+});
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -368,46 +490,23 @@ export function useHunt() {
   const devAuthBootstrappedRef = useRef(false);
 
   // Helper for API calls
-		  const fetchApi = useCallback(async <T>(
-		    endpoint: string,
-		    options: RequestInit = {}
-		  ): Promise<T> => {
-	    const headers: Record<string, string> = {
-	      'Content-Type': 'application/json',
-	    };
-	    if (ENV_API_KEY) {
-	      headers.Authorization = `Bearer ${ENV_API_KEY}`;
-	    }
-
-		    const url = `${API_BASE}${endpoint}`;
-		    const init: RequestInit = {
-		      ...options,
-		      credentials: 'include',
-		      headers: {
-		        ...headers,
-		        ...options.headers,
-		      },
-		    };
-
-		    const response = await fetch(url, init);
-
-		    // Dev QoL: if the UI has no API key env configured, bootstrap a cookie-based
-		    // api key once and retry (localhost + dev-only server route).
-		    if (response.status === 401 && !ENV_API_KEY && !devAuthBootstrappedRef.current) {
-		      devAuthBootstrappedRef.current = true;
-		      await fetch(`${API_BASE}/auth/dev/bootstrap`, { credentials: 'include' }).catch(() => null);
-		      const retry = await fetch(url, init);
-		      if (retry.ok) return retry.json();
-		      const retryErrorData = await retry.json().catch(() => ({}));
-		      throw new Error(retryErrorData.message || `API error: ${retry.status}`);
-		    }
-
-	    if (!response.ok) {
-	      const errorData = await response.json().catch(() => ({}));
-	      throw new Error(errorData.message || `API error: ${response.status}`);
-	    }
-
-    return response.json();
+  const fetchApi = useCallback(async <T>(
+    endpoint: string,
+    options: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown } = {}
+  ): Promise<T> => {
+    try {
+      return await apiFetch<T>(endpoint, options);
+    } catch (err) {
+      // Dev QoL: if the UI has no API key env configured, bootstrap a cookie-based
+      // api key once and retry (localhost + dev-only server route).
+      if (err instanceof Error && /401/.test(err.message) && !devAuthBootstrappedRef.current) {
+        devAuthBootstrappedRef.current = true;
+        // This endpoint is dev-only; body is ignored.
+        await apiFetch('/auth/dev/bootstrap', { method: 'POST', body: {} }).catch(() => null);
+        return apiFetch<T>(endpoint, options);
+      }
+      throw err;
+    }
   }, []);
 
   // Get hunt status (historical availability)
@@ -435,7 +534,7 @@ export function useHunt() {
     try {
       const data = await fetchApi<unknown>('/hunt/query', {
         method: 'POST',
-        body: JSON.stringify(query),
+        body: query,
       });
 
       const result = HuntResultSchema.safeParse(data);
@@ -503,7 +602,7 @@ export function useHunt() {
     try {
       const data = await fetchApi<unknown>('/hunt/ip-activity', {
         method: 'POST',
-        body: JSON.stringify({ sourceIp, days }),
+        body: { sourceIp, days },
       });
 
       const result = IpActivityResponseSchema.safeParse(data);
@@ -546,7 +645,7 @@ export function useHunt() {
     try {
       const data = await fetchApi<unknown>('/hunt/saved-queries', {
         method: 'POST',
-        body: JSON.stringify({ name, query, description }),
+        body: { name, query, description },
       });
 
       const result = z.object({
@@ -693,6 +792,75 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getTenantBaselines = useCallback(async (
+    days: number = 30
+  ): Promise<{ baselines: TenantBaseline[]; meta: { tenantId: string; lookbackDays: number; count: number; historical: boolean } }> => {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('days', String(days));
+      const data = await fetchApi<unknown>(`/hunt/baselines?${queryParams.toString()}`);
+
+      const result = TenantBaselinesResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid baselines response');
+      }
+
+      return { baselines: result.data.data, meta: result.data.meta };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get baselines';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const getAnomalies = useCallback(async (
+    zScore: number = 2.0
+  ): Promise<{ anomalies: TenantAnomaly[]; meta: { tenantId: string; zScoreThreshold: number; count: number; historical: boolean } }> => {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('zScore', String(zScore));
+      const data = await fetchApi<unknown>(`/hunt/anomalies?${queryParams.toString()}`);
+
+      const result = TenantAnomaliesResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid anomalies response');
+      }
+
+      return { anomalies: result.data.data, meta: result.data.meta };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get anomalies';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const getLowAndSlowIps = useCallback(async (params: {
+    days?: number;
+    minDistinctDays?: number;
+    maxSignalsPerDay?: number;
+    limit?: number;
+  } = {}): Promise<{ candidates: LowAndSlowIpCandidate[]; meta: { days: number; minDistinctDays: number; maxSignalsPerDay: number; limit: number; count: number; historical: boolean } }> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.days !== undefined) queryParams.set('days', String(params.days));
+      if (params.minDistinctDays !== undefined) queryParams.set('minDistinctDays', String(params.minDistinctDays));
+      if (params.maxSignalsPerDay !== undefined) queryParams.set('maxSignalsPerDay', String(params.maxSignalsPerDay));
+      if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
+
+      const data = await fetchApi<unknown>(`/hunt/low-and-slow${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
+      const result = LowAndSlowResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid low-and-slow response');
+      }
+
+      return { candidates: result.data.data, meta: result.data.meta };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get low-and-slow candidates';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
   const getRecentRequests = useCallback(async (limit: number = 25): Promise<RecentRequest[]> => {
     try {
       const queryParams = new URLSearchParams();
@@ -732,6 +900,9 @@ export function useHunt() {
     getCampaignTimeline,
     getRequestTimeline,
     getRecentRequests,
+    getTenantBaselines,
+    getAnomalies,
+    getLowAndSlowIps,
 
     // Helpers
     clearError,

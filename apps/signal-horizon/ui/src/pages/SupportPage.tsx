@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -15,7 +16,7 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
-import { BookOpen, Stethoscope, MessageCircle } from 'lucide-react';
+import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
 
 const authHeaders = {
@@ -89,14 +90,53 @@ interface DocItem {
   title: string;
   category: string;
   path: string;
+  mtime?: string;
+}
+
+// Helper to format date into a human-readable string
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return 'Unknown';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+
+  return date.toLocaleDateString(undefined, { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+}
+
+interface SearchResult extends DocItem {
+  snippet: string;
 }
 
 export function SupportPage() {
   useDocumentTitle('Support');
+  const { docId } = useParams();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'docs' | 'diagnostics' | 'contact'>('docs');
 
-  const [selectedDocId, setSelectedDocId] = useState<string>('README');
+  const [selectedDocId, setSelectedDocId] = useState<string>(docId || 'README');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Sync state with URL
+  useEffect(() => {
+    if (docId && docId !== selectedDocId) {
+      setSelectedDocId(docId);
+    }
+  }, [docId]);
+
+  const handleSelectDoc = (id: string) => {
+    setSelectedDocId(id);
+    navigate(`/support/${id}`);
+  };
 
   const priorityDocs: DocItem[] = [
     { id: 'tutorials:sensor-onboarding', title: 'Sensor Onboarding', category: 'Tutorials', path: '/docs/tutorials/sensor-onboarding' },
@@ -130,6 +170,19 @@ export function SupportPage() {
     },
     retry: 1,
     staleTime: 60000,
+  });
+
+  // Fetch search results
+  const { data: searchResults, isFetching: isSearching } = useQuery<SearchResult[]>({
+    queryKey: ['docs', 'search', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery || searchQuery.length < 2) return [];
+      const res = await fetch(`${API_BASE_URL}/docs/search?q=${encodeURIComponent(searchQuery)}`, { headers: authHeaders });
+      if (!res.ok) throw new Error('Failed to search docs');
+      return res.json();
+    },
+    enabled: searchQuery.length >= 2,
+    staleTime: 30000,
   });
 
   const docs = useMemo(() => {
@@ -232,29 +285,43 @@ export function SupportPage() {
 
       <div className="flex-1 overflow-hidden relative">
 
-        {activeTab === 'docs' && (
+                        {activeTab === 'docs' && (
 
-          <DocumentationViewer 
+                          <DocumentationViewer 
 
-            docs={docs}
+                            docs={docs}
 
-            selectedDocId={selectedDocId} 
+                            selectedDocId={selectedDocId} 
 
-            onSelectDoc={setSelectedDocId} 
+                            onSelectDoc={handleSelectDoc} 
 
-          />
+                            searchQuery={searchQuery}
 
-        )}
+                            setSearchQuery={setSearchQuery}
 
-        {activeTab === 'diagnostics' && (
+                            searchResults={searchResults || []}
 
-          <div className="h-full overflow-auto bg-surface-base">
+                            isSearching={isSearching}
 
-            <DiagnosticsCenter />
+                          />
 
-          </div>
+                        )}
 
-        )}
+                {activeTab === 'diagnostics' && (
+
+                  <div className="h-full overflow-auto bg-surface-base">
+
+                    <DiagnosticsCenter onSelectDoc={(id) => {
+
+                      handleSelectDoc(id);
+
+                      setActiveTab('docs');
+
+                    }} />
+
+                  </div>
+
+                )}
 
         {activeTab === 'contact' && (
 
@@ -276,7 +343,23 @@ export function SupportPage() {
 
 let mermaidIdCounter = 0;
 
-function DocumentationViewer({ docs, selectedDocId, onSelectDoc }: { docs: DocItem[], selectedDocId: string, onSelectDoc: (id: string) => void }) {
+function DocumentationViewer({ 
+  docs, 
+  selectedDocId, 
+  onSelectDoc,
+  searchQuery,
+  setSearchQuery,
+  searchResults,
+  isSearching
+}: { 
+  docs: DocItem[], 
+  selectedDocId: string, 
+  onSelectDoc: (id: string) => void,
+  searchQuery: string,
+  setSearchQuery: (query: string) => void,
+  searchResults: SearchResult[],
+  isSearching: boolean
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Demo content fallback - actual documentation from docs/
@@ -576,10 +659,44 @@ Track these metrics:
 
   const content = docContent?.content || demoContent[selectedDocId] || '# Documentation\n\nSelect a document from the sidebar.';
   
+  // Extract headers for ToC
+  const toc = useMemo(() => {
+    const lines = content.split('\n');
+    const headers: { level: number, text: string, id: string }[] = [];
+    lines.forEach((line: string) => {
+      const match = line.match(/^(#{2,3})\s+(.+)$/);
+      if (match) {
+        const level = match[1].length;
+        const text = match[2].trim();
+        const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+        headers.push({ level, text, id });
+      }
+    });
+    return headers;
+  }, [content]);
+
   // Parse markdown to HTML and sanitize with DOMPurify (labs-v20)
   // DOMPurify prevents XSS attacks from malicious markdown content
   const sanitizedHtml = useMemo(() => {
-    const rawHtml = marked.parse(content) as string;
+    // Add IDs to headers for ToC navigation
+    const renderer = new marked.Renderer();
+    renderer.heading = function({ text, depth }) {
+      const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+      return `<h${depth} id="${id}">${text}</h${depth}>`;
+    };
+
+    let rawHtml = marked.parse(content, { renderer }) as string;
+
+    // Apply search highlighting
+    if (searchQuery && searchQuery.length >= 2) {
+      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escapedQuery})`, 'gi');
+      // Only highlight outside of tags to avoid breaking HTML
+      rawHtml = rawHtml.replace(/(?![^<]*>)([^<]+)/g, (text) => {
+        return text.replace(regex, '<mark class="bg-ac-blue/20 text-ac-blue font-bold px-0.5">$1</mark>');
+      });
+    }
+
     // SH-003: Explicit allowlists for defense-in-depth XSS prevention.
     // FORBID_TAGS ensures script/iframe are blocked even if DOMPurify defaults change.
     return DOMPurify.sanitize(rawHtml, {
@@ -588,7 +705,7 @@ Track these metrics:
         'p', 'a', 'code', 'pre', 'ul', 'ol', 'li',
         'table', 'tr', 'td', 'th', 'thead', 'tbody',
         'strong', 'em', 'b', 'i', 'blockquote', 'img', 'br', 'hr',
-        'div', 'span',
+        'div', 'span', 'mark',
         // Mermaid SVG elements
         'svg', 'g', 'path', 'rect', 'text', 'line', 'circle', 'polyline',
       ],
@@ -602,7 +719,7 @@ Track these metrics:
       FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select'],
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
     });
-  }, [content]);
+  }, [content, searchQuery]);
 
   // Render mermaid diagrams off-DOM and store final HTML in state.
   // This prevents React re-renders from wiping mermaid's DOM mutations,
@@ -710,73 +827,197 @@ Track these metrics:
     return groups;
   }, [docs]);
 
+  const currentDoc = useMemo(() => docs.find(d => d.id === selectedDocId), [docs, selectedDocId]);
+
+  const scrollToHeader = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Doc Navigation - Secondary Sidebar */}
-      <div className="w-72 flex-shrink-0 border-r border-border-subtle bg-surface-subtle dark:bg-surface-subtle p-6 overflow-y-auto">
-        {Object.entries(categories).map(([category, items]) => (
-          <div key={category} className="mb-8">
-            <h3 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.15em] mb-4 pb-2 border-b border-ac-blue/20 dark:border-ac-blue/10">
-              {category}
-            </h3>
-            <div className="space-y-1.5">
-              {items.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => onSelectDoc(doc.id)}
-                  className={`w-full text-left px-3 py-2 transition-all text-[13px] ${
-                    selectedDocId === doc.id
-                      ? 'bg-white dark:bg-surface-card shadow-sm text-ac-navy dark:text-white font-bold border-l-4 border-ac-blue'
-                      : 'text-ink-secondary hover:text-ac-blue hover:translate-x-1'
-                  }`}
-                >
-                  {doc.title}
-                </button>
-              ))}
-            </div>
+      <div className="w-80 flex-shrink-0 border-r border-border-subtle bg-surface-subtle dark:bg-surface-subtle flex flex-col overflow-hidden">
+        {/* Search Header */}
+        <div className="p-6 pb-2">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted group-focus-within:text-ac-blue transition-colors" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search documentation..."
+              className="w-full pl-10 pr-10 py-2.5 bg-surface-base border border-border-subtle text-sm focus:outline-none focus:ring-2 focus:ring-ac-blue/20 focus:border-ac-blue transition-all"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-        ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 pt-2">
+          {searchQuery.length >= 2 ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-bold text-ink-muted uppercase tracking-[0.2em]">
+                  Search Results {isSearching && <span className="animate-pulse">...</span>}
+                </h3>
+                <span className="text-[10px] font-mono text-ink-muted">{searchResults.length} found</span>
+              </div>
+              
+              {searchResults.length === 0 && !isSearching ? (
+                <p className="text-sm text-ink-muted text-center py-8">No matching documents found.</p>
+              ) : (
+                <div className="space-y-4">
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      onClick={() => onSelectDoc(result.id)}
+                      className={`w-full text-left group transition-all ${
+                        selectedDocId === result.id ? 'translate-x-1' : ''
+                      }`}
+                    >
+                      <div className={`p-3 border border-transparent transition-all ${
+                        selectedDocId === result.id 
+                          ? 'bg-white dark:bg-surface-card border-ac-blue shadow-md' 
+                          : 'hover:bg-white/50 dark:hover:bg-white/5 hover:border-border-subtle'
+                      }`}>
+                        <p className={`text-sm font-bold truncate ${
+                          selectedDocId === result.id ? 'text-ac-blue' : 'text-ink-primary'
+                        }`}>
+                          {result.title}
+                        </p>
+                        <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-2">{result.category}</p>
+                        <p className="text-[11px] text-ink-secondary line-clamp-2 italic leading-relaxed">
+                          {result.snippet}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            Object.entries(categories).map(([category, items]) => (
+              <div key={category} className="mb-8 last:mb-0">
+                <h3 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.15em] mb-4 pb-2 border-b border-ac-blue/20 dark:border-ac-blue/10">
+                  {category}
+                </h3>
+                <div className="space-y-1">
+                  {items.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => onSelectDoc(doc.id)}
+                      className={`w-full text-left px-3 py-2 transition-all text-[13px] ${
+                        selectedDocId === doc.id
+                          ? 'bg-white dark:bg-surface-card shadow-sm text-ac-navy dark:text-white font-bold border-l-4 border-ac-blue'
+                          : 'text-ink-secondary hover:text-ac-blue hover:translate-x-1 hover:bg-white/30 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      {doc.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Doc Content - Main viewport */}
-      <div className="flex-1 p-16 overflow-y-auto bg-surface-base" ref={containerRef}>
-        <div className="max-w-3xl mx-auto">
-          {isLoading && !content ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue"></div>
-            </div>
-          ) : (
-            <div
-              className="prose prose-slate dark:prose-invert max-w-none
- font-sans text-ink-secondary leading-relaxed
- prose-headings:font-light prose-headings:tracking-tight prose-headings:text-ac-navy dark:prose-headings:text-white
- prose-h1:text-[48px] prose-h1:mb-12
- prose-h2:text-[32px] prose-h2:mt-16 prose-h2:mb-6
- prose-h3:text-[28px] prose-h3:mt-12 prose-h3:mb-4
- prose-h4:text-[24px]
- prose-strong:font-bold prose-strong:text-ac-blue
- prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm
- prose-pre:bg-ac-navy prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20 prose-pre:p-6
- [&_pre_code]:bg-transparent [&_pre_code]:text-slate-100 [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-relaxed
- prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline
- prose-li:my-2
- prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider
- prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-border-subtle"
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
-            />
-          )}
+      <div className="flex-1 overflow-hidden flex bg-surface-base">
+        <div className="flex-1 p-16 overflow-y-auto" ref={containerRef}>
+          <div className="max-w-3xl mx-auto">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-4">
+                <div className="animate-spin h-10 w-10 border-2 border-ac-blue/30 border-t-ac-blue"></div>
+                <p className="text-xs font-bold text-ink-muted uppercase tracking-widest">Retrieving Tactical Intel...</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-ink-muted uppercase tracking-widest mb-6">
+                  <span>Docs</span>
+                  <ChevronRight className="w-3 h-3" />
+                  <span>{currentDoc?.category || 'General'}</span>
+                  <ChevronRight className="w-3 h-3" />
+                  <span className="text-ac-blue">{currentDoc?.title}</span>
+                </div>
+                <div className="flex items-center gap-4 mb-10 pb-6 border-b border-border-subtle">
+                  <div className="px-2 py-0.5 bg-ac-blue/10 text-ac-blue text-[10px] font-bold uppercase tracking-wider border border-ac-blue/20">
+                    Intel Verified
+                  </div>
+                  <div className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">
+                    Last Updated: <span className="text-ink-secondary">{formatDate(docContent?.mtime || currentDoc?.mtime)}</span>
+                  </div>
+                </div>
+                <div
+                  className={[
+                    'prose prose-slate dark:prose-invert max-w-none',
+                    'font-sans text-ink-secondary leading-relaxed',
+                    'prose-headings:font-light prose-headings:tracking-tight prose-headings:text-ac-navy dark:prose-headings:text-white',
+                    'prose-h1:text-[48px] prose-h1:mb-12',
+                    'prose-h2:text-[32px] prose-h2:mt-16 prose-h2:mb-6',
+                    'prose-h3:text-[28px] prose-h3:mt-12 prose-h3:mb-4',
+                    'prose-h4:text-[24px]',
+                    'prose-strong:font-bold prose-strong:text-ac-blue',
+                    'prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm',
+                    'prose-pre:bg-ac-navy prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20 prose-pre:p-6',
+                    '[&_pre_code]:bg-transparent [&_pre_code]:text-slate-100 [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:leading-relaxed',
+                    'prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline',
+                    'prose-li:my-2',
+                    'prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider',
+                    'prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-border-subtle',
+                  ].join(' ')}
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+              </>
+            )}
+          </div>
         </div>
+        {/* Table of Contents - Right Sidebar */}
+        {toc.length > 0 && (
+          <div className="w-64 flex-shrink-0 border-l border-border-subtle p-8 overflow-y-auto hidden xl:block bg-surface-subtle/30">
+            <h4 className="text-[10px] font-bold text-ink-muted uppercase tracking-[0.2em] mb-6">In this section</h4>
+            <nav className="space-y-4">
+              {toc.map((header) => (
+                <button
+                  key={header.id}
+                  onClick={() => scrollToHeader(header.id)}
+                  className={`block w-full text-left text-xs transition-colors hover:text-ac-blue ${
+                    header.level === 2 ? "font-bold text-ink-primary" : "pl-4 text-ink-secondary"
+                  }`}
+                >
+                  {header.text}
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function DiagnosticsCenter() {
+function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [bundles, setBundles] = useState([
     { id: 'bund_123', date: '2024-01-30 10:00', type: 'Full System', status: 'Ready', size: '4.2 MB' },
     { id: 'bund_122', date: '2024-01-29 14:30', type: 'Logs Only', status: 'Ready', size: '1.1 MB' },
   ]);
+
+  const systemChecks = [
+    { id: 'db_conn', name: 'Database Connectivity', status: 'Healthy', details: 'PostgreSQL & ClickHouse operational', link: 'setup' },
+    { id: 'sensor_tunnel', name: 'Sensor Intelligence Tunnel', status: 'Warning', details: 'High latency detected on 2 regional sensors', link: 'tutorials:sensor-onboarding' },
+    { id: 'ingestion_pipeline', name: 'Signal Ingestion Pipeline', status: 'Healthy', details: 'Queue depth: 0, Processing latency: 12ms', link: 'architecture' },
+    { id: 'auth_service', name: 'Identity & Access Gateway', status: 'Healthy', details: 'JWT verification and RBAC operational', link: 'api:reference' },
+  ];
 
   const handleGenerate = () => {
     setIsGenerating(true);
@@ -808,6 +1049,39 @@ function DiagnosticsCenter() {
         </button>
       </div>
 
+      {/* System Health Overview */}
+      <div className="mb-16">
+        <h2 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.2em] mb-6">System Health Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {systemChecks.map((check) => (
+            <div key={check.id} className="bg-white dark:bg-surface-card border border-border-subtle p-6 flex flex-col justify-between group transition-all hover:border-ac-blue/30 hover:shadow-md">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-ink-primary">{check.name}</h3>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 border ${
+                  check.status === 'Healthy' 
+                    ? 'bg-ac-green/10 text-ac-green border-ac-green/20' 
+                    : 'bg-ac-orange/10 text-ac-orange border-ac-orange/20'
+                }`}>
+                  {check.status}
+                </span>
+              </div>
+              <p className="text-xs text-ink-secondary mb-6 leading-relaxed">{check.details}</p>
+              {onSelectDoc && (
+                <button 
+                  onClick={() => onSelectDoc(check.link)}
+                  className="inline-flex items-center text-[10px] font-bold text-ac-blue uppercase tracking-widest hover:text-ac-magenta transition-colors group/link"
+                >
+                  <BookOpen className="w-3.5 h-3.5 mr-2" />
+                  Resolution Guide
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover/link:translate-x-1 transition-transform" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <h2 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.2em] mb-6">Forensic Data Bundles</h2>
       <div className="bg-white dark:bg-surface-card shadow-card overflow-hidden border border-border-subtle">
         <table className="w-full text-sm text-left">
           <thead className="bg-ac-navy text-white uppercase tracking-widest text-[10px] font-bold">

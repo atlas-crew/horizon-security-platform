@@ -6,13 +6,7 @@
  */
 
 import { useMutation } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../lib/api';
 
 export type FleetControlCommand = 'reload' | 'restart' | 'shutdown' | 'drain' | 'resume';
 
@@ -39,32 +33,14 @@ interface BatchControlResult {
 }
 
 async function executeBatchControl({ command, sensorIds, reason }: BatchControlRequest): Promise<BatchControlResult> {
-  const response = await fetch(`${API_BASE}/fleet-control/batch/control/${command}`, {
+  return apiFetch<BatchControlResult>(`/fleet-control/batch/control/${command}`, {
     method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ sensorIds, reason }),
+    body: { sensorIds, reason },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || 'Failed to execute batch command');
-  }
-
-  return response.json();
 }
 
 async function revokeAllTokens(): Promise<{ epoch: number }> {
-  const response = await fetch(`${API_BASE}/auth/revoke-all`, {
-    method: 'POST',
-    headers: authHeaders,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || 'Failed to revoke all tokens');
-  }
-
-  return response.json();
+  return apiFetch<{ epoch: number }>('/auth/revoke-all', { method: 'POST' });
 }
 
 export function useFleetControl() {

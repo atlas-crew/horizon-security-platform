@@ -5,16 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY =
-  import.meta.env.VITE_API_KEY ||
-  import.meta.env.VITE_HORIZON_API_KEY ||
-  'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../../lib/api';
 
 export interface BlocklistEntry {
   id: string;
@@ -60,9 +51,7 @@ function computeStats(entries: BlocklistEntry[]): BlocklistStats {
 }
 
 async function fetchEntries(): Promise<BlocklistEntry[]> {
-  const response = await fetch(`${API_BASE}/blocklist?limit=500&offset=0`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch blocklist');
-  const data = await response.json().catch(() => ({}));
+  const data = await apiFetch<{ entries?: BlocklistEntry[] }>('/blocklist?limit=500&offset=0');
   return Array.isArray(data.entries) ? data.entries : [];
 }
 
@@ -72,19 +61,16 @@ async function fetchBlocklistStats(): Promise<BlocklistStats> {
 }
 
 async function addBlock(ip: string, reason: string): Promise<BlocklistEntry> {
-  const response = await fetch(`${API_BASE}/blocklist`, {
+  return apiFetch<BlocklistEntry>('/blocklist', {
     method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({
+    body: {
       blockType: 'IP',
       indicator: ip,
       reason,
       // Admin Settings is a hub-admin surface; default to fleet-wide.
       fleetWide: true,
-    }),
+    },
   });
-  if (!response.ok) throw new Error('Failed to add block');
-  return response.json();
 }
 
 export function useBlocklist() {

@@ -20,13 +20,13 @@ export function convertSigmaToSql(sigmaYaml: string): string {
     const rule = yaml.load(sigmaYaml) as SigmaRule;
     
     if (!rule || !rule.detection) {
-      throw new Error('Invalid Sigma rule: Missing detection section');
+      throw new Error('Missing detection section');
     }
 
     const { condition, ...selections } = rule.detection;
 
     if (!condition) {
-      throw new Error('Invalid Sigma rule: Missing condition');
+      throw new Error('Missing condition');
     }
 
     // 1. Parse Selections into SQL fragments
@@ -55,9 +55,11 @@ export function convertSigmaToSql(sigmaYaml: string): string {
  */
 function parseSelection(selection: any): string {
   if (Array.isArray(selection)) {
-    // List of maps -> OR logic
-    // e.g., [{field: val1}, {field: val2}]
-    const parts = selection.map(item => parseMap(item));
+    // List of items
+    const parts = selection.map(item => {
+      if (typeof item === 'string') return `(metadata ILIKE '%${escapeSql(item)}%' OR signal_type ILIKE '%${escapeSql(item)}%')`;
+      return parseMap(item);
+    });
     return `(${parts.join(' OR ')})`;
   } else if (typeof selection === 'object' && selection !== null) {
     // Single map -> AND logic
@@ -78,9 +80,9 @@ function parseMap(map: Record<string, any>): string {
     
     if (Array.isArray(value)) {
       // field: [val1, val2] -> IN or OR
-      if (value.some(v => v.includes('*'))) {
+      if (value.some(v => typeof v === 'string' && v.includes('*'))) {
          // Wildcards present -> OR LIKE
-         const likes = value.map(v => `${col} ILIKE '${escapeSql(v).replace(/\*/g, '%')}'`);
+         const likes = value.map(v => `${col} ILIKE '${escapeSql(String(v)).replace(/\*/g, '%')}'`);
          parts.push(`(${likes.join(' OR ')})`);
       } else {
         // Exact match list -> IN
@@ -131,8 +133,8 @@ function parseCondition(condition: string | string[], map: Map<string, string>):
   // 1. Replace keywords with placeholders to avoid collision
   // (Quick & dirty parser - adequate for 90% of rules)
   sql = sql
-    .replace(/\b1 of them\b/g, 'OR_ALL') // "1 of them" -> OR logic combined later
-    .replace(/\ball of them\b/g, 'AND_ALL'); // "all of them" -> AND logic
+    .replace(/\b1 of them\b/g, 'or_all') // "1 of them" -> OR logic combined later
+    .replace(/\ball of them\b/g, 'and_all'); // "all of them" -> AND logic
 
   // 2. Replace selection names with their SQL
   // Sort keys by length desc to avoid partial replacement (e.g. replacing 'sel' in 'selection')
@@ -140,26 +142,26 @@ function parseCondition(condition: string | string[], map: Map<string, string>):
   
   for (const key of keys) {
     const val = map.get(key);
-    // Use word boundaries
-    const regex = new RegExp(`\b${key}\b`, 'g');
+    // Use word boundaries, case-insensitive to match rule condition
+    const regex = new RegExp(`\\b${key}\\b`, 'gi');
     if (val) {
         sql = sql.replace(regex, val);
     }
   }
 
   // 3. Handle special "X of them" keywords
-  if (sql.includes('OR_ALL')) {
+  if (sql.includes('or_all')) {
     const allParts = Array.from(map.values());
-    sql = sql.replace('OR_ALL', `(${allParts.join(' OR ')})`);
+    sql = sql.replace(/or_all/g, `(${allParts.join(' OR ')})`);
   }
-  if (sql.includes('AND_ALL')) {
+  if (sql.includes('and_all')) {
     const allParts = Array.from(map.values());
-    sql = sql.replace('AND_ALL', `(${allParts.join(' AND ')})`);
+    sql = sql.replace(/and_all/g, `(${allParts.join(' AND ')})`);
   }
 
   return sql;
 }
 
 function escapeSql(str: string): string {
-  return str.replace(/'/g, "''").replace(/\\/g, '\\');
+  return str.replace(/'/g, "''");
 }

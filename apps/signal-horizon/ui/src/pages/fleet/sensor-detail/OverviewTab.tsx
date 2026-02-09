@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   AlertTriangle,
   ArrowUpCircle,
@@ -13,6 +13,7 @@ import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { MetricCard } from '../../../components/fleet';
 import { InfoRow, ActionButton, formatUptime } from './shared';
+import { apiFetch } from '../../../lib/api';
 
 interface OverviewTabProps {
   sensor: any;
@@ -24,6 +25,14 @@ interface OverviewTabProps {
 export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }: OverviewTabProps) {
   const meta = sensor.metadata || {};
   const { toast } = useToast();
+  const isApparatus =
+    typeof sensor?.name === 'string' &&
+    (sensor.name.toLowerCase().includes('apparatus') || sensor.name.toLowerCase().includes('cutlass'));
+
+  const [chaosDurationMs, setChaosDurationMs] = useState<number>(5000);
+  const [mtdPrefix, setMtdPrefix] = useState<string>('mtd');
+  const [recentSignals, setRecentSignals] = useState<any[]>([]);
+  const [signalsLoading, setSignalsLoading] = useState<boolean>(false);
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     description: string;
@@ -31,25 +40,38 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
     action: () => void;
   } | null>(null);
 
-  const API_BASE_LOCAL = import.meta.env.VITE_API_URL || '';
-  const API_KEY_LOCAL = import.meta.env.VITE_API_KEY || 'demo-key';
-  const headers = {
-    Authorization: `Bearer ${API_KEY_LOCAL}`,
-    'Content-Type': 'application/json',
-  };
+  useEffect(() => {
+    let cancelled = false;
+    if (!sensor?.id) return;
+
+    setSignalsLoading(true);
+    apiFetch(`/fleet/sensors/${sensor.id}/signals?limit=25`, { method: 'GET' })
+      .then((res: any) => {
+        if (cancelled) return;
+        setRecentSignals(Array.isArray(res?.signals) ? res.signals : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRecentSignals([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setSignalsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sensor?.id]);
 
   const requestAction = useCallback(async (endpoint: string, successMsg: string) => {
     try {
-      const response = await fetch(`${API_BASE_LOCAL}/api/v1/fleet/sensors/${sensor.id}/actions/${endpoint}`, {
-        method: 'POST',
-        headers,
-      });
-      if (!response.ok) throw new Error(`Failed to ${endpoint}`);
+      await apiFetch(`/fleet/sensors/${sensor.id}/actions/${endpoint}`, { method: 'POST' });
       toast.success(successMsg);
     } catch (err) {
       toast.error((err as Error).message);
     }
-  }, [sensor.id, toast, API_BASE_LOCAL, headers]);
+  }, [sensor.id, toast]);
 
   const handleRestartServices = () => {
     setConfirmAction({
@@ -77,6 +99,22 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
       action: onRestartSensor,
     });
   };
+
+  const dispatchFleetCommand = useCallback(async (commandType: 'toggle_chaos' | 'toggle_mtd', payload: Record<string, unknown>) => {
+    try {
+      await apiFetch('/fleet/commands', {
+        method: 'POST',
+        body: {
+          commandType,
+          sensorIds: [sensor.id],
+          payload,
+        },
+      });
+      toast.success(`Command queued: ${commandType}`);
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }, [sensor.id, toast]);
 
   return (
     <div className="space-y-6">
@@ -151,6 +189,61 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
       {/* Quick Actions */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Quick Actions</h3>
+        {isApparatus && (
+          <div className="mb-4 border border-border-subtle bg-surface-inset p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-3">
+              Apparatus Controls
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="apparatus-chaos-duration" className="text-[10px] font-bold uppercase tracking-widest text-ink-secondary">
+                  Chaos Duration (ms)
+                </label>
+                <input
+                  id="apparatus-chaos-duration"
+                  type="number"
+                  min={1000}
+                  max={60000}
+                  value={chaosDurationMs}
+                  onChange={(e) => setChaosDurationMs(Math.max(1000, Math.min(60000, Number(e.target.value) || 5000)))}
+                  className="w-full bg-surface-subtle border border-border-subtle p-2 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue/50"
+                />
+                <button
+                  onClick={() =>
+                    dispatchFleetCommand('toggle_chaos', { command: 'toggle_chaos', durationMs: chaosDurationMs })
+                  }
+                  className="w-full h-10 border-2 border-status-error text-status-error text-xs font-bold uppercase tracking-widest hover:bg-status-error hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                >
+                  Trigger Chaos Spike
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="apparatus-mtd-prefix" className="text-[10px] font-bold uppercase tracking-widest text-ink-secondary">
+                  MTD Prefix (empty disables)
+                </label>
+                <input
+                  id="apparatus-mtd-prefix"
+                  type="text"
+                  value={mtdPrefix}
+                  onChange={(e) => setMtdPrefix(e.target.value)}
+                  className="w-full bg-surface-subtle border border-border-subtle p-2 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue/50"
+                />
+                <button
+                  onClick={() =>
+                    dispatchFleetCommand('toggle_mtd', { command: 'toggle_mtd', prefix: mtdPrefix })
+                  }
+                  className="w-full h-10 border-2 border-ac-blue text-ac-blue text-xs font-bold uppercase tracking-widest hover:bg-ac-blue hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                >
+                  Apply MTD Prefix
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 text-[10px] text-ink-muted">
+              If commands fail with 409, enable `Toggle Chaos` / `Toggle MTD` in Admin Settings.
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <ActionButton icon={RotateCcw} label="Restart Services" onClick={handleRestartServices} />
           <ActionButton icon={Trash2} label="Clear Logs" onClick={handleClearLogs} />
@@ -158,6 +251,68 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
           <ActionButton icon={Globe2} label="Test Connectivity" />
           <ActionButton icon={Plug} label="Restart Sensor" onClick={handleRestartSensor} />
         </div>
+      </div>
+
+      {/* Recent Signals */}
+      <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-ink-primary">Recent Signals</h3>
+          <div className="text-xs text-ink-muted font-mono">
+            {signalsLoading ? 'loading…' : `${recentSignals.length} shown`}
+          </div>
+        </div>
+
+        {recentSignals.length === 0 ? (
+          <div className="text-sm text-ink-secondary">
+            {signalsLoading ? 'Loading signals…' : 'No signals yet for this sensor.'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recentSignals.slice(0, 25).map((sig: any) => {
+              const sev = String(sig.severity || '').toUpperCase();
+              const sevClass =
+                sev === 'CRITICAL' || sev === 'HIGH'
+                  ? 'text-status-error'
+                  : sev === 'MEDIUM'
+                    ? 'text-status-warning'
+                    : 'text-status-success';
+              const ts = sig.createdAt || sig.timestamp || sig.time;
+              const apparatusType = sig?.metadata?.apparatusType || sig?.metadata?.type;
+              const srcIp = sig.sourceIp || sig.source_ip || sig.ip;
+
+              return (
+                <div
+                  key={sig.id}
+                  className="flex items-center justify-between gap-4 border border-border-subtle bg-surface-card px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-bold uppercase tracking-widest ${sevClass}`}>
+                        {sev || 'UNKNOWN'}
+                      </span>
+                      <span className="text-xs font-mono text-ink-secondary">
+                        {sig.signalType}
+                      </span>
+                      {apparatusType && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-ac-magenta">
+                          {String(apparatusType)}
+                        </span>
+                      )}
+                    </div>
+                    {srcIp && (
+                      <div className="text-xs text-ink-muted font-mono truncate">
+                        {srcIp}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-ink-muted font-mono whitespace-nowrap">
+                    {ts ? new Date(ts).toLocaleString() : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Diagnostic Results */}

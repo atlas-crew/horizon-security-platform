@@ -8,6 +8,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Logger } from 'pino';
+import { createHash } from 'node:crypto';
 import { requireScope, requireRole } from '../middleware/auth.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import {
@@ -59,7 +60,13 @@ const SessionFilterSchema = PaginationSchema.extend({
   actorId: z.string().optional(),
   actor_id: z.string().optional(),
   suspicious: z.preprocess(
-    (val) => val === 'true' || val === '1',
+    (val) => {
+      // Missing query param must stay `undefined` (do not default to false).
+      if (val === undefined || val === null || val === '') return undefined;
+      if (val === true || val === 'true' || val === '1') return true;
+      if (val === false || val === 'false' || val === '0') return false;
+      return undefined;
+    },
     z.boolean().optional()
   ),
 });
@@ -144,17 +151,461 @@ const GlobalConfigUpdateSchema = ConfigUpdateSchema.extend({
 // Route Factory
 // ============================================================================
 
+export interface SynapseRoutesOptions {
+  fleetIntelService?: import('../../services/fleet/fleet-intel.js').FleetIntelService;
+}
+
 export function createSynapseRoutes(
   synapseProxy: SynapseProxyService,
-  logger: Logger
+  logger: Logger,
+  options: SynapseRoutesOptions = {}
 ): Router {
   const router = Router();
+  const { fleetIntelService } = options;
+
+  // ==========================================================================
+  // Compatibility: DLP Proxy Endpoints
+  // ==========================================================================
+  //
+  // The UI currently calls these paths, but the hub no longer exposes a generic
+  // synapse "proxy" surface. Provide safe, read-only stubs so the page works
+  // in local development and the nav doesn't hard-fail with 404s.
+  router.get(
+    '/:sensorId/proxy/_sensor/dlp/stats',
+    requireScope('fleet:read'),
+    async (_req: Request, res: Response): Promise<void> => {
+      res.json({
+        totalScans: 0,
+        totalMatches: 0,
+        patternCount: 0,
+      });
+    }
+  );
+
+  router.get(
+    '/:sensorId/proxy/_sensor/dlp/violations',
+    requireScope('fleet:read'),
+    async (_req: Request, res: Response): Promise<void> => {
+      res.json({ violations: [] });
+    }
+  );
 
   /**
    * Helper to handle synapse proxy errors consistently
-   * Uses the enhanced SynapseProxyError.toJSON() for structured responses
+   * Uses the enhanced SynapseProxyError.toJSON() for structured responses.
+   * Now includes optional database fallback for read operations.
    */
-  function handleError(req: Request, res: Response, error: unknown, context: string): void {
+  async function handleError(req: Request, res: Response, error: unknown, context: string, sensorId?: string): Promise<void> {
+    const isOffline = error instanceof SynapseProxyError && 
+      (error.code === 'TUNNEL_NOT_FOUND' || error.code === 'SENSOR_DISCONNECTED' || error.code === 'TIMEOUT');
+
+    const effectiveSensorId = sensorId || 'synapse-pingora-1';
+
+    if (isOffline && fleetIntelService) {
+      logger.info({ sensorId: effectiveSensorId, context, errorCode: (error as SynapseProxyError).code }, 'Sensor unreachable, attempting database fallback');
+      try {
+        const tenantId = req.auth!.tenantId;
+
+        // Fleet intel snapshots do not match the SOC UI contract; normalize here.
+        const jsonStringArray = (input: unknown): string[] => {
+          if (!input) return [];
+          if (Array.isArray(input)) return input.map((v) => String(v));
+          return [];
+        };
+
+        const sha256Hex = (input: string): string =>
+          createHash('sha256').update(input).digest('hex');
+
+        const normalizeHijackAlerts = (sessionId: string, input: unknown): unknown[] => {
+          if (!input) return [];
+          if (!Array.isArray(input)) return [];
+
+          // Support both shapes:
+          // - Synapse shape: {sessionId, alertType, originalValue, newValue, timestamp, confidence}
+          // - Seed legacy: {type, confidence, ts}
+          return input.map((a) => {
+            const obj = (a ?? {}) as Record<string, unknown>;
+            const alertType = String(obj.alertType ?? obj.type ?? 'unknown');
+            const timestamp = Number(obj.timestamp ?? obj.ts ?? Date.now());
+            const confidence = Number(obj.confidence ?? 0);
+            return {
+              sessionId,
+              alertType,
+              originalValue: String(obj.originalValue ?? 'unknown'),
+              newValue: String(obj.newValue ?? 'unknown'),
+              timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+              confidence: Number.isFinite(confidence) ? confidence : 0,
+            };
+          });
+        };
+
+        const normalizeActorRow = (a: any): Record<string, unknown> => {
+          const raw = (a.raw ?? {}) as Record<string, unknown>;
+          return {
+            actorId: a.actorId,
+            riskScore: a.riskScore,
+            ruleMatches: Array.isArray(raw.ruleMatches) ? raw.ruleMatches : [],
+            anomalyCount: Number(raw.anomalyCount ?? 0),
+            sessionIds: jsonStringArray(a.sessionIds ?? raw.sessionIds),
+            firstSeen: a.firstSeenAt.getTime(),
+            lastSeen: a.lastSeenAt.getTime(),
+            ips: jsonStringArray(a.ips ?? raw.ips),
+            fingerprints: jsonStringArray(a.fingerprints ?? raw.fingerprints),
+            isBlocked: !!a.isBlocked,
+            blockReason: raw.blockReason ?? (a.isBlocked ? 'blocked (seeded)' : null),
+            blockedSince: raw.blockedSince ?? (a.isBlocked ? a.lastSeenAt.getTime() : null),
+          };
+        };
+
+        if (context === 'listActors') {
+          const parsed = ActorFilterSchema.safeParse(req.query);
+          const result = await fleetIntelService.getActors(tenantId, {
+            minRisk: parsed.success ? (parsed.data.minRisk ?? parsed.data.min_risk) : undefined,
+            limit: parsed.success ? parsed.data.limit : 100,
+            offset: parsed.success ? parsed.data.offset : 0,
+          });
+          // Filter for the effective sensor, or return all if needed
+          const sensorActors = result.actors.filter(a => a.sensorId === effectiveSensorId);
+          const actorsToReturn = sensorActors.length > 0 ? sensorActors : result.actors;
+          
+          logger.info({ 
+            tenantId, 
+            sensorId: effectiveSensorId, 
+            totalFound: result.actors.length, 
+            returned: actorsToReturn.length 
+          }, 'Actors fallback executed');
+
+          res.json({ 
+            actors: actorsToReturn.map((a) => normalizeActorRow(a)),
+            stats: {
+              totalActors: actorsToReturn.length,
+              blockedActors: actorsToReturn.filter(a => a.isBlocked).length,
+              correlationsMade: 0,
+              evictions: 0,
+              totalCreated: actorsToReturn.length,
+              totalRuleMatches: 0
+            },
+            _fallback: true,
+            _sensorId: effectiveSensorId
+          });
+          return;
+        }
+        if (context === 'getActor') {
+          const actorId = (req.params as { actorId?: string }).actorId;
+          if (!actorId) {
+            res.status(400).json({ error: 'Missing actorId', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          // FleetIntelService does not currently support direct actorId lookup; page until found.
+          const pageSize = 500;
+          let offset = 0;
+          let found: any | null = null;
+          for (let i = 0; i < 10; i++) {
+            const page = await fleetIntelService.getActors(tenantId, { limit: pageSize, offset });
+            const match =
+              page.actors.find((a) => a.sensorId === effectiveSensorId && a.actorId === actorId) ??
+              page.actors.find((a) => a.actorId === actorId);
+            if (match) {
+              found = match;
+              break;
+            }
+            offset += pageSize;
+            if (offset >= page.total) break;
+          }
+
+          if (!found) {
+            res.status(404).json({ error: 'Actor not found', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          res.json({ actor: normalizeActorRow(found), _fallback: true, _sensorId: effectiveSensorId });
+          return;
+        }
+        if (context === 'getActorTimeline') {
+          const actorId = (req.params as { actorId?: string }).actorId;
+          const parsed = TimelineQuerySchema.safeParse(req.query);
+          const limit = parsed.success ? (parsed.data.limit ?? 100) : 100;
+
+          if (!actorId) {
+            res.status(400).json({ error: 'Missing actorId', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          // Best-effort timeline from session activity + hijack alerts.
+          const sessionsResult = await fleetIntelService.getSessions(tenantId, {
+            actorId,
+            limit: Math.min(200, limit),
+            offset: 0,
+          });
+
+          const events: any[] = [];
+          for (const s of sessionsResult.sessions) {
+            if (s.sensorId !== effectiveSensorId && sessionsResult.sessions.some((x) => x.sensorId === effectiveSensorId)) {
+              continue;
+            }
+
+            events.push({
+              timestamp: s.lastActivityAt.getTime(),
+              eventType: 'session_bind',
+              sessionId: s.sessionId,
+              actorId,
+              boundJa4: s.boundJa4 ?? null,
+              boundIp: s.boundIp ?? null,
+            });
+
+            const hijackAlerts = normalizeHijackAlerts(s.sessionId, s.hijackAlerts ?? (s.raw as any)?.hijackAlerts);
+            for (const a of hijackAlerts) {
+              const obj = (a ?? {}) as Record<string, unknown>;
+              events.push({
+                timestamp: Number(obj.timestamp ?? s.lastActivityAt.getTime()),
+                eventType: 'session_alert',
+                sessionId: s.sessionId,
+                actorId,
+                alertType: String(obj.alertType ?? 'unknown'),
+                confidence: Number(obj.confidence ?? 0),
+              });
+            }
+          }
+
+          events.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+          res.json({ actorId, events: events.slice(0, limit), _fallback: true, _sensorId: effectiveSensorId });
+          return;
+        }
+        if (context === 'listSessions') {
+          const parsed = SessionFilterSchema.safeParse(req.query);
+          const actorId = parsed.success ? (parsed.data.actorId ?? parsed.data.actor_id) : undefined;
+          const result = await fleetIntelService.getSessions(tenantId, {
+            actorId,
+            suspicious: parsed.success ? parsed.data.suspicious : undefined,
+            limit: parsed.success ? parsed.data.limit : 100,
+            offset: parsed.success ? parsed.data.offset : 0,
+          });
+          const sensorSessions = result.sessions.filter(s => s.sensorId === effectiveSensorId);
+          const sessionsToReturn = sensorSessions.length > 0 ? sensorSessions : result.sessions;
+
+          const sessions = sessionsToReturn.map((s) => {
+            const raw = (s.raw ?? {}) as Record<string, unknown>;
+            const hijackAlerts = normalizeHijackAlerts(s.sessionId, s.hijackAlerts ?? raw.hijackAlerts);
+            return {
+              sessionId: s.sessionId,
+              tokenHash: String(raw.tokenHash ?? `tok_${sha256Hex(s.sessionId).slice(0, 24)}`),
+              actorId: s.actorId ?? null,
+              creationTime: s.createdAt.getTime(),
+              lastActivity: s.lastActivityAt.getTime(),
+              requestCount: s.requestCount,
+              boundJa4: s.boundJa4 ?? null,
+              boundIp: s.boundIp ?? null,
+              isSuspicious: !!s.isSuspicious,
+              hijackAlerts,
+            };
+          });
+
+          const now = Date.now();
+          const suspiciousSessions = sessions.filter((s) => s.isSuspicious).length;
+          const activeSessions = sessions.filter((s) => s.lastActivity > now - 30 * 60 * 1000).length;
+          const hijackAlertsCount = sessions.reduce((acc, s) => acc + (s.hijackAlerts?.length ?? 0), 0);
+
+          res.json({ 
+            sessions,
+            stats: {
+              totalSessions: result.total,
+              activeSessions,
+              suspiciousSessions,
+              expiredSessions: Math.max(0, result.total - activeSessions),
+              hijackAlerts: hijackAlertsCount,
+              evictions: 0,
+              totalCreated: result.total,
+              totalInvalidated: 0,
+            },
+            _fallback: true,
+            _sensorId: effectiveSensorId
+          });
+          return;
+        }
+        if (context === 'listCampaigns') {
+          const parsed = CampaignFilterSchema.safeParse(req.query);
+          const result = await fleetIntelService.getCampaigns(tenantId, {
+            status: parsed.success ? parsed.data.status : undefined,
+            limit: parsed.success ? parsed.data.limit : 100,
+            offset: parsed.success ? parsed.data.offset : 0,
+          });
+          const sensorCampaigns = result.campaigns.filter(c => c.sensorId === effectiveSensorId);
+          const campaignsToReturn = sensorCampaigns.length > 0 ? sensorCampaigns : result.campaigns;
+
+          res.json({ 
+            campaigns: campaignsToReturn.map((c) => {
+              const raw = (c.raw ?? {}) as Record<string, unknown>;
+              const attackTypes = jsonStringArray(c.attackTypes);
+              return {
+                campaignId: c.campaignId,
+                name: typeof raw.name === 'string' ? raw.name : formatCampaignName(c.campaignId, attackTypes),
+                status: normalizeStatus(c.status),
+                severity: normalizeSeverity(c.riskScore),
+                confidence: normalizeConfidence(c.confidence),
+                actorCount: c.actorCount ?? 0,
+                firstSeen: c.firstSeenAt.getTime(),
+                lastSeen: c.lastActivityAt.getTime(),
+                summary: attackTypes.length ? `Attack types: ${attackTypes.join(', ')}` : null,
+                correlationTypes: attackTypes,
+              };
+            }),
+            _fallback: true,
+            _sensorId: effectiveSensorId
+          });
+          return;
+        }
+
+        if (context === 'getCampaign') {
+          const campaignId = (req.params as { campaignId?: string }).campaignId;
+          if (!campaignId) {
+            res.status(400).json({ error: 'Missing campaignId', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          const result = await fleetIntelService.getCampaigns(tenantId, { limit: 500, offset: 0 });
+          const match =
+            result.campaigns.find((c) => c.sensorId === effectiveSensorId && c.campaignId === campaignId) ??
+            result.campaigns.find((c) => c.campaignId === campaignId);
+
+          if (!match) {
+            res.status(404).json({ error: 'Campaign not found', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          const raw = (match.raw ?? {}) as Record<string, unknown>;
+          const attackTypes = jsonStringArray(match.attackTypes);
+          res.json({
+            campaign: {
+              campaignId: match.campaignId,
+              name: typeof raw.name === 'string' ? raw.name : formatCampaignName(match.campaignId, attackTypes),
+              status: normalizeStatus(match.status),
+              severity: normalizeSeverity(match.riskScore),
+              confidence: normalizeConfidence(match.confidence),
+              actorCount: match.actorCount ?? 0,
+              firstSeen: match.firstSeenAt.getTime(),
+              lastSeen: match.lastActivityAt.getTime(),
+              summary: attackTypes.length ? `Attack types: ${attackTypes.join(', ')}` : null,
+              correlationTypes: attackTypes,
+            },
+            signals: [],
+            _fallback: true,
+            _sensorId: effectiveSensorId,
+          });
+          return;
+        }
+
+        if (context === 'listCampaignActors') {
+          const campaignId = (req.params as { campaignId?: string }).campaignId;
+          res.json({ campaignId: campaignId ?? 'unknown', actors: [], _fallback: true, _sensorId: effectiveSensorId });
+          return;
+        }
+
+        if (context === 'getCampaignGraph') {
+          const campaignId = (req.params as { campaignId?: string }).campaignId;
+          if (!campaignId) {
+            res.status(400).json({ error: 'Missing campaignId', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          const campaigns = await fleetIntelService.getCampaigns(tenantId, { limit: 500, offset: 0 });
+          const campaign =
+            campaigns.campaigns.find((c) => c.sensorId === effectiveSensorId && c.campaignId === campaignId) ??
+            campaigns.campaigns.find((c) => c.campaignId === campaignId);
+
+          const raw = (campaign?.raw ?? {}) as Record<string, unknown>;
+          const label =
+            typeof raw.name === 'string'
+              ? raw.name
+              : campaign
+                ? formatCampaignName(campaign.campaignId, jsonStringArray(campaign.attackTypes))
+                : campaignId;
+
+          // Build a small, stable graph from fleet intel snapshots.
+          // Cytoscape element ids must be unique and stable; use hashed ids with readable labels.
+          const cyId = (prefix: string, value: string): string =>
+            `${prefix}_${sha256Hex(`${prefix}:${value}`).slice(0, 16)}`;
+
+          const nodes: any[] = [
+            { data: { id: 'campaign', label, type: 'campaign' } },
+          ];
+          const edges: any[] = [];
+
+          const actors = await fleetIntelService.getActors(tenantId, { limit: 25, offset: 0 });
+          const sensorActors = actors.actors.filter((a) => a.sensorId === effectiveSensorId);
+          const actorsToUse = (sensorActors.length > 0 ? sensorActors : actors.actors).slice(0, 8);
+
+          for (const a of actorsToUse) {
+            const actorNodeId = cyId('actor', a.actorId);
+            nodes.push({
+              data: { id: actorNodeId, label: a.actorId, type: 'actor', riskScore: a.riskScore },
+            });
+            edges.push({
+              data: { id: cyId('edge', `campaign->${a.actorId}`), source: 'campaign', target: actorNodeId, label: 'attributed' },
+            });
+
+            const ips = jsonStringArray(a.ips ?? (a.raw as any)?.ips).slice(0, 3);
+            for (const ip of ips) {
+              const ipNodeId = cyId('ip', ip);
+              if (!nodes.some((n) => n.data?.id === ipNodeId)) {
+                nodes.push({ data: { id: ipNodeId, label: ip, type: 'ip' } });
+              }
+              edges.push({
+                data: { id: cyId('edge', `${a.actorId}->${ip}`), source: actorNodeId, target: ipNodeId, label: 'uses' },
+              });
+            }
+          }
+
+          res.json({
+            data: { nodes, edges },
+            _fallback: true,
+            _sensorId: effectiveSensorId,
+          });
+          return;
+        }
+
+        if (context === 'getSession') {
+          const sessionId = (req.params as { sessionId?: string }).sessionId;
+          if (!sessionId) {
+            res.status(400).json({ error: 'Missing sessionId', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          const result = await fleetIntelService.getSessions(tenantId, { limit: 500, offset: 0 });
+          const match =
+            result.sessions.find((s) => s.sensorId === effectiveSensorId && s.sessionId === sessionId) ??
+            result.sessions.find((s) => s.sessionId === sessionId);
+
+          if (!match) {
+            res.status(404).json({ error: 'Session not found', _fallback: true, _sensorId: effectiveSensorId });
+            return;
+          }
+
+          const raw = (match.raw ?? {}) as Record<string, unknown>;
+          const hijackAlerts = normalizeHijackAlerts(match.sessionId, match.hijackAlerts ?? raw.hijackAlerts);
+          res.json({
+            session: {
+              sessionId: match.sessionId,
+              tokenHash: String(raw.tokenHash ?? `tok_${sha256Hex(match.sessionId).slice(0, 24)}`),
+              actorId: match.actorId ?? null,
+              creationTime: match.createdAt.getTime(),
+              lastActivity: match.lastActivityAt.getTime(),
+              requestCount: match.requestCount,
+              boundJa4: match.boundJa4 ?? null,
+              boundIp: match.boundIp ?? null,
+              isSuspicious: !!match.isSuspicious,
+              hijackAlerts,
+            },
+            _fallback: true,
+            _sensorId: effectiveSensorId,
+          });
+          return;
+        }
+      } catch (fallbackError) {
+        logger.error({ fallbackError }, 'Database fallback failed');
+      }
+    }
+
     if (error instanceof SensorError) {
       const problem = error.toProblemDetails();
       res.status(problem.status).type('application/problem+json').json(problem);
@@ -274,7 +725,7 @@ export function createSynapseRoutes(
         const status = await synapseProxy.getSensorStatus(sensorId, tenantId);
         res.json(status);
       } catch (error) {
-        handleError(req, res, error, 'getSensorStatus');
+        await handleError(req, res, error, 'getSensorStatus');
       }
     }
   );
@@ -310,7 +761,7 @@ export function createSynapseRoutes(
           : await synapseProxy.getSensorConfig(sensorId, tenantId);
         res.json(config);
       } catch (error) {
-        handleError(req, res, error, 'getSensorConfig');
+        await handleError(req, res, error, 'getSensorConfig');
       }
     }
   );
@@ -349,7 +800,7 @@ export function createSynapseRoutes(
         );
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'updateSensorConfig');
+        await handleError(req, res, error, 'updateSensorConfig');
       }
     }
   );
@@ -460,7 +911,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listEntities(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listEntities');
+        await handleError(req, res, error, 'listEntities');
       }
     }
   );
@@ -480,7 +931,7 @@ export function createSynapseRoutes(
         const entity = await synapseProxy.getEntity(sensorId, tenantId, entityId);
         res.json(entity);
       } catch (error) {
-        handleError(req, res, error, 'getEntity');
+        await handleError(req, res, error, 'getEntity');
       }
     }
   );
@@ -501,7 +952,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, entityId, tenantId }, 'Entity released');
         res.status(204).send();
       } catch (error) {
-        handleError(req, res, error, 'releaseEntity');
+        await handleError(req, res, error, 'releaseEntity');
       }
     }
   );
@@ -534,7 +985,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listBlocks(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listBlocks');
+        await handleError(req, res, error, 'listBlocks');
       }
     }
   );
@@ -568,7 +1019,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, blockId: block.id, tenantId }, 'Block added');
         res.status(201).json(block);
       } catch (error) {
-        handleError(req, res, error, 'addBlock');
+        await handleError(req, res, error, 'addBlock');
       }
     }
   );
@@ -589,7 +1040,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, blockId, tenantId }, 'Block removed');
         res.status(204).send();
       } catch (error) {
-        handleError(req, res, error, 'removeBlock');
+        await handleError(req, res, error, 'removeBlock');
       }
     }
   );
@@ -623,7 +1074,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listRules(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listRules');
+        await handleError(req, res, error, 'listRules');
       }
     }
   );
@@ -660,7 +1111,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId: rule.id, tenantId }, 'Rule added');
         res.status(201).json(rule);
       } catch (error) {
-        handleError(req, res, error, 'addRule');
+        await handleError(req, res, error, 'addRule');
       }
     }
   );
@@ -691,7 +1142,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId, tenantId }, 'Rule updated');
         res.json(rule);
       } catch (error) {
-        handleError(req, res, error, 'updateRule');
+        await handleError(req, res, error, 'updateRule');
       }
     }
   );
@@ -713,7 +1164,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId, tenantId }, 'Rule deleted');
         res.status(204).send();
       } catch (error) {
-        handleError(req, res, error, 'deleteRule');
+        await handleError(req, res, error, 'deleteRule');
       }
     }
   );
@@ -754,7 +1205,7 @@ export function createSynapseRoutes(
         });
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listActors');
+        await handleError(req, res, error, 'listActors', sensorId);
       }
     }
   );
@@ -774,7 +1225,7 @@ export function createSynapseRoutes(
         const actor = await synapseProxy.getActor(sensorId, tenantId, actorId);
         res.json(actor);
       } catch (error) {
-        handleError(req, res, error, 'getActor');
+        await handleError(req, res, error, 'getActor', sensorId);
       }
     }
   );
@@ -808,7 +1259,7 @@ export function createSynapseRoutes(
         );
         res.json(timeline);
       } catch (error) {
-        handleError(req, res, error, 'getActorTimeline');
+        await handleError(req, res, error, 'getActorTimeline', sensorId);
       }
     }
   );
@@ -847,7 +1298,7 @@ export function createSynapseRoutes(
         });
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listSessions');
+        await handleError(req, res, error, 'listSessions', sensorId);
       }
     }
   );
@@ -907,7 +1358,7 @@ export function createSynapseRoutes(
 
         res.json({ campaigns: filtered.slice(offset, offset + limit) });
       } catch (error) {
-        handleError(req, res, error, 'listCampaigns');
+        await handleError(req, res, error, 'listCampaigns', sensorId);
       }
     }
   );
@@ -949,7 +1400,7 @@ export function createSynapseRoutes(
           })) ?? [],
         });
       } catch (error) {
-        handleError(req, res, error, 'getCampaign');
+        await handleError(req, res, error, 'getCampaign', sensorId);
       }
     }
   );
@@ -975,7 +1426,7 @@ export function createSynapseRoutes(
         }));
         res.json({ campaignId, actors });
       } catch (error) {
-        handleError(req, res, error, 'listCampaignActors');
+        await handleError(req, res, error, 'listCampaignActors');
       }
     }
   );
@@ -995,7 +1446,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.getCampaignGraph(sensorId, tenantId, campaignId);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'getCampaignGraph');
+        await handleError(req, res, error, 'getCampaignGraph');
       }
     }
   );
@@ -1015,7 +1466,7 @@ export function createSynapseRoutes(
         const session = await synapseProxy.getSession(sensorId, tenantId, sessionId);
         res.json(session);
       } catch (error) {
-        handleError(req, res, error, 'getSession');
+        await handleError(req, res, error, 'getSession');
       }
     }
   );
@@ -1039,7 +1490,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.getPayloadStats(sensorId, tenantId);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'getPayloadStats');
+        await handleError(req, res, error, 'getPayloadStats');
       }
     }
   );
@@ -1068,7 +1519,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listPayloadEndpoints(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listPayloadEndpoints');
+        await handleError(req, res, error, 'listPayloadEndpoints');
       }
     }
   );
@@ -1097,7 +1548,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listPayloadAnomalies(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listPayloadAnomalies');
+        await handleError(req, res, error, 'listPayloadAnomalies');
       }
     }
   );
@@ -1117,7 +1568,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.getPayloadBandwidth(sensorId, tenantId);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'getPayloadBandwidth');
+        await handleError(req, res, error, 'getPayloadBandwidth');
       }
     }
   );
@@ -1137,7 +1588,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listProfiles(sensorId, tenantId);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'listProfiles');
+        await handleError(req, res, error, 'listProfiles');
       }
     }
   );
@@ -1166,7 +1617,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.getProfile(sensorId, tenantId, parsed.data.template);
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'getProfile');
+        await handleError(req, res, error, 'getProfile');
       }
     }
   );
@@ -1203,7 +1654,7 @@ export function createSynapseRoutes(
         );
         res.json(result);
       } catch (error) {
-        handleError(req, res, error, 'evaluateRequest');
+        await handleError(req, res, error, 'evaluateRequest');
       }
     }
   );
@@ -1230,7 +1681,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, tenantId }, 'Sensor cache cleared');
         res.json({ message: 'Cache cleared' });
       } catch (error) {
-        handleError(req, res, error, 'clearCache');
+        await handleError(req, res, error, 'clearCache');
       }
     }
   );

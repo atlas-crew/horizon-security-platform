@@ -282,7 +282,8 @@ export function createFleetReleasesRoutes(
    * Get release details including rollout history
    */
   router.get(
-    '/:id',
+    // Constrain to cuid-ish ids so "/rollouts" doesn't get captured by this route.
+    '/:id(c[a-z0-9]{8,})',
     requireScope('releases:read'),
     validateParams(ReleaseIdParamSchema),
     async (req, res) => {
@@ -380,7 +381,7 @@ export function createFleetReleasesRoutes(
    * Delete a release (only if no active rollouts)
    */
   router.delete(
-    '/:id',
+    '/:id(c[a-z0-9]{8,})',
     requireScope('releases:write'),
     validateParams(ReleaseIdParamSchema),
     async (req, res) => {
@@ -432,7 +433,7 @@ export function createFleetReleasesRoutes(
    * Start a rollout for a release
    */
   router.post(
-    '/:id/rollout',
+    '/:id(c[a-z0-9]{8,})/rollout',
     requireScope('releases:write'),
     validateParams(ReleaseIdParamSchema),
     validateBody(StartRolloutBodySchema),

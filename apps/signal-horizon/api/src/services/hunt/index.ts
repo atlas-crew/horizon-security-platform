@@ -48,7 +48,7 @@ export interface SignalResult {
   severity: Severity;
   confidence: number;
   eventCount: number;
-  metadata?: Record<string, unknown>;
+  metadata?: Prisma.JsonValue;
 }
 
 export type RequestTimelineEvent =
@@ -95,6 +95,29 @@ export type RequestTimelineEvent =
       latencyMs: number | null;
       clientIp: string | null;
       ruleId: string | null;
+    }
+  | {
+      kind: 'actor_event';
+      timestamp: Date;
+      sensorId: string;
+      actorId: string;
+      requestId: string;
+      eventType: string;
+      riskScore: number;
+      riskDelta: number;
+      ruleId: string | null;
+      ruleCategory: string | null;
+      ip: string;
+    }
+  | {
+      kind: 'session_event';
+      timestamp: Date;
+      sensorId: string;
+      sessionId: string;
+      actorId: string;
+      requestId: string;
+      eventType: string;
+      requestCount: number;
     };
 
 export interface RecentRequest {
@@ -127,6 +150,22 @@ export interface HourlyStats {
   totalEvents: number;
   uniqueIps: number;
   uniqueFingerprints: number;
+}
+
+export interface TenantBaseline {
+  signalType: string;
+  avgHourlyCount: number;
+  stddevHourlyCount: number;
+  maxHourlyCount: number;
+  observationCount: number;
+}
+
+export interface LowAndSlowIpCandidate {
+  sourceIp: string;
+  daysSeen: number;
+  maxDailySignals: number;
+  totalSignals: number;
+  tenantsHit: number;
 }
 
 export interface SavedQuery {
@@ -353,14 +392,17 @@ export class HuntService {
     this.validateIdentifier(tenantId, 'tenantId');
     this.validateRequestId(requestId);
 
-    const boundedLimit = this.validatePositiveInt(limit, 1, 5000);
+    const maxTotalEvents = this.validatePositiveInt(limit, 1, 5000);
+    // `limit` is a total cap across all kinds. We query each table with a smaller per-kind
+    // limit to avoid worst-case payloads (5 tables * 5000 rows).
+    const perKindLimit = Math.max(1, Math.ceil(maxTotalEvents / 5));
 
     const now = new Date();
     const defaultStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const start = (startTime ?? defaultStart).toISOString().replace('T', ' ').replace('Z', '');
     const end = (endTime ?? now).toISOString().replace('T', ' ').replace('Z', '');
 
-    const params = { tenantId, requestId, startTime: start, endTime: end, limit: boundedLimit };
+    const params = { tenantId, requestId, startTime: start, endTime: end, limit: perKindLimit };
 
     const [httpRows, signalRows, logRows] = await Promise.all([
       this.clickhouse.queryWithParams<ClickHouseHttpTransactionRow>(
@@ -439,10 +481,68 @@ export class HuntService {
       ),
     ]);
 
+    // SECURITY: actor_events/session_events lack tenant_id. We only query them if we can
+    // prove the tenant owns the request via http_transactions, and we scope by the
+    // owned sensor_id set.
+    //
+    // NOTE: This assumes sensor_id is globally unique across tenants. If that invariant
+    // is not guaranteed, the correct fix is to add tenant_id to these SOC tables.
+    const sensorIds = Array.from(new Set(httpRows.map((r) => r.sensor_id).filter(Boolean)));
+
+    let actorRows: ClickHouseActorEventRow[] = [];
+    let sessionRows: ClickHouseSessionEventRow[] = [];
+    if (sensorIds.length > 0) {
+      const socParams = { ...params, sensorIds };
+      [actorRows, sessionRows] = await Promise.all([
+        this.clickhouse.queryWithParams<ClickHouseActorEventRow>(
+          `
+            SELECT
+              timestamp,
+              sensor_id,
+              actor_id,
+              request_id,
+              event_type,
+              risk_score,
+              risk_delta,
+              rule_id,
+              rule_category,
+              ip
+            FROM actor_events
+            WHERE request_id = {requestId:String}
+              AND timestamp >= toDateTime64({startTime:String}, 3)
+              AND timestamp <= toDateTime64({endTime:String}, 3)
+              AND sensor_id IN {sensorIds:Array(String)}
+            ORDER BY timestamp ASC
+            LIMIT {limit:UInt32}
+          `,
+          socParams
+        ),
+        this.clickhouse.queryWithParams<ClickHouseSessionEventRow>(
+          `
+            SELECT
+              timestamp,
+              sensor_id,
+              session_id,
+              actor_id,
+              request_id,
+              event_type,
+              request_count
+            FROM session_events
+            WHERE request_id = {requestId:String}
+              AND timestamp >= toDateTime64({startTime:String}, 3)
+              AND timestamp <= toDateTime64({endTime:String}, 3)
+              AND sensor_id IN {sensorIds:Array(String)}
+            ORDER BY timestamp ASC
+            LIMIT {limit:UInt32}
+          `,
+          socParams
+        ),
+      ]);
+    }
+
     const events: RequestTimelineEvent[] = [];
 
     for (const row of httpRows) {
-      // request_id is filtered, but keep it defensive.
       if (!row.request_id) continue;
       events.push({
         kind: 'http_transaction',
@@ -498,8 +598,39 @@ export class HuntService {
       });
     }
 
+    for (const row of actorRows) {
+      if (!row.request_id) continue;
+      events.push({
+        kind: 'actor_event',
+        timestamp: new Date(row.timestamp),
+        sensorId: row.sensor_id,
+        actorId: row.actor_id,
+        requestId: row.request_id,
+        eventType: row.event_type,
+        riskScore: row.risk_score,
+        riskDelta: row.risk_delta,
+        ruleId: row.rule_id ?? null,
+        ruleCategory: row.rule_category ?? null,
+        ip: row.ip,
+      });
+    }
+
+    for (const row of sessionRows) {
+      if (!row.request_id) continue;
+      events.push({
+        kind: 'session_event',
+        timestamp: new Date(row.timestamp),
+        sensorId: row.sensor_id,
+        sessionId: row.session_id,
+        actorId: row.actor_id,
+        requestId: row.request_id,
+        eventType: row.event_type,
+        requestCount: row.request_count,
+      });
+    }
+
     events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-    return events;
+    return events.length > maxTotalEvents ? events.slice(0, maxTotalEvents) : events;
   }
 
   async getRecentRequests(tenantId: string, limit: number = 25): Promise<RecentRequest[]> {
@@ -538,6 +669,81 @@ export class HuntService {
       path: row.path,
       statusCode: row.status_code,
       wafAction: row.waf_action ?? null,
+    }));
+  }
+
+  /**
+   * Find "low and slow" IPs (cross-tenant) that persist across many days but never spike in a single day.
+   * NOTE: Uses ip_daily_mv which aggregates across tenants; treat as admin-only intelligence.
+   */
+  async getLowAndSlowIps(params?: {
+    days?: number;
+    minDistinctDays?: number;
+    maxSignalsPerDay?: number;
+    limit?: number;
+  }): Promise<LowAndSlowIpCandidate[]> {
+    if (!this.clickhouse?.isEnabled()) return [];
+
+    const days = this.validatePositiveInt(params?.days ?? 90, 1, 365);
+    const minDistinctDays = this.validatePositiveInt(params?.minDistinctDays ?? 5, 2, days);
+    const maxSignalsPerDay = this.validatePositiveInt(params?.maxSignalsPerDay ?? 10, 1, 100000);
+    const limit = this.validatePositiveInt(params?.limit ?? 100, 1, 1000);
+
+    const sql = `
+      WITH daily AS (
+        SELECT
+          source_ip,
+          day,
+          countMerge(signal_count_state) AS signals
+        FROM ip_daily_mv
+        WHERE day >= today() - INTERVAL {days:UInt32} DAY
+        GROUP BY source_ip, day
+      ),
+      summary AS (
+        SELECT
+          source_ip,
+          count() AS days_seen,
+          max(signals) AS max_daily_signals,
+          sum(signals) AS total_signals
+        FROM daily
+        GROUP BY source_ip
+        HAVING days_seen >= {minDistinctDays:UInt32}
+          AND max_daily_signals <= {maxSignalsPerDay:UInt32}
+      ),
+      tenants AS (
+        SELECT
+          source_ip,
+          uniqMerge(tenants_hit_state) AS tenants_hit
+        FROM ip_daily_mv
+        WHERE day >= today() - INTERVAL {days:UInt32} DAY
+        GROUP BY source_ip
+      )
+      SELECT
+        IPv4NumToString(summary.source_ip) AS source_ip,
+        summary.days_seen,
+        summary.max_daily_signals,
+        summary.total_signals,
+        tenants.tenants_hit
+      FROM summary
+      LEFT JOIN tenants ON tenants.source_ip = summary.source_ip
+      ORDER BY summary.days_seen DESC, summary.total_signals DESC
+      LIMIT {limit:UInt32}
+    `;
+
+    const rows = await this.clickhouse.queryWithParams<{
+      source_ip: string;
+      days_seen: string;
+      max_daily_signals: number;
+      total_signals: number;
+      tenants_hit: number;
+    }>(sql, { days, minDistinctDays, maxSignalsPerDay, limit });
+
+    return rows.map((r) => ({
+      sourceIp: r.source_ip,
+      daysSeen: parseInt(r.days_seen, 10),
+      maxDailySignals: r.max_daily_signals,
+      totalSignals: r.total_signals,
+      tenantsHit: r.tenants_hit,
     }));
   }
 
@@ -612,6 +818,126 @@ export class HuntService {
       uniqueIps: row.unique_ips,
       uniqueFingerprints: row.unique_fingerprints,
     }));
+  }
+
+  /**
+   * Establish behavioral baselines for a tenant using historical data.
+   * Calculates mean and standard deviation for each signal type.
+   */
+  async getTenantBaselines(tenantId: string, days: number = 30): Promise<TenantBaseline[]> {
+    if (!this.clickhouse?.isEnabled()) {
+      this.logger.warn('ClickHouse not enabled, tenant baselines unavailable');
+      return [];
+    }
+
+    this.validateIdentifier(tenantId, 'tenantId');
+    const validDays = this.validatePositiveInt(days, 1, 90);
+
+    const sql = `
+      SELECT
+        signal_type,
+        avg(hour_total) AS avg_count,
+        stddevPop(hour_total) AS stddev_count,
+        max(hour_total) AS max_count,
+        count() AS observation_count
+      FROM (
+        /* Aggregate across severities first, then compute distribution across hours. */
+        SELECT
+          hour,
+          signal_type,
+          sum(signal_count) AS hour_total
+        FROM signal_hourly_mv
+        WHERE tenant_id = {tenantId:String}
+          AND hour >= toStartOfHour(now()) - INTERVAL {days:UInt32} DAY
+          AND hour < toStartOfHour(now())
+        GROUP BY hour, signal_type
+      )
+      GROUP BY signal_type
+    `;
+
+    const params = { tenantId, days: validDays };
+    const rows = await this.clickhouse.queryWithParams<{
+      signal_type: string;
+      avg_count: number;
+      stddev_count: number;
+      max_count: number;
+      observation_count: string;
+    }>(sql, params);
+
+    return rows.map((row) => ({
+      signalType: row.signal_type,
+      avgHourlyCount: row.avg_count,
+      stddevHourlyCount: row.stddev_count,
+      maxHourlyCount: row.max_count,
+      observationCount: parseInt(row.observation_count, 10),
+    }));
+  }
+
+  /**
+   * Identify current signal anomalies by comparing recent activity to baselines.
+   * Flags any signal type exceeding (mean + Z*stddev).
+   */
+  async getAnomalies(tenantId: string, zScoreThreshold: number = 2.0): Promise<{
+    signalType: string;
+    currentCount: number;
+    expectedAvg: number;
+    deviation: number;
+    severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  }[]> {
+    if (!this.clickhouse?.isEnabled()) return [];
+
+    const boundedZ = this.validateFloat(zScoreThreshold, 0.1, 10);
+
+    // Use the most recent *complete* hour bucket to avoid partial-hour noise.
+    const now = new Date();
+    const thisHour = new Date(now);
+    thisHour.setMinutes(0, 0, 0);
+    const lastCompleteHour = new Date(thisHour.getTime() - 60 * 60 * 1000);
+
+    const [baselines, recent] = await Promise.all([
+      this.getTenantBaselines(tenantId),
+      this.getHourlyStats(tenantId, lastCompleteHour, lastCompleteHour)
+    ]);
+
+    const anomalies: {
+      signalType: string;
+      currentCount: number;
+      expectedAvg: number;
+      deviation: number;
+      severity: 'LOW' | 'MEDIUM' | 'HIGH';
+    }[] = [];
+
+    for (const base of baselines) {
+      // FIX: Sum all severity buckets for this signal type to avoid dimensional mismatch
+      const currentCount = recent
+        .filter(r => r.signalType === base.signalType)
+        .reduce((sum, r) => sum + r.signalCount, 0);
+
+      const threshold = base.avgHourlyCount + (boundedZ * base.stddevHourlyCount);
+
+      if (currentCount > threshold) {
+        let deviation = 0;
+        if (base.stddevHourlyCount > 0) {
+          deviation = (currentCount - base.avgHourlyCount) / base.stddevHourlyCount;
+        } else if (currentCount > base.avgHourlyCount) {
+          // Zero stddev but count increased: treat as a high-sigma event (e.g. 10.0)
+          // to ensure it's surfaced as HIGH severity.
+          deviation = 10.0;
+        }
+
+        if (deviation > 0) {
+          anomalies.push({
+            signalType: base.signalType,
+            currentCount,
+            expectedAvg: base.avgHourlyCount,
+            deviation,
+            severity: deviation > 5 ? 'HIGH' : (deviation > 3 ? 'MEDIUM' : 'LOW')
+          });
+        }
+      }
+    }
+
+    return anomalies;
   }
 
   /**
@@ -761,7 +1087,40 @@ export class HuntService {
     }
 
     if (query.sourceIps && query.sourceIps.length > 0) {
-      where.sourceIp = { in: query.sourceIps };
+      const exact: string[] = [];
+      const prefixes: string[] = [];
+
+      for (const raw of query.sourceIps) {
+        // Validation already ran for ClickHouse path; for Postgres-only just be safe.
+        this.validateIpAddress(raw, 'sourceIps');
+
+        // Prefix filters end with '.' (e.g. "185.228.")
+        if (raw.endsWith('.')) {
+          prefixes.push(raw);
+          continue;
+        }
+
+        // CIDR is ClickHouse-only for now; in Postgres fallback treat as exact IP if /32, otherwise ignore.
+        if (raw.includes('/')) {
+          const [ip, bitsStr] = raw.split('/');
+          if (bitsStr === '32') exact.push(ip);
+          continue;
+        }
+
+        exact.push(raw);
+      }
+
+      if (prefixes.length === 0) {
+        where.sourceIp = { in: exact };
+      } else {
+        const or: Prisma.SignalWhereInput[] = [];
+        if (exact.length > 0) or.push({ sourceIp: { in: exact } });
+        for (const p of prefixes) {
+          // Stored as string; use startsWith semantics.
+          or.push({ sourceIp: { startsWith: p } });
+        }
+        where.OR = (where.OR || []).concat(or);
+      }
     }
 
     if (query.severities && query.severities.length > 0) {
@@ -813,9 +1172,42 @@ export class HuntService {
     }
 
     if (query.sourceIps && query.sourceIps.length > 0) {
-      query.sourceIps.forEach((ip, i) => this.validateIpAddress(ip, `sourceIps[${i}]`));
-      whereClauses.push('source_ip IN {sourceIps:Array(IPv4)}');
-      params.sourceIps = query.sourceIps;
+      const exactIps: string[] = [];
+      const prefixIps: string[] = [];
+
+      query.sourceIps.forEach((ip, i) => {
+        this.validateIpAddress(ip, `sourceIps[${i}]`);
+        if (ip.endsWith('.')) {
+          prefixIps.push(ip);
+        } else if (ip.includes('/')) {
+          // CIDR unsupported in ClickHouse query for now (would require parsing to range).
+          // Accept /32 as exact IP.
+          const [cidrIp, bits] = ip.split('/');
+          if (bits === '32') exactIps.push(cidrIp);
+        } else {
+          exactIps.push(ip);
+        }
+      });
+
+      const ipClauses: string[] = [];
+      if (exactIps.length > 0) {
+        ipClauses.push('source_ip IN {sourceIps:Array(IPv4)}');
+        params.sourceIps = exactIps;
+      }
+
+      if (prefixIps.length > 0) {
+        // NOTE: source_ip is IPv4 type; convert to string for prefix matching.
+        ipClauses.push('startsWith(IPv4NumToString(source_ip), {sourceIpPrefix:String})');
+        // If multiple prefixes are provided, use OR of parameters.
+        // Keep it simple: if multiple, use first (UI typically sends one).
+        params.sourceIpPrefix = prefixIps[0];
+      }
+
+      if (ipClauses.length === 1) {
+        whereClauses.push(ipClauses[0]);
+      } else if (ipClauses.length > 1) {
+        whereClauses.push(`(${ipClauses.join(' OR ')})`);
+      }
     }
 
     if (query.severities && query.severities.length > 0) {
@@ -955,13 +1347,47 @@ export class HuntService {
   }
 
   /**
-   * Validate an IP address (IPv4 or IPv6)
+   * Validate an IP filter.
+   *
+   * Supported formats:
+   * - Exact IP: "203.0.113.10", "2001:db8::1"
+   * - IPv4 CIDR: "203.0.113.0/24"
+   * - IPv4 prefix: "185.228." or "185.228.101." (1-3 octets + trailing dot)
    * @throws Error if not a valid IP address
    */
   private validateIpAddress(value: string, fieldName: string): void {
     if (typeof value !== 'string') {
       throw new Error(`Invalid ${fieldName}: must be a string`);
     }
+    if (value.length === 0 || value.length > 64) {
+      throw new Error(`Invalid ${fieldName}: must be 1-64 chars`);
+    }
+
+    // IPv4 prefix "x." / "x.y." / "x.y.z."
+    const ipv4PrefixPattern = /^(\d{1,3}\.){1,3}$/;
+    if (ipv4PrefixPattern.test(value)) {
+      const octets = value.split('.').filter(Boolean).map(Number);
+      if (octets.some((o) => o < 0 || o > 255)) {
+        throw new Error(`Invalid ${fieldName}: IP prefix octets must be 0-255`);
+      }
+      return;
+    }
+
+    // IPv4 CIDR "x.y.z.w/n"
+    const ipv4CidrPattern = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+    if (ipv4CidrPattern.test(value)) {
+      const [ip, bitsStr] = value.split('/');
+      const bits = Number(bitsStr);
+      if (!Number.isInteger(bits) || bits < 0 || bits > 32) {
+        throw new Error(`Invalid ${fieldName}: CIDR bits must be 0-32`);
+      }
+      const octets = ip.split('.').map(Number);
+      if (octets.some((o) => o < 0 || o > 255)) {
+        throw new Error(`Invalid ${fieldName}: IP address octets must be 0-255`);
+      }
+      return;
+    }
+
     // Basic IPv4 pattern
     const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
     // Basic IPv6 pattern (simplified)
@@ -1112,4 +1538,27 @@ interface ClickHouseLogEntryRow {
   latency_ms: number | null;
   client_ip: string | null;
   rule_id: string | null;
+}
+
+interface ClickHouseActorEventRow {
+  timestamp: string;
+  sensor_id: string;
+  actor_id: string;
+  request_id: string | null;
+  event_type: string;
+  risk_score: number;
+  risk_delta: number;
+  rule_id: string | null;
+  rule_category: string | null;
+  ip: string;
+}
+
+interface ClickHouseSessionEventRow {
+  timestamp: string;
+  sensor_id: string;
+  session_id: string;
+  actor_id: string;
+  request_id: string | null;
+  event_type: string;
+  request_count: number;
 }

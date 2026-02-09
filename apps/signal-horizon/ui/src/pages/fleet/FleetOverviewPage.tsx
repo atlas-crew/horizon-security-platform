@@ -20,9 +20,7 @@ import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+import { apiFetch } from '../../lib/api';
 
 interface FleetOverview {
   summary: {
@@ -55,19 +53,11 @@ interface FleetOverview {
 }
 
 async function fetchFleetOverview(): Promise<FleetOverview> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/overview`, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
-  });
-  if (!response.ok) throw new Error('Failed to fetch fleet overview');
-  return response.json();
+  return apiFetch<FleetOverview>('/fleet/overview');
 }
 
 async function fetchSensors(): Promise<SensorSummary[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors`, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
-  });
-  if (!response.ok) throw new Error('Failed to fetch sensors');
-  const data = await response.json();
+  const data = await apiFetch<any>('/fleet/sensors');
   return data.sensors.map((s: any) => ({
     id: s.id,
     name: s.name,

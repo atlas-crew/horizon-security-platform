@@ -22,10 +22,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+import { apiFetch } from '../../lib/api';
 
 interface RegistrationToken {
   id: string;
@@ -76,12 +73,10 @@ export function OnboardingPage(): React.ReactElement {
   const queryClient = useQueryClient();
 
   // Fetch statistics
-  const { data: statsData } = useQuery({
+  const { data: statsData } = useQuery<any>({
     queryKey: ['onboarding-stats'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/stats`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch stats');
-      return response.json();
+      return apiFetch('/onboarding/stats');
     },
   });
 
@@ -89,9 +84,7 @@ export function OnboardingPage(): React.ReactElement {
   const { data: tokensData, isLoading: tokensLoading, error: tokensError } = useQuery({
     queryKey: ['registration-tokens'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/tokens`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch tokens');
-      return response.json();
+      return apiFetch('/onboarding/tokens');
     },
     enabled: activeTab === 'tokens',
   });
@@ -100,9 +93,7 @@ export function OnboardingPage(): React.ReactElement {
   const { data: pendingData, isLoading: pendingLoading, error: pendingError } = useQuery({
     queryKey: ['pending-sensors'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/onboarding/pending`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch pending sensors');
-      return response.json();
+      return apiFetch('/onboarding/pending');
     },
     enabled: activeTab === 'pending',
   });
@@ -113,15 +104,9 @@ export function OnboardingPage(): React.ReactElement {
   // Generate token mutation
   const generateMutation = useMutation({
     mutationFn: async (request: NewTokenRequest) => {
-      const response = await fetch(`${API_BASE}/onboarding/tokens`, {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-      if (!response.ok) throw new Error('Failed to generate token');
-      return response.json();
+      return apiFetch('/onboarding/tokens', { method: 'POST', body: request });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['registration-tokens'] });
       queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
       setGeneratedToken(data.token);
@@ -131,11 +116,7 @@ export function OnboardingPage(): React.ReactElement {
   // Revoke token mutation
   const revokeMutation = useMutation({
     mutationFn: async (tokenId: string) => {
-      const response = await fetch(`${API_BASE}/onboarding/tokens/${tokenId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-      });
-      if (!response.ok) throw new Error('Failed to revoke token');
+      await apiFetch(`/onboarding/tokens/${tokenId}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['registration-tokens'] });
@@ -147,13 +128,10 @@ export function OnboardingPage(): React.ReactElement {
   // Approve/reject sensor mutation
   const approvalMutation = useMutation({
     mutationFn: async ({ sensorId, action, assignedName }: { sensorId: string; action: 'approve' | 'reject'; assignedName?: string }) => {
-      const response = await fetch(`${API_BASE}/onboarding/pending/${sensorId}`, {
+      return apiFetch(`/onboarding/pending/${sensorId}`, {
         method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, assignedName }),
+        body: { action, assignedName },
       });
-      if (!response.ok) throw new Error(`Failed to ${action} sensor`);
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-sensors'] });

@@ -478,7 +478,9 @@ export const rateLimiters: Record<string, RequestHandler> = {
    * Provides baseline protection against DoS and resource exhaustion.
    */
   global: createRateLimiter({
-    maxRequests: 1000,
+    // Dev UX: the UI + websocket reconnect loops can easily exceed 1000/min on localhost.
+    // Keep a sane production default, but uncap local development enough to avoid flakiness.
+    maxRequests: process.env.NODE_ENV === 'production' ? 1000 : 50_000,
     windowMs: 60 * 1000,
     message: 'Global API rate limit exceeded. Please reduce request frequency.',
     trustProxy: getTrustedProxies(),

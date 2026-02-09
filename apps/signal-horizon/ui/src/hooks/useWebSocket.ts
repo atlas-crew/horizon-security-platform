@@ -13,7 +13,7 @@ import { useDemoMode } from '../stores/demoModeStore';
 import { getDemoData } from '../lib/demoData';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3100/ws/dashboard';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || import.meta.env.VITE_API_KEY || 'dev-dashboard-key';
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 

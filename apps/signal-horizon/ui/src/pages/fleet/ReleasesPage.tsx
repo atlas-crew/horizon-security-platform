@@ -615,27 +615,34 @@ export function ReleasesPage() {
     refreshRollouts,
   } = useReleases();
 
+  // Defensive defaults: some error paths can yield partial/undefined data; UI should not crash.
+  const safeReleases = Array.isArray(releases) ? releases : [];
+  const safeRollouts = Array.isArray(rollouts) ? rollouts : [];
+
   // Stats
   const stats = useMemo(() => {
-    const completedRollouts = rollouts.filter((r) => r.status === 'completed').length;
-    const totalSensorsUpdated = rollouts
+    const completedRollouts = safeRollouts.filter((r) => r.status === 'completed').length;
+    const totalSensorsUpdated = safeRollouts
       .filter((r) => r.status === 'completed')
-      .reduce((sum, r) => sum + r.progress.filter((p) => p.status === 'activated').length, 0);
+      .reduce((sum, r) => {
+        const progress = Array.isArray(r.progress) ? r.progress : [];
+        return sum + progress.filter((p) => p.status === 'activated').length;
+      }, 0);
 
     return {
-      totalReleases: releases.length,
-      latestVersion: releases[0]?.version || 'N/A',
+      totalReleases: safeReleases.length,
+      latestVersion: safeReleases[0]?.version || 'N/A',
       completedRollouts,
       totalSensorsUpdated,
     };
-  }, [releases, rollouts]);
+  }, [safeReleases, safeRollouts]);
 
   // Recent rollouts (completed)
   const recentRollouts = useMemo(() => {
-    return rollouts
+    return safeRollouts
       .filter((r) => r.status === 'completed')
       .slice(0, 5);
-  }, [rollouts]);
+  }, [safeRollouts]);
 
   // Handlers
   const handleUploadRelease = useCallback(
@@ -734,7 +741,11 @@ export function ReleasesPage() {
           </div>
           <div className="p-6">
             <RolloutManager
-              releases={deployingRelease ? [deployingRelease, ...releases.filter((r) => r.id !== deployingRelease.id)] : releases}
+              releases={
+                deployingRelease
+                  ? [deployingRelease, ...safeReleases.filter((r) => r.id !== deployingRelease.id)]
+                  : safeReleases
+              }
               activeRollout={activeRollout}
               isStartingRollout={isStartingRollout}
               isCancellingRollout={isCancellingRollout}
@@ -749,7 +760,7 @@ export function ReleasesPage() {
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
           <h2 className="text-lg font-medium text-ink-primary">Available Releases</h2>
-          <span className="text-sm text-ink-muted">{releases.length} releases</span>
+          <span className="text-sm text-ink-muted">{safeReleases.length} releases</span>
         </div>
 
         {isLoadingReleases ? (
@@ -757,7 +768,7 @@ export function ReleasesPage() {
             <Loader2 className="w-8 h-8 mx-auto animate-spin text-ink-muted" />
             <p className="mt-4 text-sm text-ink-muted">Loading releases...</p>
           </div>
-        ) : releases.length === 0 ? (
+        ) : safeReleases.length === 0 ? (
           <div className="p-12 text-center">
             <Package className="w-12 h-12 mx-auto text-ink-muted" />
             <p className="mt-4 text-sm text-ink-muted">No releases found.</p>
@@ -793,7 +804,7 @@ export function ReleasesPage() {
                 </tr>
               </thead>
               <tbody>
-                {releases.map((release, index) => (
+                {safeReleases.map((release, index) => (
                   <ReleaseRow
                     key={release.id}
                     release={release}
@@ -827,7 +838,8 @@ export function ReleasesPage() {
                   <div>
                     <div className="font-medium text-ink-primary">v{rollout.release.version}</div>
                     <div className="text-sm text-ink-muted">
-                      {rollout.progress.filter((p) => p.status === 'activated').length} sensors updated
+                      {(Array.isArray(rollout.progress) ? rollout.progress : []).filter((p) => p.status === 'activated').length}{' '}
+                      sensors updated
                     </div>
                   </div>
                 </div>

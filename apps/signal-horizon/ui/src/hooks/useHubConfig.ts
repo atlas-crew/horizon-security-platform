@@ -5,13 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = {
-  'Authorization': `Bearer ${API_KEY}`,
-  'Content-Type': 'application/json',
-};
+import { apiFetch } from '../lib/api';
 
 export interface HubConfig {
   env: string;
@@ -60,19 +54,11 @@ export interface HubConfig {
 }
 
 async function fetchHubConfig(): Promise<HubConfig> {
-  const response = await fetch(`${API_BASE}/management/config`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch hub config');
-  return response.json();
+  return apiFetch<HubConfig>('/management/config');
 }
 
 async function updateHubConfig(updates: Partial<HubConfig>): Promise<any> {
-  const response = await fetch(`${API_BASE}/management/config`, {
-    method: 'PATCH',
-    headers: authHeaders,
-    body: JSON.stringify(updates),
-  });
-  if (!response.ok) throw new Error('Failed to update hub config');
-  return response.json();
+  return apiFetch('/management/config', { method: 'PATCH', body: updates });
 }
 
 export function useHubConfig() {

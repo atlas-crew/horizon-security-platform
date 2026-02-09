@@ -22,7 +22,9 @@ const HuntQuerySchema = z.object({
   startTime: z.string().datetime().transform((s) => new Date(s)),
   endTime: z.string().datetime().transform((s) => new Date(s)),
   signalTypes: z.array(z.string()).optional(),
-  sourceIps: z.array(z.string().ip()).optional(),
+  // Accept exact IPs plus prefixes/CIDR-like inputs; validation is performed in HuntService.
+  // Examples: "203.0.113.10", "185.228.", "185.228.101.0/24".
+  sourceIps: z.array(z.string().min(1).max(64)).optional(),
   severities: z.array(SeveritySchema).optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   anonFingerprint: z.string().length(64).optional(),
@@ -51,6 +53,21 @@ const HourlyStatsSchema = z.object({
   startTime: z.string().datetime().transform((s) => new Date(s)).optional(),
   endTime: z.string().datetime().transform((s) => new Date(s)).optional(),
   signalTypes: z.array(z.string()).optional(),
+});
+
+const BaselineQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).optional().default(30),
+});
+
+const AnomalyQuerySchema = z.object({
+  zScore: z.coerce.number().min(0.1).max(10).optional().default(2.0),
+});
+
+const LowAndSlowQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).optional().default(90),
+  minDistinctDays: z.coerce.number().int().min(2).max(365).optional().default(5),
+  maxSignalsPerDay: z.coerce.number().int().min(1).max(100000).optional().default(10),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(100),
 });
 
 const RequestIdSchema = z
@@ -87,9 +104,10 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:read scope
    */
-  router.get('/status', authorize(prisma, { scopes: 'hunt:read' }), (_req: Request, res: Response) => {
+  router.get('/status', authorize(prisma, { scopes: 'hunt:read' }), (req: Request, res: Response) => {
     res.json({
       historical: huntService.isHistoricalEnabled(),
+      isFleetAdmin: req.auth?.isFleetAdmin ?? false,
       routingThreshold: '24h',
       description: huntService.isHistoricalEnabled()
         ? 'Historical queries via ClickHouse enabled'
@@ -291,10 +309,19 @@ export function createHuntRoutes(
         return;
       }
 
+      // Dev UX: "recent requests" powers pivot UI; if ClickHouse is disabled,
+      // return an empty list rather than failing the whole page.
       if (!huntService.isHistoricalEnabled()) {
-        res.status(503).json({
-          error: 'Historical queries not available',
-          message: 'ClickHouse is not enabled',
+        const limit = parsed.data.limit ?? 25;
+        res.json({
+          success: true,
+          data: [],
+          meta: {
+            tenantId: req.auth.tenantId,
+            count: 0,
+            limit,
+            historical: false,
+          },
         });
         return;
       }
@@ -309,6 +336,7 @@ export function createHuntRoutes(
           tenantId: req.auth.tenantId,
           count: data.length,
           limit,
+          historical: true,
         },
       });
     } catch (error) {
@@ -370,6 +398,175 @@ export function createHuntRoutes(
       });
     } catch (error) {
       routeLogger.error({ error }, 'Hourly stats query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/baselines
+   * Establish behavioral baselines for the authenticated tenant.
+   *
+   * Security: Tenant isolation enforced.
+   */
+  router.get('/baselines', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.aggregations, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const parsed = BaselineQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.json({
+          success: true,
+          data: [],
+          meta: {
+            tenantId: req.auth.tenantId,
+            lookbackDays: parsed.data.days,
+            count: 0,
+            historical: false,
+          },
+        });
+        return;
+      }
+
+      const data = await huntService.getTenantBaselines(req.auth.tenantId, parsed.data.days);
+
+      res.json({
+        success: true,
+        data,
+        meta: {
+          tenantId: req.auth.tenantId,
+          lookbackDays: parsed.data.days,
+          count: data.length,
+          historical: true,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Tenant baselines query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/anomalies
+   * Identify current signal anomalies for the authenticated tenant.
+   *
+   * Security: Tenant isolation enforced.
+   */
+  router.get('/anomalies', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.aggregations, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const parsed = AnomalyQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.json({
+          success: true,
+          data: [],
+          meta: {
+            tenantId: req.auth.tenantId,
+            zScoreThreshold: parsed.data.zScore,
+            count: 0,
+            historical: false,
+          },
+        });
+        return;
+      }
+
+      const data = await huntService.getAnomalies(req.auth.tenantId, parsed.data.zScore);
+
+      res.json({
+        success: true,
+        data,
+        meta: {
+          tenantId: req.auth.tenantId,
+          zScoreThreshold: parsed.data.zScore,
+          count: data.length,
+          historical: true,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Anomalies query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/low-and-slow
+   * Cross-tenant ("fleet") intelligence: IPs that persist across many days without daily spikes.
+   *
+   * Security: Admin-only (ip_daily_mv aggregates across tenants).
+   */
+  router.get('/low-and-slow', authorize(prisma, { scopes: 'hunt:read', role: 'admin' }), rateLimiters.aggregations, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const parsed = LowAndSlowQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.json({
+          success: true,
+          data: [],
+          meta: {
+            ...parsed.data,
+            count: 0,
+            historical: false,
+          },
+        });
+        return;
+      }
+
+      const data = await huntService.getLowAndSlowIps(parsed.data);
+
+      res.json({
+        success: true,
+        data,
+        meta: {
+          ...parsed.data,
+          count: data.length,
+          historical: true,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Low-and-slow query failed');
       res.status(500).json({
         error: 'Query failed',
         message: error instanceof Error ? error.message : 'Unknown error',

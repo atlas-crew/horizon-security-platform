@@ -5,9 +5,7 @@ import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+import { apiFetch } from '../../lib/api';
 
 interface HealthSummary {
   overallScore: number;
@@ -23,11 +21,7 @@ interface HealthSummary {
 }
 
 async function fetchHealthSummary(): Promise<HealthSummary> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/health`, {
-    headers: { 'Authorization': `Bearer ${API_KEY}` },
-  });
-  if (!response.ok) throw new Error('Failed to fetch health summary');
-  return response.json();
+  return apiFetch<HealthSummary>('/fleet/health');
 }
 
 export function FleetHealthPage() {

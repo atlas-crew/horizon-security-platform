@@ -19,6 +19,7 @@ import {
   getFleetCommandFeaturesForConfig,
   updateFleetCommandFeatures,
 } from '../../services/fleet/command-features.js';
+import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 
 // =============================================================================
 // Configuration
@@ -820,11 +821,17 @@ function generateApiKey(): { key: string; hash: string; prefix: string } {
 /**
  * Create management routes for API keys and connectivity
  */
+export interface ManagementRouteOptions {
+  fleetCommander?: FleetCommander;
+}
+
 export function createManagementRoutes(
   prisma: PrismaClient,
-  logger: Logger
+  logger: Logger,
+  options: ManagementRouteOptions = {}
 ): Router {
   const router = Router();
+  const { fleetCommander } = options;
 
   // =============================================================================
   // API Keys Management
@@ -1189,9 +1196,10 @@ export function createManagementRoutes(
     const startTime = Date.now();
     const clientIP = req.ip || 'unknown';
     const userId = req.auth?.userId || 'unknown';
+    const tenantId = req.auth?.tenantId || 'unknown';
 
     try {
-      const { testType, target } = req.body;
+      const { testType, target, sensorIds } = req.body;
       const normalizedTarget = normalizeConnectivityTarget(target);
       const { config } = await import('../../config.js');
       const allowlistedTargets = getAllowlistedConnectivityTargets(config);
@@ -1210,7 +1218,43 @@ export function createManagementRoutes(
         return;
       }
 
-      // Validate target if provided
+      // If sensorIds are provided, we dispatch the command to sensors instead of running locally
+      if (Array.isArray(sensorIds) && sensorIds.length > 0) {
+        if (!fleetCommander) {
+          res.status(503).json({
+            type: 'https://api.signal-horizon.io/errors/service-unavailable',
+            title: 'Fleet control unavailable',
+            status: 503,
+            detail: 'Fleet commander service is not available to dispatch remote tests',
+          });
+          return;
+        }
+
+        logger.info(
+          { clientIP, userId, tenantId, sensorCount: sensorIds.length, testType, target: normalizedTarget || 'default' },
+          'Dispatching remote connectivity test to sensors'
+        );
+
+        const commandIds = await fleetCommander.sendCommandToMultiple(tenantId, sensorIds, {
+          type: 'network_diagnostic',
+          payload: {
+            testType,
+            target: normalizedTarget || DEFAULT_TEST_TARGETS[testType as keyof typeof DEFAULT_TEST_TARGETS],
+          },
+        });
+
+        res.json({
+          remote: true,
+          commandIds,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            requestId: req.headers['x-request-id'] as string,
+          },
+        });
+        return;
+      }
+
+      // Validate target if provided (local Hub execution)
       if (target) {
         if (!normalizedTarget) {
           res.status(400).json({

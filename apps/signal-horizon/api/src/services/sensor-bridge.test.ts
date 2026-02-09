@@ -60,7 +60,8 @@ describe('SensorBridge', () => {
 
     expect(wsMock.ctor).toHaveBeenCalledTimes(1);
     const lastArgs = wsMock.getLastArgs();
-    expect(lastArgs[0]).toBe('ws://localhost:3100/ws/sensors');
+    // Hub supports auth via either headers or token query param; current behavior uses `?token=`.
+    expect(lastArgs[0]).toBe('ws://localhost:3100/ws/sensors?token=bridge-api-key');
     expect(lastArgs[1]).toMatchObject({
       headers: {
         Authorization: 'Bearer bridge-api-key',

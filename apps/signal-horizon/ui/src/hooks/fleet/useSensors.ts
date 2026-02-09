@@ -3,32 +3,10 @@ import type { SensorSummary } from '../../types/fleet';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { fleetKeys, getQueryMode } from '../../lib/queryKeys';
-import { ApiError } from '../../lib/api';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+import { apiFetch } from '../../lib/api';
 
 async function fetchSensors(): Promise<SensorSummary[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors`, {
-    headers: {
-      'Authorization': `Bearer ${API_KEY}`,
-    },
-  });
-  if (!response.ok) {
-    let serverMessage: string | undefined;
-    try {
-      const body = await response.json();
-      serverMessage = body.error ?? body.message;
-    } catch { /* no parseable body */ }
-    throw new ApiError(
-      response.status,
-      serverMessage
-        ? `Failed to fetch sensors (${response.status}: ${serverMessage})`
-        : `Failed to fetch sensors (${response.status} ${response.statusText})`,
-      serverMessage,
-    );
-  }
-  const data = await response.json();
+  const data = await apiFetch<any>('/fleet/sensors');
   return data.sensors || data;
 }
 

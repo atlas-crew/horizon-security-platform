@@ -64,7 +64,10 @@ signal-horizon/
    ```bash
    cd api
    npx prisma migrate dev
+   # Default seed profile (small):
    npx prisma db seed
+   # Larger, more "realistic" volumes:
+   pnpm run db:seed -- --profile=medium --seed=42 --wipe=true
    ```
 
 ### Running the Project

@@ -180,6 +180,8 @@ describe('SynapseProxyService', () => {
     broker.sendToSensor.mockReturnValue(false);
 
     const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+    // Prevent unhandled rejections during timer advancement.
+    request.catch(() => {});
 
     // Advance through all retry backoff delays (3 retries)
     // Retry 0: ~1s, Retry 1: ~2s, Retry 2: ~4s
@@ -196,6 +198,8 @@ describe('SynapseProxyService', () => {
     });
 
     const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+    // Prevent unhandled rejections during timer advancement.
+    request.catch(() => {});
 
     // Advance through all retry backoff delays
     await vi.advanceTimersByTimeAsync(2000);
@@ -354,6 +358,8 @@ describe('SynapseProxyService', () => {
       broker.sendToSensor.mockReturnValue(true);
 
       const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+      // Prevent unhandled rejections during timer advancement.
+      request.catch(() => {});
 
       // Let acquire() settle
       await vi.advanceTimersByTimeAsync(0);

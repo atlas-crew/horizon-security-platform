@@ -9,4 +9,5 @@ export { BehavioralAnomaliesPanel } from './BehavioralAnomaliesPanel';
 export { LowAndSlowPanel } from './LowAndSlowPanel';
 export { FleetIntelligencePanel } from './FleetIntelligencePanel';
 export { SigmaLeadsPanel } from './SigmaLeadsPanel';
+export { SigmaRulesPanel } from './SigmaRulesPanel';
 export { RequestTimelineGraph } from './RequestTimelineGraph';

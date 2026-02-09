@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FileSearch, RefreshCw } from 'lucide-react';
 import type { SigmaLead } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
@@ -171,12 +172,25 @@ export function SigmaLeadsPanel({
                       <td className="py-2 pr-3 font-mono text-ink-secondary">{new Date(r.lastSeenAt).toISOString()}</td>
                       <td className="py-2 pr-3 text-right font-mono">{r.matchCount}</td>
                       <td className="py-2 pr-3 font-mono text-xs text-ink-secondary">
-                        {r.pivot.anonFingerprint ? `fp:${r.pivot.anonFingerprint.slice(0, 10)}...` : (r.pivot.sourceIp ?? '')}
+                        {r.pivot.requestId
+                          ? `req:${r.pivot.requestId.slice(0, 12)}...`
+                          : (r.pivot.anonFingerprint
+                            ? `fp:${r.pivot.anonFingerprint.slice(0, 10)}...`
+                            : (r.pivot.sourceIp ?? ''))}
                       </td>
                       <td className="py-2 pr-3 font-mono text-xs">
                         {r.status}
                       </td>
                       <td className="py-2 text-right whitespace-nowrap">
+                        {r.pivot.requestId && (
+                          <Link
+                            to={`/hunting/request/${encodeURIComponent(r.pivot.requestId)}`}
+                            className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-ink-secondary hover:text-ink-primary font-mono mr-2 inline-block"
+                            title="Open request timeline"
+                          >
+                            Request
+                          </Link>
+                        )}
                         <button
                           type="button"
                           onClick={() => pivot(r)}
@@ -205,4 +219,3 @@ export function SigmaLeadsPanel({
     </div>
   );
 }
-

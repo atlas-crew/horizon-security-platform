@@ -48,6 +48,7 @@ import SocSearchPage from './pages/soc/SocSearchPage';
 import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import RequestTimelinePage from './pages/hunting/RequestTimelinePage';
+import CampaignTimelinePage from './pages/hunting/CampaignTimelinePage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
@@ -565,6 +566,8 @@ function App() {
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
                 <Route path="/hunting/request" element={<SignalHorizonPageWrapper><RequestTimelinePage /></SignalHorizonPageWrapper>} />
                 <Route path="/hunting/request/:requestId" element={<SignalHorizonPageWrapper><RequestTimelinePage /></SignalHorizonPageWrapper>} />
+                <Route path="/hunting/campaign" element={<SignalHorizonPageWrapper><CampaignTimelinePage /></SignalHorizonPageWrapper>} />
+                <Route path="/hunting/campaign/:campaignId" element={<SignalHorizonPageWrapper><CampaignTimelinePage /></SignalHorizonPageWrapper>} />
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
                 <Route path="/auth-coverage" element={<Suspense fallback={<LoadingSpinner message="Loading auth coverage map..." size="lg" />}><SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper></Suspense>} />

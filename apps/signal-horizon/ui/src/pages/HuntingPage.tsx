@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries, SigmaLeadsPanel } from '../components/hunting';
+import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -28,6 +28,9 @@ export default function HuntingPage() {
     getLowAndSlowIps,
     getFleetFingerprintIntelligence,
     createSigmaRule,
+    getSigmaRules,
+    updateSigmaRule,
+    deleteSigmaRule,
     getSigmaLeads,
     ackSigmaLead,
     clearError,
@@ -38,6 +41,7 @@ export default function HuntingPage() {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [queryToSave, setQueryToSave] = useState<HuntQuery | null>(null);
   const [activeExampleQuery, setActiveExampleQuery] = useState<HuntQuery | null>(null);
+  const [sigmaRulesRefreshNonce, setSigmaRulesRefreshNonce] = useState(0);
 
   // Fetch status and saved queries on mount
   useEffect(() => {
@@ -158,6 +162,10 @@ export default function HuntingPage() {
             <Link className="text-link hover:text-link-hover font-mono" to="/hunting/request">
               Pivot by request_id →
             </Link>
+            <span className="mx-2 text-ink-muted/50">|</span>
+            <Link className="text-link hover:text-link-hover font-mono" to="/hunting/campaign">
+              Campaign timeline →
+            </Link>
           </div>
         </div>
 
@@ -195,6 +203,7 @@ export default function HuntingPage() {
         onSave={handleSaveQuery}
         onSaveSigmaBackgroundHunt={async (input) => {
           await createSigmaRule(input);
+          setSigmaRulesRefreshNonce((n) => n + 1);
         }}
         isLoading={isLoading}
         historicalEnabled={status?.historical ?? false}
@@ -212,6 +221,14 @@ export default function HuntingPage() {
         getSigmaLeads={getSigmaLeads}
         ackSigmaLead={ackSigmaLead}
         onPivotExample={handleRunExample}
+      />
+
+      <SigmaRulesPanel
+        historicalEnabled={status?.historical ?? false}
+        getSigmaRules={getSigmaRules}
+        updateSigmaRule={updateSigmaRule}
+        deleteSigmaRule={deleteSigmaRule}
+        refreshNonce={sigmaRulesRefreshNonce}
       />
 
       {status?.isFleetAdmin ? (

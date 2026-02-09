@@ -46,6 +46,7 @@ vi.mock('../../components/hunting', () => ({
     </div>
   ),
   SigmaLeadsPanel: () => <div data-testid="sigma-leads-panel" />,
+  SigmaRulesPanel: () => <div data-testid="sigma-rules-panel" />,
 }));
 
 const mockHuntMethods = {
@@ -62,6 +63,12 @@ const mockHuntMethods = {
   getAnomalies: vi.fn(),
   getLowAndSlowIps: vi.fn(),
   getFleetFingerprintIntelligence: vi.fn(),
+  createSigmaRule: vi.fn(),
+  getSigmaLeads: vi.fn(),
+  ackSigmaLead: vi.fn(),
+  getSigmaRules: vi.fn(),
+  updateSigmaRule: vi.fn(),
+  deleteSigmaRule: vi.fn(),
   clearError: vi.fn(),
 };
 

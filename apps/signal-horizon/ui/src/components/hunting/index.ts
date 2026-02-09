@@ -10,4 +10,5 @@ export { LowAndSlowPanel } from './LowAndSlowPanel';
 export { FleetIntelligencePanel } from './FleetIntelligencePanel';
 export { SigmaLeadsPanel } from './SigmaLeadsPanel';
 export { SigmaRulesPanel } from './SigmaRulesPanel';
+export { RecentRequestsPanel } from './RecentRequestsPanel';
 export { RequestTimelineGraph } from './RequestTimelineGraph';

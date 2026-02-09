@@ -38,6 +38,7 @@ vi.mock('../../components/hunting', () => ({
       ))}
     </div>
   ),
+  RecentRequestsPanel: () => <div data-testid="recent-requests-panel" />,
   BehavioralAnomaliesPanel: () => <div data-testid="anomalies-panel" />,
   LowAndSlowPanel: () => <div data-testid="low-slow-panel" />,
   FleetIntelligencePanel: ({ onPivotFingerprint }: any) => (
@@ -69,6 +70,7 @@ const mockHuntMethods = {
   getSigmaRules: vi.fn(),
   updateSigmaRule: vi.fn(),
   deleteSigmaRule: vi.fn(),
+  getRecentRequests: vi.fn(),
   clearError: vi.fn(),
 };
 

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
+import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, RecentRequestsPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -33,6 +33,7 @@ export default function HuntingPage() {
     deleteSigmaRule,
     getSigmaLeads,
     ackSigmaLead,
+    getRecentRequests,
     clearError,
   } = useHunt();
 
@@ -208,6 +209,11 @@ export default function HuntingPage() {
         isLoading={isLoading}
         historicalEnabled={status?.historical ?? false}
         externalQuery={activeExampleQuery}
+      />
+
+      <RecentRequestsPanel
+        historicalEnabled={status?.historical ?? false}
+        getRecentRequests={getRecentRequests}
       />
 
       <BehavioralAnomaliesPanel

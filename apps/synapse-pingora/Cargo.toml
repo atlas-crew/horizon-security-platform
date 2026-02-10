@@ -102,6 +102,10 @@ sysinfo = "0.32"        # CPU, memory, network, process metrics
 # Terminal PTY support (remote shell)
 portable-pty = "0.8"
 
+# Terminal UI
+ratatui = "0.26"
+crossterm = { version = "0.27", features = ["event-stream"] }
+
 # Phase 3: Feature Migration - JA4 Fingerprinting
 sha2 = "0.10"           # SHA256 for fingerprint hashing
 hex = "0.4"             # Hex encoding for hash output

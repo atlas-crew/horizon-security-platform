@@ -95,6 +95,9 @@ use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
 
+// Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
+pub mod tui;
+
 // Phase 5: Actor and Session State Management (previously sleeping capabilities)
 use parking_lot::{Mutex, RwLock};
 use percent_encoding::percent_decode_str;
@@ -148,6 +151,10 @@ struct Cli {
     /// Enable demo mode (resets state between requests)
     #[arg(long)]
     demo: bool,
+
+    /// Launch interactive Terminal UI (TUI) dashboard
+    #[arg(long)]
+    tui: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -4678,11 +4685,13 @@ fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) 
 }
 
 fn main() {
-    // Initialize logging
-    init_logging();
-
     // Parse CLI arguments
     let cli = Cli::parse();
+
+    // Initialize logging (only if TUI is NOT enabled to prevent terminal corruption)
+    if !cli.tui {
+        init_logging();
+    }
 
     // Handle subcommands
     match &cli.command {
@@ -5571,7 +5580,25 @@ fn main() {
         );
     }
 
-    server.run_forever();
+    // Launch TUI if requested, otherwise run server normally
+    if cli.tui {
+        let metrics_for_tui = Arc::clone(&metrics_registry);
+        let entities_for_tui = Arc::clone(&shared_entity_manager);
+        let block_log_for_tui = Arc::clone(&shared_block_log);
+
+        // Run server in background thread
+        std::thread::spawn(move || {
+            server.run_forever();
+        });
+
+        // Run TUI in main thread (blocks until 'q' is pressed)
+        if let Err(e) = tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui) {
+            eprintln!("TUI error: {}", e);
+        }
+        std::process::exit(0);
+    } else {
+        server.run_forever();
+    }
 }
 
 fn init_logging() {

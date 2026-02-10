@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults } from '@/ui';
+import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 import {
   Target,
   Clock,
@@ -31,8 +31,6 @@ import {
   Tooltip,
 } from 'recharts';
 import { useHorizonStore } from '../stores/horizonStore';
-
-const xAxisNoLine = { ...axisDefaults.x, axisLine: false };
 
 const mockCorrelationSignals = [
   { name: 'HTTP Fingerprint Match', confidence: 0.98, color: 'bg-ac-green' },

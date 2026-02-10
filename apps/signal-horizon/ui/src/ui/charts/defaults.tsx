@@ -41,6 +41,11 @@ export const axisDefaults = {
   },
 } as const;
 
+export const xAxisNoLine = {
+  ...axisDefaults.x,
+  axisLine: false,
+} as const;
+
 export const gridDefaults = {
   strokeDasharray: '4 4',
   stroke: colors.chart.grid,

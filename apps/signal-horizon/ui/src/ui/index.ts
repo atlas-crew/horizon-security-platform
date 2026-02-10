@@ -73,6 +73,7 @@ export { Tooltip, ProgressBar, EmptyState, Spinner, LoadingOverlay, Breadcrumb }
 // ─── Chart Defaults ──────────────────────────────────────────────────────────
 export {
   axisDefaults,
+  xAxisNoLine,
   gridDefaults,
   gridDefaultsSoft,
   tooltipDefaults,

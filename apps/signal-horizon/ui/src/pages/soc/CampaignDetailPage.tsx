@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults } from '@/ui';
+import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 import {
   Target,
   Clock,
@@ -33,8 +33,6 @@ import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { CampaignGraph } from '../../components/soc/CampaignGraph';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import type { SocCampaign, SocCampaignActor, SocCampaignDetailResponse, SocCampaignActorsResponse, SocCampaignSignal } from '../../types/soc';
-
-const xAxisNoLine = { ...axisDefaults.x, axisLine: false };
 
 const demoSignals: SocCampaignSignal[] = [
   { type: 'HTTP Fingerprint Match', confidence: 0.96, reason: 'Shared fingerprint across 4 sensors.' },

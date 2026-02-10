@@ -285,6 +285,11 @@ impl ProgressionManager {
         &self.config
     }
 
+    /// Get current statistics
+    pub fn stats(&self) -> &ProgressionStats {
+        &self.stats
+    }
+
     /// Push an entry to escalation history with bounds checking.
     /// If at capacity, removes oldest entry before adding new one.
     /// This prevents memory exhaustion from malicious actors.
@@ -522,11 +527,6 @@ impl ProgressionManager {
                 self.actor_states.remove(&actor_id);
             }
         }
-    }
-
-    /// Get statistics
-    pub fn stats(&self) -> &ProgressionStats {
-        &self.stats
     }
 
     /// Get number of tracked actors

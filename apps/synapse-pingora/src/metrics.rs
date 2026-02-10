@@ -4,6 +4,12 @@
 //! exposing request counts, latencies, WAF statistics, and backend health.
 
 use crate::tunnel::TunnelChannel;
+use crate::actor::ActorManager;
+use crate::crawler::CrawlerDetector;
+use crate::tarpit::TarpitManager;
+use crate::interrogator::ProgressionManager;
+use crate::shadow::ShadowMirrorManager;
+use crate::trends::TrendsManager;
 use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,8 +20,20 @@ use std::time::Instant;
 const MAX_METRICS_MAP_SIZE: usize = 1000;
 
 /// Metrics registry holding all metric collectors.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct MetricsRegistry {
+    /// Actor manager for intelligence aggregation (labs-tui)
+    pub actor_manager: Option<Arc<ActorManager>>,
+    /// Crawler detector for intelligence aggregation (labs-tui)
+    pub crawler_detector: Option<Arc<CrawlerDetector>>,
+    /// Tarpit manager for mitigation visibility (labs-tui)
+    pub tarpit_manager: Option<Arc<TarpitManager>>,
+    /// Progression manager for challenge visibility (labs-tui)
+    pub progression_manager: Option<Arc<ProgressionManager>>,
+    /// Shadow mirror manager for honeypot visibility (labs-tui)
+    pub shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
+    /// Trends manager for geo-anomaly visibility (labs-tui)
+    pub trends_manager: Option<Arc<TrendsManager>>,
     /// Request counters by status code
     request_counts: RequestCounters,
     /// Latency histograms
@@ -38,8 +56,19 @@ pub struct MetricsRegistry {
     active_requests: Arc<AtomicU64>,
     /// Backend health metrics
     backend_metrics: Arc<RwLock<HashMap<String, BackendMetrics>>>,
+    /// Status message for TUI visibility (labs-operator)
+    pub status_message: Arc<RwLock<Option<String>>>,
     /// Registry start time for uptime calculation
     start_time: Option<Instant>,
+}
+
+impl std::fmt::Debug for MetricsRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MetricsRegistry")
+            .field("total_requests", &self.total_requests())
+            .field("active_requests", &self.active_requests())
+            .finish()
+    }
 }
 
 /// RAII guard to track active requests.
@@ -863,6 +892,21 @@ impl WindowedCounter {
             .sum();
         total_latency as f64 / total_count as f64
     }
+
+    /// Returns the request history for visualization (e.g. Sparkline).
+    /// Ordered from oldest to newest.
+    pub fn get_history(&self) -> Vec<u64> {
+        self.maybe_rotate();
+        let current = self.current_index.load(Ordering::Relaxed) as usize;
+        let mut history = Vec::with_capacity(self.window_secs);
+        
+        // Buckets are a ring buffer. Start from current+1 (oldest) to current (newest).
+        for i in 1..=self.window_secs {
+            let idx = (current + i) % self.window_secs;
+            history.push(self.buckets[idx].load(Ordering::Relaxed));
+        }
+        history
+    }
 }
 
 /// WAF-specific metrics.
@@ -1024,6 +1068,21 @@ impl MetricsRegistry {
         self.active_requests.load(Ordering::Relaxed)
     }
 
+    /// Returns the total number of requests blocked by WAF or rate limits.
+    pub fn total_blocked(&self) -> u64 {
+        self.request_counts.blocked.load(Ordering::Relaxed)
+    }
+
+    /// Returns the total number of requests blocked by WAF rules.
+    pub fn waf_blocked(&self) -> u64 {
+        self.waf_metrics.blocked.load(Ordering::Relaxed)
+    }
+
+    /// Returns the average WAF detection time in microseconds.
+    pub fn avg_waf_detection_us(&self) -> f64 {
+        self.waf_metrics.avg_detection_us()
+    }
+
     /// Records a blocked request.
     pub fn record_blocked(&self) {
         self.request_counts.blocked.fetch_add(1, Ordering::Relaxed);
@@ -1053,6 +1112,99 @@ impl MetricsRegistry {
     /// Returns the average latency in milliseconds over the last minute.
     pub fn avg_latency_ms(&self) -> f64 {
         self.windowed_requests.average_latency_us() / 1000.0
+    }
+
+    /// Returns the request history for the last 60 seconds.
+    pub fn request_history(&self) -> Vec<u64> {
+        self.windowed_requests.get_history()
+    }
+
+    /// Returns the top N most triggered WAF rules.
+    pub fn top_rules(&self, limit: usize) -> Vec<(String, u64)> {
+        let matches = self.waf_metrics.rule_matches.read();
+        let mut rules: Vec<_> = matches.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        rules.sort_by(|a, b| b.1.cmp(&a.1));
+        rules.truncate(limit);
+        rules
+    }
+
+    /// Returns the current status of all backends.
+    pub fn backend_status(&self) -> Vec<(String, BackendMetrics)> {
+        let backends = self.backend_metrics.read();
+        backends.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
+    /// Returns top legitimate crawler hits.
+    pub fn top_crawlers(&self, limit: usize) -> Vec<(String, u64)> {
+        self.crawler_detector.as_ref()
+            .map(|d| d.get_crawler_distribution(limit))
+            .unwrap_or_default()
+    }
+
+    /// Returns top bad bot hits.
+    pub fn top_bad_bots(&self, limit: usize) -> Vec<(String, u64)> {
+        self.crawler_detector.as_ref()
+            .map(|d| d.get_bad_bot_distribution(limit))
+            .unwrap_or_default()
+    }
+
+    /// Returns top risky actors (by score).
+    pub fn top_risky_actors(&self, limit: usize) -> Vec<crate::actor::ActorState> {
+        self.actor_manager.as_ref()
+            .map(|m| m.list_by_min_risk(1.0, limit, 0))
+            .unwrap_or_default()
+    }
+
+    /// Returns top JA4 clusters.
+    pub fn top_ja4_clusters(&self, limit: usize) -> Vec<(String, Vec<String>, f64)> {
+        self.actor_manager.as_ref()
+            .map(|m| m.get_fingerprint_groups(limit))
+            .unwrap_or_default()
+    }
+
+    /// Returns top DLP matches by type.
+    pub fn top_dlp_hits(&self, limit: usize) -> Vec<(String, u64)> {
+        let matches = self.dlp_metrics.matches_by_type.read();
+        let mut dist: Vec<_> = matches.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        dist.sort_by(|a, b| b.1.cmp(&a.1));
+        dist.truncate(limit);
+        dist
+    }
+
+    /// Returns tarpit statistics.
+    pub fn tarpit_stats(&self) -> Option<crate::tarpit::TarpitStats> {
+        self.tarpit_manager.as_ref().map(|m| m.stats())
+    }
+
+    /// Returns challenge progression statistics.
+    pub fn progression_stats(&self) -> Option<crate::interrogator::ProgressionStatsSnapshot> {
+        self.progression_manager.as_ref().map(|m| m.stats().snapshot())
+    }
+
+    /// Returns shadow mirroring statistics.
+    pub fn shadow_stats(&self) -> Option<crate::shadow::ShadowMirrorStats> {
+        self.shadow_mirror_manager.as_ref().map(|m| m.stats())
+    }
+
+    /// Returns geo-anomaly (impossible travel) alerts.
+    pub fn recent_geo_anomalies(&self, limit: usize) -> Vec<crate::trends::Anomaly> {
+        self.trends_manager.as_ref()
+            .map(|m| m.get_anomalies(crate::trends::AnomalyQueryOptions {
+                anomaly_type: Some(crate::trends::AnomalyType::ImpossibleTravel),
+                limit: Some(limit),
+                ..Default::default()
+            }))
+            .unwrap_or_default()
+    }
+
+    /// Sets a temporary status message for the TUI.
+    pub fn set_status_message(&self, message: String) {
+        *self.status_message.write() = Some(message);
+    }
+
+    /// Gets and clears the status message.
+    pub fn get_status_message(&self) -> Option<String> {
+        self.status_message.write().take()
     }
 
     /// Records WAF metrics.

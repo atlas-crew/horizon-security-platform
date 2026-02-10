@@ -52,6 +52,7 @@ pub use js_challenge_manager::{
 };
 pub use progression_manager::{
     ActorChallengeState, ChallengeLevel, ProgressionConfig, ProgressionManager, ProgressionStats,
+    ProgressionStatsSnapshot,
 };
 
 /// Response to present to the actor

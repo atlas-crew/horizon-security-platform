@@ -308,7 +308,7 @@ function TopThreatSourcesChart() {
       <div className="h-48 mb-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
-            <XAxis type="number" axisLine={false} tickLine={false} tick={axisDefaults.x.tick} />
+            <XAxis type="number" axisLine={false} tickLine={false} tick={tickSmallX} />
             <YAxis
               type="category"
               dataKey="ip"

@@ -11,6 +11,8 @@ export default defineConfig({
   },
   server: {
     port: 5180,
+    // Avoid "random port" fallbacks that silently break CORS expectations.
+    strictPort: true,
     proxy: {
       // Only proxy the API namespace; do not catch UI routes like "/api-intelligence".
       '/api/v1': {
@@ -22,6 +24,11 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  // `vite preview` defaults to 4173; keep it aligned with dev/docs (5180).
+  preview: {
+    port: 5180,
+    strictPort: true,
   },
   build: {
     outDir: 'dist',

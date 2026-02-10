@@ -376,7 +376,10 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
   const { pollInterval = 30000 } = options;
   const { isEnabled } = useDemoMode();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const isFetchingRef = useRef(false);
+  // Token-based request coordination:
+  // - React StrictMode will mount/unmount effects twice in dev, which can abort in-flight requests.
+  // - We increment a token per fetch so stale/aborted requests never clobber state.
+  const fetchTokenRef = useRef(0);
 
   const [stats, setStats] = useState<DiscoveryStats | null>(null);
   const [endpoints, setEndpoints] = useState<ApiEndpoint[]>([]);
@@ -394,15 +397,12 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
   const [totalEndpoints, setTotalEndpoints] = useState(0);
 
   const fetchStats = useCallback(async () => {
-    // Prevent overlapping requests
-    if (isFetchingRef.current) return;
+    const token = ++fetchTokenRef.current;
 
-    // Cancel any in-flight request
+    // Cancel any in-flight request (best-effort)
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
-
-    isFetchingRef.current = true;
 
     if (isEnabled) {
       // Demo Mode Data with relative dates - no polling
@@ -434,7 +434,7 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
       setEndpointDriftTrends(generateDemoEndpointDriftTrends());
       setIsLoading(false);
       setLastUpdated(new Date());
-      isFetchingRef.current = false;
+      setError(null);
       return;
     }
 
@@ -455,6 +455,9 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
         apiFetch<unknown>('/api-intelligence/schema-changes?limit=20', { signal }),
         apiFetch<unknown>('/api-intelligence/violations/trends/endpoints?days=7&limit=5', { signal }),
       ]);
+
+      // Ignore stale results (e.g., StrictMode abort/restart)
+      if (token !== fetchTokenRef.current) return;
 
       // Validate responses with Zod
       const statsResult = DiscoveryStatsSchema.safeParse(statsData);
@@ -503,6 +506,9 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
+      // Ignore stale errors
+      if (token !== fetchTokenRef.current) return;
+
       // Ignore abort errors
       if (err instanceof Error && err.name === 'AbortError') {
         return;
@@ -510,13 +516,14 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
       console.error('API Intelligence fetch error:', err);
       setError(err as Error);
     } finally {
-      isFetchingRef.current = false;
-      setIsLoading(false);
+      // Only the latest in-flight request should mutate loading state.
+      if (token === fetchTokenRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [isEnabled, pagination.limit, pagination.offset]);
 
   const refetch = useCallback(async () => {
-    isFetchingRef.current = false; // Allow refetch even if one is "in progress"
     await fetchStats();
   }, [fetchStats]);
 
@@ -536,6 +543,8 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
     const intervalId = setInterval(fetchStats, pollInterval);
 
     return () => {
+      // Invalidate any in-flight request before aborting so stale handlers become no-ops.
+      fetchTokenRef.current += 1;
       clearInterval(intervalId);
       abortControllerRef.current?.abort();
       setIsPolling(false);

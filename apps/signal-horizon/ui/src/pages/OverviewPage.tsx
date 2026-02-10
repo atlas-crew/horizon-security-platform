@@ -20,7 +20,7 @@ import {
   Database,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useHorizonStore } from '../stores/horizonStore';
+import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   StatsGridSkeleton,
@@ -56,6 +56,7 @@ const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 export default function OverviewPage() {
   useDocumentTitle('Overview');
   const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
+  const timeRange = useTimeRange();
   const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
@@ -143,7 +144,9 @@ export default function OverviewPage() {
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Signal Horizon</p>
+          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">
+            Signal Horizon &middot; Last {timeRange}
+          </p>
           <h1 className="text-3xl font-light text-ink-primary">Threat Overview</h1>
           <p className="text-ink-secondary mt-1">
             Fleet threat intelligence and collective defense across {stats.sensorsOnline} sensors
@@ -221,7 +224,7 @@ export default function OverviewPage() {
           <div className="card-header flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
               <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
-                LIVE ATTACK MAP
+                Live Attack Map
               </h2>
               {error && (
                 <span className="text-xs text-ac-orange flex items-center gap-1">
@@ -265,12 +268,12 @@ export default function OverviewPage() {
       {/* Full-width Active Campaigns Row */}
       <section className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]" aria-labelledby="campaigns-heading">
         <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
-          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary uppercase tracking-tight">Active Campaigns</h2>
+          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary tracking-tight">Active Campaigns</h2>
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest" aria-label={`${campaigns.length} active campaigns`}>
               {campaigns.filter(c => c.status === 'ACTIVE').length} ACTIVE
             </span>
-            <button className="text-[10px] font-bold text-ac-blue hover:text-ac-blue-dark transition-colors uppercase tracking-widest">
+            <button className="text-[10px] font-bold text-ac-blue hover:text-ac-blue-dark transition-colors tracking-widest">
               View All Campaigns &gt;
             </button>
           </div>
@@ -294,7 +297,7 @@ export default function OverviewPage() {
               <Shield className="w-4 h-4" />
               <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Insight</span>
             </div>
-            <h3 className="text-xl font-light mb-4 uppercase tracking-tight">Fleet Vulnerability Analysis</h3>
+            <h3 className="text-xl font-light mb-4 tracking-tight">Fleet Vulnerability Analysis</h3>
             <p className="text-sm text-white/70 leading-relaxed mb-6">
               Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api. 
               Edge sensors have automatically shifted to aggressive rate-limiting.
@@ -308,7 +311,7 @@ export default function OverviewPage() {
                 <div className="h-full bg-ac-orange w-[65%]" />
               </div>
             </div>
-            <button className="text-[10px] font-bold text-ac-magenta hover:text-ac-magenta-light transition-colors uppercase tracking-widest flex items-center gap-2">
+            <button className="text-[10px] font-bold text-ac-magenta hover:text-ac-magenta-light transition-colors tracking-widest flex items-center gap-2">
               Review Recommended Policies <Activity className="w-3 h-3" />
             </button>
           </div>
@@ -317,7 +320,7 @@ export default function OverviewPage() {
         {/* Top Attackers */}
         <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="attackers-heading">
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted uppercase tracking-widest">Top Attackers (24h)</h2>
+            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Attackers (24h)</h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topAttackers.map((attacker) => (
@@ -328,7 +331,7 @@ export default function OverviewPage() {
                 </div>
                 <div className="h-1 bg-surface-subtle w-full">
                   <div 
-                    className="h-full bg-ac-blue/40" 
+                    className="h-full bg-ac-blue/70"
                     style={{ width: `${Math.min(100, (attacker.value / (topAttackers[0]?.value || 1)) * 100)}%` }} 
                   />
                 </div>
@@ -340,7 +343,7 @@ export default function OverviewPage() {
         {/* Top Fingerprints */}
         <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="fingerprints-heading">
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2 id="fingerprints-heading" className="text-xs font-bold text-ink-muted uppercase tracking-widest">Top Fingerprints (24h)</h2>
+            <h2 id="fingerprints-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Fingerprints (24h)</h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topFingerprints.map((fingerprint) => (
@@ -351,7 +354,7 @@ export default function OverviewPage() {
                 </div>
                 <div className="h-1 bg-surface-subtle w-full">
                   <div 
-                    className="h-full bg-ac-magenta/40" 
+                    className="h-full bg-ac-magenta/70"
                     style={{ width: `${Math.min(100, (fingerprint.value / (topFingerprints[0]?.value || 1)) * 100)}%` }} 
                   />
                 </div>
@@ -578,6 +581,15 @@ function AttackMap({
   );
 }
 
+// Map tone classes to border/bg/shadow variants for stat cards
+const toneStyles: Record<string, { border: string; bg: string; shadow: string; iconBorder: string; iconBg: string }> = {
+  'text-ac-red':    { border: 'border-ac-red/50',    bg: 'dark:bg-ac-red/5',    shadow: 'shadow-[0_0_15px_rgba(239,51,64,0.15)]',  iconBorder: 'border-ac-red/30',    iconBg: 'bg-ac-red/10' },
+  'text-ac-orange': { border: 'border-ac-orange/50',  bg: 'dark:bg-ac-orange/5',  shadow: 'shadow-[0_0_15px_rgba(227,82,5,0.1)]',   iconBorder: 'border-ac-orange/30',  iconBg: 'bg-ac-orange/10' },
+  'text-ac-green':  { border: 'border-ac-green/30',   bg: 'dark:bg-ac-green/5',   shadow: 'shadow-[0_0_10px_rgba(0,177,64,0.08)]',  iconBorder: 'border-ac-green/30',   iconBg: 'bg-ac-green/10' },
+  'text-ac-blue':   { border: 'border-ac-blue/30',    bg: 'dark:bg-ac-blue/5',    shadow: 'shadow-[0_0_10px_rgba(0,87,183,0.08)]',  iconBorder: 'border-ac-blue/30',    iconBg: 'bg-ac-blue/10' },
+  'text-ac-purple': { border: 'border-ac-purple/30',  bg: 'dark:bg-ac-purple/5',  shadow: 'shadow-[0_0_10px_rgba(68,0,153,0.08)]',  iconBorder: 'border-ac-purple/30',  iconBg: 'bg-ac-purple/10' },
+};
+
 function StatCard({
   icon: Icon,
   label,
@@ -595,13 +607,13 @@ function StatCard({
 }) {
   const isCritical = tone.includes('red') || (typeof value === 'number' && value > 0 && label.includes('Active Campaigns'));
   const isWarning = tone.includes('orange');
+  const styles = toneStyles[tone] ?? toneStyles['text-ac-blue'];
 
   return (
     <article
       className={clsx(
         'card p-4 flex items-center justify-between transition-all duration-300',
-        isCritical && 'border-ac-red/50 shadow-[0_0_15px_rgba(239,51,64,0.15)] dark:bg-ac-red/5',
-        isWarning && 'border-ac-orange/50 shadow-[0_0_15px_rgba(227,82,5,0.1)]'
+        styles.border, styles.bg, styles.shadow
       )}
       aria-label={`${label}: ${value.toLocaleString()}`}
       tabIndex={0}
@@ -624,9 +636,7 @@ function StatCard({
       </div>
       <div className={clsx(
         'w-10 h-10 border flex items-center justify-center transition-colors',
-        isCritical ? 'border-ac-red/30 bg-ac-red/10 text-ac-red' :
-        isWarning ? 'border-ac-orange/30 bg-ac-orange/10 text-ac-orange' :
-        'border-border-subtle bg-surface-subtle text-ink-muted'
+        styles.iconBorder, styles.iconBg, tone
       )}>
         <Icon className="w-5 h-5" />
       </div>

@@ -62,6 +62,7 @@ interface HorizonState {
   threats: Threat[];
   alerts: ThreatAlert[];
   sensorStats: Record<string, number>;
+  timeRange: string;
 
   // Stats
   stats: {
@@ -80,6 +81,7 @@ interface HorizonState {
   setConnectionState: (state: HorizonState['connectionState']) => void;
   setSessionId: (id: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setTimeRange: (range: string) => void;
   setSnapshot: (data: {
     activeCampaigns: Campaign[];
     recentThreats: Threat[];
@@ -108,6 +110,7 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
   threats: [],
   alerts: [],
   sensorStats: {},
+  timeRange: '7d',
   stats: {
     totalThreats: 0,
     fleetThreats: 0,
@@ -124,6 +127,7 @@ export const useHorizonStore = create<HorizonState>((set, get) => ({
   setConnectionState: (state) => set({ connectionState: state }),
   setSessionId: (id) => set({ sessionId: id }),
   setLoading: (loading) => set({ isLoading: loading }),
+  setTimeRange: (range) => set({ timeRange: range }),
 
   setSnapshot: (data) =>
     set({
@@ -262,6 +266,11 @@ export const useCriticalAlerts = () =>
  * Select sensor stats
  */
 export const useSensorStats = () => useHorizonStore(useShallow((state) => state.sensorStats));
+
+/**
+ * Select current time range
+ */
+export const useTimeRange = () => useHorizonStore((state) => state.timeRange);
 
 /**
  * Combined selector for overview page - batches related state

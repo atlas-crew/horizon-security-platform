@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation, Link } from 'react-router-dom';
 import { useEffect, useCallback, Suspense, useMemo, useState, lazy } from 'react';
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   ChevronDown,
+  ChevronRight,
   Activity,
   Package,
   Server,
@@ -52,6 +53,7 @@ import CampaignTimelinePage from './pages/hunting/CampaignTimelinePage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
+import DesignLabPage from './pages/DesignLabPage';
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -95,7 +97,6 @@ const beamNavItems = [
   { path: '/beam', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/beam/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/beam/catalog', icon: Package, label: 'API Catalog' },
-  { path: '/beam/rules', icon: Shield, label: 'Rules' },
   { path: '/beam/threats', icon: Target, label: 'Threats' },
 ];
 
@@ -119,9 +120,12 @@ function App() {
   const campaigns = useHorizonStore((s) => s.campaigns);
   const threats = useHorizonStore((s) => s.threats);
   const alerts = useHorizonStore((s) => s.alerts);
+  const timeRange = useHorizonStore((s) => s.timeRange);
+  const setTimeRange = useHorizonStore((s) => s.setTimeRange);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme());
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const [isTimeRangeOpen, setIsTimeRangeOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('signal-horizon-sidebar-collapsed') === 'true';
@@ -131,6 +135,25 @@ function App() {
     setSidebarCollapsed((prev) => {
       const next = !prev;
       window.localStorage.setItem('signal-horizon-sidebar-collapsed', String(next));
+      return next;
+    });
+  }, []);
+
+  // Collapsible nav sections - persisted to localStorage
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const stored = window.localStorage.getItem('signal-horizon-sidebar-sections');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleSection = useCallback((key: string) => {
+    setCollapsedSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      window.localStorage.setItem('signal-horizon-sidebar-sections', JSON.stringify(next));
       return next;
     });
   }, []);
@@ -200,6 +223,89 @@ function App() {
   const themeIcon = useMemo(() => (theme === 'dark' ? Sun : Moon), [theme]);
   const ThemeIcon = themeIcon;
 
+  // Render a collapsible nav section with colored accent bar
+  const renderCollapsibleSection = (
+    key: string,
+    label: string,
+    items: typeof primaryNavItems,
+    accent: string,
+  ) => {
+    const isSectionOpen = !collapsedSections[key];
+    const hasActive = items.some((item) =>
+      item.path === '/'
+        ? location.pathname === '/'
+        : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+    );
+
+    return (
+      <div key={key} className="sidebar-nav-section">
+        {!sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => toggleSection(key)}
+            aria-expanded={isSectionOpen}
+            className="w-full flex items-center justify-between px-3 py-2 mb-0.5 group transition-colors hover:bg-surface-card focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50"
+          >
+            <div className="flex items-center gap-2.5">
+              <span
+                className={clsx(
+                  'w-0.5 h-3.5 flex-shrink-0 transition-opacity',
+                  accent,
+                  !isSectionOpen && !hasActive && 'opacity-30'
+                )}
+              />
+              <span className="text-[10px] tracking-[0.2em] uppercase text-ink-secondary group-hover:text-ink-primary transition-colors font-medium">
+                {label}
+              </span>
+              {!isSectionOpen && hasActive && (
+                <span className={clsx('w-1.5 h-1.5 flex-shrink-0 animate-pulse', accent)} />
+              )}
+            </div>
+            <ChevronRight
+              className={clsx(
+                'w-3 h-3 text-ink-muted transition-transform duration-200',
+                isSectionOpen && 'rotate-90'
+              )}
+            />
+          </button>
+        ) : (
+          <div className="flex justify-center py-2.5">
+            <span className={clsx('w-5 h-px opacity-40', accent)} />
+          </div>
+        )}
+        <div
+          className="sidebar-section-content"
+          data-collapsed={!sidebarCollapsed && !isSectionOpen ? 'true' : 'false'}
+        >
+          <div className="overflow-hidden">
+            <div className="space-y-0.5">
+              {items.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === '/'}
+                  title={sidebarCollapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    clsx(
+                      'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                      sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                      isActive
+                        ? 'bg-surface-card text-link border-link'
+                        : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
+                    )
+                  }
+                >
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  {!sidebarCollapsed && <span>{item.label}</span>}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <ToastProvider>
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
@@ -229,9 +335,63 @@ function App() {
       <header className="h-14 border-b border-ac-navy-light bg-ac-navy relative z-10 surface-hero-gradient edge-highlight">
         <div className="h-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
+            {/* Status Indicators - Tactical Display */}
+            <div className="hidden lg:flex items-center gap-6">
+              <Link to="/campaigns" className="flex items-center gap-2 hover:text-white transition-colors group">
+                <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
+                  <Target className={clsx('w-4 h-4 transition-colors', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70 group-hover:text-white')} />
+                </span>
+                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                  <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
+                </span>
+              </Link>
+              <Link to="/" className="flex items-center gap-2 hover:text-white transition-colors group">
+                <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
+                  <AlertTriangle className={clsx('w-4 h-4 transition-colors', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/70 group-hover:text-white')} />
+                </span>
+                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                  <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
+                </span>
+              </Link>
+              <Link to="/search" className="flex items-center gap-2 hover:text-white transition-colors group">
+                <Bell className={clsx('w-4 h-4 transition-colors', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/70 group-hover:text-white')} />
+                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                  <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
+                </span>
+              </Link>
+              <Link to="/fleet" className="flex items-center gap-2 hover:text-white transition-colors group">
+                <span className={clsx(sensorCount > 0 && 'status-blink')}>
+                  <Server className={clsx('w-4 h-4 transition-colors', sensorCount > 0 ? 'text-ac-green' : 'text-white/70 group-hover:text-white')} />
+                </span>
+                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                  <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
+                </span>
+              </Link>
+              {/* API Connection Status */}
+              <Link to="/fleet/connectivity" className="flex items-center gap-2 pl-4 border-l border-white/20 hover:text-white transition-colors group">
+                {connectionState === 'connected' ? (
+                  <Wifi className="w-4 h-4 text-status-success" />
+                ) : connectionState === 'connecting' ? (
+                  <Wifi className="w-4 h-4 text-ac-orange animate-pulse" />
+                ) : (
+                  <WifiOff className="w-4 h-4 text-ac-red" />
+                )}
+                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                  <span className={clsx(
+                    'font-semibold uppercase',
+                    connectionState === 'connected' ? 'text-status-success' :
+                    connectionState === 'connecting' ? 'text-ac-orange' : 'text-ac-red'
+                  )}>
+                    {connectionState === 'connected' ? 'HUB' : connectionState === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+                  </span>
+                </span>
+              </Link>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 hover:bg-white/20 transition-colors text-white hover:text-white"
+              className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 hover:bg-white/20 transition-colors text-white hover:text-white mr-2"
               title="Open Command Palette (Ctrl+K)"
             >
               <Search className="w-3.5 h-3.5" />
@@ -240,68 +400,52 @@ function App() {
                 {navigator.platform?.includes('Mac') ? '⌘K' : 'Ctrl+K'}
               </kbd>
             </button>
-            {/* Status Indicators - Tactical Display */}
-            <div className="hidden lg:flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
-                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono">
-                  <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
-                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/70')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono">
-                  <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/70')} />
-                <span className="text-xs text-white/70 font-mono">
-                  <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={clsx(sensorCount > 0 && 'status-blink')}>
-                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-white/70')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono">
-                  <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
-                </span>
-              </div>
-              {/* API Connection Status */}
-              <div className="flex items-center gap-2 pl-4 border-l border-white/20">
-                {connectionState === 'connected' ? (
-                  <Wifi className="w-4 h-4 text-ac-green" />
-                ) : connectionState === 'connecting' ? (
-                  <Wifi className="w-4 h-4 text-ac-orange animate-pulse" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-ac-red" />
-                )}
-                <span className="text-xs text-white/70 font-mono">
-                  <span className={clsx(
-                    'font-semibold uppercase',
-                    connectionState === 'connected' ? 'text-ac-green' :
-                    connectionState === 'connecting' ? 'text-ac-orange' : 'text-ac-red'
-                  )}>
-                    {connectionState === 'connected' ? 'HUB' : connectionState === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
-                  </span>
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
             <DemoModeControls />
-            <div className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70">
-              acme-corp
-              <ChevronDown className="w-3 h-3" />
-            </div>
-            <div className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70">
-              Last 7 days
-              <ChevronDown className="w-3 h-3" />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTimeRangeOpen(!isTimeRangeOpen)}
+                className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70 hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+              >
+                {(() => {
+                  switch (timeRange) {
+                    case '1h': return 'Last hour';
+                    case '6h': return 'Last 6 hours';
+                    case '24h': return 'Last 24 hours';
+                    case '7d': return 'Last 7 days';
+                    case '30d': return 'Last 30 days';
+                    default: return timeRange;
+                  }
+                })()}
+                <ChevronDown className={clsx("w-3 h-3 transition-transform", isTimeRangeOpen && "rotate-180")} />
+              </button>
+              
+              {isTimeRangeOpen && (
+                <div className="absolute right-0 mt-1 w-40 bg-ac-card-dark border border-white/10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md">
+                  {(['1h', '6h', '24h', '7d', '30d'] as const).map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => {
+                        setTimeRange(range);
+                        setIsTimeRangeOpen(false);
+                      }}
+                      className={clsx(
+                        "w-full text-left px-4 py-2.5 text-xs transition-all border-b border-white/5 last:border-0",
+                        timeRange === range 
+                          ? "bg-ac-blue text-white font-bold" 
+                          : "text-white/60 hover:bg-white/10 hover:text-white"
+                      )}
+                    >
+                      {range === '1h' ? 'Last hour' : 
+                       range === '6h' ? 'Last 6 hours' : 
+                       range === '24h' ? 'Last 24 hours' : 
+                       range === '7d' ? 'Last 7 days' : 
+                       'Last 30 days'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -311,9 +455,6 @@ function App() {
             >
               <ThemeIcon className="w-4 h-4" />
             </button>
-            <button type="button" className="h-8 px-2 text-white/70 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50" aria-label="Settings">
-              <Settings className="w-4 h-4" />
-            </button>
           </div>
         </div>
       </header>
@@ -321,129 +462,49 @@ function App() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar with gradient depth */}
         <aside className={clsx('transition-all duration-200 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative', sidebarCollapsed ? 'w-16' : 'w-64')}>
-          <div className={clsx('border-b border-border-subtle overflow-hidden', sidebarCollapsed ? 'p-2' : 'p-4')}>
-            <div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : 'gap-3')}>
-              <div className="w-11 h-11 flex-shrink-0 flex items-center justify-center">
+          <div className={clsx('border-b border-border-subtle overflow-hidden', sidebarCollapsed ? 'p-2' : 'p-6')}>
+            <div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : 'gap-4')}>
+              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
                 <img
                   src={signalHorizonLogoLight}
                   alt="Signal Horizon"
-                  className="w-11 h-11 block dark:hidden"
+                  className="w-16 h-16 block dark:hidden"
                 />
                 <img
                   src={signalHorizonLogoDark}
                   alt="Signal Horizon"
-                  className="w-11 h-11 hidden dark:block"
+                  className="w-16 h-16 hidden dark:block"
                 />
               </div>
               {!sidebarCollapsed && (
                 <div>
-                  <div className="text-sm font-medium text-ink-primary tracking-wide">SIGNAL HORIZON</div>
-                  <p className="text-xs text-ink-muted">See Further. Act Faster.</p>
+                  <div className="text-[1.7rem] font-light text-ink-primary tracking-tight leading-tight">Signal Horizon</div>
                 </div>
               )}
             </div>
             {!sidebarCollapsed && (
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-[10px] tracking-[0.18em] uppercase text-ac-magenta border border-ac-magenta/40 px-2 py-0.5 status-blink">
-                  LIVE
-                </span>
-                <span className="text-[10px] tracking-[0.1em] uppercase text-ink-muted">
-                  Collective Defense
-                </span>
+              <div className="mt-[10px]">
+                <p className="text-[10px] font-medium text-ac-magenta uppercase tracking-[0.15em]">See Further. Act Faster.</p>
               </div>
             )}
           </div>
 
-          <nav aria-label="Main navigation" className={clsx('flex-1 py-4 space-y-6 overflow-y-auto', sidebarCollapsed ? 'px-1' : 'px-3')}>
-            <div>
-              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Threat Intelligence</p>}
-              <div className="space-y-1">
-                {primaryNavItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === '/'}
-                    title={sidebarCollapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      clsx(
-                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
-                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                        isActive
-                          ? 'bg-surface-card text-link border-link'
-                          : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
-                      )
-                    }
-                  >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Sensor Console</p>}
-              <div className="space-y-1">
-                {beamNavItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    title={sidebarCollapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      clsx(
-                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
-                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                        isActive
-                          ? 'bg-surface-card text-link border-link'
-                          : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
-                      )
-                    }
-                  >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Fleet Operations</p>}
-              <div className="space-y-1">
-                {fleetNavItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    title={sidebarCollapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      clsx(
-                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
-                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                        isActive
-                          ? 'bg-surface-card text-link border-link'
-                          : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
-                      )
-                    }
-                  >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
+          <nav aria-label="Main navigation" className={clsx('flex-1 py-4 overflow-y-auto', sidebarCollapsed ? 'px-1' : 'px-3')}>
+            {renderCollapsibleSection('threat', 'Threat Intelligence', primaryNavItems, 'bg-ac-magenta')}
+            {renderCollapsibleSection('sensor', 'Sensor Console', beamNavItems, 'bg-ac-sky')}
+            {renderCollapsibleSection('fleet', 'Fleet Operations', fleetNavItems, 'bg-ac-green')}
 
             {!sidebarCollapsed && (
-              <div>
-                <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Settings</p>
-                <div className="space-y-1">
+              <div className="sidebar-nav-section">
+                <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2 mt-1">Settings</p>
+                <div className="space-y-0.5">
                   {settingsNavItems.map((item) => (
                     <NavLink
                       key={item.path}
                       to={item.path}
-                      title={sidebarCollapsed ? item.label : undefined}
                       className={({ isActive }) =>
                         clsx(
-                          'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
-                          sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                          'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap gap-3 px-3',
                           isActive
                             ? 'bg-surface-card text-link border-link'
                             : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
@@ -451,16 +512,16 @@ function App() {
                       }
                     >
                       <item.icon className="w-4 h-4 flex-shrink-0" />
-                      {!sidebarCollapsed && <span>{item.label}</span>}
+                      <span>{item.label}</span>
                     </NavLink>
                   ))}
                 </div>
               </div>
             )}
 
-            <div>
-              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Support</p>}
-              <div className="space-y-1">
+            <div className="sidebar-nav-section">
+              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2 mt-1">Support</p>}
+              <div className="space-y-0.5">
                 {supportNavItems.map((item) => (
                   <NavLink
                     key={item.path}
@@ -573,6 +634,7 @@ function App() {
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
+                <Route path="/design-lab" element={<DesignLabPage />} />
                 
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />

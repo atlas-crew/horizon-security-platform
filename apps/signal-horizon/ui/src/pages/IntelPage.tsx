@@ -3,7 +3,7 @@
  * Attack volume trends, trending threats, IOC table, export
  */
 
-import { useState } from 'react';
+import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -29,7 +29,7 @@ import {
   Bar,
 } from 'recharts';
 
-const timeRanges = ['24h', '7d', '30d', '90d'];
+const timeRanges = ['1h', '6h', '24h', '7d', '30d'];
 
 const volumeData = [
   { day: 'Mon', attacks: 32000, blocked: 24000, campaigns: 8 },
@@ -82,7 +82,8 @@ const mockIOCs = [
 
 export default function IntelPage() {
   useDocumentTitle('Intel');
-  const [timeRange, setTimeRange] = useState('7d');
+  const timeRange = useTimeRange();
+  const setTimeRange = useHorizonStore(s => s.setTimeRange);
 
   return (
     <div className="p-6 space-y-6">

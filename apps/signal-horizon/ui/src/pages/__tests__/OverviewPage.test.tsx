@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import OverviewPage from '../OverviewPage';
-import { useHorizonStore } from '../../stores/horizonStore';
+import { useHorizonStore, useTimeRange } from '../../stores/horizonStore';
 import { useAttackMap } from '../../hooks/useAttackMap';
 
 // Mock framer-motion to avoid issues with animations
@@ -16,6 +16,7 @@ vi.mock('framer-motion', () => ({
 // Mock the global stores and hooks
 vi.mock('../../stores/horizonStore', () => ({
   useHorizonStore: vi.fn(),
+  useTimeRange: vi.fn(() => '7d'),
 }));
 
 vi.mock('../../hooks/useAttackMap', () => ({
@@ -59,6 +60,7 @@ const mockThreats = [
 describe('OverviewPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useTimeRange).mockReturnValue('7d');
   });
 
   it('renders loading state when store or map is loading', () => {

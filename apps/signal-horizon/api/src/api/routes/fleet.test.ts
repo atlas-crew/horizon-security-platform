@@ -121,6 +121,9 @@ describe('Fleet Routes', () => {
         findUnique: vi.fn(),
         count: vi.fn(),
       } as unknown as PrismaClient['sensor'],
+      sensorPayloadSnapshot: {
+        findMany: vi.fn(),
+      } as unknown as PrismaClient['sensorPayloadSnapshot'],
       signal: {
         findMany: vi.fn(),
       } as unknown as PrismaClient['signal'],
@@ -147,6 +150,8 @@ describe('Fleet Routes', () => {
         securityAuditService: mockAuditService as SecurityAuditService,
       })
     );
+
+    vi.mocked(mockPrisma.sensorPayloadSnapshot!.findMany).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -189,6 +194,33 @@ describe('Fleet Routes', () => {
     });
   });
 
+  describe('GET /fleet/metrics', () => {
+    it('should fall back to DB-derived metrics when aggregator is unavailable', async () => {
+      const sensors = [
+        createMockSensor({ id: 'sensor-1', connectionState: 'CONNECTED', lastHeartbeat: new Date() }),
+        createMockSensor({ id: 'sensor-2', connectionState: 'DISCONNECTED', lastHeartbeat: new Date(Date.now() - 600000) }),
+      ];
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue(sensors);
+      vi.mocked(mockPrisma.sensorPayloadSnapshot!.findMany).mockResolvedValue([
+        { sensorId: 'sensor-1', capturedAt: new Date(), stats: { rps: 120, latencyMs: 18 } },
+        { sensorId: 'sensor-2', capturedAt: new Date(), stats: { rps: 0, latencyMs: 0 } },
+      ] as any);
+
+      const res = await request(app)
+        .get('/fleet/metrics')
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        totalSensors: 2,
+        totalRps: 120,
+      });
+      expect(res.body).toHaveProperty('onlineCount');
+      expect(res.body).toHaveProperty('warningCount');
+      expect(res.body).toHaveProperty('offlineCount');
+      expect(res.body).toHaveProperty('avgLatencyMs');
+    });
+  });
+
   describe('GET /fleet/sensors', () => {
     it('should return list of sensors for tenant', async () => {
       const sensors = [
@@ -203,6 +235,17 @@ describe('Fleet Routes', () => {
         .expect(200);
 
       expect(res.body.sensors).toHaveLength(2);
+      expect(res.body.sensors[0]).toMatchObject({
+        id: 'sensor-1',
+        name: 'Test Sensor',
+        status: expect.any(String),
+        cpu: expect.any(Number),
+        memory: expect.any(Number),
+        rps: expect.any(Number),
+        latencyMs: expect.any(Number),
+        version: expect.any(String),
+        region: expect.any(String),
+      });
       expect(res.body.pagination).toHaveProperty('total', 2);
     });
 

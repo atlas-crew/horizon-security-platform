@@ -2439,38 +2439,36 @@ describe('RuleDistributor', () => {
       ).rejects.toThrow(TenantIsolationError);
     });
 
-    it('should use canary percentage in config', async () => {
-      const ruleIds = ['rule-1'];
-      const sensorIds = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
+	    it('should use canary percentage in config', async () => {
+	      const ruleIds = ['rule-1'];
+	      const sensorIds = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
 
-      // Note: distributeRules uses the default 60000ms delay between stages
-      const resultPromise = distributor.distributeRules(TEST_TENANT_ID, ruleIds, sensorIds, {
-        strategy: 'canary',
-        canaryPercentage: 25,
-      });
+	      // Focus this test on config plumbing (not timer-based rollout execution).
+	      const deployCanarySpy = vi
+	        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+	        .spyOn(distributor as any, 'deployCanary')
+	        .mockResolvedValue({
+	          success: true,
+	          totalTargets: sensorIds.length,
+	          successCount: 0,
+	          failureCount: 0,
+	          pendingCount: sensorIds.length,
+	          results: sensorIds.map((sensorId, i) => ({ sensorId, success: true, commandId: `cmd-${i}` })),
+	        });
 
-      // Advance time to allow async initialization and the first logger call
-      await advanceUntil(
-        () => getLoggerInfoMock().mock.calls.find((call) => call[1] === 'Starting canary deployment'),
-        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'canary deployment initialization' }
-      );
+	      await distributor.distributeRules(TEST_TENANT_ID, ruleIds, sensorIds, {
+	        strategy: 'canary',
+	        canaryPercentage: 25,
+	      });
 
-      // Advance timer incrementally by large amounts for the default 60s delays
-      // 3 stages means 2 delays of 60s each = 120s total, plus some buffer
-      for (let i = 0; i < 15; i++) {
-        await vi.advanceTimersByTimeAsync(10000); // 10 second increments
-        await Promise.resolve();
-      }
-      await resultPromise;
-
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          percentages: [25, 50, 100],
-        }),
-        'Starting canary deployment'
-      );
-    });
-  });
+	      expect(deployCanarySpy).toHaveBeenCalledWith(
+	        TEST_TENANT_ID,
+	        sensorIds,
+	        expect.any(Array),
+	        expect.objectContaining({ canaryPercentages: [25, 50, 100] })
+	      );
+	    });
+	  });
 
   // =============================================================================
   // pushRules (Simple API) Tests

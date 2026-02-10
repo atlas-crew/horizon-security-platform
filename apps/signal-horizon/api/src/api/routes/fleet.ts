@@ -118,6 +118,29 @@ function isSafeString(val: string): boolean {
   return !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(val);
 }
 
+type ComputedSensorStatus = 'online' | 'warning' | 'offline';
+
+function computeSensorStatus(connectionState: string, lastHeartbeat: Date | null, nowMs: number): ComputedSensorStatus {
+  const warningThreshold = 2 * 60 * 1000;
+  const offlineThreshold = 5 * 60 * 1000;
+  const hb = lastHeartbeat ? new Date(lastHeartbeat).getTime() : 0;
+  const age = nowMs - hb;
+
+  if (connectionState === 'DISCONNECTED' || age > offlineThreshold) return 'offline';
+  if (age > warningThreshold) return 'warning';
+  return 'online';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /**
  * Creates a safe string schema with the specified max length.
  */
@@ -416,12 +439,62 @@ export function createFleetRoutes(
    * GET /api/v1/fleet/metrics
    * Get fleet-wide aggregated metrics
    */
-  const fleetMetricsHandler = async (_req: any, res: any) => {
+  const fleetMetricsHandler = async (req: any, res: any) => {
     try {
       if (!fleetAggregator) {
-        res
-          .status(503)
-          .json({ error: 'Fleet aggregator service not available' });
+        // Local/dev fallback: compute from DB + latest payload snapshots.
+        const auth = req.auth!;
+        const sensors = await prisma.sensor.findMany({
+          where: { tenantId: auth.tenantId },
+          select: { id: true, connectionState: true, lastHeartbeat: true },
+        });
+
+        const nowMs = Date.now();
+        let onlineCount = 0;
+        let warningCount = 0;
+        let offlineCount = 0;
+        for (const s of sensors) {
+          const st = computeSensorStatus(s.connectionState, s.lastHeartbeat, nowMs);
+          if (st === 'online') onlineCount++;
+          else if (st === 'warning') warningCount++;
+          else offlineCount++;
+        }
+
+        const ids = sensors.map((s) => s.id);
+        const snapshotRows = ids.length
+          ? await prisma.sensorPayloadSnapshot.findMany({
+              where: { tenantId: auth.tenantId, sensorId: { in: ids } },
+              orderBy: [{ sensorId: 'asc' }, { capturedAt: 'desc' }],
+              select: { sensorId: true, capturedAt: true, stats: true },
+            })
+          : [];
+
+        const latestBySensor = new Map<string, { stats: unknown }>();
+        for (const row of snapshotRows) {
+          if (!latestBySensor.has(row.sensorId)) latestBySensor.set(row.sensorId, { stats: row.stats });
+        }
+
+        let totalRps = 0;
+        let latencySum = 0;
+        let latencyCount = 0;
+        for (const id of ids) {
+          const statsObj = asRecord(latestBySensor.get(id)?.stats);
+          totalRps += asNumber(statsObj?.rps, 0);
+          const lat = asNumber(statsObj?.latencyMs, NaN);
+          if (Number.isFinite(lat)) {
+            latencySum += lat;
+            latencyCount++;
+          }
+        }
+
+        res.json({
+          totalSensors: sensors.length,
+          onlineCount,
+          warningCount,
+          offlineCount,
+          totalRps: Math.round(totalRps),
+          avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
+        });
         return;
       }
 
@@ -834,29 +907,48 @@ export function createFleetRoutes(
         // If filtering by computed status (online/warning/offline), we need to post-process
         let filteredSensors = sensors;
         if (status && ['online', 'warning', 'offline'].includes(status)) {
-          const now = Date.now();
-          const warningThreshold = 2 * 60 * 1000; // 2 minutes
-          const offlineThreshold = 5 * 60 * 1000; // 5 minutes
+          const nowMs = Date.now();
 
           filteredSensors = sensors.filter((sensor) => {
-            const lastHeartbeat = sensor.lastHeartbeat ? new Date(sensor.lastHeartbeat).getTime() : 0;
-            const timeSinceHeartbeat = now - lastHeartbeat;
-
-            let computedStatus: 'online' | 'warning' | 'offline';
-            if (sensor.connectionState === 'DISCONNECTED' || timeSinceHeartbeat > offlineThreshold) {
-              computedStatus = 'offline';
-            } else if (timeSinceHeartbeat > warningThreshold) {
-              computedStatus = 'warning';
-            } else {
-              computedStatus = 'online';
-            }
-
-            return computedStatus === status;
+            return computeSensorStatus(sensor.connectionState, sensor.lastHeartbeat, nowMs) === status;
           });
         }
 
+        const nowMs = Date.now();
+        const ids = filteredSensors.map((s) => s.id);
+        const snapshotRows = ids.length
+          ? await prisma.sensorPayloadSnapshot.findMany({
+              where: { tenantId: auth.tenantId, sensorId: { in: ids } },
+              orderBy: [{ sensorId: 'asc' }, { capturedAt: 'desc' }],
+              select: { sensorId: true, capturedAt: true, stats: true },
+            })
+          : [];
+
+        const latestBySensor = new Map<string, { stats: unknown }>();
+        for (const row of snapshotRows) {
+          if (!latestBySensor.has(row.sensorId)) latestBySensor.set(row.sensorId, { stats: row.stats });
+        }
+
         res.json({
-          sensors: filteredSensors,
+          sensors: filteredSensors.map((sensor) => {
+            const status = computeSensorStatus(sensor.connectionState, sensor.lastHeartbeat, nowMs);
+            const statsObj = asRecord(latestBySensor.get(sensor.id)?.stats);
+            const cpu = asNumber(statsObj?.cpu, 0);
+            const memory = asNumber(statsObj?.memory ?? statsObj?.mem, 0);
+            const rps = asNumber(statsObj?.rps, 0);
+            const latencyMs = asNumber(statsObj?.latencyMs, 0);
+            return {
+              id: sensor.id,
+              name: sensor.name,
+              status,
+              cpu,
+              memory,
+              rps,
+              latencyMs,
+              version: sensor.version,
+              region: sensor.region,
+            };
+          }),
           pagination: { total, limit, offset },
         });
       } catch (error) {
@@ -921,7 +1013,7 @@ export function createFleetRoutes(
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const { limit } = req.query as z.infer<typeof ListSensorSignalsQuerySchema>;
+        const { limit } = req.query as unknown as z.infer<typeof ListSensorSignalsQuerySchema>;
         const tenantId = req.auth?.tenantId;
 
         if (!tenantId) {
@@ -1630,7 +1722,7 @@ const SensorLogsQuerySchema = z.object({
           results.push({ sensorId, ok: true, version, commandId });
         }
 
-        res.status(202).json({
+        return res.status(202).json({
           message: 'Upstream preset push initiated',
           preset: 'apparatus-echo',
           host,
@@ -1639,7 +1731,7 @@ const SensorLogsQuerySchema = z.object({
         });
       } catch (error) {
         logger.error({ error }, 'Failed to apply upstream preset');
-        res.status(500).json({
+        return res.status(500).json({
           error: 'Failed to apply upstream preset',
           message: getErrorMessage(error),
         });
@@ -1942,7 +2034,7 @@ const SensorLogsQuerySchema = z.object({
     async (req, res) => {
       try {
         const auth = req.auth!;
-        const { resourceId, limit, offset } = req.query as z.infer<
+        const { resourceId, limit, offset } = req.query as unknown as z.infer<
           typeof ConfigAuditQuerySchema
         >;
 
@@ -2083,7 +2175,7 @@ const SensorLogsQuerySchema = z.object({
         (s) => s.connectionState === 'CONNECTED' && !s.syncState?.lastSyncSuccess
       ).length;
       const errorSensors = sensors.filter(
-        (s) => s.connectionState === 'ERROR'
+        (s) => s.connectionState === 'RECONNECTING'
       ).length;
 
       res.json({

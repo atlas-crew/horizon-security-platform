@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useQuery } from '@tanstack/react-query';
@@ -140,7 +140,7 @@ export function FleetOverviewPage() {
   const summary = overview?.summary || { totalSensors: 0, onlineCount: 0, warningCount: 0, offlineCount: 0, healthScore: 100 };
   const fleetMetrics = overview?.fleetMetrics || { totalRps: 0, avgLatency: 0, avgCpu: 0, avgMemory: 0 };
 
-  const kpiMetrics = useMemo(() => [
+  const kpiMetrics = [
     {
       label: 'Sensors Online',
       value: formatNumber(summary.onlineCount),
@@ -173,7 +173,7 @@ export function FleetOverviewPage() {
       valueColor: colors.purple,
       icon: <Zap aria-hidden="true" className="w-4 h-4" style={{ color: colors.purple }} />,
     },
-  ], [summary.onlineCount, summary.warningCount, summary.offlineCount, fleetMetrics.totalRps]);
+  ];
 
   return (
     <div className="space-y-6 p-6">

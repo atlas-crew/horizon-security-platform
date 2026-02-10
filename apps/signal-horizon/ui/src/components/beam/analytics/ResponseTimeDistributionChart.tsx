@@ -1,14 +1,25 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from 'recharts';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
+import {
+  TOOLTIP_CONTENT_STYLE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_ITEM_STYLE,
+  lighten,
+  darken,
+  getGridStroke,
+  getCursorFill,
+  getValueLabelStyle,
+} from '../../../lib/chartTheme';
 
 interface ResponseTimeBucket {
   range: string;
@@ -21,39 +32,55 @@ interface ResponseTimeDistributionChartProps {
   className?: string;
 }
 
-// Atlas Crew brand colors from fast (green) to slow (magenta)
+// Atlas Crew brand chart colors from fast (green) to slow (magenta)
 const bucketColors = [
-  '#00B140', // <25ms - Atlas Crew Green (fast)
-  '#00B140', // 25-50ms - Atlas Crew Green
+  '#00B140', // <25ms - Green (fast)
+  '#00B140', // 25-50ms - Green
   '#529EEC', // 50-100ms - Sky Blue (ok)
-  '#E35205', // 100-250ms - Atlas Crew Orange (slow)
-  '#D62598', // 250-500ms - Atlas Crew Magenta (critical)
-  '#D62598', // >500ms - Atlas Crew Magenta
+  '#E35205', // 100-250ms - Orange (slow)
+  '#D62598', // 250-500ms - Magenta (critical)
+  '#D62598', // >500ms - Magenta
 ];
+
+// Pre-compute unique colors for gradient defs
+const uniqueBucketColors = [...new Set(bucketColors)];
 
 /**
  * ResponseTimeDistributionChart - Vertical bar chart showing response time distribution.
- * Colors gradient from green (fast) to red (slow).
+ * Colors gradient from green (fast) to magenta (slow) per Atlas Crew chart standards.
  */
 export const ResponseTimeDistributionChart = memo(function ResponseTimeDistributionChart({
   data,
   className = '',
 }: ResponseTimeDistributionChartProps) {
+  const gridStroke = useMemo(() => getGridStroke(), []);
+  const cursorFill = useMemo(() => getCursorFill(), []);
+  const valueLabelStyle = useMemo(() => getValueLabelStyle(), []);
+
   return (
     <div className={`h-64 ${className}`} role="img" aria-label="Bar chart showing response time distribution across latency buckets">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
-          margin={{ top: 10, right: 10, left: -10, bottom: 20 }}
+          margin={{ top: 24, right: 10, left: -10, bottom: 20 }}
         >
+          <defs>
+            {uniqueBucketColors.map((color) => (
+              <linearGradient key={color} id={`bar-v-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={lighten(color, 30)} />
+                <stop offset="100%" stopColor={darken(color, 20)} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="4 4" stroke={gridStroke} vertical={false} />
           <XAxis
             dataKey="range"
-            tick={{ fontSize: 11, fill: '#7B8FA8' }}
+            tick={{ fontSize: 12, fontFamily: 'Rubik', fill: '#7F7F7F' }}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#7B8FA8' }}
+            tick={{ fontSize: 12, fontFamily: 'Rubik', fill: '#7F7F7F' }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(value) => `${value}%`}
@@ -63,15 +90,22 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
               `${value.toFixed(1)}%`,
               'Requests',
             ]}
-            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px' }}
+            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px', fontFamily: 'Rubik' }}
             labelStyle={{ ...TOOLTIP_LABEL_STYLE, fontWeight: 600 }}
             itemStyle={TOOLTIP_ITEM_STYLE}
+            cursor={{ fill: cursorFill }}
           />
-          <Bar dataKey="percentage">
+          <Bar dataKey="percentage" fillOpacity={0.9} radius={[0, 0, 0, 0]}>
+            <LabelList
+              dataKey="percentage"
+              position="top"
+              style={valueLabelStyle}
+              formatter={(value: number) => `${value.toFixed(1)}%`}
+            />
             {data.map((_entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={bucketColors[Math.min(index, bucketColors.length - 1)]}
+                fill={`url(#bar-v-${bucketColors[Math.min(index, bucketColors.length - 1)].replace('#', '')})`}
               />
             ))}
           </Bar>

@@ -123,29 +123,16 @@ export function SupportPage() {
 
   const [activeTab, setActiveTab] = useState<'docs' | 'diagnostics' | 'contact'>('docs');
 
-  const [selectedDocId, setSelectedDocId] = useState<string>(docId || 'README');
+  const [selectedDocId, setSelectedDocId] = useState<string>(docId || 'index');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Sync state with URL
-  useEffect(() => {
-    if (docId && docId !== selectedDocId) {
-      setSelectedDocId(docId);
-    }
-  }, [docId]);
-
-  const handleSelectDoc = (id: string) => {
-    setSelectedDocId(id);
-    navigate(`/support/${id}`);
-  };
-
+  // Priority docs for sidebar
   const priorityDocs: DocItem[] = [
     { id: 'tutorials:sensor-onboarding', title: 'Sensor Onboarding', category: 'Tutorials', path: '/docs/tutorials/sensor-onboarding' },
     { id: 'tutorials:synapse-rules', title: 'Rule Authoring (Synapse Rules)', category: 'Tutorials', path: '/docs/tutorials/synapse-rules' },
     { id: 'guides:rule-authoring-flow', title: 'Rule Authoring Flow', category: 'Guides', path: '/docs/guides/rule-authoring-flow' },
     { id: 'api:reference', title: 'API Reference', category: 'API Reference', path: '/docs/api' },
   ];
-
-
 
   // Demo docs fallback when API unavailable
   const demoDocs: DocItem[] = [
@@ -172,6 +159,28 @@ export function SupportPage() {
     staleTime: 60000,
   });
 
+  // Sync state with URL
+  useEffect(() => {
+    if (docId && docId !== selectedDocId) {
+      setSelectedDocId(docId);
+    }
+  }, [docId, selectedDocId]);
+
+  const handleSelectDoc = (id: string) => {
+    setSelectedDocId(id);
+    navigate(`/support/${id}`);
+  };
+
+  // If the current selection doesn't exist in the index (e.g. switching doc roots),
+  // pick a stable default when available.
+  useEffect(() => {
+    if (docId) return; // URL is source of truth when deep-linking
+    const ids = new Set((docsFromApi ?? []).map((d) => d.id));
+    if (ids.size === 0) return; // fall back to demo docs rendering
+    if (ids.has(selectedDocId)) return;
+    setSelectedDocId(ids.has('index') ? 'index' : (docsFromApi?.[0]?.id ?? 'index'));
+  }, [docId, docsFromApi, selectedDocId]);
+
   // Fetch search results
   const { data: searchResults, isFetching: isSearching } = useQuery<SearchResult[]>({
     queryKey: ['docs', 'search', searchQuery],
@@ -192,7 +201,7 @@ export function SupportPage() {
       if (!merged.has(doc.id)) merged.set(doc.id, doc);
     });
     return Array.from(merged.values());
-  }, [docsFromApi]);
+  }, [docsFromApi, priorityDocs, demoDocs]);
 
 
   return (

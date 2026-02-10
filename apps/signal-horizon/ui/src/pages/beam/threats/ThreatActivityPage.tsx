@@ -37,7 +37,8 @@ import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
 
-const tickSmall11 = { ...axisDefaults.x.tick, fontSize: 11 };
+const tickSmallX = { ...axisDefaults.x.tick, fontSize: 11 };
+const tickSmallY = { ...axisDefaults.y.tick, fontSize: 11 };
 
 // Demo data - threat activity timeline
 const DEMO_THREAT_TIMELINE = [
@@ -277,9 +278,9 @@ function ThreatTimelineChart() {
             <XAxis
               dataKey="time"
               {...xAxisNoLine}
-              tick={tickSmall11}
+              tick={tickSmallX}
             />
-            <YAxis {...axisDefaults.y} tick={tickSmall11} />
+            <YAxis {...axisDefaults.y} tick={tickSmallY} />
             <Tooltip {...tooltipDefaults} />
             <Area
               type="monotone"
@@ -313,7 +314,7 @@ function TopThreatSourcesChart() {
               dataKey="ip"
               axisLine={false}
               tickLine={false}
-              tick={tickSmall11}
+              tick={tickSmallY}
               width={110}
             />
             <Tooltip {...tooltipDefaults} />

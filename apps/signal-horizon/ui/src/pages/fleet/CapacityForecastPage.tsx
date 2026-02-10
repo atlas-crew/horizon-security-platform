@@ -29,6 +29,7 @@ import { axisDefaults, colors, gridDefaults, legendDefaults, tooltipDefaults } f
 const REGIONS = ['US-East', 'EU-West', 'AP-South'];
 const HISTORY_DAYS = 30;
 const FORECAST_DAYS = 14;
+const xAxisNoLine = { ...axisDefaults.x, axisLine: false };
 
 interface DailyMetric {
   day: number;
@@ -122,8 +123,6 @@ export default function CapacityForecastPage() {
     };
   }, [selectedRegion, regionData]);
 
-  const xAxis = { ...axisDefaults.x, axisLine: false };
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -215,17 +214,18 @@ export default function CapacityForecastPage() {
                 </linearGradient>
               </defs>
 
-              <CartesianGrid {...gridDefaults} />
+              <CartesianGrid
+                {...gridDefaults}
+                strokeDasharray="3 3"
+                stroke={colors.blue}
+                strokeOpacity={0.15}
+              />
               <XAxis
                 dataKey="date"
-                {...xAxis}
+                {...xAxisNoLine}
                 minTickGap={30}
               />
-              <YAxis
-                unit="%"
-                domain={[0, 100]}
-                {...axisDefaults.y}
-              />
+              <YAxis {...axisDefaults.y} unit="%" domain={[0, 100]} />
               <Tooltip
                 {...tooltipDefaults}
                 formatter={(val: number) => typeof val === 'number' ? val.toFixed(1) + '%' : val}

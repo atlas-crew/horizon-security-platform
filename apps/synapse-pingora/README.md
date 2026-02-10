@@ -6,15 +6,16 @@ A proof-of-concept integrating the **real Synapse WAF detection engine** (237 pr
 
 | Metric | Result |
 |--------|--------|
-| **Detection Latency** | **~26-50 μs** |
+| **Clean GET** | **~10 μs** |
+| **Attack detection** | **~25 μs** avg across all vectors |
+| **Full pipeline (WAF + DLP, 4 KB)** | **~247 μs** |
 | Rules loaded | **237** production rules |
-| Clean traffic | **~2 μs** (no rule matches) |
-| Attack traffic | **~18-50 μs** (with entity tracking) |
+| Benchmark suites | **19** suites, **306** benchmarks |
 | vs NAPI (Node.js FFI) | **~2-3x faster** |
 | vs ModSecurity | **4-19x faster** |
 
-> **Note**: These numbers use the **real libsynapse engine** with 237 production rules,
-> behavioral tracking, entity risk scoring, and the full production rule set.
+> **Note**: February 2026 Criterion.rs numbers on macOS arm64. See
+> [`docs/performance/BENCHMARK_REPORT_2026_02.md`](docs/performance/BENCHMARK_REPORT_2026_02.md) for the full report.
 
 ## Architecture
 
@@ -82,31 +83,53 @@ cp config.example.yaml config.yaml
 ./test.sh
 ```
 
-## Benchmark Results
+## Benchmark Results (February 2026)
 
-Actual results from libsynapse native benchmarks (release build, 100,000 iterations):
+Criterion.rs results from 19 benchmark suites (306 benchmarks), release build with LTO:
 
-| Benchmark | Latency | Throughput | Notes |
-|-----------|---------|------------|-------|
-| **Clean traffic** | **1.85 μs** | 541,158 req/s | No rules match |
-| **SQLi + entity tracking** | **17.74 μs** | 56,381 req/s | 100k unique IPs |
-| **SQLi same-IP lookup** | **11.55 μs** | 86,587 req/s | Entity cache hit |
-| **Rust-only (no FFI)** | **26.2 μs** | 38,224 req/s | 237 rules, documented |
+### Detection Engine
 
-### Comparison Table
+| Benchmark | Latency | Notes |
+|-----------|---------|-------|
+| **Simple GET** | **10.0 μs** | Minimal GET, no params |
+| **SQLi detection** | **26.6 μs** | Average across 5 SQLi variants |
+| **XSS detection** | **23.3 μs** | Average across 3 XSS variants |
+| **Evasive attacks** | **25-33 μs** | Hex, double-encoding, unicode, polyglot |
+| **Full rule set (237)** | **71.6 μs** | Linear scaling, ~302 ns/rule |
 
-| Implementation | Detection Latency | Throughput | Notes |
-|----------------|-------------------|------------|-------|
-| **Synapse-Pingora** | **~26 μs** | ~38k req/s | Pure Rust, no FFI boundary |
-| libsynapse (NAPI) | ~62-73 μs | ~14k req/s | Node.js + Rust FFI overhead |
-| Batch mode (128) | ~9.9 μs | ~101k req/s | FlatBuffers, parallel |
-| ModSecurity | 100-500 μs | varies | Depends on ruleset |
-| AWS WAF | 50-200 μs | varies | Cloud service |
+### Per-Request Hot Path
 
-### Honest Assessment
+| Operation | Latency |
+|-----------|---------|
+| Rate limit check | 61 ns |
+| ACL evaluation (100 rules) | 156 ns |
+| Trap matching (honeypot) | 33 ns |
+| Actor is-blocked check | 45 ns |
+| Session validation | 304 ns |
 
-Pingora eliminates the **~47 μs FFI overhead** (73 μs NAPI vs 26 μs pure Rust), providing
-a **~2-3x speedup** over the Node.js architecture. The real value proposition is:
+### End-to-End Pipeline
+
+| Scenario | Latency |
+|----------|---------|
+| Clean GET, full chain | 72 μs |
+| WAF + DLP (4 KB body) | 247 μs |
+| WAF + DLP (8 KB body) | 442 μs |
+| E-commerce order (heavy) | 1.6 ms |
+| Healthcare claim (PII + DLP) | 2.3 ms |
+
+### Comparison
+
+| Implementation | Detection Latency | Notes |
+|----------------|-------------------|-------|
+| **Synapse-Pingora** | **~10-25 μs** | Pure Rust, no FFI boundary |
+| libsynapse (NAPI) | ~62-73 μs | Node.js + Rust FFI overhead |
+| ModSecurity | 100-500 μs | Depends on ruleset |
+| AWS WAF | 50-200 μs | Cloud service |
+
+### Value Proposition
+
+Pingora eliminates the **~47 μs FFI overhead** (73 μs NAPI vs 25 μs pure Rust), providing
+a **~2-3x speedup** over the Node.js architecture:
 
 1. **Simpler architecture** - Single Rust binary vs nginx + Node.js + NAPI stack
 2. **No serialization boundary** - Detection runs in-process, no IPC
@@ -114,14 +137,13 @@ a **~2-3x speedup** over the Node.js architecture. The real value proposition is
 4. **Graceful reload** - Zero-downtime updates via SIGQUIT + socket handoff
 5. **Thread-local engines** - Each Pingora worker has its own Synapse instance
 
-### What This Means
-
 | Metric | Current (nginx + NAPI) | Pingora | Improvement |
 |--------|------------------------|---------|-------------|
-| Per-request latency | ~73 μs | ~26 μs | **2.8x faster** |
+| Per-request latency | ~73 μs | ~25 μs | **~3x faster** |
 | Components to deploy | 3 (nginx, Node.js, NAPI) | 1 binary | **Simpler** |
 | Memory footprint | Node.js + V8 heap | Rust only | **~50% smaller** |
 | Cold start | Seconds (V8 init) | Milliseconds | **Much faster** |
+| Config reload | Service restart | 240 μs hot reload | **Zero downtime** |
 
 ## Configuration
 
@@ -326,14 +348,16 @@ The DLP scanner has been optimized for high-throughput request body scanning:
 | **Inspection Depth Cap** | Truncate body to first 8KB by default | O(1) scan time for large payloads |
 | **Aho-Corasick Prefilter** | Single-pass multi-pattern detection | 30-50% faster than sequential regex |
 
-#### DLP Performance Benchmarks
+#### DLP Performance Benchmarks (February 2026)
 
 | Payload Size | With PII | Clean Traffic | Notes |
 |--------------|----------|---------------|-------|
-| 4 KB | **~45 μs** | ~33 μs | E-commerce order payloads |
-| 8 KB | ~86 μs | ~73 μs | At inspection cap limit |
-| 18 KB | ~100 μs | ~76 μs | Truncated to 8KB cap |
-| 32 KB | ~85 μs | ~65 μs | Plateaus due to truncation |
+| 4 KB | **~34 μs** | ~21 μs | E-commerce order payloads |
+| 8 KB | ~65 μs | ~42 μs | At inspection cap limit |
+| 18 KB | ~68 μs | ~42 μs | Truncated to 8KB cap |
+| 32 KB | ~64 μs | ~41 μs | Plateaus due to truncation |
+
+DLP fast mode saves 30-34%: 4 KB drops from ~34 μs to ~24 μs, 8 KB from ~70 μs to ~46 μs.
 
 #### DLP Configuration Options
 

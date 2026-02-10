@@ -1122,36 +1122,36 @@ impl MetricsRegistry {
         }
     }
 
-    pub fn set_actor_manager(&mut self, manager: Arc<ActorManager>) {
-        self.actor_manager = Some(manager);
+    pub fn set_actor_manager(&self, manager: Arc<ActorManager>) {
+        *self.actor_manager.write() = Some(manager);
     }
 
-    pub fn set_crawler_detector(&mut self, detector: Arc<CrawlerDetector>) {
-        self.crawler_detector = Some(detector);
+    pub fn set_crawler_detector(&self, detector: Arc<CrawlerDetector>) {
+        *self.crawler_detector.write() = Some(detector);
     }
 
-    pub fn set_tarpit_manager(&mut self, manager: Arc<TarpitManager>) {
-        self.tarpit_manager = Some(manager);
+    pub fn set_tarpit_manager(&self, manager: Arc<TarpitManager>) {
+        *self.tarpit_manager.write() = Some(manager);
     }
 
-    pub fn set_progression_manager(&mut self, manager: Arc<ProgressionManager>) {
-        self.progression_manager = Some(manager);
+    pub fn set_progression_manager(&self, manager: Arc<ProgressionManager>) {
+        *self.progression_manager.write() = Some(manager);
     }
 
-    pub fn set_shadow_mirror_manager(&mut self, manager: Arc<ShadowMirrorManager>) {
-        self.shadow_mirror_manager = Some(manager);
+    pub fn set_shadow_mirror_manager(&self, manager: Arc<ShadowMirrorManager>) {
+        *self.shadow_mirror_manager.write() = Some(manager);
     }
 
-    pub fn set_trends_manager(&mut self, manager: Arc<TrendsManager>) {
-        self.trends_manager = Some(manager);
+    pub fn set_trends_manager(&self, manager: Arc<TrendsManager>) {
+        *self.trends_manager.write() = Some(manager);
     }
 
-    pub fn set_entity_manager(&mut self, manager: Arc<EntityManager>) {
-        self.entity_manager = Some(manager);
+    pub fn set_entity_manager(&self, manager: Arc<EntityManager>) {
+        *self.entity_manager.write() = Some(manager);
     }
 
-    pub fn set_block_log(&mut self, log: Arc<BlockLog>) {
-        self.block_log = Some(log);
+    pub fn set_block_log(&self, log: Arc<BlockLog>) {
+        *self.block_log.write() = Some(log);
     }
 
     /// Records a request with status code and latency.
@@ -1262,28 +1262,28 @@ impl MetricsRegistry {
 
     /// Returns top legitimate crawler hits.
     pub fn top_crawlers(&self, limit: usize) -> Vec<(String, u64)> {
-        self.crawler_detector.as_ref()
+        self.crawler_detector.read().as_ref()
             .map(|d| d.get_crawler_distribution(limit))
             .unwrap_or_default()
     }
 
     /// Returns top bad bot hits.
     pub fn top_bad_bots(&self, limit: usize) -> Vec<(String, u64)> {
-        self.crawler_detector.as_ref()
+        self.crawler_detector.read().as_ref()
             .map(|d| d.get_bad_bot_distribution(limit))
             .unwrap_or_default()
     }
 
     /// Returns top risky actors (by score).
     pub fn top_risky_actors(&self, limit: usize) -> Vec<crate::actor::ActorState> {
-        self.actor_manager.as_ref()
+        self.actor_manager.read().as_ref()
             .map(|m| m.list_by_min_risk(1.0, limit, 0))
             .unwrap_or_default()
     }
 
     /// Returns top JA4 clusters.
     pub fn top_ja4_clusters(&self, limit: usize) -> Vec<(String, Vec<String>, f64)> {
-        self.actor_manager.as_ref()
+        self.actor_manager.read().as_ref()
             .map(|m| m.get_fingerprint_groups(limit))
             .unwrap_or_default()
     }
@@ -1299,22 +1299,22 @@ impl MetricsRegistry {
 
     /// Returns tarpit statistics.
     pub fn tarpit_stats(&self) -> Option<crate::tarpit::TarpitStats> {
-        self.tarpit_manager.as_ref().map(|m| m.stats())
+        self.tarpit_manager.read().as_ref().map(|m| m.stats())
     }
 
     /// Returns challenge progression statistics.
     pub fn progression_stats(&self) -> Option<crate::interrogator::ProgressionStatsSnapshot> {
-        self.progression_manager.as_ref().map(|m| m.stats().snapshot())
+        self.progression_manager.read().as_ref().map(|m| m.stats().snapshot())
     }
 
     /// Returns shadow mirroring statistics.
     pub fn shadow_stats(&self) -> Option<crate::shadow::ShadowMirrorStats> {
-        self.shadow_mirror_manager.as_ref().map(|m| m.stats())
+        self.shadow_mirror_manager.read().as_ref().map(|m| m.stats())
     }
 
     /// Returns geo-anomaly (impossible travel) alerts.
     pub fn recent_geo_anomalies(&self, limit: usize) -> Vec<crate::trends::Anomaly> {
-        self.trends_manager.as_ref()
+        self.trends_manager.read().as_ref()
             .map(|m| m.get_anomalies(crate::trends::AnomalyQueryOptions {
                 anomaly_type: Some(crate::trends::AnomalyType::ImpossibleTravel),
                 limit: Some(limit),

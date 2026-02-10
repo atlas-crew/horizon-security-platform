@@ -5026,6 +5026,7 @@ fn main() {
 
     // Create shared EntityManager for both admin API and proxy
     let shared_entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
+    metrics_registry.set_entity_manager(Arc::clone(&shared_entity_manager));
 
     // Restore entities from snapshot if available
     if let Some(ref snapshot) = loaded_snapshot {
@@ -5046,6 +5047,7 @@ fn main() {
         1000,
         IpAnonymization::from_env(),
     ));
+    metrics_registry.set_block_log(Arc::clone(&shared_block_log));
 
     // Restore campaigns from snapshot if available
     if let Some(ref snapshot) = loaded_snapshot {
@@ -5060,6 +5062,7 @@ fn main() {
 
     // Phase 5: Create shared ActorManager for behavioral tracking across admin API and proxy
     let shared_actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
+    metrics_registry.set_actor_manager(Arc::clone(&shared_actor_manager));
 
     // Restore actors from snapshot if available
     if let Some(ref snapshot) = loaded_snapshot {
@@ -5158,6 +5161,7 @@ fn main() {
         };
         rt.block_on(build_crawler_detector(config.crawler.clone()))
     };
+    metrics_registry.set_crawler_detector(Arc::clone(&shared_crawler_detector));
     info!(
         "CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
         synapse_pingora::crawler::KNOWN_CRAWLERS.len(),
@@ -5173,6 +5177,7 @@ fn main() {
 
     // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting
     let shared_trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+    metrics_registry.set_trends_manager(Arc::clone(&shared_trends_manager));
     info!("TrendsManager initialized with default config");
 
     // Phase 9: Shared SignalManager for intelligence aggregation

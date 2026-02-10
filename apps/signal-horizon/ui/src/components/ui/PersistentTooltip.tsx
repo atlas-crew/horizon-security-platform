@@ -22,11 +22,7 @@ import type {
   ValueType,
   NameType,
 } from 'recharts/types/component/DefaultTooltipContent';
-import {
-  TOOLTIP_CONTENT_STYLE,
-  TOOLTIP_LABEL_STYLE,
-  TOOLTIP_ITEM_STYLE,
-} from '../../lib/chartTheme';
+import { colors, tooltipDefaults } from '@/ui';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -144,7 +140,7 @@ export function PersistentTooltip({
       role="status"
       aria-live="polite"
       style={{
-        ...TOOLTIP_CONTENT_STYLE,
+        ...tooltipDefaults.contentStyle,
         padding: '10px 14px',
         pointerEvents: 'auto',
         // Prevent Recharts' wrapper from clipping the interactive area.
@@ -153,7 +149,7 @@ export function PersistentTooltip({
       }}
     >
       {lastLabel.current != null && (
-        <p style={{ ...TOOLTIP_LABEL_STYLE, margin: '0 0 4px' }}>
+        <p style={{ ...tooltipDefaults.labelStyle, margin: '0 0 4px' }}>
           {lastLabel.current}
         </p>
       )}
@@ -162,7 +158,7 @@ export function PersistentTooltip({
           <li
             key={entry.dataKey?.toString() ?? idx}
             style={{
-              ...TOOLTIP_ITEM_STYLE,
+              ...tooltipDefaults.itemStyle,
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -175,7 +171,7 @@ export function PersistentTooltip({
                 width: 10,
                 height: 10,
                 backgroundColor:
-                  (entry.color as string) ?? 'var(--chart-tooltip-item)',
+                  (entry.color as string) ?? colors.skyBlue,
                 flexShrink: 0,
               }}
             />

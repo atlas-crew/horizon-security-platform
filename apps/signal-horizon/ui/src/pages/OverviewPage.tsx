@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
+import type { GeometryCollection, Topology } from 'topojson-specification';
 import land from 'world-atlas/land-110m.json';
 import {
   Shield,
@@ -44,18 +45,16 @@ import {
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
 
+const LAND_TOPOLOGY = land as unknown as Topology<{ land: GeometryCollection }>;
+const LAND_GEO = feature(LAND_TOPOLOGY, LAND_TOPOLOGY.objects.land);
+
 function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRoute[] }) {
   const W = 920;
   const H = 520;
 
-  const landGeo = useMemo(() => {
-    const topo = land as any;
-    return feature(topo, topo.objects.land);
-  }, []);
-
   const projection = useMemo(
-    () => geoNaturalEarth1().fitSize([W, H], landGeo as any),
-    [landGeo],
+    () => geoNaturalEarth1().fitSize([W, H], LAND_GEO),
+    [],
   );
 
   const path = useMemo(() => geoPath(projection), [projection]);
@@ -69,7 +68,8 @@ function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRo
     return colors.skyBlue;
   };
 
-  const projPoint = (p: AttackPoint) => projection([p.lon, p.lat]) as [number, number] | null;
+  const projPoint = (p: AttackPoint): [number, number] | null =>
+    projection([p.lon, p.lat]);
 
   const routePath = (from: AttackPoint, to: AttackPoint) => {
     const a = projPoint(from);
@@ -93,7 +93,7 @@ function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRo
         preserveAspectRatio="xMidYMid meet"
       >
         <path
-          d={path(landGeo as any) ?? ''}
+          d={path(LAND_GEO) ?? ''}
           fill="rgba(255,255,255,0.04)"
           stroke="rgba(255,255,255,0.06)"
         />
@@ -271,16 +271,19 @@ export default function OverviewPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-	              {mapFilters.map((filter) => (
-	                <Button
-	                  key={filter}
-	                  variant={activeFilter === filter ? 'primary' : 'ghost'}
-	                  size="sm"
-	                  onClick={() => setActiveFilter(filter)}
-	                  className={clsx(activeFilter === filter && 'border-link')}
-	                  style={{ fontSize: '12px', height: '28px', padding: '0 12px' }}
-	                >{filter}</Button>
-	              ))}
+              {mapFilters.map((filter) => (
+                <Button
+                  key={filter}
+                  variant={activeFilter === filter ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setActiveFilter(filter)}
+                  aria-pressed={activeFilter === filter}
+                  className={clsx(activeFilter === filter && 'border-link')}
+                  style={{ fontSize: '12px', height: '28px', padding: '0 12px' }}
+                >
+                  {filter}
+                </Button>
+              ))}
             </div>
           </div>
           <div className="card-body relative z-10">

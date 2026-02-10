@@ -4,181 +4,676 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Synapse Admin Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
         --navy: #001e62;
         --blue: #0057b7;
+        --sky: #529eec;
         --magenta: #d62598;
-        --ink: #0b1220;
-        --muted: #5b6b86;
-        --bg: #f7f8fb;
-        --panel: #ffffff;
-        --border: rgba(0, 30, 98, 0.15);
+        --green: #00b140;
+        --orange: #e35205;
+        --red: #ef3340;
+        --bg: #09090b;
+        --surface: #121212;
+        --surface-subtle: #18181b;
+        --border: rgba(244,244,245,0.1);
+        --border-focus: rgba(82,158,236,0.5);
+        --ink: #f4f4f5;
+        --ink-secondary: #a1a1aa;
+        --ink-muted: #71717a;
+        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
       }
-      * { box-sizing: border-box; border-radius: 0 !important; }
-      body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-        color: var(--ink);
-        background: linear-gradient(135deg, rgba(0, 87, 183, 0.08), rgba(214, 37, 152, 0.05)) , var(--bg);
+      * { box-sizing: border-box; margin: 0; border-radius: 0 !important; }
+      body { font-family: 'Rubik', sans-serif; color: var(--ink); background: var(--bg); font-size: 14px; }
+      a { color: var(--sky); text-decoration: none; }
+      a:hover { color: #7cbaff; }
+
+      /* Layout */
+      .shell { display: flex; min-height: 100vh; }
+      .sidebar {
+        width: 220px; flex-shrink: 0; background: var(--surface);
+        border-right: 1px solid var(--border); padding: 20px 0;
+        display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
       }
-      header {
-        padding: 24px;
-        border-bottom: 1px solid var(--border);
-        background: #fff;
+      .sidebar-brand { padding: 0 16px 20px; border-bottom: 1px solid var(--border); }
+      .sidebar-brand h1 { font-size: 15px; font-weight: 500; color: var(--ink); letter-spacing: 0.02em; }
+      .sidebar-brand .sub { font-size: 10px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.06em; }
+      .sidebar nav { padding: 12px 0; flex: 1; overflow-y: auto; }
+      .nav-section { padding: 0 16px; margin-bottom: 16px; }
+      .nav-section-label { font-size: 10px; font-weight: 700; color: var(--ink-muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+      .nav-item {
+        display: block; padding: 7px 12px; font-size: 13px; color: var(--ink-secondary);
+        cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+        font-family: 'Rubik', sans-serif; transition: color 0.15s, background 0.15s;
       }
-      h1 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--navy);
+      .nav-item:hover { color: var(--ink); background: var(--surface-subtle); }
+      .nav-item.active { color: var(--sky); background: rgba(82,158,236,0.08); border-left: 2px solid var(--sky); margin-left: -2px; }
+      .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
+      .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; }
+      .status-dot.ok { background: var(--green); }
+      .status-dot.err { background: var(--red); }
+
+      .content { flex: 1; padding: 24px 32px; overflow-y: auto; }
+
+      /* Panels */
+      .panel { display: none; }
+      .panel.active { display: block; }
+      .panel-header { margin-bottom: 20px; }
+      .panel-header h2 { font-size: 22px; font-weight: 300; }
+      .panel-header p { font-size: 13px; color: var(--ink-secondary); margin-top: 4px; }
+
+      /* Cards */
+      .card { background: var(--surface); border: 1px solid var(--border); padding: 16px; margin-bottom: 16px; }
+      .card-title { font-size: 11px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+      .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+      /* Stat cards */
+      .stat { text-align: center; padding: 20px 16px; }
+      .stat-value { font-size: 28px; font-weight: 300; font-family: var(--mono); }
+      .stat-label { font-size: 11px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.06em; }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 14px; border: 1px solid var(--border); background: var(--surface);
+        color: var(--ink); font-family: 'Rubik', sans-serif; font-size: 12px; font-weight: 500;
+        cursor: pointer; transition: all 0.15s;
       }
-      .sub {
-        margin-top: 8px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
+      .btn:hover { border-color: var(--sky); color: var(--sky); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn.primary { border-color: rgba(0,87,183,0.5); color: var(--sky); }
+      .btn.primary:hover { background: rgba(0,87,183,0.1); }
+      .btn.danger { border-color: rgba(214,37,152,0.5); color: var(--magenta); }
+      .btn.danger:hover { background: rgba(214,37,152,0.08); }
+      .btn.success { border-color: rgba(0,177,64,0.4); color: var(--green); }
+      .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      /* Forms */
+      .field { margin-bottom: 12px; }
+      .field label { display: block; font-size: 11px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0.06em; margin-bottom: 4px; text-transform: uppercase; }
+      .field input, .field select, .field textarea {
+        width: 100%; padding: 8px 10px; border: 1px solid var(--border); background: var(--bg);
+        color: var(--ink); font-family: var(--mono); font-size: 12px; outline: none;
       }
-      main {
-        padding: 24px;
-        max-width: 980px;
+      .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--border-focus); }
+      .field textarea { min-height: 80px; resize: vertical; }
+      .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+      .toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--sky); }
+
+      /* Output */
+      pre.output {
+        padding: 12px; border: 1px solid var(--border); background: var(--bg);
+        color: #a1a1aa; font-family: var(--mono); font-size: 11px; line-height: 1.5;
+        overflow: auto; max-height: 300px; white-space: pre-wrap; word-break: break-all;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 16px;
+      pre.output.ok { border-color: rgba(0,177,64,0.3); }
+      pre.output.err { border-color: rgba(239,51,64,0.3); }
+
+      /* Table */
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { text-align: left; font-size: 10px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+      td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--ink-secondary); }
+      tr:hover td { background: var(--surface-subtle); }
+      .mono { font-family: var(--mono); font-size: 12px; }
+      .tag { display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 600; border: 1px solid; }
+      .tag-green { color: var(--green); border-color: rgba(0,177,64,0.3); }
+      .tag-red { color: var(--red); border-color: rgba(239,51,64,0.3); }
+      .tag-blue { color: var(--sky); border-color: rgba(82,158,236,0.3); }
+      .tag-orange { color: var(--orange); border-color: rgba(227,82,5,0.3); }
+
+      /* Toast */
+      .toast {
+        position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+        background: var(--surface); border: 1px solid var(--border);
+        font-size: 12px; color: var(--ink); z-index: 100;
+        transform: translateY(80px); opacity: 0; transition: all 0.3s;
       }
-      @media (min-width: 860px) {
-        .grid { grid-template-columns: 1fr 1fr; }
+      .toast.show { transform: translateY(0); opacity: 1; }
+      .toast.ok { border-color: rgba(0,177,64,0.4); color: var(--green); }
+      .toast.err { border-color: rgba(239,51,64,0.4); color: var(--red); }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .sidebar { width: 56px; overflow: hidden; }
+        .sidebar-brand h1, .sidebar-brand .sub, .nav-section-label, .nav-item span { display: none; }
+        .content { padding: 16px; }
+        .card-grid { grid-template-columns: 1fr; }
+        .field-row { grid-template-columns: 1fr; }
       }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        padding: 16px;
-      }
-      .card h2 {
-        margin: 0 0 10px 0;
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--navy);
-      }
-      .row { display: flex; gap: 10px; flex-wrap: wrap; }
-      button {
-        appearance: none;
-        border: 1px solid var(--border);
-        background: #fff;
-        color: var(--navy);
-        padding: 10px 12px;
-        font-weight: 700;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        cursor: pointer;
-      }
-      button.primary {
-        border-color: rgba(0, 87, 183, 0.45);
-      }
-      button.danger {
-        border-color: rgba(214, 37, 152, 0.55);
-        color: var(--magenta);
-      }
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      pre {
-        margin: 12px 0 0 0;
-        padding: 12px;
-        border: 1px solid var(--border);
-        background: #0b1020;
-        color: #e6edf7;
-        overflow: auto;
-        font-size: 12px;
-        line-height: 1.4;
-      }
-      .hint { color: var(--muted); font-size: 12px; }
-      a { color: var(--blue); }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Synapse Admin Console</h1>
-      <div class="sub">Local UI for admin endpoints</div>
-    </header>
-    <main>
-      <div class="grid">
-        <section class="card">
-          <h2>Actions</h2>
-          <div class="row">
-            <button class="primary" data-method="POST" data-path="/reload">Reload</button>
-            <button class="danger" data-method="POST" data-path="/restart">Restart</button>
-            <button data-method="POST" data-path="/test">Test Config</button>
-          </div>
-          <div class="hint" style="margin-top: 10px;">
-            These calls hit the admin server directly. In dev mode, this file is loaded from disk at
-            <code>assets/admin_console.html</code>.
-          </div>
-          <pre id="out-actions">{}</pre>
-        </section>
-
-        <section class="card">
-          <h2>Read</h2>
-          <div class="row">
-            <button data-method="GET" data-path="/health">Health</button>
-            <button data-method="GET" data-path="/stats">Stats</button>
-            <button data-method="GET" data-path="/sites">Sites</button>
-            <button data-method="GET" data-path="/metrics">Metrics</button>
-          </div>
-          <pre id="out-read">{}</pre>
-        </section>
-      </div>
-
-      <section class="card" style="margin-top: 16px;">
-        <h2>Console</h2>
-        <div class="hint">
-          Tip: open devtools network tab. Metrics endpoint returns plaintext.
+    <div class="shell">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <h1>Synapse Console</h1>
+          <div class="sub">Admin &middot; <span id="admin-port"></span></div>
         </div>
-      </section>
-    </main>
+        <nav>
+          <div class="nav-section">
+            <div class="nav-section-label">Monitor</div>
+            <button class="nav-item active" data-panel="overview">Overview</button>
+            <button class="nav-item" data-panel="waf">WAF Stats</button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">Configure</div>
+            <button class="nav-item" data-panel="detection">Detection</button>
+            <button class="nav-item" data-panel="rate-limit">Rate Limiting</button>
+            <button class="nav-item" data-panel="sites">Sites</button>
+            <button class="nav-item" data-panel="tls">TLS</button>
+            <button class="nav-item" data-panel="modules">Modules</button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">Admin</div>
+            <button class="nav-item" data-panel="actions">Actions</button>
+            <button class="nav-item" data-panel="raw">Raw API</button>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="status-dot" id="health-dot"></span>
+          <span style="font-size:11px;color:var(--ink-muted)" id="health-text">...</span>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="content">
+
+        <!-- Overview Panel -->
+        <div class="panel active" id="panel-overview">
+          <div class="panel-header">
+            <h2>Overview</h2>
+            <p>Sensor health and key metrics</p>
+          </div>
+          <div class="card-grid" id="stats-grid"></div>
+          <div class="card" style="margin-top:8px">
+            <div class="card-title">Active Configuration</div>
+            <pre class="output" id="config-out" style="max-height:400px">Loading...</pre>
+          </div>
+        </div>
+
+        <!-- WAF Stats Panel -->
+        <div class="panel" id="panel-waf">
+          <div class="panel-header">
+            <h2>WAF Statistics</h2>
+            <p>Detection and blocking metrics</p>
+          </div>
+          <div class="card-grid" id="waf-stats-grid"></div>
+          <div class="card">
+            <div class="card-title">Full WAF Stats</div>
+            <pre class="output" id="waf-out">Loading...</pre>
+          </div>
+        </div>
+
+        <!-- Detection Panel -->
+        <div class="panel" id="panel-detection">
+          <div class="panel-header">
+            <h2>Detection Settings</h2>
+            <p>WAF detection categories, action mode, and thresholds</p>
+          </div>
+          <div class="card" id="detection-card">
+            <div id="detection-form"></div>
+            <div class="btn-row" style="margin-top:16px">
+              <button class="btn primary" id="detection-save">Save &amp; Reload</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rate Limiting Panel -->
+        <div class="panel" id="panel-rate-limit">
+          <div class="panel-header">
+            <h2>Rate Limiting</h2>
+            <p>Global rate limit settings</p>
+          </div>
+          <div class="card" id="ratelimit-card">
+            <div id="ratelimit-form"></div>
+            <div class="btn-row" style="margin-top:16px">
+              <button class="btn primary" id="ratelimit-save">Save &amp; Reload</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sites Panel -->
+        <div class="panel" id="panel-sites">
+          <div class="panel-header">
+            <h2>Virtual Hosts</h2>
+            <p>Site-level WAF, rate limiting, and upstream configuration</p>
+          </div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div class="card-title" style="margin-bottom:0">Sites</div>
+              <button class="btn primary" id="sites-refresh">Refresh</button>
+            </div>
+            <div id="sites-table-wrap">
+              <table>
+                <thead><tr><th>Hostname</th><th>Upstream</th><th>WAF</th><th>Rate Limit</th><th></th></tr></thead>
+                <tbody id="sites-body"><tr><td colspan="5" style="color:var(--ink-muted)">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" id="site-detail" style="display:none">
+            <div class="card-title">Site Detail</div>
+            <pre class="output" id="site-detail-out"></pre>
+          </div>
+        </div>
+
+        <!-- TLS Panel -->
+        <div class="panel" id="panel-tls">
+          <div class="panel-header">
+            <h2>TLS Configuration</h2>
+            <p>Certificate and protocol settings</p>
+          </div>
+          <div class="card" id="tls-card">
+            <div id="tls-form"></div>
+            <div class="btn-row" style="margin-top:16px">
+              <button class="btn primary" id="tls-save">Save &amp; Reload</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modules Panel -->
+        <div class="panel" id="panel-modules">
+          <div class="panel-header">
+            <h2>Modules</h2>
+            <p>DLP, Tarpit, Crawler detection, and other subsystem config</p>
+          </div>
+          <div class="card-grid" id="modules-grid"></div>
+        </div>
+
+        <!-- Actions Panel -->
+        <div class="panel" id="panel-actions">
+          <div class="panel-header">
+            <h2>Admin Actions</h2>
+            <p>Operational controls for the sensor</p>
+          </div>
+          <div class="card">
+            <div class="card-title">Operations</div>
+            <div class="btn-row">
+              <button class="btn primary" data-action="POST:/reload">Reload Config</button>
+              <button class="btn" data-action="POST:/test">Test Config</button>
+              <button class="btn danger" data-action="POST:/restart">Restart</button>
+            </div>
+            <pre class="output" id="action-out" style="margin-top:12px">{}</pre>
+          </div>
+          <div class="card">
+            <div class="card-title">Config Import / Export</div>
+            <div class="btn-row">
+              <button class="btn" data-action="GET:/_sensor/config/export">Export Config</button>
+            </div>
+            <pre class="output" id="export-out" style="margin-top:12px"></pre>
+          </div>
+        </div>
+
+        <!-- Raw API Panel -->
+        <div class="panel" id="panel-raw">
+          <div class="panel-header">
+            <h2>Raw API</h2>
+            <p>Directly query any admin endpoint</p>
+          </div>
+          <div class="card">
+            <div class="field-row">
+              <div class="field">
+                <label>Method</label>
+                <select id="raw-method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+              </div>
+              <div class="field">
+                <label>Path</label>
+                <input id="raw-path" type="text" placeholder="/health" value="/health" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Body (JSON, optional)</label>
+              <textarea id="raw-body" placeholder="{}"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn primary" id="raw-send">Send</button>
+            </div>
+            <pre class="output" id="raw-out" style="margin-top:12px"></pre>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
 
     <script>
-      async function call(path, method) {
-        const res = await fetch(path, { method });
-        const contentType = (res.headers.get('content-type') || '').toLowerCase();
-        const text = await res.text();
-        if (contentType.includes('json')) {
-          try { return JSON.parse(text); } catch { return { raw: text }; }
+    /* ── Helpers ─────────────────────────────────────────── */
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    async function api(path, method = 'GET', body) {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+      }
+      const res = await fetch(path, opts);
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      const text = await res.text();
+      let data;
+      if (ct.includes('json')) { try { data = JSON.parse(text); } catch { data = text; } } else { data = text; }
+      if (!res.ok) throw { status: res.status, data };
+      return data;
+    }
+
+    function toast(msg, type = 'ok') {
+      const el = $('#toast');
+      el.textContent = msg;
+      el.className = 'toast show ' + type;
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    function pretty(data) {
+      return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    }
+
+    function setOutput(id, data, ok = true) {
+      const el = $(id);
+      el.textContent = pretty(data);
+      el.className = 'output ' + (ok ? 'ok' : 'err');
+    }
+
+    function statCard(label, value, color) {
+      const c = color || 'var(--ink)';
+      return `<div class="card stat"><div class="stat-value" style="color:${c}">${value}</div><div class="stat-label">${label}</div></div>`;
+    }
+
+    function buildField(key, value, parentKey) {
+      const id = parentKey ? `${parentKey}.${key}` : key;
+      if (typeof value === 'boolean') {
+        return `<div class="field"><label class="toggle"><input type="checkbox" data-key="${id}" ${value ? 'checked' : ''} /> ${key}</label></div>`;
+      }
+      if (typeof value === 'number') {
+        return `<div class="field"><label>${key}</label><input type="number" data-key="${id}" value="${value}" /></div>`;
+      }
+      if (typeof value === 'string') {
+        return `<div class="field"><label>${key}</label><input type="text" data-key="${id}" value="${value}" /></div>`;
+      }
+      return '';
+    }
+
+    function collectFields(container) {
+      const obj = {};
+      container.querySelectorAll('[data-key]').forEach(el => {
+        const keys = el.getAttribute('data-key').split('.');
+        let target = obj;
+        for (let i = 0; i < keys.length - 1; i++) {
+          target[keys[i]] = target[keys[i]] || {};
+          target = target[keys[i]];
         }
-        return { status: res.status, text };
-      }
+        const k = keys[keys.length - 1];
+        if (el.type === 'checkbox') target[k] = el.checked;
+        else if (el.type === 'number') target[k] = parseFloat(el.value);
+        else target[k] = el.value;
+      });
+      return obj;
+    }
 
-      function setOut(id, payload) {
-        const el = document.getElementById(id);
-        el.textContent = JSON.stringify(payload, null, 2);
-      }
+    /* ── Navigation ─────────────────────────────────────── */
+    $$('.nav-item[data-panel]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        $$('.panel').forEach(p => p.classList.remove('active'));
+        $(`#panel-${btn.dataset.panel}`).classList.add('active');
+      });
+    });
 
-      document.querySelectorAll('button[data-path]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const path = btn.getAttribute('data-path');
-          const method = btn.getAttribute('data-method') || 'GET';
-          const outId = method === 'GET' ? 'out-read' : 'out-actions';
-          btn.disabled = true;
-          try {
-            setOut(outId, { pending: true, method, path });
-            const data = await call(path, method);
-            setOut(outId, { ok: true, method, path, data });
-          } catch (err) {
-            setOut(outId, { ok: false, method, path, error: String(err) });
-          } finally {
-            btn.disabled = false;
+    /* ── Overview ────────────────────────────────────────── */
+    async function loadOverview() {
+      try {
+        const [health, stats, config] = await Promise.all([
+          api('/health'), api('/stats'), api('/config')
+        ]);
+        const dot = $('#health-dot');
+        const txt = $('#health-text');
+        dot.className = 'status-dot ' + (health.healthy !== false ? 'ok' : 'err');
+        txt.textContent = health.healthy !== false ? 'Healthy' : 'Unhealthy';
+
+        const grid = $('#stats-grid');
+        const s = stats.data || stats;
+        grid.innerHTML = [
+          statCard('Total Requests', (s.total_requests ?? s.totalRequests ?? 0).toLocaleString(), 'var(--sky)'),
+          statCard('Blocked', (s.blocked_requests ?? s.blockedRequests ?? 0).toLocaleString(), 'var(--magenta)'),
+          statCard('Rate Limited', (s.rate_limited ?? s.rateLimited ?? 0).toLocaleString(), 'var(--orange)'),
+          statCard('Active Connections', (s.active_connections ?? s.activeConnections ?? 0).toLocaleString(), 'var(--green)'),
+        ].join('');
+
+        setOutput('#config-out', config);
+      } catch (e) {
+        $('#health-dot').className = 'status-dot err';
+        $('#health-text').textContent = 'Error';
+        setOutput('#config-out', e.data || e.message || e, false);
+      }
+    }
+
+    /* ── WAF Stats ───────────────────────────────────────── */
+    async function loadWafStats() {
+      try {
+        const data = await api('/waf/stats');
+        const s = data.data || data;
+        const grid = $('#waf-stats-grid');
+        grid.innerHTML = [
+          statCard('SQLi Detections', (s.sqli ?? s.sqli_detections ?? 0).toLocaleString(), 'var(--red)'),
+          statCard('XSS Detections', (s.xss ?? s.xss_detections ?? 0).toLocaleString(), 'var(--orange)'),
+          statCard('Path Traversal', (s.path_traversal ?? 0).toLocaleString(), 'var(--magenta)'),
+          statCard('Cmd Injection', (s.command_injection ?? s.cmd_injection ?? 0).toLocaleString(), 'var(--sky)'),
+        ].join('');
+        setOutput('#waf-out', data);
+      } catch (e) {
+        setOutput('#waf-out', e.data || e, false);
+      }
+    }
+
+    /* ── Detection Config ────────────────────────────────── */
+    async function loadDetection() {
+      try {
+        const cfg = await api('/config');
+        const d = cfg.detection || cfg.data?.detection || {};
+        const form = $('#detection-form');
+        form.innerHTML = [
+          buildField('sqli', d.sqli ?? true, 'detection'),
+          buildField('xss', d.xss ?? true, 'detection'),
+          buildField('path_traversal', d.path_traversal ?? true, 'detection'),
+          buildField('command_injection', d.command_injection ?? true, 'detection'),
+          `<div class="field"><label>Action</label><select data-key="detection.action"><option ${d.action==='block'?'selected':''}>block</option><option ${d.action==='log'?'selected':''}>log</option><option ${d.action==='challenge'?'selected':''}>challenge</option></select></div>`,
+          buildField('block_status', d.block_status ?? 403, 'detection'),
+        ].join('');
+      } catch (e) {
+        toast('Failed to load detection config', 'err');
+      }
+    }
+    $('#detection-save').addEventListener('click', async () => {
+      try {
+        const fields = collectFields($('#detection-card'));
+        await api('/config', 'POST', fields);
+        await api('/reload', 'POST');
+        toast('Detection config saved and reloaded');
+      } catch (e) { toast('Save failed: ' + pretty(e.data || e), 'err'); }
+    });
+
+    /* ── Rate Limiting Config ────────────────────────────── */
+    async function loadRateLimit() {
+      try {
+        const cfg = await api('/config');
+        const r = cfg.rate_limit || cfg.data?.rate_limit || {};
+        const form = $('#ratelimit-form');
+        form.innerHTML = [
+          buildField('enabled', r.enabled ?? true, 'rate_limit'),
+          buildField('rps', r.rps ?? 10000, 'rate_limit'),
+        ].join('');
+      } catch (e) { toast('Failed to load rate limit config', 'err'); }
+    }
+    $('#ratelimit-save').addEventListener('click', async () => {
+      try {
+        const fields = collectFields($('#ratelimit-card'));
+        await api('/config', 'POST', fields);
+        await api('/reload', 'POST');
+        toast('Rate limit config saved and reloaded');
+      } catch (e) { toast('Save failed: ' + pretty(e.data || e), 'err'); }
+    });
+
+    /* ── Sites ───────────────────────────────────────────── */
+    async function loadSites() {
+      try {
+        const data = await api('/sites');
+        const sites = data.data || data.sites || data || [];
+        const body = $('#sites-body');
+        if (!Array.isArray(sites) || sites.length === 0) {
+          body.innerHTML = '<tr><td colspan="5" style="color:var(--ink-muted)">No sites configured</td></tr>';
+          return;
+        }
+        body.innerHTML = sites.map(s => {
+          const wafTag = s.waf_enabled !== false
+            ? '<span class="tag tag-green">On</span>'
+            : '<span class="tag tag-red">Off</span>';
+          const rl = s.rate_limit || s.rateLimit;
+          const rlTag = rl
+            ? `<span class="tag tag-blue">${rl.rps || rl} rps</span>`
+            : '<span class="tag tag-orange">None</span>';
+          const host = s.hostname || s.host || s.name || '—';
+          const upstream = s.upstream || s.backend || '—';
+          return `<tr>
+            <td class="mono">${host}</td>
+            <td class="mono" style="font-size:11px">${typeof upstream === 'object' ? JSON.stringify(upstream) : upstream}</td>
+            <td>${wafTag}</td>
+            <td>${rlTag}</td>
+            <td><button class="btn" style="padding:4px 8px;font-size:10px" onclick="viewSite('${host}')">View</button></td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        $('#sites-body').innerHTML = `<tr><td colspan="5" style="color:var(--red)">${e.data?.message || e.message || 'Failed to load'}</td></tr>`;
+      }
+    }
+    window.viewSite = async (hostname) => {
+      try {
+        const data = await api(`/sites/${encodeURIComponent(hostname)}`);
+        setOutput('#site-detail-out', data);
+        $('#site-detail').style.display = 'block';
+      } catch (e) {
+        setOutput('#site-detail-out', e.data || e, false);
+        $('#site-detail').style.display = 'block';
+      }
+    };
+    $('#sites-refresh').addEventListener('click', loadSites);
+
+    /* ── TLS Config ──────────────────────────────────────── */
+    async function loadTls() {
+      try {
+        const cfg = await api('/config');
+        const t = cfg.tls || cfg.data?.tls || {};
+        const form = $('#tls-form');
+        form.innerHTML = [
+          buildField('enabled', t.enabled ?? false, 'tls'),
+          buildField('cert_path', t.cert_path || '', 'tls'),
+          buildField('key_path', t.key_path || '', 'tls'),
+          `<div class="field"><label>Min TLS Version</label><select data-key="tls.min_version"><option ${t.min_version==='1.2'?'selected':''}>1.2</option><option ${t.min_version==='1.3'?'selected':''}>1.3</option></select></div>`,
+        ].join('');
+      } catch (e) { toast('Failed to load TLS config', 'err'); }
+    }
+    $('#tls-save').addEventListener('click', async () => {
+      try {
+        const fields = collectFields($('#tls-card'));
+        await api('/config', 'POST', fields);
+        await api('/reload', 'POST');
+        toast('TLS config saved and reloaded');
+      } catch (e) { toast('Save failed: ' + pretty(e.data || e), 'err'); }
+    });
+
+    /* ── Modules ─────────────────────────────────────────── */
+    const MODULE_ENDPOINTS = [
+      { key: 'dlp', label: 'Data Loss Prevention', path: '/_sensor/config/dlp' },
+      { key: 'tarpit', label: 'Tarpit', path: '/_sensor/config/tarpit' },
+      { key: 'crawler', label: 'Crawler Detection', path: '/_sensor/config/crawler' },
+      { key: 'entity', label: 'Entity Tracking', path: '/_sensor/config/entity' },
+      { key: 'integrations', label: 'Integrations', path: '/_sensor/config/integrations' },
+    ];
+
+    async function loadModules() {
+      const grid = $('#modules-grid');
+      grid.innerHTML = '';
+      for (const mod of MODULE_ENDPOINTS) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<div class="card-title">${mod.label}</div><div id="mod-${mod.key}-form"></div>
+          <div class="btn-row" style="margin-top:12px"><button class="btn primary mod-save" data-mod="${mod.key}" data-path="${mod.path}">Save</button></div>`;
+        grid.appendChild(card);
+        try {
+          const data = await api(mod.path);
+          const cfg = data.data || data;
+          const form = card.querySelector(`#mod-${mod.key}-form`);
+          if (typeof cfg === 'object' && cfg !== null) {
+            form.innerHTML = Object.entries(cfg)
+              .filter(([, v]) => typeof v !== 'object')
+              .map(([k, v]) => buildField(k, v, mod.key))
+              .join('');
+          } else {
+            form.innerHTML = `<pre class="output">${pretty(cfg)}</pre>`;
           }
+        } catch {
+          card.querySelector(`#mod-${mod.key}-form`).innerHTML = '<span style="color:var(--ink-muted);font-size:12px">Not available</span>';
+        }
+      }
+      grid.querySelectorAll('.mod-save').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const key = btn.dataset.mod;
+          const path = btn.dataset.path;
+          const fields = collectFields(btn.closest('.card'));
+          const payload = fields[key] || fields;
+          try {
+            await api(path, 'PUT', payload);
+            toast(`${key} config saved`);
+          } catch (e) { toast(`Save failed: ${pretty(e.data || e)}`, 'err'); }
         });
       });
+    }
+
+    /* ── Admin Actions ───────────────────────────────────── */
+    $$('[data-action]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const [method, path] = btn.dataset.action.split(':');
+        const outId = path.includes('export') ? '#export-out' : '#action-out';
+        btn.disabled = true;
+        try {
+          const data = await api(path, method);
+          setOutput(outId, data, true);
+          toast(`${method} ${path} succeeded`);
+        } catch (e) {
+          setOutput(outId, e.data || e, false);
+          toast(`${method} ${path} failed`, 'err');
+        } finally { btn.disabled = false; }
+      });
+    });
+
+    /* ── Raw API ─────────────────────────────────────────── */
+    $('#raw-send').addEventListener('click', async () => {
+      const method = $('#raw-method').value;
+      const path = $('#raw-path').value;
+      const bodyText = $('#raw-body').value.trim();
+      try {
+        const body = bodyText && method !== 'GET' ? JSON.parse(bodyText) : undefined;
+        const data = await api(path, method, body);
+        setOutput('#raw-out', data, true);
+      } catch (e) {
+        setOutput('#raw-out', e.data || e.message || e, false);
+      }
+    });
+
+    /* ── Init ────────────────────────────────────────────── */
+    $('#admin-port').textContent = location.host;
+    loadOverview();
+    loadWafStats();
+    loadDetection();
+    loadRateLimit();
+    loadSites();
+    loadTls();
+    loadModules();
+    // Auto-refresh overview every 30s
+    setInterval(loadOverview, 30000);
     </script>
   </body>
 </html>
-

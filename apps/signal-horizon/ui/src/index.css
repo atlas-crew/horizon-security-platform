@@ -1727,3 +1727,28 @@
   background: var(--ac-magenta, #D62598);
   clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); /* Pentagon = notable */
 }
+
+/* =========================================
+   UI LIBRARY KEYFRAMES
+   Used by @/ui components (StatusBadge, Spinner, Modal, etc.)
+   ========================================= */
+
+@keyframes sh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes sh-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sh-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

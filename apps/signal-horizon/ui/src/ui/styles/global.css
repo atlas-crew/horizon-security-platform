@@ -1,0 +1,151 @@
+/**
+ * Signal Horizon Global Styles
+ * ============================
+ * Import this once at app root.
+ * Enforces brand resets, keyframes, and base typography.
+ *
+ * Usage:
+ *   import '@/ui/styles/global.css';
+ */
+
+/* ─── Font Import ──────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
+
+/* ─── Brand Reset ──────────────────────────────────────────────────────────── */
+
+* {
+  border-radius: 0 !important;
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+}
+
+body {
+  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #F0F4F8;
+  background: #000A1A;
+  margin: 0;
+  padding: 0;
+  hyphens: none;
+}
+
+/* ─── Typography ───────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  font-weight: 300;
+  margin: 0 0 16px 0;
+}
+
+h5, h6 {
+  font-weight: 500;
+  margin: 0 0 12px 0;
+}
+
+h1 { font-size: 3rem; line-height: 56px; }
+h2 { font-size: 2rem; line-height: 40px; }
+h3 { font-size: 1.75rem; line-height: 36px; }
+h4 { font-size: 1.5rem; line-height: 32px; }
+h5 { font-size: 1.25rem; line-height: 28px; }
+h6 { font-size: 1rem; line-height: 24px; }
+
+p { margin: 0 0 16px 0; }
+
+a {
+  color: #529EEC;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+a:hover { color: #7CBAFF; }
+
+/* ─── Scrollbar ────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 0 !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Form Resets ──────────────────────────────────────────────────────────── */
+
+input, select, textarea, button {
+  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+  border-radius: 0 !important;
+}
+
+input, select, textarea {
+  font-weight: 400;
+  font-size: 16px;
+  padding: 12px 16px;
+  border: 2px solid #003EC8;
+  background: #0A1A3A;
+  color: #F0F4F8;
+  transition: border-color 0.15s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #529EEC;
+  outline: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #7F7F7F;
+}
+
+/* ─── Table Resets ─────────────────────────────────────────────────────────── */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ─── Keyframes ────────────────────────────────────────────────────────────── */
+
+@keyframes sh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes sh-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sh-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Utility Classes ──────────────────────────────────────────────────────── */
+
+.sh-fade-in { animation: sh-fade-in 0.3s ease both; }
+.sh-slide-in { animation: sh-slide-in 0.3s ease both; }
+.sh-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }

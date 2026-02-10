@@ -1,6 +1,8 @@
 /**
  * Threat Overview Page
  * Live attack map, threat feed, sensor status, active campaigns
+ *
+ * Migrated to @/ui component library for brand consistency.
  */
 
 import { motion } from 'framer-motion';
@@ -31,6 +33,14 @@ import {
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
 import { useRelativeTime } from '../hooks/useRelativeTime';
+
+// ─── @/ui library imports ────────────────────────────────────────────────────
+import {
+  SectionHeader,
+  KpiStrip,
+  Button,
+  colors,
+} from '@/ui';
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
@@ -63,7 +73,6 @@ export default function OverviewPage() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const lastUpdatedText = useRelativeTime(lastUpdated);
 
-  // Track when data finishes loading
   useEffect(() => {
     if (!isLoading && (campaigns.length > 0 || threats.length > 0 || alerts.length > 0)) {
       setLastUpdated(Date.now());
@@ -71,29 +80,16 @@ export default function OverviewPage() {
   }, [isLoading, campaigns.length, threats.length, alerts.length]);
 
   const filteredMapPoints = useMemo(() => {
-    if (activeFilter === 'Top Bots (1h)') {
-      return mapPoints.filter((point) => point.category === 'bot');
-    }
-
-    if (activeFilter === 'Cross-Tenant') {
-      return mapPoints.filter((point) => point.scope === 'fleet');
-    }
-
+    if (activeFilter === 'Top Bots (1h)') return mapPoints.filter((p) => p.category === 'bot');
+    if (activeFilter === 'Cross-Tenant') return mapPoints.filter((p) => p.scope === 'fleet');
     return mapPoints;
   }, [activeFilter, mapPoints]);
 
   const filteredMapRoutes = useMemo(() => {
-    const visiblePoints = new Set(filteredMapPoints.map((point) => point.id));
-    return mapRoutes.filter((route) => {
-      if (!visiblePoints.has(route.from) || !visiblePoints.has(route.to)) {
-        return false;
-      }
-      if (activeFilter === 'Top Bots (1h)') {
-        return route.category === 'bot';
-      }
-      if (activeFilter === 'Cross-Tenant') {
-        return true;
-      }
+    const visible = new Set(filteredMapPoints.map((p) => p.id));
+    return mapRoutes.filter((r) => {
+      if (!visible.has(r.from) || !visible.has(r.to)) return false;
+      if (activeFilter === 'Top Bots (1h)') return r.category === 'bot';
       return true;
     });
   }, [activeFilter, filteredMapPoints, mapRoutes]);
@@ -103,20 +99,26 @@ export default function OverviewPage() {
     return [...threats]
       .sort((a, b) => b.hitCount - a.hitCount)
       .slice(0, 5)
-      .map((threat) => ({ label: threat.indicator, value: threat.hitCount }));
+      .map((t) => ({ label: t.indicator, value: t.hitCount }));
   }, [threats]);
 
   const topFingerprints = useMemo(() => {
-    const fingerprintThreats = threats.filter((t) =>
-      t.threatType.toLowerCase().includes('fingerprint')
-    );
-    const source = fingerprintThreats.length > 0 ? fingerprintThreats : threats;
+    const fp = threats.filter((t) => t.threatType.toLowerCase().includes('fingerprint'));
+    const source = fp.length > 0 ? fp : threats;
     if (source.length === 0) return fallbackFingerprints;
     return [...source]
       .sort((a, b) => b.hitCount - a.hitCount)
       .slice(0, 5)
-      .map((threat) => ({ label: threat.indicator, value: threat.hitCount }));
+      .map((t) => ({ label: t.indicator, value: t.hitCount }));
   }, [threats]);
+
+  const kpiMetrics = useMemo(() => [
+    { label: 'Active Campaigns', value: stats.activeCampaigns, subtitle: '+2 from yesterday', borderColor: colors.red, icon: <Shield className="w-4 h-4" /> },
+    { label: 'Campaigns (24h)', value: campaigns.length, subtitle: '+4 from yesterday', borderColor: colors.orange, icon: <AlertTriangle className="w-4 h-4" /> },
+    { label: 'Blocked', value: stats.blockedIndicators, subtitle: '+12% from yesterday', borderColor: colors.green, icon: <Activity className="w-4 h-4" /> },
+    { label: 'Sensors Reporting', value: `${stats.sensorsOnline}`, subtitle: '1 sensor offline', borderColor: colors.blue, icon: <Server className="w-4 h-4" /> },
+    { label: 'API Discovery', value: stats.apiStats?.discoveryEvents ?? 0, subtitle: `${stats.apiStats?.schemaViolations ?? 0} schema changes`, borderColor: colors.purple, icon: <Database className="w-4 h-4" /> },
+  ], [stats, campaigns.length]);
 
   if (isLoading) {
     return (
@@ -129,9 +131,7 @@ export default function OverviewPage() {
         </div>
         <StatsGridSkeleton />
         <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2">
-            <CampaignListSkeleton />
-          </div>
+          <div className="col-span-2"><CampaignListSkeleton /></div>
           <AlertFeedSkeleton />
         </div>
         <TableSkeleton rows={5} />
@@ -139,114 +139,51 @@ export default function OverviewPage() {
     );
   }
 
+  const lastUpdatedSuffix = lastUpdatedText ? ` · Updated ${lastUpdatedText}` : '';
+
   return (
     <div className="p-6 space-y-6" role="main" aria-label="Threat overview dashboard">
-      {/* Header */}
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">
-            Signal Horizon &middot; Last {timeRange}
-          </p>
-          <h1 className="text-3xl font-light text-ink-primary">Threat Overview</h1>
-          <p className="text-ink-secondary mt-1">
-            Fleet threat intelligence and collective defense across {stats.sensorsOnline} sensors
-            {lastUpdatedText && (
-              <span className="ml-2 text-xs text-ink-muted">
-                &middot; Updated {lastUpdatedText}
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-outline h-10 px-4 text-xs" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </button>
-          <button className="btn-outline h-10 px-4 text-xs">
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </button>
-          <button className="btn-secondary h-10 px-4 text-xs">
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
-          </button>
-        </div>
-      </header>
+      {/* ─── Header ──────────────────────────────────────────────────── */}
+      <SectionHeader
+        eyebrow={`Signal Horizon · Last ${timeRange}`}
+        title="Threat Overview"
+        description={`Fleet threat intelligence and collective defense across ${stats.sensorsOnline} sensors${lastUpdatedSuffix}`}
+        size="h2"
+        mb="sm"
+        actions={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button variant="outlined" size="sm" icon={<RefreshCw className="w-4 h-4" />} onClick={() => refetch()}>Refresh</Button>
+            <Button variant="outlined" size="sm" icon={<Download className="w-4 h-4" />}>Export Report</Button>
+            <Button variant="secondary" size="sm" icon={<Settings className="w-4 h-4" />}>Settings</Button>
+          </div>
+        }
+      />
 
-      {/* Stats Grid */}
-      <section aria-label="Key metrics" className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <StatCard
-          icon={Shield}
-          label="Active Campaigns"
-          value={stats.activeCampaigns}
-          sublabel="+2 from yesterday"
-          tone="text-ac-red"
-          description="Coordinated attack campaigns currently being tracked across the fleet"
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Campaigns (24h)"
-          value={campaigns.length}
-          sublabel="+4 from yesterday"
-          tone="text-ac-orange"
-          description="Total number of distinct attack campaigns observed in the last 24 hours"
-        />
-        <StatCard
-          icon={Activity}
-          label="Blocked"
-          value={stats.blockedIndicators}
-          sublabel="+12% from yesterday"
-          tone="text-ac-green"
-          description="Threat indicators actively blocked across all sensors"
-        />
-        <StatCard
-          icon={Server}
-          label="Sensors Reporting"
-          value={`${stats.sensorsOnline}`}
-          sublabel="1 sensor offline"
-          tone="text-ac-blue"
-          description="Number of sensors currently connected and sending telemetry"
-        />
-        <StatCard
-          icon={Database}
-          label="API Discovery"
-          value={stats.apiStats?.discoveryEvents ?? 0}
-          sublabel={`${stats.apiStats?.schemaViolations ?? 0} schema changes`}
-          tone="text-ac-purple"
-          description="New API endpoints automatically discovered by the profiler"
-        />
-      </section>
+      {/* ─── KPI Strip ───────────────────────────────────────────────── */}
+      <KpiStrip metrics={kpiMetrics} cols={5} size="default" />
 
+      {/* ─── Attack Map + Threat Feed ────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Live Attack Map - tactical display */}
         <section className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden" aria-labelledby="attack-map-heading">
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
           <div className="card-header flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
-              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
-                Live Attack Map
-              </h2>
+              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">Live Attack Map</h2>
               {error && (
                 <span className="text-xs text-ac-orange flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Using cached data
+                  <AlertTriangle className="w-3 h-3" />Using cached data
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {mapFilters.map((filter) => (
-                <button
+                <Button
                   key={filter}
+                  variant={activeFilter === filter ? 'primary' : 'ghost'}
+                  size="sm"
                   onClick={() => setActiveFilter(filter)}
-                  className={clsx(
-                    'px-3 py-1 text-xs border transition-colors',
-                    activeFilter === filter
-                      ? 'border-link text-link bg-surface-subtle shadow-inner'
-                      : 'border-border-subtle text-ink-muted hover:text-ink-primary hover:bg-surface-subtle'
-                  )}
-                >
-                  {filter}
-                </button>
+                  style={{ fontSize: '12px', height: '28px', padding: '0 12px' }}
+                >{filter}</Button>
               ))}
             </div>
           </div>
@@ -254,8 +191,6 @@ export default function OverviewPage() {
             <AttackMap points={filteredMapPoints} routes={filteredMapRoutes} />
           </div>
         </section>
-
-        {/* Threat Trajectory Feed - Moved next to Attack Map */}
         <div className="flex flex-col h-fit">
           <ErrorBoundary fallback={<AlertFeedSkeleton />}>
             <Suspense fallback={<AlertFeedSkeleton />}>
@@ -265,17 +200,17 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Full-width Active Campaigns Row */}
+      {/* ─── Active Campaigns ────────────────────────────────────────── */}
       <section className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]" aria-labelledby="campaigns-heading">
         <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
           <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary tracking-tight">Active Campaigns</h2>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest" aria-label={`${campaigns.length} active campaigns`}>
+            <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">
               {campaigns.filter(c => c.status === 'ACTIVE').length} ACTIVE
             </span>
-            <button className="text-[10px] font-bold text-ac-blue hover:text-ac-blue-dark transition-colors tracking-widest">
+            <Button variant="ghost" size="sm" style={{ fontSize: '10px', height: '24px', letterSpacing: '0.1em' }}>
               View All Campaigns &gt;
-            </button>
+            </Button>
           </div>
         </div>
         <div className="card-body p-0">
@@ -287,33 +222,33 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* 3-Column Grid for Strategic Insights and Top Metrics */}
+      {/* ─── Strategic Insights + Top Metrics ────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Strategic Insight / Summary Card - Moved to 3-column grid */}
-        <div className="bg-ac-navy p-6 text-white relative overflow-hidden group flex flex-col justify-center min-h-[450px]">
+        {/* Strategic Insight hero */}
+        <div className="group flex flex-col justify-center min-h-[450px] relative overflow-hidden" style={{ background: colors.navy, padding: '24px' }}>
           <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
           <div className="relative z-10">
-            <div className="flex items-center gap-2 text-ac-sky-blue mb-3">
+            <div className="flex items-center gap-2 mb-3" style={{ color: colors.skyBlue }}>
               <Shield className="w-4 h-4" />
               <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Insight</span>
             </div>
-            <h3 className="text-xl font-light mb-4 tracking-tight">Fleet Vulnerability Analysis</h3>
-            <p className="text-sm text-white/70 leading-relaxed mb-6">
-              Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api. 
+            <h3 className="text-xl font-light mb-4 tracking-tight" style={{ color: '#F0F4F8' }}>Fleet Vulnerability Analysis</h3>
+            <p className="text-sm leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api.
               Edge sensors have automatically shifted to aggressive rate-limiting.
             </p>
             <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-white/50">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
                 <span>Threat Level</span>
-                <span className="text-ac-orange">Elevated</span>
+                <span style={{ color: colors.orange }}>Elevated</span>
               </div>
-              <div className="h-1 bg-white/10 w-full overflow-hidden">
-                <div className="h-full bg-ac-orange w-[65%]" />
+              <div className="h-1 w-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                <div className="h-full w-[65%]" style={{ background: colors.orange }} />
               </div>
             </div>
-            <button className="text-[10px] font-bold text-ac-magenta hover:text-ac-magenta-light transition-colors tracking-widest flex items-center gap-2">
-              Review Recommended Policies <Activity className="w-3 h-3" />
-            </button>
+            <Button variant="ghost" size="sm" iconAfter={<Activity className="w-3 h-3" />} style={{ color: colors.magenta, fontSize: '10px', letterSpacing: '0.1em', padding: 0, height: 'auto' }}>
+              Review Recommended Policies
+            </Button>
           </div>
         </div>
 
@@ -323,17 +258,14 @@ export default function OverviewPage() {
             <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Attackers (24h)</h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
-            {topAttackers.map((attacker) => (
-              <div key={attacker.label} className="flex flex-col gap-1.5">
+            {topAttackers.map((a) => (
+              <div key={a.label} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-ink-secondary truncate pr-2">{attacker.label}</span>
-                  <span className="text-ink-muted font-bold">{attacker.value.toLocaleString()}</span>
+                  <span className="text-ink-secondary truncate pr-2">{a.label}</span>
+                  <span className="text-ink-muted font-bold">{a.value.toLocaleString()}</span>
                 </div>
-                <div className="h-1 bg-surface-subtle w-full">
-                  <div 
-                    className="h-full bg-ac-blue/70"
-                    style={{ width: `${Math.min(100, (attacker.value / (topAttackers[0]?.value || 1)) * 100)}%` }} 
-                  />
+                <div className="h-1 w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-full" style={{ background: `${colors.blue}B3`, width: `${Math.min(100, (a.value / (topAttackers[0]?.value || 1)) * 100)}%` }} />
                 </div>
               </div>
             ))}
@@ -346,17 +278,14 @@ export default function OverviewPage() {
             <h2 id="fingerprints-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Fingerprints (24h)</h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
-            {topFingerprints.map((fingerprint) => (
-              <div key={fingerprint.label} className="flex flex-col gap-1.5">
+            {topFingerprints.map((f) => (
+              <div key={f.label} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-ink-secondary truncate pr-2">{fingerprint.label}</span>
-                  <span className="text-ink-muted font-bold">{fingerprint.value.toLocaleString()}</span>
+                  <span className="text-ink-secondary truncate pr-2">{f.label}</span>
+                  <span className="text-ink-muted font-bold">{f.value.toLocaleString()}</span>
                 </div>
-                <div className="h-1 bg-surface-subtle w-full">
-                  <div 
-                    className="h-full bg-ac-magenta/70"
-                    style={{ width: `${Math.min(100, (fingerprint.value / (topFingerprints[0]?.value || 1)) * 100)}%` }} 
-                  />
+                <div className="h-1 w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-full" style={{ background: `${colors.magenta}B3`, width: `${Math.min(100, (f.value / (topFingerprints[0]?.value || 1)) * 100)}%` }} />
                 </div>
               </div>
             ))}
@@ -364,282 +293,5 @@ export default function OverviewPage() {
         </section>
       </div>
     </div>
-  );
-}
-
-function AttackMap({
-  points,
-  routes,
-}: {
-  points: AttackPoint[];
-  routes: AttackRoute[];
-}) {
-  const mapWidth = 1000;
-  const mapHeight = 520;
-
-  const landPath = useMemo(() => {
-    const topology = land as unknown as Topology<{ land: GeometryCollection }>;
-    const landFeature = feature(topology, topology.objects.land);
-    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature);
-    const pathGenerator = geoPath(projection);
-    return pathGenerator(landFeature) ?? '';
-  }, [mapHeight, mapWidth]);
-
-  const projectedPoints = useMemo(() => {
-    const topology = land as unknown as Topology<{ land: GeometryCollection }>;
-    const landFeature = feature(topology, topology.objects.land);
-    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature);
-
-    return points
-      .map((point) => {
-        const projected = projection([point.lon, point.lat]);
-        if (!projected) {
-          return null;
-        }
-        const [x, y] = projected;
-        return {
-          ...point,
-          x,
-          y,
-          xPercent: (x / mapWidth) * 100,
-          yPercent: (y / mapHeight) * 100,
-        };
-      })
-      .filter(
-        (point): point is AttackPoint & {
-          x: number;
-          y: number;
-          xPercent: number;
-          yPercent: number;
-        } => Boolean(point)
-      );
-  }, [mapHeight, mapWidth, points]);
-
-  const pointLookup = useMemo(() => {
-    const map = new Map<number, (typeof projectedPoints)[number]>();
-    for (const point of projectedPoints) {
-      map.set(point.id, point);
-    }
-    return map;
-  }, [projectedPoints]);
-
-  const routesToRender = useMemo(() => {
-    return routes
-      .map((route) => {
-        const from = pointLookup.get(route.from);
-        const to = pointLookup.get(route.to);
-        if (!from || !to) return null;
-
-        const midX = (from.x + to.x) / 2;
-        const arcHeight = Math.max(30, Math.abs(from.x - to.x) * 0.15);
-        const midY = Math.max(Math.min(from.y, to.y) - arcHeight, 16);
-        const path = `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`;
-        return { ...route, path };
-      })
-      .filter((route): route is AttackRoute & { path: string } => Boolean(route));
-  }, [pointLookup, routes]);
-
-  return (
-    <div
-      className="relative h-72 overflow-hidden border border-border-subtle bg-[#050505]"
-      role="img"
-      aria-label="Stylized world map with live attack activity"
-    >
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: [
-            'radial-gradient(circle at 18% 30%, rgba(0, 87, 183, 0.08), transparent 45%)',
-            'radial-gradient(circle at 72% 42%, rgba(227, 82, 5, 0.08), transparent 45%)',
-            'radial-gradient(circle at 55% 75%, rgba(0, 177, 64, 0.05), transparent 38%)',
-            'linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0))',
-            'radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0)',
-          ].join(','),
-          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 18px 18px',
-          backgroundPosition: 'center, center, center, center, 0 0',
-        }}
-      />
-
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox={`0 0 ${mapWidth} ${mapHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <g opacity="0.25" fill="#3f3f46">
-          <path d={landPath} />
-        </g>
-
-        <g opacity="0.15" fill="none" stroke="#52525b" strokeWidth="0.5">
-          <path d="M 0 200 Q 250 120 500 200 T 1000 200" />
-          <path d="M 0 320 Q 250 250 500 320 T 1000 320" />
-          <path d="M 180 0 Q 220 120 180 260 T 180 520" />
-          <path d="M 500 0 Q 540 120 500 260 T 500 520" />
-          <path d="M 820 0 Q 860 120 820 260 T 820 520" />
-        </g>
-      </svg>
-
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox={`0 0 ${mapWidth} ${mapHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <linearGradient id="attack-arc" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="var(--ac-blue)" stopOpacity="0.2" />
-            <stop offset="50%" stopColor="var(--ac-sky-blue)" stopOpacity="0.65" />
-            <stop offset="100%" stopColor="var(--ac-orange)" stopOpacity="0.35" />
-          </linearGradient>
-        </defs>
-
-        {routesToRender.map((route, index) => (
-          <motion.path
-            key={route.id}
-            d={route.path}
-            stroke="url(#attack-arc)"
-            strokeWidth={route.severity === 'CRITICAL' ? 0.6 : route.severity === 'HIGH' ? 0.5 : 0.4}
-            fill="none"
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 0.8 }}
-            transition={{
-              duration: 1.4,
-              ease: 'easeOut',
-              delay: index * 0.15,
-            }}
-          />
-        ))}
-      </svg>
-
-      <motion.div
-        className="absolute left-0 right-0 h-px bg-ac-blue/40"
-        initial={{ y: 24, opacity: 0.3 }}
-        animate={{ y: [24, 200, 24], opacity: [0.2, 0.6, 0.2] }}
-        transition={{ duration: 10, ease: 'linear', repeat: Infinity }}
-      />
-
-      {projectedPoints.map((point) => {
-        const size = point.severity === 'CRITICAL' ? 10 : point.severity === 'HIGH' ? 8 : 6;
-        const dotClass = clsx(
-          point.severity === 'CRITICAL' && 'bg-ac-red',
-          point.severity === 'HIGH' && 'bg-ac-orange',
-          point.severity === 'MEDIUM' && 'bg-ac-blue',
-          point.severity === 'LOW' && 'bg-ac-green'
-        );
-
-        return (
-          <motion.div
-            key={point.id}
-            className="absolute group"
-            style={{
-              left: `${point.xPercent}%`,
-              top: `${point.yPercent}%`,
-              transform: 'translate(-50%, -50%)',
-            }}
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-          >
-            <span
-              className={clsx('block  shadow-[0_0_12px_rgba(0,0,0,0.15)]', dotClass)}
-              style={{ width: size, height: size }}
-            />
-            <span
-              className={clsx(
-                'absolute inset-0 animate-ping-slow opacity-50',
-                dotClass
-              )}
-              style={{ width: size, height: size }}
-            />
-            <span
-              className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap bg-surface-base/90 border border-border-subtle px-2 py-1 text-[10px] text-ink-secondary opacity-0 transition-opacity group-hover:opacity-100"
-            >
-              {point.label} · {point.count.toLocaleString()}
-            </span>
-          </motion.div>
-        );
-      })}
-
-      <div className="absolute bottom-3 left-4 flex items-center gap-4 text-[10px] text-ink-muted">
-        {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as AttackSeverity[]).map((severity) => (
-          <div key={severity} className="flex items-center gap-1.5">
-            <span
-              className={clsx(
-                'inline-block h-2 w-2',
-                severity === 'CRITICAL' && 'bg-ac-red',
-                severity === 'HIGH' && 'bg-ac-orange',
-                severity === 'MEDIUM' && 'bg-ac-blue',
-                severity === 'LOW' && 'bg-ac-green'
-              )}
-            />
-            <span>{severity}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-ink-muted">
-        Live · 15s
-      </div>
-    </div>
-  );
-}
-
-// Map tone classes to border/bg/shadow variants for stat cards
-const toneStyles: Record<string, { border: string; bg: string; shadow: string; iconBorder: string; iconBg: string }> = {
-  'text-ac-red':    { border: 'border-ac-red/50',    bg: 'dark:bg-ac-red/5',    shadow: 'shadow-[0_0_15px_rgba(239,51,64,0.15)]',  iconBorder: 'border-ac-red/30',    iconBg: 'bg-ac-red/10' },
-  'text-ac-orange': { border: 'border-ac-orange/50',  bg: 'dark:bg-ac-orange/5',  shadow: 'shadow-[0_0_15px_rgba(227,82,5,0.1)]',   iconBorder: 'border-ac-orange/30',  iconBg: 'bg-ac-orange/10' },
-  'text-ac-green':  { border: 'border-ac-green/30',   bg: 'dark:bg-ac-green/5',   shadow: 'shadow-[0_0_10px_rgba(0,177,64,0.08)]',  iconBorder: 'border-ac-green/30',   iconBg: 'bg-ac-green/10' },
-  'text-ac-blue':   { border: 'border-ac-blue/30',    bg: 'dark:bg-ac-blue/5',    shadow: 'shadow-[0_0_10px_rgba(0,87,183,0.08)]',  iconBorder: 'border-ac-blue/30',    iconBg: 'bg-ac-blue/10' },
-  'text-ac-purple': { border: 'border-ac-purple/30',  bg: 'dark:bg-ac-purple/5',  shadow: 'shadow-[0_0_10px_rgba(68,0,153,0.08)]',  iconBorder: 'border-ac-purple/30',  iconBg: 'bg-ac-purple/10' },
-};
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sublabel,
-  tone,
-  description,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: number | string;
-  sublabel?: string;
-  tone: string;
-  description?: string;
-}) {
-  const isCritical = tone.includes('red') || (typeof value === 'number' && value > 0 && label.includes('Active Campaigns'));
-  const isWarning = tone.includes('orange');
-  const styles = toneStyles[tone] ?? toneStyles['text-ac-blue'];
-
-  return (
-    <article
-      className={clsx(
-        'card p-4 flex items-center justify-between transition-all duration-300',
-        styles.border, styles.bg, styles.shadow
-      )}
-      aria-label={`${label}: ${value.toLocaleString()}`}
-      tabIndex={0}
-    >
-      <div>
-        <div className="text-[10px] font-bold tracking-[0.18em] uppercase text-ink-muted" title={description}>{label}</div>
-        <div className={clsx('text-2xl font-light mt-0.5', isCritical ? 'text-ac-red' : isWarning ? 'text-ac-orange' : 'text-ink-primary')}>
-          {value}
-        </div>
-        {sublabel && (
-          <div className={clsx(
-            "text-[10px] mt-1 uppercase tracking-wider font-medium",
-            sublabel.toLowerCase().includes('offline') ? 'text-ac-orange' :
-            sublabel.toLowerCase().includes('critical') ? 'text-ac-red' :
-            'text-ink-secondary'
-          )}>
-            {sublabel}
-          </div>
-        )}
-      </div>
-      <div className={clsx(
-        'w-10 h-10 border flex items-center justify-center transition-colors',
-        styles.iconBorder, styles.iconBg, tone
-      )}>
-        <Icon className="w-5 h-5" />
-      </div>
-    </article>
   );
 }

@@ -32,7 +32,13 @@ export function SensorDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   // Core sensor data
-  const { data: sensor, isLoading } = useQuery({
+  const {
+    data: sensor,
+    isLoading: isSensorLoading,
+    error: sensorError,
+    refetch: refetchSensor,
+    isFetching: isSensorFetching,
+  } = useQuery({
     queryKey: ['fleet', 'sensor', id],
     queryFn: () => fetchSensorDetail(id!),
     enabled: !!id,
@@ -40,7 +46,13 @@ export function SensorDetailPage() {
   });
 
   // System info for overview tab
-  const { data: systemInfo } = useQuery({
+  const {
+    data: systemInfo,
+    isLoading: isSystemLoading,
+    error: systemError,
+    refetch: refetchSystem,
+    isFetching: isSystemFetching,
+  } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'system'],
     queryFn: () => fetchSystemInfo(id!),
     enabled: !!id && activeTab === 'overview',
@@ -48,7 +60,13 @@ export function SensorDetailPage() {
   });
 
   // Performance data
-  const { data: performance } = useQuery({
+  const {
+    data: performance,
+    isLoading: isPerformanceLoading,
+    error: performanceError,
+    refetch: refetchPerformance,
+    isFetching: isPerformanceFetching,
+  } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'performance'],
     queryFn: () => fetchPerformance(id!),
     enabled: !!id && activeTab === 'performance',
@@ -56,7 +74,13 @@ export function SensorDetailPage() {
   });
 
   // Network data
-  const { data: network } = useQuery({
+  const {
+    data: network,
+    isLoading: isNetworkLoading,
+    error: networkError,
+    refetch: refetchNetwork,
+    isFetching: isNetworkFetching,
+  } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'network'],
     queryFn: () => fetchNetwork(id!),
     enabled: !!id && activeTab === 'network',
@@ -64,10 +88,16 @@ export function SensorDetailPage() {
   });
 
   // Processes data
-  const { data: processes } = useQuery({
+  const {
+    data: processes,
+    isLoading: isProcessesLoading,
+    error: processesError,
+    refetch: refetchProcesses,
+    isFetching: isProcessesFetching,
+  } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'processes'],
     queryFn: () => fetchProcesses(id!),
-    enabled: !!id && activeTab === 'processes',
+    enabled: !!id && (activeTab === 'processes' || activeTab === 'overview'),
     refetchInterval: 5000,
   });
 
@@ -83,8 +113,31 @@ export function SensorDetailPage() {
     mutationFn: () => runDiagnostics(id!),
   });
 
-  if (isLoading || !sensor) {
+  if (isSensorLoading) {
     return <SensorDetailSkeleton />;
+  }
+
+  if (sensorError) {
+    return (
+      <div className="p-12 text-center">
+        <p className="text-status-error mb-4">{(sensorError as Error).message || 'Failed to load sensor details.'}</p>
+        <button
+          onClick={() => refetchSensor()}
+          disabled={isSensorFetching}
+          className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
+        >
+          {isSensorFetching ? 'Retrying...' : 'Retry'}
+        </button>
+      </div>
+    );
+  }
+
+  if (!sensor) {
+    return (
+      <div className="p-12 text-center">
+        <p className="text-ink-secondary">Sensor not found.</p>
+      </div>
+    );
   }
 
   const status = sensor.connectionState === 'CONNECTED'

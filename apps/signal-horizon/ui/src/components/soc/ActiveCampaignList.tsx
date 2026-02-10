@@ -115,7 +115,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
                 </div>
               </div>
               <div className="w-8 h-8 flex items-center justify-center border border-border-subtle group-hover:border-white/20">
-                <span className="text-[10px] font-bold group-hover:text-[#D62598] transition-colors">&gt;</span>
+                <span className="text-[10px] font-bold group-hover:text-ac-magenta transition-colors">&gt;</span>
               </div>
             </div>
           </motion.div>

@@ -144,7 +144,7 @@ const DEMO_ENDPOINTS = [
 const METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-400 bg-green-500/20',
   POST: 'text-blue-400 bg-blue-500/20',
-  PUT: 'text-[#D62598] bg-[#D62598]/20',
+  PUT: 'text-ac-magenta bg-ac-magenta/20',
   PATCH: 'text-orange-400 bg-orange-500/20',
   DELETE: 'text-red-400 bg-red-500/20',
 };

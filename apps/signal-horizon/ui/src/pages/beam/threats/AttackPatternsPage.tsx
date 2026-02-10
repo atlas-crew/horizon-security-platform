@@ -5,7 +5,6 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   Shield,
@@ -30,6 +29,7 @@ import {
   Line,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type PatternCategory = 'injection' | 'authentication' | 'bot' | 'rate_abuse' | 'data_exposure' | 'protocol';
 type TrendDirection = 'up' | 'down' | 'stable';
@@ -155,10 +155,10 @@ const DEMO_PATTERN_TIMELINE = [
 
 // Demo data - category distribution (reduced to 4 brand colors)
 const DEMO_CATEGORY_DIST = [
-  { name: 'Injection', value: 2562, color: '#D62598' },      // Magenta - highest volume
-  { name: 'Authentication', value: 756, color: '#E35205' },   // Orange
-  { name: 'Bot Activity', value: 534, color: '#0057B7' },     // Atlas Crew Blue
-  { name: 'Other', value: 801, color: '#001E62' },            // Navy (combined Rate Abuse + Data Exposure + Protocol)
+  { name: 'Injection', value: 2562, color: colors.magenta },
+  { name: 'Authentication', value: 756, color: colors.orange },
+  { name: 'Bot Activity', value: 534, color: colors.blue },
+  { name: 'Other', value: 801, color: colors.navy },
 ];
 
 // Calculate total for percentage display
@@ -184,10 +184,10 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string }> = {
 
 // Brand colors for charts (4 max)
 const CHART_COLORS = {
-  injection: '#D62598',   // Magenta
-  auth: '#E35205',        // Orange
-  bot: '#0057B7',         // Atlas Crew Blue
-  other: '#001E62',       // Navy
+  injection: colors.magenta,
+  auth: colors.orange,
+  bot: colors.blue,
+  other: colors.navy,
 };
 
 // Stat Card
@@ -460,16 +460,10 @@ export default function AttackPatternsPage() {
               <LineChart data={DEMO_PATTERN_TIMELINE}>
                 <XAxis
                   dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#7B8FA8', fontSize: 12 }}
+                  {...xAxisNoLine}
                 />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                  itemStyle={TOOLTIP_ITEM_STYLE}
-                />
+                <YAxis {...axisDefaults.y} />
+                <Tooltip {...tooltipDefaults} />
                 <Line
                   type="monotone"
                   dataKey="injection"
@@ -572,22 +566,18 @@ export default function AttackPatternsPage() {
                 type="number"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#7B8FA8', fontSize: 12 }}
+                tick={axisDefaults.x.tick}
               />
               <YAxis
                 type="category"
                 dataKey="name"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#7B8FA8', fontSize: 11 }}
+                tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
                 width={140}
               />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
-              />
-              <Bar dataKey="count" fill="#0057B7" radius={[0, 0, 0, 0]} name="Detections" />
+              <Tooltip {...tooltipDefaults} />
+              <Bar dataKey="count" fill={colors.blue} radius={[0, 0, 0, 0]} name="Detections" />
             </BarChart>
           </ResponsiveContainer>
         </div>

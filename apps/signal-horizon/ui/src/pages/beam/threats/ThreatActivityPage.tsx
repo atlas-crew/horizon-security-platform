@@ -31,8 +31,8 @@ import {
 } from 'recharts';
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
 import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
+import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
@@ -140,10 +140,10 @@ const DEMO_TOP_SOURCES = [
 
 // Demo data - severity distribution (brand colors: Magenta, Orange, Atlas Crew Blue, Navy)
 const DEMO_SEVERITY_DIST = [
-  { name: 'Critical', value: 42, color: '#D62598' },  // Magenta
-  { name: 'High', value: 168, color: '#E35205' },     // Orange
-  { name: 'Medium', value: 289, color: '#0057B7' },   // Atlas Crew Blue
-  { name: 'Low', value: 198, color: '#001E62' },      // Navy
+  { name: 'Critical', value: 42, color: colors.magenta },
+  { name: 'High', value: 168, color: colors.orange },
+  { name: 'Medium', value: 289, color: colors.blue },
+  { name: 'Low', value: 198, color: colors.navy },
 ];
 
 // Calculate total for percentage display
@@ -254,9 +254,7 @@ function TimeRangeSelector({
 
 // Threat Timeline Chart
 function ThreatTimelineChart() {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
+  const tickSmall = { ...axisDefaults.x.tick, fontSize: 11 };
 
   return (
     <motion.div
@@ -270,28 +268,23 @@ function ThreatTimelineChart() {
           <AreaChart data={DEMO_THREAT_TIMELINE}>
             <defs>
               <linearGradient id="threatGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#D62598" stopOpacity={0.5} />
-                <stop offset="50%" stopColor="#D62598" stopOpacity={0.2} />
-                <stop offset="100%" stopColor="#D62598" stopOpacity={0.05} />
+                <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.5} />
+                <stop offset="50%" stopColor={colors.magenta} stopOpacity={0.2} />
+                <stop offset="100%" stopColor={colors.magenta} stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <CartesianGrid {...gridDefaultsSoft} />
             <XAxis
               dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: tickColor, fontSize: 11 }}
+              {...xAxisNoLine}
+              tick={tickSmall}
             />
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: tickColor, fontSize: 11 }} />
-            <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
-            />
+            <YAxis {...axisDefaults.y} tick={tickSmall} />
+            <Tooltip {...tooltipDefaults} />
             <Area
               type="monotone"
               dataKey="threats"
-              stroke="#D62598"
+              stroke={colors.magenta}
               fill="url(#threatGradient)"
               strokeWidth={2.5}
             />
@@ -304,8 +297,7 @@ function ThreatTimelineChart() {
 
 // Top Threat Sources Chart
 function TopThreatSourcesChart() {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const tickSmall = { ...axisDefaults.y.tick, fontSize: 11 };
 
   return (
     <motion.div
@@ -317,21 +309,17 @@ function TopThreatSourcesChart() {
       <div className="h-48 mb-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
-            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: tickColor, fontSize: 12 }} />
+            <XAxis type="number" axisLine={false} tickLine={false} tick={axisDefaults.x.tick} />
             <YAxis
               type="category"
               dataKey="ip"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: tickColor, fontSize: 11 }}
+              tick={tickSmall}
               width={110}
             />
-            <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
-            />
-            <Bar dataKey="threats" fill="#D62598" radius={[0, 0, 0, 0]} />
+            <Tooltip {...tooltipDefaults} />
+            <Bar dataKey="threats" fill={colors.magenta} radius={[0, 0, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

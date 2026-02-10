@@ -5,7 +5,6 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE } from '../../../lib/chartTheme';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   GitBranch,
@@ -30,6 +29,7 @@ import {
 } from 'recharts';
 import { useApiIntelligence } from '../../../hooks/useApiIntelligence';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type ChangeType = 'added' | 'removed' | 'modified' | 'deprecated';
 
@@ -83,7 +83,7 @@ const METHOD_COLORS: Record<string, string> = {
   DELETE: 'text-red-400',
 };
 
-const TREND_COLORS = ['#529EEC', '#D62598', '#E35205'];
+const TREND_COLORS = [colors.skyBlue, colors.magenta, colors.orange];
 
 // Stat Card
 function StatCard({
@@ -368,13 +368,10 @@ export default function SchemaChangesPage() {
           {trendChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendChartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
-                <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                />
+                <CartesianGrid {...gridDefaultsSoft} />
+                <XAxis dataKey="date" {...xAxisNoLine} />
+                <YAxis {...axisDefaults.y} />
+                <Tooltip {...tooltipDefaults} />
                 {trendLabels.map((label, index) => (
                   <Line
                     key={label}

@@ -243,6 +243,35 @@ export interface RecentRequest {
   wafAction: string | null;
 }
 
+export interface OpsMetricSnapshot {
+  name: string;
+  help: string;
+  type: string;
+  values: Array<{
+    value: number;
+    metricName?: string;
+    labels?: Record<string, string | number>;
+  }>;
+}
+
+export interface ClickHouseOpsSnapshot {
+  sampledAt: string;
+  clickhouse: {
+    enabled: boolean;
+    connected: boolean;
+    config: {
+      enabled: boolean;
+      maxOpenConnections: number;
+      maxInFlightQueries: number;
+      maxInFlightStreamQueries: number;
+      queryTimeoutSec: number;
+      queueTimeoutSec: number;
+      maxRowsLimit: number;
+    } | null;
+  };
+  metrics: Record<string, OpsMetricSnapshot>;
+}
+
 // =============================================================================
 // Zod Schemas for Validation
 // =============================================================================
@@ -455,6 +484,39 @@ const RecentRequestSchema = z.object({
   path: z.string(),
   statusCode: z.number(),
   wafAction: z.string().nullable(),
+});
+
+const OpsMetricSnapshotSchema = z.object({
+  name: z.string(),
+  help: z.string(),
+  type: z.string(),
+  values: z.array(
+    z.object({
+      value: z.number(),
+      metricName: z.string().optional(),
+      labels: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+    })
+  ),
+});
+
+const ClickHouseOpsSnapshotSchema = z.object({
+  sampledAt: z.string(),
+  clickhouse: z.object({
+    enabled: z.boolean(),
+    connected: z.boolean(),
+    config: z
+      .object({
+        enabled: z.boolean(),
+        maxOpenConnections: z.number(),
+        maxInFlightQueries: z.number(),
+        maxInFlightStreamQueries: z.number(),
+        queryTimeoutSec: z.number(),
+        queueTimeoutSec: z.number(),
+        maxRowsLimit: z.number(),
+      })
+      .nullable(),
+  }),
+  metrics: z.record(z.string(), OpsMetricSnapshotSchema),
 });
 
 const RecentRequestsResponseSchema = z.object({
@@ -1153,6 +1215,15 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getClickHouseOpsSnapshot = useCallback(async (): Promise<ClickHouseOpsSnapshot> => {
+    const data = await fetchApi<unknown>('/ops/clickhouse');
+    const result = ClickHouseOpsSnapshotSchema.safeParse(data);
+    if (!result.success) {
+      throw new Error('Invalid ClickHouse ops snapshot response');
+    }
+    return result.data;
+  }, [fetchApi]);
+
   return {
     // State
     isLoading,
@@ -1172,6 +1243,7 @@ export function useHunt() {
     getCampaignTimeline,
     getRequestTimeline,
     getRecentRequests,
+    getClickHouseOpsSnapshot,
     getTenantBaselines,
     getAnomalies,
     getLowAndSlowIps,

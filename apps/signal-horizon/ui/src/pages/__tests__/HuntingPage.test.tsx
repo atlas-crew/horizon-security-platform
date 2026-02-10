@@ -38,6 +38,7 @@ vi.mock('../../components/hunting', () => ({
       ))}
     </div>
   ),
+  ClickHouseOpsPanel: () => <div data-testid="clickhouse-ops-panel" />,
   RecentRequestsPanel: () => <div data-testid="recent-requests-panel" />,
   BehavioralAnomaliesPanel: () => <div data-testid="anomalies-panel" />,
   LowAndSlowPanel: () => <div data-testid="low-slow-panel" />,
@@ -71,6 +72,7 @@ const mockHuntMethods = {
   updateSigmaRule: vi.fn(),
   deleteSigmaRule: vi.fn(),
   getRecentRequests: vi.fn(),
+  getClickHouseOpsSnapshot: vi.fn(),
   clearError: vi.fn(),
 };
 

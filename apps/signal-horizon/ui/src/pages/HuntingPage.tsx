@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, RecentRequestsPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
+import { BehavioralAnomaliesPanel, ClickHouseOpsPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, RecentRequestsPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -34,6 +34,7 @@ export default function HuntingPage() {
     getSigmaLeads,
     ackSigmaLead,
     getRecentRequests,
+    getClickHouseOpsSnapshot,
     clearError,
   } = useHunt();
 
@@ -210,6 +211,13 @@ export default function HuntingPage() {
         historicalEnabled={status?.historical ?? false}
         externalQuery={activeExampleQuery}
       />
+
+      {status?.isFleetAdmin && (
+        <ClickHouseOpsPanel
+          historicalEnabled={status?.historical ?? false}
+          getClickHouseOpsSnapshot={getClickHouseOpsSnapshot}
+        />
+      )}
 
       <RecentRequestsPanel
         historicalEnabled={status?.historical ?? false}

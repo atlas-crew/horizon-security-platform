@@ -11,4 +11,5 @@ export { FleetIntelligencePanel } from './FleetIntelligencePanel';
 export { SigmaLeadsPanel } from './SigmaLeadsPanel';
 export { SigmaRulesPanel } from './SigmaRulesPanel';
 export { RecentRequestsPanel } from './RecentRequestsPanel';
+export { ClickHouseOpsPanel } from './ClickHouseOpsPanel';
 export { RequestTimelineGraph } from './RequestTimelineGraph';

@@ -28,6 +28,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { alpha, axisDefaults, colors } from '@/ui';
 import {
   useBeamStats,
   useBlockedRequests,
@@ -42,19 +43,19 @@ import type { BlockedRequest, ProtectionAlert, TrafficDataPoint } from '../../ty
 
 // Color palette for dark theme - Atlas Crew Brand compliant
 const COLORS = {
-  requests: '#0057B7', // Atlas Crew Blue
-  blocked: '#BF3A30', // Atlas Crew Red (design system)
-  protected: '#008731', // Atlas Crew Green (contrast-safe)
-  warning: '#529EEC', // Atlas Crew Sky Blue (secondary) - no yellow per brand
+  requests: colors.blue,
+  blocked: colors.red,
+  protected: colors.green,
+  warning: colors.skyBlue,
   chart: {
-    area: 'rgba(0, 87, 183, 0.2)',
-    line: '#0057B7',
-    blocked: 'rgba(191, 58, 48, 0.4)',
-    blockedLine: '#BF3A30',
+    area: alpha(colors.blue, 0.2),
+    line: colors.blue,
+    blocked: alpha(colors.red, 0.4),
+    blockedLine: colors.red,
   },
 };
 
-const ATTACK_COLORS = ['#0057B7', '#D62598', '#C24900', '#BF3A30', '#008731']; // Atlas Crew brand palette (contrast-safe)
+const ATTACK_COLORS = [colors.blue, colors.magenta, colors.orange, colors.red, colors.green];
 
 // Demo data for initial development
 const DEMO_TRAFFIC: TrafficDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
@@ -131,11 +132,11 @@ function TrafficChart({ data }: TrafficChartProps) {
         <h3 className="text-lg font-semibold text-ink-primary">Traffic Overview</h3>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-[#0057B7]" />
+            <div className="w-3 h-3" style={{ background: COLORS.requests }} />
             <span className="text-ink-secondary">Requests</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-[#BF3A30]" />
+            <div className="w-3 h-3" style={{ background: COLORS.blocked }} />
             <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
@@ -155,14 +156,11 @@ function TrafficChart({ data }: TrafficChartProps) {
             </defs>
             <XAxis
               dataKey="time"
-              tick={{ fill: '#7B8FA8', fontSize: 12 }}
+              {...axisDefaults.x}
               axisLine={false}
-              tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#7B8FA8', fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...axisDefaults.y}
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
             />
             <Tooltip content={<PersistentTooltip />} />
@@ -207,7 +205,7 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
       <div
         className="absolute inset-0 opacity-30 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(0, 87, 183, 0.15) 0%, transparent 60%)',
+          background: `radial-gradient(ellipse at 50% 0%, ${alpha(colors.blue, 0.15)} 0%, transparent 60%)`,
         }}
       />
 
@@ -245,8 +243,8 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
                 <div
                   className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 text-xs text-ink-primary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10"
                   style={{
-                    background: 'linear-gradient(180deg, rgba(0, 30, 98, 0.95) 0%, rgba(0, 20, 60, 0.98) 100%)',
-                    border: '1px solid rgba(0, 87, 183, 0.4)',
+                    background: `linear-gradient(180deg, ${alpha(colors.navy, 0.95)} 0%, ${alpha(colors.tint.blueDarker, 0.98)} 100%)`,
+                    border: `1px solid ${alpha(colors.blue, 0.4)}`,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
                   }}
                 >

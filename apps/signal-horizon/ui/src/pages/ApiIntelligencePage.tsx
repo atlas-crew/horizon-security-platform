@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { alpha, axisDefaults, colors, gridDefaults } from '@/ui';
 import {
   BarChart3,
   Search,
@@ -223,14 +224,14 @@ export default function ApiIntelligencePage() {
               <AreaChart data={stats?.discoveryTrend ?? []}>
                 <defs>
                   <linearGradient id="colorDiscovery" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#529EEC" stopOpacity={0.5} />
-                    <stop offset="50%" stopColor="#0057B7" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#0057B7" stopOpacity={0.05} />
+                    <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.5} />
+                    <stop offset="50%" stopColor={colors.blue} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
-                <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
+                <XAxis dataKey="date" {...axisDefaults.x} axisLine={false} />
+                <YAxis {...axisDefaults.y} />
                 <Tooltip
                   contentStyle={TOOLTIP_CONTENT_STYLE}
                   labelStyle={TOOLTIP_LABEL_STYLE}
@@ -239,7 +240,7 @@ export default function ApiIntelligencePage() {
                 <Area
                   type="monotone"
                   dataKey="count"
-                  stroke="#529EEC"
+                  stroke={colors.skyBlue}
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#colorDiscovery)"
@@ -280,15 +281,21 @@ export default function ApiIntelligencePage() {
               <BarChart data={stats?.topViolatingEndpoints ?? []} layout="vertical" margin={{ left: 40 }}>
                 <defs>
                   <linearGradient id="violationGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#D62598" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#E35205" stopOpacity={1} />
+                    <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.9} />
+                    <stop offset="100%" stopColor={colors.orange} stopOpacity={1} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
-                <XAxis type="number" stroke="#7B8FA8" fontSize={12} hide />
-                <YAxis dataKey="endpoint" type="category" width={150} stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
+                <XAxis type="number" hide {...axisDefaults.x} />
+                <YAxis
+                  dataKey="endpoint"
+                  type="category"
+                  {...axisDefaults.y}
+                  width={150}
+                  tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
+                />
                 <Tooltip
-                  cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
+                  cursor={{ fill: alpha(colors.blue, 0.1) }}
                   contentStyle={TOOLTIP_CONTENT_STYLE}
                   labelStyle={TOOLTIP_LABEL_STYLE}
                   itemStyle={TOOLTIP_ITEM_STYLE}

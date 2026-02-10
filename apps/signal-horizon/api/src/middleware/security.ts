@@ -34,7 +34,7 @@ export function enforceHttps(req: Request, res: Response, next: NextFunction): v
  * Handled by Helmet usually, but added here for completeness if needed.
  */
 export function hsts(maxAge: number = 31536000): RequestHandler {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Strict-Transport-Security', `max-age=${maxAge}; includeSubDomains; preload`);
     next();
   };

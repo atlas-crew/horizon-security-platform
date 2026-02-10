@@ -295,6 +295,7 @@ export class Correlator {
         timestamp: new Date().toISOString(),
         campaign_id: campaign.id,
         tenant_id: campaign.tenantId ?? 'fleet',
+        request_id: null,
         event_type: eventType,
         name: campaign.name,
         status: campaign.status,

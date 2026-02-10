@@ -15,6 +15,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
+import { sendProblem } from '../../lib/problem-details.js';
 import {
   getFleetCommandFeaturesForConfig,
   updateFleetCommandFeatures,
@@ -909,7 +910,10 @@ export function createManagementRoutes(
       const requestedScopes = permissions || ['signal:write'];
       const scopeCheck = validateSensorScopes(requestedScopes);
       if (!scopeCheck.valid) {
-        this.logger.warn({ sensorId, tenantId, forbidden: scopeCheck.forbidden }, 'Rejected unauthorized scopes for sensor token');
+        logger.warn(
+          { sensorId, tenantId, forbidden: scopeCheck.forbidden },
+          'Rejected unauthorized scopes for sensor token'
+        );
         return sendProblem(res, 403, 'Unauthorized scopes for sensor', {
           code: 'FORBIDDEN_SCOPES',
           details: { forbidden: scopeCheck.forbidden, allowed: ALLOWED_SENSOR_SCOPES },
@@ -970,14 +974,14 @@ export function createManagementRoutes(
         purpose: purpose || 'unspecified'
       }, 'Sensor API key created');
 
-      res.status(201).json({
+      return res.status(201).json({
         ...sanitizedKey,
         key,
         warning: 'This key will only be shown once. Store it securely.',
       });
     } catch (error) {
       logger.error({ error }, 'Error creating API key');
-      res.status(500).json({
+      return res.status(500).json({
         error: 'Failed to create API key',
       });
     }

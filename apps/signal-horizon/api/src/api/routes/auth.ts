@@ -11,7 +11,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { config } from '../../config.js';
 import { parseJwt } from '../../lib/jwt.js';
-import { authorize, requireScope } from '../middleware/auth.js';
+import { authorize } from '../middleware/auth.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { validateBody } from '../middleware/validation.js';
 import { UserAuthService } from '../../services/user-auth.js';

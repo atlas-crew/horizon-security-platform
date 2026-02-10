@@ -41,8 +41,18 @@ export function validateBody<T extends z.ZodSchema>(schema: T): RequestHandler {
 }
 
 // Common validation schemas
+const IdStringSchema = z.string().superRefine((val, ctx) => {
+  // Prisma models mix UUIDs and CUIDs (`@default(uuid())` vs `@default(cuid())`).
+  // Keep a single shared param schema that accepts either, with a stable message.
+  const isUuid = z.string().uuid().safeParse(val).success;
+  const isCuid = z.string().cuid().safeParse(val).success;
+  if (!isUuid && !isCuid) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid ID format' });
+  }
+});
+
 export const IdParamSchema = z.object({
-  id: z.string().uuid('Invalid ID format'),
+  id: IdStringSchema,
 });
 
 export const PaginationQuerySchema = z.object({

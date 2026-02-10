@@ -395,7 +395,7 @@ export class FleetIntelService {
           lastActivityAt: new Date(session.lastActivity || 0),
           boundIp: session.boundIp ?? null,
           boundJa4: session.boundJa4 ?? null,
-          hijackAlerts: session.hijackAlerts as Prisma.InputJsonValue,
+          hijackAlerts: session.hijackAlerts as unknown as Prisma.InputJsonValue,
           raw: session as unknown as Prisma.InputJsonValue,
         },
         update: {
@@ -405,7 +405,7 @@ export class FleetIntelService {
           lastActivityAt: new Date(session.lastActivity || 0),
           boundIp: session.boundIp ?? null,
           boundJa4: session.boundJa4 ?? null,
-          hijackAlerts: session.hijackAlerts as Prisma.InputJsonValue,
+          hijackAlerts: session.hijackAlerts as unknown as Prisma.InputJsonValue,
           raw: session as unknown as Prisma.InputJsonValue,
         },
       });
@@ -511,7 +511,7 @@ export class FleetIntelService {
     const anomalies = this.extractPayloadData(anomaliesResult);
     const bandwidth = bandwidthResult.status === 'fulfilled'
       ? (bandwidthResult.value as unknown as Prisma.InputJsonValue)
-      : null;
+      : undefined;
 
     await this.prisma.sensorPayloadSnapshot.create({
       data: {
@@ -528,9 +528,9 @@ export class FleetIntelService {
 
   private extractPayloadData(
     result: PromiseSettledResult<PayloadEndpointsResponse | PayloadAnomaliesResponse>
-  ): Prisma.InputJsonValue | null {
-    if (result.status !== 'fulfilled') return null;
-    if (!result.value?.success || !result.value.data) return null;
+  ): Prisma.InputJsonValue | undefined {
+    if (result.status !== 'fulfilled') return undefined;
+    if (!result.value?.success || !result.value.data) return undefined;
     return result.value.data as unknown as Prisma.InputJsonValue;
   }
 

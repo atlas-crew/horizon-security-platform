@@ -10,7 +10,7 @@ import { TunnelBroker } from '../tunnel-broker.js';
 import type { TunnelMessage } from '../../types/tunnel.js';
 
 class MockWebSocket extends EventEmitter {
-  readyState = WebSocket.OPEN;
+  readyState: number = WebSocket.OPEN;
   sentMessages: string[] = [];
 
   send(data: string): void {

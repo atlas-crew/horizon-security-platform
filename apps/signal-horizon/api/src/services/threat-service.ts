@@ -237,7 +237,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
   readonly skipCleanup = true;
 
   private kv: RedisKv;
-  private logger: Logger;
   private namespace: string;
   private version: number;
   private dataType: string;
@@ -248,7 +247,7 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
 
   constructor(
     kv: RedisKv,
-    logger: Logger,
+    _logger: Logger,
     options: {
       namespace?: string;
       version?: number;
@@ -260,7 +259,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
     } = {}
   ) {
     this.kv = kv;
-    this.logger = logger.child({ component: 'redis-recent-signals-store' });
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.dataType = options.dataType ?? 'recent-signal-volume';

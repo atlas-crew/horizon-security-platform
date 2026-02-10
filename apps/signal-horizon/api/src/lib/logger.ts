@@ -4,6 +4,12 @@
 import pino from 'pino';
 import type { Request, Response, NextFunction } from 'express';
 import type { Logger as PinoLogger } from 'pino';
+import { randomUUID } from 'node:crypto';
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
 
 /**
  * Create base logger instance with appropriate configuration
@@ -41,9 +47,10 @@ export function createLogger(context: Record<string, unknown>) {
  */
 export function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction) {
   const request = req as Request & { requestId?: string; logger?: PinoLogger };
-  const requestId = req.headers['x-request-id'] ||
-                    req.headers['x-correlation-id'] ||
-                    crypto.randomUUID();
+  const requestId =
+    firstHeaderValue(req.headers['x-request-id']) ??
+    firstHeaderValue(req.headers['x-correlation-id']) ??
+    randomUUID();
 
   request.requestId = requestId;
   request.logger = logger.child({ requestId });

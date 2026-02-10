@@ -17,6 +17,8 @@ describe('Configuration parsing', () => {
     process.env.DATABASE_URL = 'postgres://db.example.com:5432/db';
     process.env.JWT_SECRET = 'production-secret-at-least-16-chars';
     process.env.TELEMETRY_JWT_SECRET = 'production-telemetry-secret-16ch';
+    // Avoid inheriting an insecure local CLICKHOUSE_PASSWORD when testing production validation.
+    process.env.CLICKHOUSE_PASSWORD = 'test-clickhouse-password-strong';
 
     const { config } = await import('./config.js');
     expect(config.env).toBe('production');

@@ -1575,8 +1575,7 @@ export class TunnelBroker extends EventEmitter {
     session.lastActivity = new Date();
 
     try {
-      const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
-      const parsed = JSON.parse(str);
+      const parsed = this.parseMessage(data);
       const validation = LegacyTunnelMessageSchema.safeParse(parsed);
 
       if (!validation.success) {

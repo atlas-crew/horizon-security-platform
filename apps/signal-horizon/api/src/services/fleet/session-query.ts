@@ -607,7 +607,7 @@ export class FleetSessionQueryService {
    */
   private async batchQuerySensors<T>(
     sensors: Array<{ id: string; name: string }>,
-    method: string,
+    method: FleetRpcMethod,
     params: Record<string, unknown>
   ): Promise<SensorRpcResult<T>[]> {
     // Process in batches to avoid overwhelming resources

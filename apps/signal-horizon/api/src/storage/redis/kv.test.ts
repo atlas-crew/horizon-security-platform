@@ -7,8 +7,12 @@ const ioredisBase = () => ({
   del: vi.fn(async () => 0),
   set: vi.fn(async () => 'OK' as const),
   incr: vi.fn(async () => 1),
+  incrby: vi.fn(async () => 1),
   expire: vi.fn(async () => 1),
   mget: vi.fn(async (..._keys: string[]) => [] as (string | null)[]),
+  sadd: vi.fn(async () => 0),
+  srem: vi.fn(async () => 0),
+  smembers: vi.fn(async () => [] as string[]),
 });
 
 const nodeRedisBase = () => ({
@@ -16,8 +20,12 @@ const nodeRedisBase = () => ({
   del: vi.fn(async () => 0),
   set: vi.fn(async () => 'OK' as const),
   incr: vi.fn(async () => 1),
+  incrby: vi.fn(async () => 1),
   expire: vi.fn(async () => true as boolean),
   mget: vi.fn(async (_keys: string[]) => [] as (string | null)[]),
+  sadd: vi.fn(async () => 0),
+  srem: vi.fn(async () => 0),
+  smembers: vi.fn(async () => [] as string[]),
 });
 
 describe('createIoredisKv', () => {

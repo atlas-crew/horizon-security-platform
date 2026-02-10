@@ -64,7 +64,7 @@ import {
   DEFAULT_TRAVEL_MAX_SPEED_KMH,
   DEFAULT_TRAVEL_MIN_DISTANCE_KM,
   DEFAULT_UPSTREAM_WEIGHT,
-} from './sensorConfigDefaults';
+} from './sensorConfigDefaults.js';
 
 export const ServerConfigSchema = z.object({
   http_addr: z.string().max(255).regex(/^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])?:\d+$/).default(DEFAULT_SERVER_HTTP_ADDR),

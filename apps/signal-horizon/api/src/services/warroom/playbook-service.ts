@@ -158,6 +158,7 @@ export class PlaybookService {
       userAgent: 'playbook-service-internal',
       userId,
       tenantId,
+      requestId: null,
     };
   }
 

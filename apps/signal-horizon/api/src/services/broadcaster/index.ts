@@ -278,7 +278,6 @@ export class Broadcaster {
         indicator: threat.indicator,
         riskScore: threat.riskScore,
         isFleetThreat: threat.isFleetThreat,
-        tenantId: threat.tenantId ?? undefined,
       },
       timestamp: Date.now(),
     });
@@ -330,6 +329,7 @@ export class Broadcaster {
       const row: BlocklistHistoryRow = {
         timestamp: new Date().toISOString(),
         tenant_id: params.tenant_id ?? 'fleet',
+        request_id: null,
         action: params.action,
         block_type: params.block_type,
         indicator: params.indicator,

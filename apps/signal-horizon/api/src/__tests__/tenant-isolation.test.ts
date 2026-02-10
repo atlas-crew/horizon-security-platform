@@ -48,7 +48,7 @@ function createMockSensor(id: string, tenantId: string): Sensor {
     metadata: {},
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as Sensor;
+  } as unknown as Sensor;
 }
 
 describe('Tenant Isolation', () => {
@@ -270,8 +270,9 @@ describe('Tenant Isolation', () => {
       await expect(
         distributor.distributeRules(
           TENANT_B,
+          ['rule-1'],
           ['sensor-a1'], // These belong to Tenant A
-          [{ id: 'rule-1', name: 'Test', conditions: {}, actions: {}, enabled: true, priority: 1 }]
+          { strategy: 'immediate' }
         )
       ).rejects.toThrow(TenantIsolationError);
     });

@@ -8,7 +8,7 @@ import type { Request, Response } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { config } from '../../config.js';
-import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
+import { parseJwt } from '../../lib/jwt.js';
 
 export interface TelemetryAuthContext {
   tenantId: string;

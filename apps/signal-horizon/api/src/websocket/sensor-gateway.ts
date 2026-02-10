@@ -77,7 +77,8 @@ interface SensorGatewayConfig {
 const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 /** Supported protocol versions for sensor-hub communication (from config) */
-const SUPPORTED_PROTOCOL_VERSIONS = globalConfig.websocket.protocol.supportedVersions;
+const SUPPORTED_PROTOCOL_VERSIONS =
+  globalConfig.websocket.protocol.supportedVersions as readonly string[];
 
 /** Default protocol version assigned to sensors that do not advertise one (from config) */
 const LEGACY_PROTOCOL_VERSION = globalConfig.websocket.protocol.legacyVersion;

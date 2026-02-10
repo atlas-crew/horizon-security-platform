@@ -365,7 +365,7 @@ export function handleValidationError(
 export function handleRouteError(
   res: Response,
   error: unknown,
-  logger: Logger,
+  logger: Pick<Logger, 'error'> | Pick<Console, 'error'>,
   context?: Record<string, unknown>
 ): Response {
   // Log the full error with context
@@ -409,7 +409,8 @@ export function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
-    const requestLogger = (req as Request & { logger?: Logger }).logger ?? console;
+    const requestLogger =
+      (req as Request & { logger?: Logger }).logger ?? console;
     Promise.resolve(fn(req, res, next)).catch((error) => {
       handleRouteError(res, error, requestLogger, {
         route: req.route?.path,

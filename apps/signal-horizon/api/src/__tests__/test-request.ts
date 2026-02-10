@@ -25,7 +25,6 @@
 import { EventEmitter } from 'node:events';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
-import type { Express } from 'express';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -174,7 +173,7 @@ class TestRequest<T = unknown> {
   private expectedStatus?: number;
 
   constructor(
-    private readonly app: Express,
+    private readonly app: unknown,
     private readonly method: HttpMethod,
     private readonly path: string
   ) {}
@@ -213,20 +212,21 @@ class TestRequest<T = unknown> {
 }
 
 function dispatchRequest<T = unknown>(
-  app: Express,
+  app: unknown,
   method: HttpMethod,
   path: string,
   headers: Record<string, string>,
   payload?: unknown
 ): Promise<TestResponse<T>> {
   return new Promise((resolve, reject) => {
-    const req = (createMockRequest(method, path, { ...headers }, payload) as unknown) as Parameters<Express['handle']>[0];
-    const res = (new MockResponse(resolve) as unknown) as Parameters<Express['handle']>[1];
-    const handle = (app.handle.bind(app) as unknown) as (
-        req: Parameters<Express['handle']>[0],
-        res: Parameters<Express['handle']>[1],
-        next: Parameters<Express['handle']>[2]
-      ) => void;
+    const req = createMockRequest(method, path, { ...headers }, payload) as any;
+    const res = new MockResponse(resolve) as any;
+    const handle = (app as any).handle?.bind(app) as ((req: any, res: any, next: any) => void) | undefined;
+
+    if (!handle) {
+      reject(new Error('test-request: app.handle is not available'));
+      return;
+    }
 
     try {
       handle(req, res, (err: unknown) => {
@@ -240,7 +240,7 @@ function dispatchRequest<T = unknown>(
   });
 }
 
-export default function request(app: Express) {
+export default function request(app: unknown) {
   return {
     get: <T = unknown>(path: string) => new TestRequest<T>(app, 'GET', path),
     post: <T = unknown>(path: string) => new TestRequest<T>(app, 'POST', path),

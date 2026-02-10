@@ -1,6 +1,6 @@
-import type { PrismaClient, User, TenantMember, UserRole } from '@prisma/client';
+import type { PrismaClient, User, UserRole } from '@prisma/client';
 import type { Logger } from 'pino';
-import { randomUUID, scrypt, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
+import { randomUUID, scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { signJwt, type JwtPayload } from '../lib/jwt.js';
 import { config } from '../config.js';

@@ -387,11 +387,16 @@ function buildResponseTimeDistribution(
   histogram?: { buckets: Record<string, number>; count: number }
 ): ResponseTimeBucket[] {
   if (!histogram) {
-    return RESPONSE_TIME_BUCKETS.map(bucket => ({
-      range: bucket.label,
-      count: 0,
-      percentage: 0,
-    })).concat({ range: '>500ms', count: 0, percentage: 0 });
+    return [
+      ...RESPONSE_TIME_BUCKETS.map(
+        (bucket): ResponseTimeBucket => ({
+          range: bucket.label,
+          count: 0,
+          percentage: 0,
+        })
+      ),
+      { range: '>500ms', count: 0, percentage: 0 },
+    ];
   }
 
   const total = histogram.count || histogram.buckets['+Inf'] || 0;

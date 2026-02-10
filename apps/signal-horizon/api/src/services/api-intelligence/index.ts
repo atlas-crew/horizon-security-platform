@@ -12,6 +12,7 @@
 import { Prisma, type PrismaClient, type SignalType } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'events';
+import { ViolationTypeSchema } from '../../schemas/api-intelligence.js';
 import type {
   APIIntelligenceSignal,
   SignalBatch,
@@ -328,8 +329,8 @@ export class APIIntelligenceService extends EventEmitter {
     const endpoint = typeof metadata.path === 'string' && metadata.path.length > 0
       ? metadata.path
       : templatePattern ?? 'unknown';
-    const violationType = typeof metadata.violationType === 'string'
-      ? metadata.violationType
+    const violationType = ViolationTypeSchema.safeParse(metadata.violationType).success
+      ? (metadata.violationType as APIIntelligenceSignal['violationType'])
       : undefined;
     const violationPath = typeof metadata.field === 'string' ? metadata.field : undefined;
 
@@ -366,6 +367,7 @@ export class APIIntelligenceService extends EventEmitter {
     const schema = metadata.schema;
     const tags = Array.isArray(metadata.tags) ? metadata.tags : [];
     const parameters = metadata.parameters;
+    const parametersJson = parameters as unknown as Prisma.InputJsonValue;
 
     const existingEndpoint = await this.prisma.endpoint.findFirst({
       where: {
@@ -404,7 +406,7 @@ export class APIIntelligenceService extends EventEmitter {
         requestSchema: schema ? (schema as Prisma.InputJsonValue) : undefined,
         metadata: {
           tags,
-          parameters,
+          parameters: parametersJson,
         },
       },
     });

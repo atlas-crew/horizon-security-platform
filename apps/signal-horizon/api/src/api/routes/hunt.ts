@@ -792,6 +792,11 @@ export function createHuntRoutes(
       // Authentication already verified by requireScope middleware
       const { id } = req.params;
 
+      if (!req.auth) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       // Get the saved query first to check ownership
       const savedQuery = await huntService.getSavedQuery(id);
       if (!savedQuery) {

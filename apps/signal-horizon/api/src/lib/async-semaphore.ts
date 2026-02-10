@@ -6,6 +6,10 @@ export class AsyncSemaphore {
     this.available = capacity;
   }
 
+  getCapacity(): number {
+    return this.capacity;
+  }
+
   getAvailable(): number {
     return this.available;
   }

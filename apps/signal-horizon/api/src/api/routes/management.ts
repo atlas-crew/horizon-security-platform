@@ -10,6 +10,9 @@ import crypto from 'crypto';
 import dns from 'dns/promises';
 import tls from 'tls';
 import net from 'net';
+import dgram from 'dgram';
+import http from 'http';
+import http2 from 'http2';
 import { spawn } from 'child_process';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
@@ -32,6 +35,17 @@ const CONNECTIVITY_CONFIG = {
     dns: 10000,
     tls: 10000,
     traceroute: 60000,
+    http1: 10000,
+    http2: 10000,
+    h2c: 10000,
+    tcp: 8000,
+    udp: 8000,
+    grpc: 10000,
+    mqtt: 10000,
+    redis: 8000,
+    smtp: 10000,
+    icap: 8000,
+    syslog: 4000,
   },
   limits: {
     maxHostnameLength: 253,
@@ -48,6 +62,18 @@ const DEFAULT_TEST_TARGETS = {
   dns: 'google.com',
   tls: 'google.com',
   traceroute: '8.8.8.8',
+  // Apparatus echo (local demo stack)
+  http1: 'http://demo.site:80/echo',
+  http2: 'https://demo.site:443/echo',
+  h2c: 'http://demo.site:81/echo',
+  tcp: 'demo.site:9000',
+  udp: 'demo.site:9001',
+  grpc: 'demo.site:50051',
+  mqtt: 'demo.site:1883',
+  redis: 'demo.site:6379',
+  smtp: 'demo.site:2525',
+  icap: 'demo.site:1344',
+  syslog: 'demo.site:5140',
 } as const;
 
 // Concurrency limiter for expensive operations
@@ -58,6 +84,49 @@ let activeTests = 0;
 // =============================================================================
 
 type ErrorType = 'timeout' | 'connection_refused' | 'dns_error' | 'tls_error' | 'unreachable' | 'blocked' | 'unknown';
+
+const PORT_AWARE_TEST_TYPES = new Set([
+  'http1',
+  'http2',
+  'h2c',
+  'tcp',
+  'udp',
+  'grpc',
+  'mqtt',
+  'redis',
+  'smtp',
+  'icap',
+  'syslog',
+]);
+
+export function defaultPortForTestType(testType: string): number | undefined {
+  switch (testType) {
+    case 'http1':
+      return 80;
+    case 'http2':
+      return 443;
+    case 'h2c':
+      return 81;
+    case 'tcp':
+      return 9000;
+    case 'udp':
+      return 9001;
+    case 'grpc':
+      return 50051;
+    case 'mqtt':
+      return 1883;
+    case 'redis':
+      return 6379;
+    case 'smtp':
+      return 2525;
+    case 'icap':
+      return 1344;
+    case 'syslog':
+      return 5140;
+    default:
+      return undefined;
+  }
+}
 
 interface TestResult {
   testType: string;
@@ -125,7 +194,84 @@ export function normalizeConnectivityTarget(raw: unknown): string | undefined {
   return stripPortFromHost(trimmed);
 }
 
+type ParsedConnectivityTarget = {
+  raw: string;
+  host: string;
+  port?: number;
+  path?: string;
+  scheme?: 'http' | 'https';
+};
+
+export function parseConnectivityTargetSpec(raw: string): ParsedConnectivityTarget | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // URL form (http/https)
+  if (trimmed.includes('://')) {
+    try {
+      const url = new URL(trimmed);
+      const port = url.port
+        ? Number(url.port)
+        : url.protocol === 'https:'
+          ? 443
+          : url.protocol === 'http:'
+            ? 80
+            : undefined;
+      const validPort =
+        typeof port === 'number' && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : undefined;
+      return {
+        raw: trimmed,
+        host: url.hostname,
+        port: validPort,
+        path: `${url.pathname || '/'}${url.search || ''}`,
+        scheme: url.protocol === 'https:' ? 'https' : 'http',
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Bracketed IPv6 + optional port: "[::1]:443"
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']');
+    if (end > 1) {
+      const host = trimmed.slice(1, end);
+      const rest = trimmed.slice(end + 1);
+      if (rest.startsWith(':')) {
+        const port = Number(rest.slice(1));
+        if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+        return {
+          raw: trimmed,
+          host,
+          port,
+        };
+      }
+      return { raw: trimmed, host };
+    }
+  }
+
+  // Pure IP (v4/v6)
+  if (net.isIP(trimmed)) return { raw: trimmed, host: trimmed };
+
+  // host:port (single colon). If multiple colons, assume hostname (and let validation reject if needed).
+  const colonCount = (trimmed.match(/:/g) || []).length;
+  if (colonCount === 1) {
+    const [host, portRaw] = trimmed.split(':');
+    if (!host) return null;
+    const port = Number(portRaw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+    return {
+      raw: trimmed,
+      host,
+      port,
+    };
+  }
+
+  return { raw: trimmed, host: trimmed };
+}
+
 export function getAllowlistedConnectivityTargets(config: {
+  isDev?: boolean;
   riskServer: { url: string };
   synapseDirect: { url?: string; enabled: boolean };
 }): Set<string> {
@@ -137,7 +283,85 @@ export function getAllowlistedConnectivityTargets(config: {
   const synapseHost = config.synapseDirect.url ? normalizeConnectivityTarget(config.synapseDirect.url) : undefined;
   if (synapseHost) allow.add(synapseHost.toLowerCase());
 
+  // Local demo stack targets (Apparatus echo). Only enable in dev.
+  if (config.isDev) {
+    allow.add('demo.site');
+    allow.add('apparatus');
+  }
+
   return allow;
+}
+
+function inferUrlPort(url: URL): number | undefined {
+  if (url.port) {
+    const p = Number(url.port);
+    return Number.isInteger(p) && p >= 1 && p <= 65535 ? p : undefined;
+  }
+  if (url.protocol === 'https:') return 443;
+  if (url.protocol === 'http:') return 80;
+  return undefined;
+}
+
+export function getAllowlistedConnectivityPorts(config: {
+  isDev?: boolean;
+  riskServer: { url: string };
+  synapseDirect: { url?: string; enabled: boolean };
+}): Map<string, Set<number>> {
+  const ports = new Map<string, Set<number>>();
+
+  const add = (host: string, port: number | undefined) => {
+    if (!host || !port) return;
+    const key = host.toLowerCase();
+    const set = ports.get(key) ?? new Set<number>();
+    set.add(port);
+    ports.set(key, set);
+  };
+
+  try {
+    const url = new URL(config.riskServer.url);
+    add(url.hostname, inferUrlPort(url));
+  } catch {
+    // ignore
+  }
+
+  if (config.synapseDirect.url) {
+    try {
+      const url = new URL(config.synapseDirect.url);
+      add(url.hostname, inferUrlPort(url));
+    } catch {
+      // ignore
+    }
+  }
+
+  if (config.isDev) {
+    const demoHosts = ['demo.site', 'apparatus'];
+    const demoPorts = [80, 443, 81, 9000, 9001, 50051, 1883, 6379, 2525, 1344, 5140];
+    for (const h of demoHosts) {
+      for (const p of demoPorts) add(h, p);
+    }
+  }
+
+  return ports;
+}
+
+export function checkConnectivityPortAllowlist(params: {
+  testType: string;
+  effectiveHost?: string;
+  effectiveTarget?: string;
+  allowPrivate: boolean;
+  allowlistedPorts: Map<string, Set<number>>;
+}): { ok: true } | { ok: false; port: number } {
+  if (!params.effectiveHost || !params.allowPrivate) return { ok: true };
+  if (!PORT_AWARE_TEST_TYPES.has(params.testType)) return { ok: true };
+
+  const parsed = params.effectiveTarget ? parseConnectivityTargetSpec(params.effectiveTarget) : null;
+  const port = parsed?.port ?? defaultPortForTestType(params.testType);
+  if (!port) return { ok: true };
+
+  const allowed = params.allowlistedPorts.get(params.effectiveHost.toLowerCase());
+  if (!allowed || !allowed.has(port)) return { ok: false, port };
+
+  return { ok: true };
 }
 
 /**
@@ -706,16 +930,1026 @@ async function runTracerouteTest(target: string, resolvedIP: string, logger: Log
   }
 }
 
+async function runHttp1Test(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  path: string,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.http1;
+
+  if (host.includes('\r') || host.includes('\n')) {
+    return {
+      testType: 'http1',
+      status: 'failed',
+      target: `http://${host}:${port}${path}`,
+      latencyMs: 0,
+      details: {},
+      errorType: 'blocked',
+      error: 'Invalid host header',
+      timestamp,
+    };
+  }
+
+  return await new Promise((resolve) => {
+    let resolved = false;
+    let bytes = 0;
+
+    const req = http.request(
+      {
+        host: resolvedIP,
+        port,
+        method: 'GET',
+        path,
+        headers: {
+          Host: host,
+          'User-Agent': 'signal-horizon-connectivity',
+          Accept: '*/*',
+        },
+      },
+      (res) => {
+        res.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes > 64 * 1024) {
+            // Avoid unbounded buffering for diagnostic endpoint.
+            res.destroy();
+          }
+        });
+        res.on('end', () => {
+          if (resolved) return;
+          resolved = true;
+          const statusCode = res.statusCode ?? 0;
+          resolve({
+            testType: 'http1',
+            status: statusCode >= 100 ? 'passed' : 'failed',
+            target: `http://${host}:${port}${path}`,
+            latencyMs: Date.now() - startTime,
+            details: {
+              statusCode,
+              bytesReceived: bytes,
+            },
+            timestamp,
+          });
+        });
+      }
+    );
+
+    req.setTimeout(timeout, () => req.destroy(new Error('HTTP request timed out')));
+
+    req.on('error', (error: unknown) => {
+      if (resolved) return;
+      resolved = true;
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'HTTP/1 test failed');
+      resolve({
+        testType: 'http1',
+        status: 'failed',
+        target: `http://${host}:${port}${path}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+
+    req.end();
+  });
+}
+
+async function runHttp2Test(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  path: string,
+  logger: Logger,
+  opts: { allowInsecureTls: boolean }
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.http2;
+
+  if (host.includes('\r') || host.includes('\n')) {
+    return {
+      testType: 'http2',
+      status: 'failed',
+      target: `https://${host}:${port}${path}`,
+      latencyMs: 0,
+      details: {},
+      errorType: 'blocked',
+      error: 'Invalid authority header',
+      timestamp,
+    };
+  }
+
+  return await new Promise((resolve) => {
+    let done = false;
+    const client = http2.connect(`https://${resolvedIP}:${port}`, {
+      servername: host,
+      rejectUnauthorized: !opts.allowInsecureTls,
+    });
+
+    const cleanup = () => {
+      try { client.close(); } catch { /* best effort */ }
+      try { client.destroy(); } catch { /* best effort */ }
+    };
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const onError = (error: unknown, status: 'failed' | 'error' = 'failed') => {
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'HTTP/2 test failed');
+      finish({
+        testType: 'http2',
+        status,
+        target: `https://${host}:${port}${path}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    };
+
+    client.setTimeout(timeout, () => onError(new Error('HTTP/2 request timed out')));
+    client.on('error', (err) => onError(err));
+
+    const req = client.request({
+      ':method': 'GET',
+      ':path': path,
+      ':authority': host,
+      ':scheme': 'https',
+      'user-agent': 'signal-horizon-connectivity',
+    });
+
+    let bytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 64 * 1024) req.close();
+    });
+    req.on('response', (headers) => {
+      const statusCode = Number(headers[':status'] ?? 0);
+      req.on('end', () => {
+        finish({
+          testType: 'http2',
+          status: statusCode >= 100 ? 'passed' : 'failed',
+          target: `https://${host}:${port}${path}`,
+          latencyMs: Date.now() - startTime,
+          details: {
+            statusCode,
+            bytesReceived: bytes,
+            tls: {
+              verify: !opts.allowInsecureTls,
+            },
+          },
+          timestamp,
+        });
+      });
+    });
+
+    req.on('error', (err) => onError(err));
+    req.end();
+  });
+}
+
+async function runH2cTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  path: string,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.h2c;
+
+  if (host.includes('\r') || host.includes('\n')) {
+    return {
+      testType: 'h2c',
+      status: 'failed',
+      target: `http://${host}:${port}${path}`,
+      latencyMs: 0,
+      details: {},
+      errorType: 'blocked',
+      error: 'Invalid authority header',
+      timestamp,
+    };
+  }
+
+  return await new Promise((resolve) => {
+    let done = false;
+    const client = http2.connect(`http://${resolvedIP}:${port}`);
+
+    const cleanup = () => {
+      try { client.close(); } catch { /* best effort */ }
+      try { client.destroy(); } catch { /* best effort */ }
+    };
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const onError = (error: unknown) => {
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'H2C test failed');
+      finish({
+        testType: 'h2c',
+        status: 'failed',
+        target: `http://${host}:${port}${path}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    };
+
+    client.setTimeout(timeout, () => onError(new Error('H2C request timed out')));
+    client.on('error', (err) => onError(err));
+
+    const req = client.request({
+      ':method': 'GET',
+      ':path': path,
+      ':authority': host,
+      ':scheme': 'http',
+      'user-agent': 'signal-horizon-connectivity',
+    });
+
+    let bytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 64 * 1024) req.close();
+    });
+
+    req.on('response', (headers) => {
+      const statusCode = Number(headers[':status'] ?? 0);
+      req.on('end', () => {
+        finish({
+          testType: 'h2c',
+          status: statusCode >= 100 ? 'passed' : 'failed',
+          target: `http://${host}:${port}${path}`,
+          latencyMs: Date.now() - startTime,
+          details: {
+            statusCode,
+            bytesReceived: bytes,
+          },
+          timestamp,
+        });
+      });
+    });
+
+    req.on('error', (err) => onError(err));
+    req.end();
+  });
+}
+
+async function runTcpEchoTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.tcp;
+  const payload = `signal-horizon tcp echo ${crypto.randomBytes(6).toString('hex')}\n`;
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+    let received = '';
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'tcp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'TCP connect timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('connect', () => {
+      socket.write(payload);
+    });
+
+    socket.on('data', (chunk) => {
+      received += chunk.toString();
+      if (received.includes(payload.trim())) {
+        clearTimeout(timeoutId);
+        finish({
+          testType: 'tcp',
+          status: 'passed',
+          target: `${host}:${port}`,
+          latencyMs: Date.now() - startTime,
+          details: {
+            echoed: true,
+            bytesReceived: received.length,
+          },
+          timestamp,
+        });
+      }
+      if (received.length > 4096) {
+        clearTimeout(timeoutId);
+        finish({
+          testType: 'tcp',
+          status: 'passed',
+          target: `${host}:${port}`,
+          latencyMs: Date.now() - startTime,
+          details: {
+            echoed: false,
+            bytesReceived: received.length,
+          },
+          timestamp,
+        });
+      }
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'TCP test failed');
+      finish({
+        testType: 'tcp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+
+    socket.on('end', () => {
+      clearTimeout(timeoutId);
+      finish({
+        testType: 'tcp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'unreachable',
+        error: 'Connection closed before echo received',
+        timestamp,
+      });
+    });
+  });
+}
+
+async function runUdpEchoTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.udp;
+  const payload = Buffer.from(`signal-horizon udp echo ${crypto.randomBytes(6).toString('hex')}`);
+
+  return await new Promise((resolve) => {
+    const socket = dgram.createSocket(net.isIPv6(resolvedIP) ? 'udp6' : 'udp4');
+    let done = false;
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      try { socket.close(); } catch { /* noop */ }
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'udp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'UDP echo timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('message', (msg) => {
+      clearTimeout(timeoutId);
+      finish({
+        testType: 'udp',
+        status: msg.equals(payload) ? 'passed' : 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          echoed: msg.equals(payload),
+          bytesReceived: msg.length,
+        },
+        timestamp,
+      });
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'UDP test failed');
+      finish({
+        testType: 'udp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+
+    socket.send(payload, port, resolvedIP, (err) => {
+      if (err) socket.emit('error', err);
+    });
+  });
+}
+
+async function runGrpcProbeTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.grpc;
+
+  // HTTP/2 client preface + an empty SETTINGS frame.
+  const preface = Buffer.from('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n', 'utf8');
+  const settings = Buffer.from([0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00]);
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'grpc',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'gRPC probe timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('connect', () => {
+      socket.write(Buffer.concat([preface, settings]));
+    });
+
+    socket.on('data', (chunk) => {
+      clearTimeout(timeoutId);
+      // HTTP/2 frame header: length(3) type(1) flags(1) streamId(4). SETTINGS type=0x04.
+      const looksLikeSettings = chunk.length >= 9 && chunk[3] === 0x04;
+      finish({
+        testType: 'grpc',
+        status: looksLikeSettings ? 'passed' : 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          http2SettingsFrame: looksLikeSettings,
+          bytesReceived: chunk.length,
+        },
+        timestamp,
+      });
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'gRPC probe failed');
+      finish({
+        testType: 'grpc',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+  });
+}
+
+function encodeMqttRemainingLength(len: number): Buffer {
+  const out: number[] = [];
+  let x = len;
+  do {
+    let digit = x % 128;
+    x = Math.floor(x / 128);
+    if (x > 0) digit = digit | 0x80;
+    out.push(digit);
+  } while (x > 0);
+  return Buffer.from(out);
+}
+
+async function runMqttConnectTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.mqtt;
+  const clientId = `signal-horizon-${crypto.randomBytes(4).toString('hex')}`;
+
+  const protoName = Buffer.from('MQTT', 'utf8');
+  const vh = Buffer.concat([
+    Buffer.from([0x00, protoName.length]),
+    protoName,
+    Buffer.from([0x04]), // protocol level 4 (3.1.1)
+    Buffer.from([0x02]), // clean session
+    Buffer.from([0x00, 0x3c]), // keepalive 60s
+  ]);
+
+  const cid = Buffer.from(clientId, 'utf8');
+  const payload = Buffer.concat([Buffer.from([0x00, cid.length]), cid]);
+  const remainingLength = vh.length + payload.length;
+  const fixedHeader = Buffer.concat([Buffer.from([0x10]), encodeMqttRemainingLength(remainingLength)]);
+  const packet = Buffer.concat([fixedHeader, vh, payload]);
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'mqtt',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'MQTT connect timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('connect', () => socket.write(packet));
+
+    socket.on('data', (chunk) => {
+      clearTimeout(timeoutId);
+      // CONNACK: 0x20 0x02 0x00 0x00 (accepted)
+      const ok = chunk.length >= 4 && chunk[0] === 0x20 && chunk[1] === 0x02 && chunk[3] === 0x00;
+      if (ok) {
+        // DISCONNECT (best effort)
+        try { socket.write(Buffer.from([0xE0, 0x00])); } catch { /* noop */ }
+      }
+      finish({
+        testType: 'mqtt',
+        status: ok ? 'passed' : 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          connack: ok,
+          bytesReceived: chunk.length,
+        },
+        timestamp,
+      });
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'MQTT test failed');
+      finish({
+        testType: 'mqtt',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+  });
+}
+
+async function runRedisPingTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.redis;
+  const payload = '*1\r\n$4\r\nPING\r\n';
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+    let buf = '';
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'redis',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'Redis ping timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('connect', () => socket.write(payload));
+    socket.on('data', (chunk) => {
+      buf += chunk.toString();
+      if (!buf.includes('\r\n')) return;
+      clearTimeout(timeoutId);
+      const ok = buf.startsWith('+PONG') || buf.startsWith('+');
+      finish({
+        testType: 'redis',
+        status: ok ? 'passed' : 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          pong: ok,
+        },
+        timestamp,
+      });
+    });
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'Redis test failed');
+      finish({
+        testType: 'redis',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+  });
+}
+
+async function runSmtpHeloTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.smtp;
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+    let buf = '';
+    let state: 'banner' | 'ehlo' = 'banner';
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'smtp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'SMTP handshake timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('data', (chunk) => {
+      buf += chunk.toString();
+      if (state === 'banner' && buf.includes('\r\n')) {
+        state = 'ehlo';
+        buf = '';
+        socket.write('EHLO signal-horizon\r\n');
+        return;
+      }
+      if (state === 'ehlo' && buf.includes('\r\n')) {
+        const lines = buf.split('\r\n').filter(Boolean).map(l => l.trim());
+        const hasError = lines.some(l => /^[45][0-9][0-9]\b/.test(l));
+        if (hasError) {
+          clearTimeout(timeoutId);
+          finish({
+            testType: 'smtp',
+            status: 'failed',
+            target: `${host}:${port}`,
+            latencyMs: Date.now() - startTime,
+            details: {
+              firstLine: (lines[0] || '').slice(0, 120),
+            },
+            errorType: 'unknown',
+            error: 'SMTP rejected EHLO',
+            timestamp,
+          });
+          return;
+        }
+
+        // Multiline EHLO ends with "250 <text>" (continuations use "250-").
+        const hasFinalOk = lines.some(l => /^250\s/.test(l) || l === '250');
+        if (hasFinalOk) {
+          clearTimeout(timeoutId);
+          finish({
+            testType: 'smtp',
+            status: 'passed',
+            target: `${host}:${port}`,
+            latencyMs: Date.now() - startTime,
+            details: {
+              greeted: true,
+            },
+            timestamp,
+          });
+        }
+      }
+      if (buf.length > 16 * 1024) {
+        clearTimeout(timeoutId);
+        finish({
+          testType: 'smtp',
+          status: 'failed',
+          target: `${host}:${port}`,
+          latencyMs: Date.now() - startTime,
+          details: {},
+          errorType: 'unknown',
+          error: 'SMTP response too large',
+          timestamp,
+        });
+      }
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'SMTP test failed');
+      finish({
+        testType: 'smtp',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+  });
+}
+
+async function runIcapOptionsTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.icap;
+
+  return await new Promise((resolve) => {
+    const socket = net.connect({ host: resolvedIP, port });
+    let done = false;
+    let buf = '';
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'icap',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'ICAP OPTIONS timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('connect', () => {
+      // Defense-in-depth: never interpolate CRLF into raw protocol lines.
+      if (!/^[a-zA-Z0-9.:-]+$/.test(host) || host.includes('\r') || host.includes('\n')) {
+        clearTimeout(timeoutId);
+        finish({
+          testType: 'icap',
+          status: 'failed',
+          target: `${host}:${port}`,
+          latencyMs: Date.now() - startTime,
+          details: {},
+          errorType: 'blocked',
+          error: 'Invalid host for ICAP request',
+          timestamp,
+        });
+        return;
+      }
+      const req =
+        `OPTIONS icap://${host}/ ICAP/1.0\r\n` +
+        `Host: ${host}\r\n` +
+        `User-Agent: signal-horizon-connectivity\r\n` +
+        `\r\n`;
+      socket.write(req);
+    });
+
+    socket.on('data', (chunk) => {
+      buf += chunk.toString();
+      if (!buf.includes('\r\n')) return;
+      clearTimeout(timeoutId);
+      const firstLine = buf.split('\r\n')[0] || '';
+      const ok = firstLine.startsWith('ICAP/1.0 200') || firstLine.startsWith('ICAP/1.0 204');
+      finish({
+        testType: 'icap',
+        status: ok ? 'passed' : 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          ok,
+          firstLine: firstLine.slice(0, 80),
+        },
+        timestamp,
+      });
+    });
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'ICAP test failed');
+      finish({
+        testType: 'icap',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+  });
+}
+
+async function runSyslogSendTest(
+  host: string,
+  resolvedIP: string,
+  port: number,
+  logger: Logger
+): Promise<TestResult> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const timeout = CONNECTIVITY_CONFIG.timeouts.syslog;
+  const payload = Buffer.from(`<134>1 ${new Date().toISOString()} signal-horizon connectivity - - - probe`);
+
+  return await new Promise((resolve) => {
+    const socket = dgram.createSocket(net.isIPv6(resolvedIP) ? 'udp6' : 'udp4');
+    let done = false;
+
+    const finish = (result: TestResult) => {
+      if (done) return;
+      done = true;
+      try { socket.close(); } catch { /* noop */ }
+      resolve(result);
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish({
+        testType: 'syslog',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType: 'timeout',
+        error: 'Syslog send timed out',
+        timestamp,
+      });
+    }, timeout);
+
+    socket.on('error', (error: unknown) => {
+      clearTimeout(timeoutId);
+      const errorType = classifyError(error);
+      logger.warn({ errorType, host, port }, 'Syslog send failed');
+      finish({
+        testType: 'syslog',
+        status: 'failed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {},
+        errorType,
+        error: sanitizeErrorMessage(error),
+        timestamp,
+      });
+    });
+
+    socket.send(payload, port, resolvedIP, (err) => {
+      if (err) {
+        socket.emit('error', err);
+        return;
+      }
+      clearTimeout(timeoutId);
+      finish({
+        testType: 'syslog',
+        status: 'passed',
+        target: `${host}:${port}`,
+        latencyMs: Date.now() - startTime,
+        details: {
+          note: 'UDP is connectionless; send completed without error',
+        },
+        timestamp,
+      });
+    });
+  });
+}
+
 /**
  * Run a connectivity test by type with concurrency control
  */
-async function runConnectivityTest(
+export async function runConnectivityTest(
   testType: string,
   target: string | undefined,
   logger: Logger,
-  opts: { allowPrivate: boolean }
+  opts: { allowPrivate: boolean; allowInsecureTls?: boolean }
 ): Promise<TestResult> {
   const testTarget = target || DEFAULT_TEST_TARGETS[testType as keyof typeof DEFAULT_TEST_TARGETS] || '8.8.8.8';
+  const parsed = parseConnectivityTargetSpec(testTarget);
+  if (!parsed) {
+    return {
+      testType,
+      status: 'error',
+      target: testTarget,
+      latencyMs: null,
+      details: {},
+      errorType: 'unknown',
+      error: 'Invalid target format',
+      timestamp: new Date().toISOString(),
+    };
+  }
 
   // Concurrency control
   if (activeTests >= CONNECTIVITY_CONFIG.limits.maxConcurrentTests) {
@@ -734,7 +1968,7 @@ async function runConnectivityTest(
   activeTests++;
   try {
     // Resolve and validate target (DNS rebinding protection)
-    const { ip: resolvedIP, hostname } = await resolveAndValidateTarget(testTarget, logger, opts);
+    const { ip: resolvedIP, hostname } = await resolveAndValidateTarget(parsed.host, logger, opts);
 
     switch (testType) {
       case 'ping':
@@ -745,6 +1979,30 @@ async function runConnectivityTest(
         return await runTlsTest(hostname, resolvedIP, logger);
       case 'traceroute':
         return await runTracerouteTest(hostname, resolvedIP, logger);
+      case 'http1':
+        return await runHttp1Test(hostname, resolvedIP, parsed.port ?? 80, parsed.path ?? '/echo', logger);
+      case 'http2':
+        return await runHttp2Test(hostname, resolvedIP, parsed.port ?? 443, parsed.path ?? '/echo', logger, {
+          allowInsecureTls: opts.allowInsecureTls ?? false,
+        });
+      case 'h2c':
+        return await runH2cTest(hostname, resolvedIP, parsed.port ?? 81, parsed.path ?? '/echo', logger);
+      case 'tcp':
+        return await runTcpEchoTest(hostname, resolvedIP, parsed.port ?? 9000, logger);
+      case 'udp':
+        return await runUdpEchoTest(hostname, resolvedIP, parsed.port ?? 9001, logger);
+      case 'grpc':
+        return await runGrpcProbeTest(hostname, resolvedIP, parsed.port ?? 50051, logger);
+      case 'mqtt':
+        return await runMqttConnectTest(hostname, resolvedIP, parsed.port ?? 1883, logger);
+      case 'redis':
+        return await runRedisPingTest(hostname, resolvedIP, parsed.port ?? 6379, logger);
+      case 'smtp':
+        return await runSmtpHeloTest(hostname, resolvedIP, parsed.port ?? 2525, logger);
+      case 'icap':
+        return await runIcapOptionsTest(hostname, resolvedIP, parsed.port ?? 1344, logger);
+      case 'syslog':
+        return await runSyslogSendTest(hostname, resolvedIP, parsed.port ?? 5140, logger);
       default:
         return {
           testType,
@@ -1189,8 +2447,11 @@ export function createManagementRoutes(
    * - Input validation and sanitization
    * - Audit logging
    *
-   * @param testType - 'ping' | 'dns' | 'tls' | 'traceroute'
-   * @param target - Optional hostname/IP (defaults to well-known endpoints)
+   * @param testType - Built-in diagnostics:
+   *   'ping' | 'dns' | 'tls' | 'traceroute' |
+   *   'http1' | 'http2' | 'h2c' |
+   *   'tcp' | 'udp' | 'grpc' | 'mqtt' | 'redis' | 'smtp' | 'icap' | 'syslog'
+   * @param target - Optional hostname/IP/host:port/URL (defaults to safe presets)
    */
   router.post(
     '/connectivity/test',
@@ -1204,13 +2465,30 @@ export function createManagementRoutes(
 
     try {
       const { testType, target, sensorIds } = req.body;
-      const normalizedTarget = normalizeConnectivityTarget(target);
+      const rawTarget = typeof target === 'string' ? target.trim() : undefined;
+      const normalizedTarget = normalizeConnectivityTarget(rawTarget);
       const { config } = await import('../../config.js');
       const allowlistedTargets = getAllowlistedConnectivityTargets(config);
-      const allowPrivate = normalizedTarget ? allowlistedTargets.has(normalizedTarget.toLowerCase()) : false;
+      const allowlistedPorts = getAllowlistedConnectivityPorts(config);
 
       // Validate test type
-      const validTestTypes = ['ping', 'dns', 'tls', 'traceroute'];
+      const validTestTypes = [
+        'ping',
+        'dns',
+        'tls',
+        'traceroute',
+        'http1',
+        'http2',
+        'h2c',
+        'tcp',
+        'udp',
+        'grpc',
+        'mqtt',
+        'redis',
+        'smtp',
+        'icap',
+        'syslog',
+      ];
       if (!testType || !validTestTypes.includes(testType)) {
         res.status(400).json({
           type: 'https://api.signal-horizon.io/errors/validation-error',
@@ -1218,6 +2496,46 @@ export function createManagementRoutes(
           status: 400,
           detail: `Test type must be one of: ${validTestTypes.join(', ')}`,
           validTypes: validTestTypes,
+        });
+        return;
+      }
+
+      const effectiveTarget =
+        rawTarget || DEFAULT_TEST_TARGETS[testType as keyof typeof DEFAULT_TEST_TARGETS] || undefined;
+      const effectiveHost = normalizeConnectivityTarget(effectiveTarget);
+      const allowPrivate = effectiveHost ? allowlistedTargets.has(effectiveHost.toLowerCase()) : false;
+      const allowInsecureTls =
+        Boolean(
+          config.isDev &&
+          effectiveHost &&
+          (effectiveHost.toLowerCase() === 'demo.site' || effectiveHost.toLowerCase() === 'apparatus')
+        );
+
+      if (rawTarget && PORT_AWARE_TEST_TYPES.has(testType) && !parseConnectivityTargetSpec(rawTarget)) {
+        res.status(400).json({
+          type: 'https://api.signal-horizon.io/errors/validation-error',
+          title: 'Invalid target',
+          status: 400,
+          detail: 'Target must be a hostname, IP address, host:port, or URL',
+        });
+        return;
+      }
+
+      // If targeting a private (allowlisted) host with a port-aware test, require the port itself to be allowlisted.
+      // This prevents using allowlisted internal hosts as a general port scanner.
+      const portCheck = checkConnectivityPortAllowlist({
+        testType,
+        effectiveHost: effectiveHost || undefined,
+        effectiveTarget: effectiveTarget || undefined,
+        allowPrivate,
+        allowlistedPorts,
+      });
+      if (!portCheck.ok) {
+        res.status(400).json({
+          type: 'https://api.signal-horizon.io/errors/ssrf-blocked',
+          title: 'Target port blocked',
+          status: 400,
+          detail: 'This target port is not allowed for diagnostics',
         });
         return;
       }
@@ -1243,7 +2561,7 @@ export function createManagementRoutes(
           type: 'network_diagnostic',
           payload: {
             testType,
-            target: normalizedTarget || DEFAULT_TEST_TARGETS[testType as keyof typeof DEFAULT_TEST_TARGETS],
+            target: effectiveTarget,
           },
         });
 
@@ -1259,7 +2577,7 @@ export function createManagementRoutes(
       }
 
       // Validate target if provided (local Hub execution)
-      if (target) {
+      if (rawTarget) {
         if (!normalizedTarget) {
           res.status(400).json({
             type: 'https://api.signal-horizon.io/errors/validation-error',
@@ -1317,7 +2635,7 @@ export function createManagementRoutes(
           clientIP,
           userId,
           testType,
-          target: normalizedTarget || 'default',
+          target: effectiveHost || 'default',
           allowPrivate,
           action: 'CONNECTIVITY_TEST_START',
         },
@@ -1325,7 +2643,7 @@ export function createManagementRoutes(
       );
 
       // Run the actual test
-      const result = await runConnectivityTest(testType, normalizedTarget, logger, { allowPrivate });
+      const result = await runConnectivityTest(testType, rawTarget, logger, { allowPrivate, allowInsecureTls });
 
       // Audit log: test completed
       logger.info(

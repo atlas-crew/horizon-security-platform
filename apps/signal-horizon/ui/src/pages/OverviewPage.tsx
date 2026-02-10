@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import type { Topology, GeometryCollection } from 'topojson-specification';
 import land from 'world-atlas/land-110m.json';
 import {
   Shield,
@@ -44,6 +43,102 @@ import {
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
+
+function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRoute[] }) {
+  const W = 920;
+  const H = 520;
+
+  const landGeo = useMemo(() => {
+    const topo = land as any;
+    return feature(topo, topo.objects.land);
+  }, []);
+
+  const projection = useMemo(
+    () => geoNaturalEarth1().fitSize([W, H], landGeo as any),
+    [landGeo],
+  );
+
+  const path = useMemo(() => geoPath(projection), [projection]);
+
+  const byId = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
+
+  const severityColor = (s: AttackSeverity) => {
+    if (s === 'CRITICAL') return colors.red;
+    if (s === 'HIGH') return colors.magenta;
+    if (s === 'MEDIUM') return colors.orange;
+    return colors.skyBlue;
+  };
+
+  const projPoint = (p: AttackPoint) => projection([p.lon, p.lat]) as [number, number] | null;
+
+  const routePath = (from: AttackPoint, to: AttackPoint) => {
+    const a = projPoint(from);
+    const b = projPoint(to);
+    if (!a || !b) return null;
+    const [x1, y1] = a;
+    const [x2, y2] = b;
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2 - Math.min(120, Math.hypot(x2 - x1, y2 - y1) / 4);
+    return `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`;
+  };
+
+  return (
+    <div className="relative w-full h-[520px] overflow-hidden border border-border-subtle bg-surface-base">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height="100%"
+        role="img"
+        aria-label="Live attack map"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d={path(landGeo as any) ?? ''}
+          fill="rgba(255,255,255,0.04)"
+          stroke="rgba(255,255,255,0.06)"
+        />
+
+        {routes.map((r) => {
+          const from = byId.get(r.from);
+          const to = byId.get(r.to);
+          if (!from || !to) return null;
+          const d = routePath(from, to);
+          if (!d) return null;
+          const stroke = severityColor(r.severity);
+          return (
+            <motion.path
+              key={r.id}
+              d={d}
+              fill="none"
+              stroke={stroke}
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.6 }}
+            />
+          );
+        })}
+
+        {points.map((p) => {
+          const xy = projPoint(p);
+          if (!xy) return null;
+          const [x, y] = xy;
+          const fill = severityColor(p.severity);
+          const r = Math.max(2.5, Math.min(7, 2.5 + Math.log10(Math.max(10, p.count)) * 1.5));
+          return (
+            <g key={p.id}>
+              <circle cx={x} cy={y} r={r + 4} fill={fill} opacity={0.08} />
+              <circle cx={x} cy={y} r={r} fill={fill} opacity={0.9}>
+                <title>{p.label} · {p.count.toLocaleString()}</title>
+              </circle>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
 
 const fallbackAttackers = [
   { label: '185.228.101.0/24', value: 12421 },
@@ -176,15 +271,16 @@ export default function OverviewPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {mapFilters.map((filter) => (
-                <Button
-                  key={filter}
-                  variant={activeFilter === filter ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setActiveFilter(filter)}
-                  style={{ fontSize: '12px', height: '28px', padding: '0 12px' }}
-                >{filter}</Button>
-              ))}
+	              {mapFilters.map((filter) => (
+	                <Button
+	                  key={filter}
+	                  variant={activeFilter === filter ? 'primary' : 'ghost'}
+	                  size="sm"
+	                  onClick={() => setActiveFilter(filter)}
+	                  className={clsx(activeFilter === filter && 'border-link')}
+	                  style={{ fontSize: '12px', height: '28px', padding: '0 12px' }}
+	                >{filter}</Button>
+	              ))}
             </div>
           </div>
           <div className="card-body relative z-10">
@@ -232,7 +328,7 @@ export default function OverviewPage() {
               <Shield className="w-4 h-4" />
               <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Insight</span>
             </div>
-            <h3 className="text-xl font-light mb-4 tracking-tight" style={{ color: '#F0F4F8' }}>Fleet Vulnerability Analysis</h3>
+            <h3 className="text-xl font-light mb-4 tracking-tight" style={{ color: colors.gray.light }}>Fleet Vulnerability Analysis</h3>
             <p className="text-sm leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.7)' }}>
               Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api.
               Edge sensors have automatically shifted to aggressive rate-limiting.

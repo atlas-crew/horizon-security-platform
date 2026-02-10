@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import { colors, fontFamily, fontWeight, chartColors } from '../tokens/tokens';
+import { colors, fontFamily, fontWeight } from '../tokens/tokens';
 import { lighten, darken } from '../utils/helpers';
 
 export { chartColors } from '../tokens/tokens';

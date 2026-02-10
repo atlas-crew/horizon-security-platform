@@ -14,9 +14,13 @@ interface TooltipProps {
 
 export const Tooltip: React.FC<TooltipProps> = ({ content, position = 'top', delay = 200, children }) => {
   const [visible, setVisible] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const show = () => { timeoutRef.current = setTimeout(() => setVisible(true), delay); };
-  const hide = () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); setVisible(false); };
+  const hide = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+    setVisible(false);
+  };
   useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
 
   const positionStyles: Record<string, React.CSSProperties> = {

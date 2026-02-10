@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { colors, fontFamily, fontWeight, spacing, transitions } from '../tokens/tokens';
 
 /**

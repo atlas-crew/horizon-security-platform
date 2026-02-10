@@ -38,7 +38,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
       aria-labelledby="feed-heading"
     >
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
-        <h2 id="feed-heading" className="text-xs font-bold tracking-[0.2em] text-ac-blue dark:text-ac-sky-blue uppercase flex items-center gap-2">
+        <h2 id="feed-heading" className="text-xs font-bold tracking-[0.2em] text-ac-blue dark:text-ac-sky-blue flex items-center gap-2">
           <span className="w-2 h-2 bg-ac-blue dark:bg-ac-sky-blue status-blink" />
           Threat Trajectory
         </h2>
@@ -112,7 +112,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
       </div>
 
       <div className="px-4 py-2 bg-surface-subtle/50 border-t border-border-subtle">
-        <button className="w-full py-2 text-[9px] font-bold text-ac-blue dark:text-ac-sky-blue uppercase tracking-[0.2em] hover:text-ink-primary transition-colors">
+        <button className="w-full py-2 text-[9px] font-bold text-ac-blue dark:text-ac-sky-blue tracking-[0.2em] hover:text-ink-primary transition-colors">
           Access Full Terminal Feed &gt;
         </button>
       </div>

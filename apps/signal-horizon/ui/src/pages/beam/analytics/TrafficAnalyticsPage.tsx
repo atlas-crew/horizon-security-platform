@@ -43,12 +43,16 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 ];
 
 // Demo data
-const DEMO_TRAFFIC_HOURLY = Array.from({ length: 24 }, (_, i) => ({
-  time: `${String(i).padStart(2, '0')}:00`,
-  requests: Math.floor(Math.random() * 5000) + 1000,
-  blocked: Math.floor(Math.random() * 100) + 10,
-  allowed: Math.floor(Math.random() * 4900) + 900,
-}));
+const DEMO_TRAFFIC_HOURLY = Array.from({ length: 24 }, (_, i) => {
+  const requests = Math.floor(Math.random() * 5000) + 1000;
+  const blocked = Math.floor(Math.random() * 100) + 10;
+  return {
+    time: `${String(i).padStart(2, '0')}:00`,
+    requests,
+    blocked,
+    allowed: Math.max(0, requests - blocked),
+  };
+});
 
 const DEMO_METHOD_BREAKDOWN = [
   { method: 'GET', count: 45200, percentage: 65 },
@@ -67,9 +71,8 @@ const DEMO_TOP_ENDPOINTS = [
 
 // Atlas Crew brand colors
 const CHART_COLORS = {
-  requests: '#0057B7',  // Atlas Crew Blue
-  blocked: '#D62598',   // Atlas Crew Magenta
-  allowed: '#00B140',   // Atlas Crew Green
+  allowed: '#0057B7',   // Atlas Crew Blue (primary series)
+  blocked: '#EF3340',   // Atlas Crew Red (danger/error)
   get: '#0057B7',       // Atlas Crew Blue
   post: '#00B140',      // Atlas Crew Green
   put: '#E35205',       // Atlas Crew Orange
@@ -158,23 +161,19 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
   const gridStroke = useMemo(() => getGridStroke(), []);
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
+    <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-ink-primary">Traffic Over Time</h3>
-          <p className="text-sm text-ink-secondary mt-1">Requests per hour</p>
+          <h3 className="text-xl font-light text-ink-primary">Traffic Over Time</h3>
+          <p className="text-sm text-ink-secondary mt-1">Allowed + Blocked requests per hour (total implied)</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-blue-500" />
-            <span className="text-ink-secondary">Total</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500" />
+            <div className="w-3 h-3" style={{ backgroundColor: CHART_COLORS.allowed }} />
             <span className="text-ink-secondary">Allowed</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500" />
+            <div className="w-3 h-3" style={{ backgroundColor: CHART_COLORS.blocked }} />
             <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>
@@ -183,24 +182,24 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient id="requestsGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={CHART_COLORS.requests} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS.requests} stopOpacity={0} />
-              </linearGradient>
               <linearGradient id="allowedGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={CHART_COLORS.allowed} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS.allowed} stopOpacity={0} />
+                <stop offset="0%" stopColor={CHART_COLORS.allowed} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={CHART_COLORS.allowed} stopOpacity={0.02} />
+              </linearGradient>
+              <linearGradient id="blockedGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_COLORS.blocked} stopOpacity={0.28} />
+                <stop offset="100%" stopColor={CHART_COLORS.blocked} stopOpacity={0.03} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fill: tickColor, fontSize: 12 }}
+              tick={{ fill: tickColor, fontSize: 12, fontFamily: 'Rubik' }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: tickColor, fontSize: 12 }}
+              tick={{ fill: tickColor, fontSize: 12, fontFamily: 'Rubik' }}
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
@@ -209,30 +208,31 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               contentStyle={tooltipStyle.contentStyle}
               labelStyle={tooltipStyle.labelStyle}
               itemStyle={tooltipStyle.itemStyle}
-            />
-            <Area
-              type="monotone"
-              dataKey="requests"
-              stroke={CHART_COLORS.requests}
-              fill="url(#requestsGrad)"
-              strokeWidth={2}
-              name="Total"
+              formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Area
               type="monotone"
               dataKey="allowed"
+              stackId="traffic"
               stroke={CHART_COLORS.allowed}
               fill="url(#allowedGrad)"
-              strokeWidth={2}
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 3.5, fill: '#F0F4F8', stroke: CHART_COLORS.allowed, strokeWidth: 2 }}
               name="Allowed"
+              style={{ filter: 'drop-shadow(0 0 6px rgba(0, 87, 183, 0.35))' }}
             />
             <Area
               type="monotone"
               dataKey="blocked"
+              stackId="traffic"
               stroke={CHART_COLORS.blocked}
-              fill="transparent"
-              strokeWidth={2}
+              fill="url(#blockedGrad)"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 3.5, fill: '#F0F4F8', stroke: CHART_COLORS.blocked, strokeWidth: 2 }}
               name="Blocked"
+              style={{ filter: 'drop-shadow(0 0 6px rgba(239, 51, 64, 0.28))' }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -284,7 +284,7 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
             />
             <Bar
               dataKey="count"
-              fill={CHART_COLORS.requests}
+              fill={CHART_COLORS.allowed}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               shape={(props: any) => {
                 const { x, y, width, height, payload } = props;
@@ -294,7 +294,7 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
                     y={y}
                     width={width}
                     height={height}
-                    fill={colors[payload.method] || CHART_COLORS.requests}
+                    fill={colors[payload.method] || CHART_COLORS.allowed}
                     rx={0}
                     ry={0}
                   />

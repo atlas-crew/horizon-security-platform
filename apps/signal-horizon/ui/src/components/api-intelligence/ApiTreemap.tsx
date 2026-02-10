@@ -37,14 +37,14 @@ const DEMO_TREEMAP_DATA = [
   },
 ];
 
-// Atlas Crew Brand colors (brand hierarchy order)
+// Atlas Crew Brand chart series colors (priority order per chart standards)
 const COLORS = [
-  '#001E62', // Navy
   '#0057B7', // Atlas Crew Blue
-  '#D62598', // Magenta
   '#529EEC', // Sky Blue
-  '#008731', // Green (contrast-safe)
-  '#C24900', // Orange (contrast-safe)
+  '#00B140', // Green
+  '#E35205', // Orange
+  '#D62598', // Magenta
+  '#5E8AB4', // Cloud Blue
 ];
 
 // Simple rect-only content
@@ -87,8 +87,10 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
   return (
     <div className="card h-[400px] flex flex-col">
       <div className="card-header flex justify-between items-center">
-        <h3 className="font-medium text-ink-primary">API Surface Area</h3>
-        <span className="text-xs text-ink-secondary">Size = Request Volume</span>
+        <div>
+          <h3 className="text-xl font-light text-ink-primary">API Surface Area</h3>
+          <p className="text-sm text-ink-secondary">Size = Request Volume</p>
+        </div>
       </div>
       <div className="flex-1 min-h-0 p-4">
         {treemapData.length > 0 ? (
@@ -105,8 +107,8 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs">
-                        <p className="font-semibold text-ink-primary">{data.name}</p>
+                      <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs" style={{ fontFamily: 'Rubik' }}>
+                        <p className="font-medium text-ink-primary">{data.name}</p>
                         {data.method && (
                           <p className="text-ink-secondary">Method: {data.method}</p>
                         )}
@@ -130,7 +132,7 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
           </div>
         )}
       </div>
-      {/* Legend */}
+      {/* Legend — square markers per brand */}
       {treemapData.length > 0 && (
         <div className="px-4 pb-4 flex flex-wrap gap-4">
           {treemapData.map((service, i) => (
@@ -139,7 +141,7 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
                 className="w-3 h-3"
                 style={{ backgroundColor: COLORS[i % COLORS.length] }}
               />
-              <span className="text-xs text-ink-secondary">{service.name}</span>
+              <span className="text-xs text-ink-secondary" style={{ fontFamily: 'Rubik' }}>{service.name}</span>
             </div>
           ))}
         </div>

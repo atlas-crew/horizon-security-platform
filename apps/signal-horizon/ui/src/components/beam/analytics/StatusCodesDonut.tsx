@@ -13,17 +13,17 @@ interface StatusCodesDonutProps {
   className?: string;
 }
 
-// Atlas Crew brand colors for status codes
+// Atlas Crew brand chart colors for status codes
 const statusCodeColors: Record<string, string> = {
-  '2xx': '#00B140', // success - Atlas Crew Green
+  '2xx': '#00B140', // success - Green
   '3xx': '#0057B7', // redirect - Atlas Crew Blue
-  '4xx': '#E35205', // client error - Atlas Crew Orange
-  '5xx': '#D62598', // server error - Atlas Crew Magenta
+  '4xx': '#E35205', // client error - Orange
+  '5xx': '#EF3340', // server error - Red
 };
 
 /**
  * StatusCodesDonut - Donut chart showing HTTP status code distribution.
- * 2xx=green, 3xx=blue, 4xx=sky blue (Atlas Crew brand), 5xx=red.
+ * Uses brand chart palette: 2xx=green, 3xx=blue, 4xx=orange, 5xx=red.
  */
 export const StatusCodesDonut = memo(function StatusCodesDonut({
   data,
@@ -53,18 +53,20 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
               name,
             ]}
-            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px' }}
+            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px', fontFamily: 'Rubik' }}
             labelStyle={TOOLTIP_LABEL_STYLE}
             itemStyle={TOOLTIP_ITEM_STYLE}
           />
           <Legend
             verticalAlign="bottom"
             height={36}
+            iconType="square"
+            iconSize={12}
             formatter={(value, _entry) => {
               const item = data.find((d) => d.name === value);
               const percentage = item ? ((item.value / total) * 100).toFixed(1) : '0';
               return (
-                <span className="text-xs text-ink-secondary">
+                <span style={{ fontFamily: 'Rubik', fontSize: 12 }} className="text-ink-secondary">
                   {value} ({percentage}%)
                 </span>
               );

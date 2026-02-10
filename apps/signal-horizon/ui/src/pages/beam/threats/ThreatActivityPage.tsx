@@ -3,7 +3,7 @@
  * Real-time threat monitoring with heatmap and incident timeline
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -32,6 +32,7 @@ import {
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
+import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
@@ -401,7 +402,8 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
 }
 
 export default function ThreatActivityPage() {
-  const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const timeRange = useTimeRange() as TimeRange;
+  const setTimeRange = useHorizonStore(s => s.setTimeRange);
 
   // Fetch threats from API
   const {

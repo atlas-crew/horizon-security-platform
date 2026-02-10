@@ -110,7 +110,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
 
             <div className="flex items-center gap-4">
               <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-ink-primary group-hover:text-white uppercase tracking-tighter">
+                <div className="text-xs font-bold text-ink-primary group-hover:text-white tracking-tighter">
                   Status: {campaign.status}
                 </div>
               </div>

@@ -32,14 +32,14 @@ interface ResponseTimeDistributionChartProps {
   className?: string;
 }
 
-// Atlas Crew brand chart colors from fast (green) to slow (magenta)
+// Latency buckets are time ranges; keep them one color and only warn/danger at the tail.
 const bucketColors = [
-  '#00B140', // <25ms - Green (fast)
-  '#00B140', // 25-50ms - Green
-  '#529EEC', // 50-100ms - Sky Blue (ok)
-  '#E35205', // 100-250ms - Orange (slow)
-  '#D62598', // 250-500ms - Magenta (critical)
-  '#D62598', // >500ms - Magenta
+  '#0057B7', // <25ms - Atlas Crew Blue
+  '#0057B7', // 25-50ms - Atlas Crew Blue
+  '#0057B7', // 50-100ms - Atlas Crew Blue
+  '#0057B7', // 100-250ms - Atlas Crew Blue
+  '#E35205', // 250-500ms - Orange (warning)
+  '#EF3340', // >500ms - Red (danger)
 ];
 
 // Pre-compute unique colors for gradient defs

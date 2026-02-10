@@ -47,7 +47,7 @@ const COUNTRY_TRAFFIC: Record<string, number> = {
   '643': 5000,   // RUS
 };
 
-const COLOR_SCALE = scaleThreshold<number, number[]>()
+const COLOR_SCALE = scaleThreshold()
   .domain([1000, 5000, 10000, 50000, 100000])
   .range([
     [82, 158, 236],  // Sky Blue (#529EEC)

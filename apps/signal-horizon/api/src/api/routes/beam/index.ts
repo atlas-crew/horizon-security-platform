@@ -10,10 +10,12 @@ import { createAnalyticsRouter } from './analytics.js';
 import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
 import { config } from '../../../config.js';
 import { buildTraceHeaders } from '../../../lib/trace-headers.js';
+import type { SecurityAuditService } from '../../../services/audit/security-audit.js';
 
 export function createBeamRouter(
   prisma: PrismaClient,
-  logger: Logger
+  logger: Logger,
+  auditService?: SecurityAuditService
 ): Router {
   const router = Router();
   const beamLogger = logger.child({ module: 'beam' });
@@ -45,7 +47,7 @@ export function createBeamRouter(
 
   router.use('/dashboard', createDashboardRouter(prisma, beamLogger));
   router.use('/endpoints', createEndpointsRouter(prisma, beamLogger));
-  router.use('/rules', createRulesRouter(prisma, beamLogger));
+  router.use('/rules', createRulesRouter(prisma, beamLogger, auditService));
   router.use('/threats', createThreatsRouter(prisma, beamLogger));
   router.use('/analytics', createAnalyticsRouter(prisma, beamLogger));
 

@@ -64,12 +64,14 @@ export const CreateRuleSchema = z.object({
     value: z.string(),
   })).optional(),
   sensitivity: z.number().min(0).max(100).default(50),
-});
+}).strict();
 
 /**
  * Rule update schema (all fields optional)
  */
-export const UpdateRuleSchema = CreateRuleSchema.partial();
+export const UpdateRuleSchema = CreateRuleSchema.partial().extend({
+  enabled: z.boolean().optional(),
+}).strict();
 
 /**
  * Endpoint query parameters

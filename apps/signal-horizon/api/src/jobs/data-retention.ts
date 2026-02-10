@@ -110,15 +110,21 @@ export class DataRetentionService {
 
       // Record in security audit log
       if (this.auditService) {
-        await this.auditService.record({
-          action: 'DATA_RETENTION_PURGE',
-          resourceType: 'system',
-          resourceId: 'retention-service',
-          userId: 'system',
-          tenantId: 'fleet',
-          result: 'SUCCESS',
-          details: { ...results, config: this.config },
-        });
+        await this.auditService.logEvent(
+          {
+            ipAddress: null,
+            userAgent: null,
+            userId: 'system',
+            tenantId: 'fleet',
+            requestId: null,
+          },
+          {
+            action: 'DATA_RETENTION_PURGE',
+            result: 'SUCCESS',
+            resourceId: 'retention-service',
+            details: { ...results, config: this.config },
+          }
+        );
       }
 
       return results;

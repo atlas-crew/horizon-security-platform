@@ -48,7 +48,13 @@ export type SecurityAuditAction =
   // Configuration operations
   | 'CONFIG_CREATED'
   | 'CONFIG_UPDATED'
-  | 'CONFIG_DELETED';
+  | 'CONFIG_DELETED'
+  // Rule operations
+  | 'RULE_CREATED'
+  | 'RULE_UPDATED'
+  | 'RULE_DELETED'
+  // System operations
+  | 'DATA_RETENTION_PURGE';
 
 /**
  * Result of an audited operation
@@ -129,7 +135,7 @@ export class SecurityAuditService {
       userAgent: this.extractUserAgent(req),
       userId: auth?.userId ?? null,
       tenantId: auth?.tenantId ?? 'unknown',
-      requestId: req.id ?? null,
+      requestId: req.id != null ? String(req.id) : null,
     };
   }
 
@@ -269,6 +275,12 @@ export class SecurityAuditService {
     }
     if (action.startsWith('CONFIG_')) {
       return 'configuration';
+    }
+    if (action.startsWith('RULE_')) {
+      return 'rule';
+    }
+    if (action === 'DATA_RETENTION_PURGE') {
+      return 'system';
     }
     return 'playbook';
   }

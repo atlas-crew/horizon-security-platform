@@ -25,11 +25,28 @@ export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Route
     const where: Prisma.BlockDecisionWhereInput = { tenantId };
 
     if (severity) {
-      where.severity = severity;
+      // BlockDecision doesn't store "severity" directly; approximate via riskScore.
+      const ranges: Record<
+        typeof severity,
+        { gte: number; lte?: number }
+      > = {
+        low: { gte: 0, lte: 24 },
+        medium: { gte: 25, lte: 49 },
+        high: { gte: 50, lte: 74 },
+        critical: { gte: 75 },
+      };
+
+      where.riskScore = ranges[severity];
     }
 
     if (status) {
-      where.action = status;
+      // BlockDecision stores the decision mode; accept both legacy + current labels.
+      const modes: Record<typeof status, string[]> = {
+        blocked: ['blocked', 'block'],
+        allowed: ['allowed', 'allow'],
+        monitored: ['monitored', 'monitor'],
+      };
+      where.mode = { in: modes[status] };
     }
 
     if (timeRange) {

@@ -191,4 +191,49 @@ describe('ConfigManagerPage', () => {
       });
     });
   });
+
+  it('disables push when no sensors are selected in push modal', async () => {
+    apiFetch.mockImplementation(async (endpoint: string, options?: any) => {
+      if (endpoint === '/fleet/config/templates' && (!options || options.method === 'GET')) {
+        return {
+          templates: [
+            {
+              id: 'tmpl-1',
+              name: 'Template 1',
+              description: '',
+              environment: 'production',
+              version: '1.0.0',
+              isActive: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      if (endpoint === '/fleet/config/sync-status') {
+        return {
+          totalSensors: 2,
+          syncedSensors: 2,
+          outOfSyncSensors: 0,
+          errorSensors: 0,
+          syncPercentage: 100,
+        };
+      }
+      if (endpoint.startsWith('/fleet/config/audit')) {
+        return { logs: [], total: 0, limit: 25, offset: 0 };
+      }
+      return {};
+    });
+
+    renderWithClient(<ConfigManagerPage />);
+    await waitFor(() => expect(screen.getByText('Template 1')).toBeInTheDocument());
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Push to Selected'));
+    });
+
+    const dialog = screen.getByRole('dialog');
+    const pushButton = within(dialog).getByRole('button', { name: /Push \(0\)/ });
+    expect(pushButton).toBeDisabled();
+  });
 });

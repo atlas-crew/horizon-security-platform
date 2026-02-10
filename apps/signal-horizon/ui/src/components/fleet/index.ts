@@ -13,6 +13,7 @@ export { FileBrowser } from './FileBrowser';
 export { RolloutManager } from './RolloutManager';
 export { SessionSearchResults } from './SessionSearchResults';
 export { SynapseConfigEditor, getDefaultConfigYaml } from './SynapseConfigEditor';
+export { PolicyConfigEditor } from './PolicyConfigEditor';
 export type { SynapseConfig } from './SynapseConfigEditor';
 export type { WebTerminalProps } from './WebTerminal';
 export type { EmbeddedDashboardProps } from './EmbeddedDashboard';

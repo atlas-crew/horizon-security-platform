@@ -170,7 +170,7 @@ export function FleetOverviewPage() {
           icon={CheckCircle}
           iconBg="bg-status-success/10"
           iconColor="text-status-success"
-          value={summary.onlineCount}
+          value={formatNumber(summary.onlineCount)}
           label="Sensors Online"
           description="Number of sensors currently connected and reporting telemetry"
           borderClassName="border-l-ac-green"
@@ -180,7 +180,7 @@ export function FleetOverviewPage() {
           icon={AlertTriangle}
           iconBg="bg-status-warning/10"
           iconColor="text-status-warning"
-          value={summary.warningCount}
+          value={formatNumber(summary.warningCount)}
           label="Needs Attention"
           description="Sensors with degraded performance, high resource usage, or reconnecting"
           borderClassName="border-l-ac-orange"
@@ -190,7 +190,7 @@ export function FleetOverviewPage() {
           icon={XCircle}
           iconBg="bg-status-error/10"
           iconColor="text-status-error"
-          value={summary.offlineCount}
+          value={formatNumber(summary.offlineCount)}
           label="Offline"
           description="Sensors that have stopped reporting and may need investigation"
           borderClassName="border-l-ac-red"
@@ -290,7 +290,7 @@ export function FleetOverviewPage() {
 function StatsCard({ icon: Icon, iconBg, iconColor, value, label, description, borderClassName, valueClassName }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string; description?: string; borderClassName: string; valueClassName: string }) {
   return (
     <div className={`card border border-border-subtle border-l-2 p-6 ${borderClassName}`}>
-      <div className={`w-10 h-10 border border-border-subtle ${iconBg} flex items-center justify-center mb-3`}>
+      <div className={`w-10 h-10 ${iconBg} flex items-center justify-center mb-3`}>
         <Icon className={`w-5 h-5 ${iconColor}`} />
       </div>
       <div className={`text-3xl font-light ${valueClassName}`}>{value}</div>
@@ -310,7 +310,7 @@ function QuickAction({ icon: Icon, title, description, onClick, accentClassName,
       className={`card border border-border-subtle border-l-2 p-4 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50 ${accentClassName} ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-subtle'}`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 border border-border-subtle bg-surface-subtle flex items-center justify-center">
+        <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center">
           <Icon className={`w-5 h-5 ${iconClassName}`} />
         </div>
         <div>
@@ -360,7 +360,7 @@ function RegionBar({ region }: { region: { region: string; online: number; warni
 function formatNumber(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toString();
+  return n.toFixed(1);
 }
 
 function formatRegion(region: string): string {

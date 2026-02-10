@@ -2,11 +2,18 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
 import { SynapseConfigEditor, getDefaultConfigYaml } from '../../components/fleet/SynapseConfigEditor';
+import {
+  AdvancedConfigPanel,
+  defaultAdvancedConfig,
+  type AdvancedConfigData,
+} from '../../components/fleet/pingora';
+import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
 import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
+import { deepMergeConfig } from '../../utils';
 import YAML from 'yaml';
 
 interface ConfigTemplate {
@@ -72,6 +79,7 @@ async function pushConfig(templateId: string, sensorIds: string[]): Promise<void
 }
 
 type TemplateEditorMode = 'create' | 'edit';
+type TemplateConfigView = 'base' | 'advanced' | 'json';
 
 function parseYamlConfig(yamlText: string): Record<string, unknown> {
   const parsed = YAML.parse(yamlText);
@@ -79,6 +87,42 @@ function parseYamlConfig(yamlText: string): Record<string, unknown> {
     throw new Error('Config must be a YAML mapping (object at root)');
   }
   return parsed as Record<string, unknown>;
+}
+
+function extractAdvancedConfig(fullConfig: Record<string, unknown>): AdvancedConfigData {
+  return {
+    dlp: (fullConfig.dlp as AdvancedConfigData['dlp']) || defaultAdvancedConfig.dlp,
+    block_page: (fullConfig.block_page as AdvancedConfigData['block_page']) || defaultAdvancedConfig.block_page,
+    crawler: (fullConfig.crawler as AdvancedConfigData['crawler']) || defaultAdvancedConfig.crawler,
+    tarpit: (fullConfig.tarpit as AdvancedConfigData['tarpit']) || defaultAdvancedConfig.tarpit,
+    entity: (fullConfig.entity as AdvancedConfigData['entity']) || defaultAdvancedConfig.entity,
+    travel: (fullConfig.travel as AdvancedConfigData['travel']) || defaultAdvancedConfig.travel,
+  };
+}
+
+function mergeAdvancedConfig(
+  fullConfig: Record<string, unknown>,
+  advancedConfig: AdvancedConfigData
+): Record<string, unknown> {
+  return {
+    ...fullConfig,
+    dlp: deepMergeConfig((fullConfig.dlp as Record<string, unknown>) || {}, advancedConfig.dlp),
+    block_page: deepMergeConfig((fullConfig.block_page as Record<string, unknown>) || {}, advancedConfig.block_page),
+    crawler: deepMergeConfig((fullConfig.crawler as Record<string, unknown>) || {}, advancedConfig.crawler),
+    tarpit: deepMergeConfig((fullConfig.tarpit as Record<string, unknown>) || {}, advancedConfig.tarpit),
+    entity: deepMergeConfig((fullConfig.entity as Record<string, unknown>) || {}, advancedConfig.entity),
+    travel: deepMergeConfig((fullConfig.travel as Record<string, unknown>) || {}, advancedConfig.travel),
+  };
+}
+
+function extractBaseConfig(fullConfig: Record<string, unknown>): Record<string, unknown> {
+  const base: Record<string, unknown> = {};
+  for (const key of ['server', 'sites', 'rate_limit', 'profiler']) {
+    if (Object.prototype.hasOwnProperty.call(fullConfig, key)) {
+      base[key] = fullConfig[key];
+    }
+  }
+  return base;
 }
 
 export function ConfigManagerPage() {
@@ -91,6 +135,11 @@ export function ConfigManagerPage() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateModalMode, setTemplateModalMode] = useState<TemplateEditorMode>('create');
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateDetailLoading, setTemplateDetailLoading] = useState(false);
+  const [templateDetailError, setTemplateDetailError] = useState<string | null>(null);
+  const [templateConfigView, setTemplateConfigView] = useState<TemplateConfigView>('base');
+  const [templateBaseYamlError, setTemplateBaseYamlError] = useState<string | null>(null);
+  const [templateJsonError, setTemplateJsonError] = useState<string | null>(null);
 
   const [showPushModal, setShowPushModal] = useState(false);
   const [pushTemplateId, setPushTemplateId] = useState<string | null>(null);
@@ -101,6 +150,9 @@ export function ConfigManagerPage() {
   const [newEnv, setNewEnv] = useState<'production' | 'staging' | 'dev'>('production');
   const [newDesc, setNewDesc] = useState('');
   const [newConfig, setNewConfig] = useState(getDefaultConfigYaml);
+  const [templateConfigJson, setTemplateConfigJson] = useState('{\n}\n');
+  const [templateConfigObject, setTemplateConfigObject] = useState<Record<string, unknown>>({});
+  const [templateAdvancedConfig, setTemplateAdvancedConfig] = useState<AdvancedConfigData>(defaultAdvancedConfig);
 
   // Pingora upstream preset: Apparatus echo
   const { data: sensors = [] } = useSensors();
@@ -109,7 +161,13 @@ export function ConfigManagerPage() {
   const [selectedEchoSensors, setSelectedEchoSensors] = useState<Set<string>>(new Set());
   const echoSelectedIds = useMemo(() => Array.from(selectedEchoSensors), [selectedEchoSensors]);
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+  const {
+    data: templates = [],
+    isLoading: templatesLoading,
+    isError: templatesIsError,
+    error: templatesError,
+    refetch: refetchTemplates,
+  } = useQuery({
     queryKey: ['fleet', 'config', 'templates', isDemoMode ? scenario : 'live'],
     queryFn: () => {
       if (isDemoMode) {
@@ -117,9 +175,16 @@ export function ConfigManagerPage() {
       }
       return fetchTemplates();
     },
+    retry: false,
   });
 
-  const { data: syncStatus } = useQuery({
+  const {
+    data: syncStatus,
+    isLoading: syncLoading,
+    isError: syncIsError,
+    error: syncError,
+    refetch: refetchSyncStatus,
+  } = useQuery({
     queryKey: ['fleet', 'config', 'sync-status', isDemoMode ? scenario : 'live'],
     queryFn: () => {
       if (isDemoMode) {
@@ -128,9 +193,16 @@ export function ConfigManagerPage() {
       return fetchSyncStatus();
     },
     refetchInterval: isDemoMode ? false : 10000,
+    retry: false,
   });
 
-  const { data: auditData, isLoading: auditLoading } = useQuery({
+  const {
+    data: auditData,
+    isLoading: auditLoading,
+    isError: auditIsError,
+    error: auditError,
+    refetch: refetchAudit,
+  } = useQuery({
     queryKey: ['fleet', 'config', 'audit', isDemoMode ? scenario : 'live'],
     queryFn: () => {
       if (isDemoMode) {
@@ -139,6 +211,7 @@ export function ConfigManagerPage() {
       return fetchConfigAudit();
     },
     refetchInterval: isDemoMode ? false : 15000,
+    retry: false,
   });
 
   const pushMutation = useMutation({
@@ -235,6 +308,7 @@ export function ConfigManagerPage() {
   };
 
   const auditLogs = auditData?.logs ?? [];
+
   const formatAuditAction = (action: ConfigAuditLog['action']) =>
     action.replace('CONFIG_', '').toLowerCase();
 
@@ -259,42 +333,132 @@ export function ConfigManagerPage() {
   const openCreateModal = () => {
     setTemplateModalMode('create');
     setEditingTemplateId(null);
+    setTemplateDetailLoading(false);
+    setTemplateDetailError(null);
+    setTemplateConfigView('base');
+    setTemplateBaseYamlError(null);
+    setTemplateJsonError(null);
     setNewName('');
     setNewDesc('');
     setNewEnv('production');
-    setNewConfig(getDefaultConfigYaml);
+    try {
+      const seedYaml = getDefaultConfigYaml();
+      setNewConfig(seedYaml);
+      const parsed = parseYamlConfig(seedYaml);
+      setTemplateConfigObject(parsed);
+      setTemplateAdvancedConfig(extractAdvancedConfig(parsed));
+      setTemplateConfigJson(JSON.stringify(parsed, null, 2));
+    } catch {
+      setNewConfig(getDefaultConfigYaml());
+      setTemplateConfigObject({});
+      setTemplateAdvancedConfig(defaultAdvancedConfig);
+      setTemplateConfigJson('{\n}\n');
+    }
     setShowTemplateModal(true);
   };
 
   const openEditModal = async (id: string) => {
     setTemplateModalMode('edit');
     setEditingTemplateId(id);
+    setTemplateDetailError(null);
+    setTemplateDetailLoading(true);
+    setTemplateConfigView('base');
+    setTemplateBaseYamlError(null);
+    setTemplateJsonError(null);
+    // Reset fields so stale state doesn't flash while detail loads.
+    setNewName('');
+    setNewDesc('');
+    setNewEnv('production');
+    setNewConfig(getDefaultConfigYaml());
+    setTemplateConfigObject({});
+    setTemplateAdvancedConfig(defaultAdvancedConfig);
+    setTemplateConfigJson('{\n}\n');
     setShowTemplateModal(true);
 
     if (isDemoMode) {
       const demoTemplate: any = (getDemoData(scenario).fleet.configTemplates || []).find(
         (t: any) => t.id === id
       );
-      if (!demoTemplate) return;
-      setNewName(demoTemplate.name ?? '');
-      setNewDesc(demoTemplate.description ?? '');
-      setNewEnv((demoTemplate.environment ?? 'production') as any);
-      try {
-        setNewConfig(YAML.stringify(demoTemplate.config ?? {}, { indent: 2 }));
-      } catch {
-        setNewConfig(getDefaultConfigYaml);
+      if (!demoTemplate) {
+        setTemplateDetailLoading(false);
+        toast.error('Template not found');
+        setShowTemplateModal(false);
+        return;
       }
+      try {
+        const cfg = (demoTemplate.config ?? {}) as Record<string, unknown>;
+        setNewName(demoTemplate.name ?? '');
+        setNewDesc(demoTemplate.description ?? '');
+        setNewEnv((demoTemplate.environment ?? 'production') as any);
+        setTemplateConfigObject(cfg);
+        setTemplateAdvancedConfig(extractAdvancedConfig(cfg));
+        setTemplateConfigJson(JSON.stringify(cfg, null, 2));
+        setNewConfig(YAML.stringify(extractBaseConfig(cfg), { indent: 2 }));
+      } catch {
+        setNewConfig(getDefaultConfigYaml());
+      }
+      setTemplateDetailLoading(false);
       return;
     }
 
     try {
       const detail = await fetchTemplateDetail(id);
+      const cfg = (detail.config ?? {}) as Record<string, unknown>;
       setNewName(detail.name ?? '');
       setNewDesc(detail.description ?? '');
       setNewEnv((detail.environment ?? 'production') as any);
-      setNewConfig(YAML.stringify(detail.config ?? {}, { indent: 2 }));
+      setTemplateConfigObject(cfg);
+      setTemplateAdvancedConfig(extractAdvancedConfig(cfg));
+      setTemplateConfigJson(JSON.stringify(cfg, null, 2));
+      setNewConfig(YAML.stringify(extractBaseConfig(cfg), { indent: 2 }));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to load template');
+      const message = err?.message || 'Failed to load template';
+      setTemplateDetailError(message);
+      toast.error(message);
+    }
+    setTemplateDetailLoading(false);
+  };
+
+  const handleBaseYamlChange = (yamlText: string) => {
+    setNewConfig(yamlText);
+    try {
+      const parsed = parseYamlConfig(yamlText);
+      setTemplateBaseYamlError(null);
+      setTemplateConfigObject((prev) => {
+        const merged = deepMergeConfig(prev, parsed);
+        setTemplateAdvancedConfig(extractAdvancedConfig(merged));
+        setTemplateConfigJson(JSON.stringify(merged, null, 2));
+        return merged;
+      });
+    } catch (err: any) {
+      setTemplateBaseYamlError(err?.message || 'Invalid YAML config');
+      // Keep last good object/json/advanced in place.
+    }
+  };
+
+  const handleAdvancedConfigChange = (nextAdvanced: AdvancedConfigData) => {
+    setTemplateAdvancedConfig(nextAdvanced);
+    setTemplateConfigObject((prev) => {
+      const merged = mergeAdvancedConfig(prev, nextAdvanced);
+      setTemplateConfigJson(JSON.stringify(merged, null, 2));
+      return merged;
+    });
+  };
+
+  const handleJsonChange = (jsonText: string) => {
+    setTemplateConfigJson(jsonText);
+    try {
+      const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Config must be a JSON object at root');
+      }
+      setTemplateJsonError(null);
+      setTemplateConfigObject(parsed);
+      setTemplateAdvancedConfig(extractAdvancedConfig(parsed));
+      setNewConfig(YAML.stringify(extractBaseConfig(parsed), { indent: 2 }));
+    } catch (err: any) {
+      setTemplateJsonError(err?.message || 'Invalid JSON config');
+      // Keep last good object/yaml/advanced in place.
     }
   };
 
@@ -310,13 +474,16 @@ export function ConfigManagerPage() {
       return;
     }
 
-    let config: Record<string, unknown>;
-    try {
-      config = parseYamlConfig(newConfig);
-    } catch (err: any) {
-      toast.error(err?.message || 'Invalid YAML config');
+    if (templateConfigView === 'base' && templateBaseYamlError) {
+      toast.error(templateBaseYamlError);
       return;
     }
+    if (templateConfigView === 'json' && templateJsonError) {
+      toast.error(templateJsonError);
+      return;
+    }
+
+    const config = templateConfigObject;
 
     if (templateModalMode === 'create') {
       await templateCreateMutation.mutateAsync({
@@ -361,6 +528,15 @@ export function ConfigManagerPage() {
     setShowPushModal(false);
   };
 
+  const selectedPushCount = pushSelectedSensors.size;
+
+  const templatesErrorMessage =
+    templatesError instanceof Error ? templatesError.message : 'Failed to load templates';
+  const syncErrorMessage =
+    syncError instanceof Error ? syncError.message : 'Failed to load sync status';
+  const auditErrorMessage =
+    auditError instanceof Error ? auditError.message : 'Failed to load audit trail';
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -380,31 +556,44 @@ export function ConfigManagerPage() {
       </div>
 
       {/* Sync Status */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <MetricCard label="Total Sensors" value={syncStatus?.totalSensors ?? 0} />
-        <MetricCard
-          label="In Sync"
-          value={syncStatus?.syncedSensors ?? 0}
-          className="border-ac-green/40"
-        />
-        <MetricCard
-          label="Out of Sync"
-          value={syncStatus?.outOfSyncSensors ?? 0}
-          className={syncStatus?.outOfSyncSensors ? 'border-ac-orange/40' : ''}
-        />
-        <MetricCard
-          label="Sync Errors"
-          value={syncStatus?.errorSensors ?? 0}
-          className={syncStatus?.errorSensors ? 'border-ac-red/40' : ''}
-        />
-      </div>
+      {syncIsError ? (
+        <div className="card p-6">
+          <div className="text-sm text-ac-red">Sync status unavailable: {syncErrorMessage}</div>
+          <button
+            type="button"
+            onClick={() => refetchSyncStatus()}
+            className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+          <MetricCard label="Total Sensors" value={syncStatus?.totalSensors ?? 0} />
+          <MetricCard
+            label="In Sync"
+            value={syncStatus?.syncedSensors ?? 0}
+            className="border-ac-green/40"
+          />
+          <MetricCard
+            label="Out of Sync"
+            value={syncStatus?.outOfSyncSensors ?? 0}
+            className={syncStatus?.outOfSyncSensors ? 'border-ac-orange/40' : ''}
+          />
+          <MetricCard
+            label="Sync Errors"
+            value={syncStatus?.errorSensors ?? 0}
+            className={syncStatus?.errorSensors ? 'border-ac-red/40' : ''}
+          />
+        </div>
+      )}
 
       {/* Sync Progress */}
-      {syncStatus && (
+      {syncStatus && !syncLoading && !syncIsError && (
         <div className="card p-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-medium text-ink-primary">Fleet Sync Status</h3>
-            <span className="text-sm text-ink-secondary">{syncStatus.syncPercentage.toFixed(1)}%</span>
+            <span className="text-sm text-ink-secondary">{Math.round(syncStatus.syncPercentage)}%</span>
           </div>
           <div className="w-full h-3 bg-surface-subtle">
             <div
@@ -583,6 +772,17 @@ export function ConfigManagerPage() {
 
         {templatesLoading ? (
           <div className="p-12 text-center text-ink-muted">Loading templates...</div>
+        ) : templatesIsError ? (
+          <div className="p-6">
+            <div className="text-sm text-ac-red">Templates unavailable: {templatesErrorMessage}</div>
+            <button
+              type="button"
+              onClick={() => refetchTemplates()}
+              className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+            >
+              Retry
+            </button>
+          </div>
         ) : filteredTemplates.length === 0 ? (
           <div className="p-12 text-center text-ink-muted">
             No templates found. Create your first template to get started.
@@ -693,6 +893,17 @@ export function ConfigManagerPage() {
 
         {isDemoMode ? (
           <div className="p-6 text-sm text-ink-muted">Audit trail is disabled in demo mode.</div>
+        ) : auditIsError ? (
+          <div className="p-6">
+            <div className="text-sm text-ac-red">Audit trail unavailable: {auditErrorMessage}</div>
+            <button
+              type="button"
+              onClick={() => refetchAudit()}
+              className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+            >
+              Retry
+            </button>
+          </div>
         ) : auditLoading ? (
           <div className="p-6 text-sm text-ink-muted">Loading audit trail...</div>
         ) : auditLogs.length === 0 ? (
@@ -825,11 +1036,13 @@ export function ConfigManagerPage() {
               </button>
               <button
                 type="button"
-                disabled={pushMutation.isPending || sensors.length === 0}
+                disabled={
+                  pushMutation.isPending || sensors.length === 0 || selectedPushCount === 0
+                }
                 onClick={submitPushModal}
                 className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
               >
-                {pushMutation.isPending ? 'Pushing...' : 'Push'}
+                {pushMutation.isPending ? 'Pushing...' : `Push (${selectedPushCount})`}
               </button>
             </div>
           </div>
@@ -844,12 +1057,22 @@ export function ConfigManagerPage() {
           aria-modal="true"
           aria-labelledby="template-modal-title"
         >
-          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
+          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col relative">
             <h2 id="template-modal-title" className="text-xl font-light text-ink-primary mb-4">
               {templateModalMode === 'create' ? 'Create Configuration Template' : 'Edit Configuration Template'}
             </h2>
+
+            {templateDetailError && templateModalMode === 'edit' && (
+              <div className="mb-4 border border-ac-red/30 bg-ac-red/10 px-4 py-2 text-sm text-ac-red">
+                {templateDetailError}
+              </div>
+            )}
             
-            <div className="grid grid-cols-3 gap-6 flex-1 overflow-hidden">
+            <div
+              className={`grid grid-cols-3 gap-6 flex-1 overflow-hidden ${
+                templateDetailLoading ? 'opacity-60 pointer-events-none' : ''
+              }`}
+            >
               {/* Left Column: Metadata */}
               <div className="space-y-4">
                 <div>
@@ -858,6 +1081,7 @@ export function ConfigManagerPage() {
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
+                    disabled={templateDetailLoading}
                     className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
                     placeholder="Template name"
                   />
@@ -867,6 +1091,7 @@ export function ConfigManagerPage() {
                   <select 
                     value={newEnv}
                     onChange={(e) => setNewEnv(e.target.value as any)}
+                    disabled={templateDetailLoading}
                     className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
                   >
                     <option value="dev">Development</option>
@@ -879,6 +1104,7 @@ export function ConfigManagerPage() {
                   <textarea
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
+                    disabled={templateDetailLoading}
                     className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue resize-none h-32"
                     placeholder="Optional description"
                   />
@@ -887,13 +1113,90 @@ export function ConfigManagerPage() {
 
               {/* Right Column: Config Editor */}
               <div className="col-span-2 flex flex-col h-full overflow-hidden">
-                <label className="block text-sm font-medium text-ink-secondary mb-2">Sensor Configuration</label>
-                <div className="flex-1 overflow-hidden">
-                  <SynapseConfigEditor
-                    value={newConfig}
-                    onChange={setNewConfig}
-                  />
+                <div className="flex items-center justify-between gap-4 mb-2">
+                  <label className="block text-sm font-medium text-ink-secondary">Sensor Configuration</label>
+                  <div className="flex items-center bg-surface-subtle p-1">
+                    <button
+                      type="button"
+                      onClick={() => setTemplateConfigView('base')}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+                        templateConfigView === 'base'
+                          ? 'bg-surface-card text-ink-primary shadow-sm'
+                          : 'text-ink-secondary hover:text-ink-primary'
+                      }`}
+                    >
+                      Base
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateConfigView('advanced')}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+                        templateConfigView === 'advanced'
+                          ? 'bg-surface-card text-ink-primary shadow-sm'
+                          : 'text-ink-secondary hover:text-ink-primary'
+                      }`}
+                    >
+                      Advanced
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateConfigView('json')}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+                        templateConfigView === 'json'
+                          ? 'bg-surface-card text-ink-primary shadow-sm'
+                          : 'text-ink-secondary hover:text-ink-primary'
+                      }`}
+                    >
+                      JSON
+                    </button>
+                  </div>
                 </div>
+
+                {templateConfigView === 'base' && (
+                  <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                    {templateBaseYamlError && (
+                      <div className="mb-2 border border-ac-red/30 bg-ac-red/10 px-3 py-2 text-xs text-ac-red">
+                        {templateBaseYamlError}
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-hidden min-h-0">
+                      <SynapseConfigEditor value={newConfig} onChange={handleBaseYamlChange} />
+                    </div>
+                  </div>
+                )}
+
+                {templateConfigView === 'advanced' && (
+                  <div className="flex-1 overflow-auto min-h-0 border border-border-subtle bg-surface-base">
+                    <AdvancedConfigPanel config={templateAdvancedConfig} onChange={handleAdvancedConfigChange} />
+                  </div>
+                )}
+
+                {templateConfigView === 'json' && (
+                  <div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+                    <div className="border border-ac-magenta/30 bg-ac-magenta/10 px-4 py-3 text-xs text-ink-secondary">
+                      <div className="text-xs font-bold uppercase tracking-[0.2em] text-ac-magenta mb-1">
+                        Raw Config
+                      </div>
+                      Edit the full sensor configuration object. Invalid JSON will block save.
+                    </div>
+
+                    {templateJsonError && (
+                      <div className="border border-ac-red/30 bg-ac-red/10 px-3 py-2 text-xs text-ac-red">
+                        {templateJsonError}
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
+                      <CodeEditor
+                        value={templateConfigJson}
+                        onChange={handleJsonChange}
+                        language="json"
+                        height="100%"
+                        className="h-full font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -908,7 +1211,12 @@ export function ConfigManagerPage() {
               {templateModalMode === 'edit' && (
                 <button
                   type="button"
-                  disabled={isDemoMode || templateDeleteMutation.isPending || !editingTemplateId}
+                  disabled={
+                    isDemoMode ||
+                    templateDeleteMutation.isPending ||
+                    !editingTemplateId ||
+                    templateDetailLoading
+                  }
                   onClick={() => {
                     if (!editingTemplateId) return;
                     const ok = window.confirm('Delete this template? This cannot be undone.');
@@ -925,7 +1233,8 @@ export function ConfigManagerPage() {
                 disabled={
                   isDemoMode ||
                   templateCreateMutation.isPending ||
-                  templateUpdateMutation.isPending
+                  templateUpdateMutation.isPending ||
+                  templateDetailLoading
                 }
                 onClick={submitTemplateModal}
                 className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
@@ -939,6 +1248,14 @@ export function ConfigManagerPage() {
                     : 'Save Changes'}
               </button>
             </div>
+
+            {templateDetailLoading && templateModalMode === 'edit' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-ac-black/20">
+                <div className="bg-surface-base border border-border-subtle px-4 py-2 text-sm text-ink-secondary">
+                  Loading template...
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

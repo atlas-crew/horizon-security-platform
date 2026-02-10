@@ -33,7 +33,7 @@ import { useTenantSettings, SharingPreference } from '../hooks/useTenantSettings
 import { usePolicies, type PolicyTemplate } from '../hooks/fleet/usePolicies';
 import { useHubConfig, type HubConfig } from '../hooks/useHubConfig';
 import { useFleetControl, useSensors, usePlaybooks, useBlocklist, useOnboarding, useConnectivity } from '../hooks/fleet';
-import { MetricCard } from '../components/fleet';
+import { MetricCard, PolicyConfigEditor } from '../components/fleet';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
@@ -759,22 +759,32 @@ const AdminSettingsPage: React.FC = () => {
                     />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Config (JSON)</label>
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Policy Configuration</label>
                       <button
                         onClick={formatPolicyConfig}
                         className="text-[10px] font-bold uppercase tracking-widest text-ac-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
                       >
-                        Format
+                        Format JSON
                       </button>
                     </div>
-                    <textarea
-                      value={policyDraft.configText}
-                      onChange={(e) => setPolicyDraft((prev) => ({ ...prev, configText: e.target.value }))}
-                      rows={14}
-                      className="w-full bg-surface-subtle border border-border-subtle p-3 text-xs font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                    />
+                    
+                    <div className="border border-border-subtle p-1 bg-surface-subtle">
+                      <PolicyConfigEditor
+                        value={(() => {
+                          try {
+                            return JSON.parse(policyDraft.configText);
+                          } catch {
+                            return {};
+                          }
+                        })()}
+                        onChange={(newConfig) => setPolicyDraft(prev => ({
+                          ...prev,
+                          configText: JSON.stringify(newConfig, null, 2)
+                        }))}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-3 justify-end">

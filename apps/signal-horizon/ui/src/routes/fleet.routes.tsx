@@ -62,7 +62,7 @@ export const fleetRoutes: RouteObject[] = [
     ),
   },
   {
-    path: '/fleet/rules',
+    path: '/fleet/rules/:ruleId?',
     element: (
       <FleetErrorBoundary level="page" title="Rule Distribution Error">
         <FleetPageWrapper>

@@ -5592,7 +5592,7 @@ fn main() {
         });
 
         // Run TUI in main thread (blocks until 'q' is pressed)
-        if let Err(e) = tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui) {
+        if let Err(e) = tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
             eprintln!("TUI error: {}", e);
         }
         std::process::exit(0);

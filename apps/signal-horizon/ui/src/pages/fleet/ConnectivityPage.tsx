@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Activity,
@@ -38,6 +37,10 @@ import {
 } from 'recharts';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
+import { alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+
+const xAxisSmall = { ...xAxisNoLine, tick: { ...xAxisNoLine.tick, fontSize: 11 } } as const;
+const yAxisSmall = { ...axisDefaults.y, tick: { ...axisDefaults.y.tick, fontSize: 11 } } as const;
 
 interface ConnectivityStats {
   total: number;
@@ -614,22 +617,18 @@ export function ConnectivityPage(): React.ReactElement {
             <LineChart data={latencyTrendData}>
               <defs>
                 <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#529EEC" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#529EEC" stopOpacity={0} />
+                  <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={colors.skyBlue} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
-              <XAxis dataKey="time" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
-              />
+              <CartesianGrid {...gridDefaultsSoft} />
+              <XAxis dataKey="time" {...xAxisSmall} />
+              <YAxis {...yAxisSmall} />
+              <Tooltip {...tooltipDefaults} />
               <Line
                 type="monotone"
                 dataKey="latency"
-                stroke="#529EEC"
+                stroke={colors.skyBlue}
                 strokeWidth={2.5}
                 dot={false}
                 name="Latency (ms)"
@@ -645,18 +644,16 @@ export function ConnectivityPage(): React.ReactElement {
             <BarChart data={connectionEventsData}>
               <defs>
                 <linearGradient id="reconnectGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#E35205" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#E35205" stopOpacity={0.7} />
+                  <stop offset="0%" stopColor={colors.orange} stopOpacity={1} />
+                  <stop offset="100%" stopColor={colors.orange} stopOpacity={0.7} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
-              <XAxis dataKey="day" stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis stroke="#7B8FA8" fontSize={11} tickLine={false} axisLine={false} />
+              <CartesianGrid {...gridDefaultsSoft} />
+              <XAxis dataKey="day" {...xAxisSmall} />
+              <YAxis {...yAxisSmall} />
               <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
-                cursor={{ fill: 'rgba(0, 87, 183, 0.1)' }}
+                {...tooltipDefaults}
+                cursor={{ fill: alpha(colors.blue, 0.1) }}
               />
               <Bar dataKey="reconnections" fill="url(#reconnectGradient)" name="Reconnections" radius={[0, 0, 0, 0]} />
             </BarChart>

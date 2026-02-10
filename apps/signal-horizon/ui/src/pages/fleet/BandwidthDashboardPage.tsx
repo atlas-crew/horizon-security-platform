@@ -30,7 +30,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { axisDefaults, barDefaults, chartColors, colors, tooltipDefaults } from '@/ui';
+import { alpha, axisDefaults, barDefaults, chartColors, colors, tooltipDefaults } from '@/ui';
 import {
   useBandwidthDashboard,
   type BandwidthDataPoint,
@@ -106,16 +106,16 @@ function StatCard({ icon: Icon, label, value, subValue, trend, color, bgColor }:
             <div
               className={clsx(
                 'mt-2 flex items-center gap-1 text-sm',
-                trend.value >= 0 ? 'text-ac-green' : 'text-ac-red',
               )}
+              style={{ color: trend.value >= 0 ? colors.green : colors.red }}
             >
               <TrendingUp className={clsx('w-4 h-4', trend.value < 0 && 'rotate-180')} />
               <span>{Math.abs(trend.value)}% {trend.label}</span>
             </div>
           )}
         </div>
-        <div className={clsx('p-3', bgColor)}>
-          <Icon className={clsx('w-6 h-6', color)} />
+        <div className="p-3" style={{ backgroundColor: bgColor }}>
+          <Icon className="w-6 h-6" style={{ color }} />
         </div>
       </div>
     </motion.div>
@@ -246,7 +246,12 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
                 className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3 text-sm">
-                  <code className="text-ac-blue bg-ac-blue/10 px-2 py-0.5">{ep.endpoint}</code>
+                  <code
+                    className="px-2 py-0.5"
+                    style={{ color: colors.blue, backgroundColor: alpha(colors.blue, 0.1) }}
+                  >
+                    {ep.endpoint}
+                  </code>
                   <div className="mt-1 flex gap-1">
                     {ep.methods.map((m) => (
                       <span key={m} className="text-xs text-ink-muted bg-surface-subtle px-1.5 py-0.5">
@@ -257,13 +262,13 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <ArrowDownLeft className="w-3 h-3 text-ac-blue" />
+                    <ArrowDownLeft className="w-3 h-3" style={{ color: colors.blue }} />
                     {formatBytes(ep.bytesIn)}
                   </div>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <ArrowUpRight className="w-3 h-3 text-ac-green" />
+                    <ArrowUpRight className="w-3 h-3" style={{ color: colors.green }} />
                     {formatBytes(ep.bytesOut)}
                   </div>
                 </td>
@@ -335,7 +340,7 @@ function BillingPanel({
             <DollarSign className="w-4 h-4" />
             Estimated Cost
           </div>
-          <div className="text-2xl font-bold text-ac-green mt-1">{formatCurrency(estimatedCost)}</div>
+          <div className="text-2xl font-bold mt-1" style={{ color: colors.green }}>{formatCurrency(estimatedCost)}</div>
           <div className="text-xs text-ink-muted mt-1">@ {formatCurrency(costPerGb)}/GB</div>
         </div>
       </div>
@@ -393,6 +398,7 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
   const chartData = useMemo(
     () =>
       sensors.map((s) => ({
+        id: s.sensorId,
         name: s.sensorName,
         bytes: s.bytes / (1024 * 1024 * 1024), // Convert to GB
         requests: s.requestCount,
@@ -412,7 +418,11 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
               {...tooltipDefaults}
               formatter={(value: number) => [`${value.toFixed(2)} GB`, 'Bandwidth']}
             />
-            <Bar dataKey="bytes" fill={COLORS.primary} radius={barDefaults.radius} opacity={barDefaults.opacity} />
+            <Bar dataKey="bytes" radius={barDefaults.radius} opacity={barDefaults.opacity}>
+              {chartData.map((d, index) => (
+                <Cell key={d.id} fill={chartColors[index % chartColors.length]} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -478,8 +488,14 @@ export default function BandwidthDashboardPage() {
   if (isError) {
     return (
       <div className="p-6">
-        <div className="bg-status-error/10 border border-status-error/50 p-4">
-          <h2 className="text-lg font-semibold text-status-error">Error Loading Dashboard</h2>
+        <div
+          className="border p-4"
+          style={{
+            backgroundColor: alpha(colors.red, 0.1),
+            borderColor: alpha(colors.red, 0.5),
+          }}
+        >
+          <h2 className="text-lg font-semibold" style={{ color: colors.red }}>Error Loading Dashboard</h2>
           <p className="text-ink-secondary mt-1">{error instanceof Error ? error.message : 'Unknown error'}</p>
         </div>
       </div>
@@ -496,8 +512,14 @@ export default function BandwidthDashboardPage() {
   if (!stats && !timelineData && !endpointData && !billingData) {
     return (
       <div className="p-6">
-        <div className="bg-status-warning/10 border border-status-warning/50 p-4">
-          <h2 className="text-lg font-semibold text-status-warning">No Data Available</h2>
+        <div
+          className="border p-4"
+          style={{
+            backgroundColor: alpha(colors.orange, 0.1),
+            borderColor: alpha(colors.orange, 0.5),
+          }}
+        >
+          <h2 className="text-lg font-semibold" style={{ color: colors.orange }}>No Data Available</h2>
           <p className="text-ink-secondary mt-1">
             Bandwidth data is not currently available. This may be because no sensors are connected or reporting metrics.
           </p>
@@ -536,8 +558,8 @@ export default function BandwidthDashboardPage() {
             <option value={1440}>Last 24 hours</option>
           </select>
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 bg-ac-green animate-pulse" aria-hidden="true" />
-            <span className="text-ac-green">Live</span>
+            <span className="w-2 h-2 animate-pulse" aria-hidden="true" style={{ backgroundColor: colors.green }} />
+            <span style={{ color: colors.green }}>Live</span>
           </div>
         </div>
       </header>
@@ -549,31 +571,31 @@ export default function BandwidthDashboardPage() {
             icon={ArrowDownLeft}
             label="Total Ingress"
             value={formatBytes(stats.totalBytesIn)}
-            color="text-ac-blue"
-            bgColor="bg-ac-blue/10"
+            color={colors.blue}
+            bgColor={alpha(colors.blue, 0.1)}
           />
           <StatCard
             icon={ArrowUpRight}
             label="Total Egress"
             value={formatBytes(stats.totalBytesOut)}
-            color="text-ac-green"
-            bgColor="bg-ac-green/10"
+            color={colors.green}
+            bgColor={alpha(colors.green, 0.1)}
           />
           <StatCard
             icon={Activity}
             label="Total Requests"
             value={formatNumber(stats.totalRequests)}
             subValue={`Avg ${formatBytes(stats.avgBytesPerRequest)}/req`}
-            color="text-ac-purple"
-            bgColor="bg-ac-purple/10"
+            color={colors.purple}
+            bgColor={alpha(colors.purple, 0.1)}
           />
           <StatCard
             icon={Server}
             label="Fleet Coverage"
             value={`${stats.respondedSensors}/${stats.sensorCount}`}
             subValue="Sensors responding"
-            color="text-ac-orange"
-            bgColor="bg-ac-orange/10"
+            color={colors.orange}
+            bgColor={alpha(colors.orange, 0.1)}
           />
         </section>
       )}

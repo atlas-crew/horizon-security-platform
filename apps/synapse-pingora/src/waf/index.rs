@@ -790,3 +790,321 @@ fn collect_header_fields(condition: &MatchCondition, out: &mut HashSet<String>) 
         collect_header_fields(selector, out);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::waf::rule::{MatchCondition, MatchValue, WafRule};
+
+    /// Helper: build a minimal WafRule with a method match condition.
+    fn rule_with_method(id: u32, methods: &[&str]) -> WafRule {
+        let match_value = if methods.len() == 1 {
+            MatchValue::Str(methods[0].to_string())
+        } else {
+            MatchValue::Arr(
+                methods
+                    .iter()
+                    .map(|m| MatchValue::Str(m.to_string()))
+                    .collect(),
+            )
+        };
+
+        WafRule {
+            id,
+            description: format!("rule-{}", id),
+            contributing_score: None,
+            risk: Some(5.0),
+            blocking: None,
+            matches: vec![MatchCondition {
+                kind: "method".to_string(),
+                match_value: Some(match_value),
+                op: None,
+                field: None,
+                direction: None,
+                field_type: None,
+                name: None,
+                selector: None,
+                cleanup_after: None,
+                count: None,
+                timeframe: None,
+            }],
+        }
+    }
+
+    /// Helper: build a WafRule with a URI contains anchor.
+    fn rule_with_uri_contains(id: u32, pattern: &str) -> WafRule {
+        WafRule {
+            id,
+            description: format!("rule-{}", id),
+            contributing_score: None,
+            risk: Some(5.0),
+            blocking: None,
+            matches: vec![MatchCondition {
+                kind: "uri".to_string(),
+                match_value: Some(MatchValue::Cond(Box::new(MatchCondition {
+                    kind: "contains".to_string(),
+                    match_value: Some(MatchValue::Str(pattern.to_string())),
+                    op: None,
+                    field: None,
+                    direction: None,
+                    field_type: None,
+                    name: None,
+                    selector: None,
+                    cleanup_after: None,
+                    count: None,
+                    timeframe: None,
+                }))),
+                op: None,
+                field: None,
+                direction: None,
+                field_type: None,
+                name: None,
+                selector: None,
+                cleanup_after: None,
+                count: None,
+                timeframe: None,
+            }],
+        }
+    }
+
+    fn noop_percent_decode(s: &str) -> String {
+        s.to_string()
+    }
+
+    #[test]
+    fn test_method_to_mask_known_methods() {
+        assert_eq!(method_to_mask("GET"), Some(METHOD_GET));
+        assert_eq!(method_to_mask("POST"), Some(METHOD_POST));
+        assert_eq!(method_to_mask("HEAD"), Some(METHOD_HEAD));
+        assert_eq!(method_to_mask("PUT"), Some(METHOD_PUT));
+        assert_eq!(method_to_mask("PATCH"), Some(METHOD_PATCH));
+    }
+
+    #[test]
+    fn test_method_to_mask_case_insensitive() {
+        assert_eq!(method_to_mask("get"), Some(METHOD_GET));
+        assert_eq!(method_to_mask("Post"), Some(METHOD_POST));
+    }
+
+    #[test]
+    fn test_method_to_mask_unknown_returns_none() {
+        assert_eq!(method_to_mask("DELETE"), None);
+        assert_eq!(method_to_mask("OPTIONS"), None);
+        assert_eq!(method_to_mask("CONNECT"), None);
+    }
+
+    #[test]
+    fn test_build_rule_index_method_filtering() {
+        let rules = vec![
+            rule_with_method(1, &["GET"]),
+            rule_with_method(2, &["POST"]),
+            rule_with_method(3, &["GET", "POST"]),
+        ];
+
+        let index = build_rule_index(&rules);
+        assert_eq!(index.rules.len(), 3);
+
+        // Rule 0 (GET only)
+        assert_eq!(index.rules[0].method_mask, Some(METHOD_GET));
+        // Rule 1 (POST only)
+        assert_eq!(index.rules[1].method_mask, Some(METHOD_POST));
+        // Rule 2 (GET | POST)
+        assert_eq!(
+            index.rules[2].method_mask,
+            Some(METHOD_GET | METHOD_POST)
+        );
+    }
+
+    #[test]
+    fn test_get_candidates_get_method_returns_only_get_rules() {
+        let rules = vec![
+            rule_with_method(1, &["GET"]),
+            rule_with_method(2, &["POST"]),
+            rule_with_method(3, &["GET", "POST"]),
+        ];
+
+        let index = build_rule_index(&rules);
+
+        let candidates = get_candidate_rule_indices(
+            &index,
+            METHOD_GET,
+            "/any-path",
+            0,     // no feature requirements
+            false, // not static
+            0,     // no header mask
+            rules.len(),
+            noop_percent_decode,
+        );
+
+        // Should include rule 0 (GET) and rule 2 (GET|POST), but NOT rule 1 (POST)
+        assert!(candidates.contains(&0), "GET rule should be a candidate");
+        assert!(
+            !candidates.contains(&1),
+            "POST-only rule should NOT be a candidate for GET"
+        );
+        assert!(
+            candidates.contains(&2),
+            "GET|POST rule should be a candidate for GET"
+        );
+    }
+
+    #[test]
+    fn test_get_candidates_post_method_returns_only_post_rules() {
+        let rules = vec![
+            rule_with_method(1, &["GET"]),
+            rule_with_method(2, &["POST"]),
+            rule_with_method(3, &["GET", "POST"]),
+        ];
+
+        let index = build_rule_index(&rules);
+
+        let candidates = get_candidate_rule_indices(
+            &index,
+            METHOD_POST,
+            "/any-path",
+            0,
+            false,
+            0,
+            rules.len(),
+            noop_percent_decode,
+        );
+
+        assert!(
+            !candidates.contains(&0),
+            "GET-only rule should NOT be a candidate for POST"
+        );
+        assert!(candidates.contains(&1), "POST rule should be a candidate");
+        assert!(
+            candidates.contains(&2),
+            "GET|POST rule should be a candidate for POST"
+        );
+    }
+
+    #[test]
+    fn test_get_candidates_uri_anchor_filtering() {
+        let rules = vec![
+            rule_with_uri_contains(1, "/admin"),
+            rule_with_uri_contains(2, "/api"),
+        ];
+
+        let index = build_rule_index(&rules);
+
+        // Request to /admin/dashboard
+        let candidates = get_candidate_rule_indices(
+            &index,
+            0, // no method filter (unknown method)
+            "/admin/dashboard",
+            0,
+            false,
+            0,
+            rules.len(),
+            noop_percent_decode,
+        );
+        assert!(
+            candidates.contains(&0),
+            "/admin rule should match /admin/dashboard"
+        );
+        assert!(
+            !candidates.contains(&1),
+            "/api rule should NOT match /admin/dashboard"
+        );
+
+        // Request to /api/v1/users
+        let candidates = get_candidate_rule_indices(
+            &index,
+            0,
+            "/api/v1/users",
+            0,
+            false,
+            0,
+            rules.len(),
+            noop_percent_decode,
+        );
+        assert!(
+            !candidates.contains(&0),
+            "/admin rule should NOT match /api/v1/users"
+        );
+        assert!(
+            candidates.contains(&1),
+            "/api rule should match /api/v1/users"
+        );
+    }
+
+    #[test]
+    fn test_get_candidates_no_method_constraint_matches_all() {
+        // A rule without method constraint should match any request method
+        let rules = vec![rule_with_uri_contains(1, "/health")];
+
+        let index = build_rule_index(&rules);
+        // Method mask is None for the rule (no method condition)
+        assert!(index.rules[0].method_mask.is_none());
+
+        let candidates = get_candidate_rule_indices(
+            &index,
+            METHOD_GET,
+            "/health",
+            0,
+            false,
+            0,
+            rules.len(),
+            noop_percent_decode,
+        );
+        assert!(
+            candidates.contains(&0),
+            "rule without method constraint should match GET"
+        );
+
+        let candidates = get_candidate_rule_indices(
+            &index,
+            METHOD_POST,
+            "/health",
+            0,
+            false,
+            0,
+            rules.len(),
+            noop_percent_decode,
+        );
+        assert!(
+            candidates.contains(&0),
+            "rule without method constraint should match POST"
+        );
+    }
+
+    #[test]
+    fn test_candidate_cache_insert_and_get() {
+        let mut cache = CandidateCache::new(10);
+        let key = CandidateCacheKey {
+            method_bit: METHOD_GET,
+            available_features: 0,
+            is_static: false,
+            header_mask: 0,
+        };
+        let candidates: Arc<[usize]> = Arc::from(vec![0, 2, 5].as_slice());
+        cache.insert(key, "/test".to_string(), candidates.clone());
+
+        let result = cache.get(&key, "/test");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_ref(), &[0, 2, 5]);
+    }
+
+    #[test]
+    fn test_candidate_cache_eviction() {
+        let mut cache = CandidateCache::new(2);
+        let key = CandidateCacheKey {
+            method_bit: METHOD_GET,
+            available_features: 0,
+            is_static: false,
+            header_mask: 0,
+        };
+
+        cache.insert(key, "/a".to_string(), Arc::from(vec![0].as_slice()));
+        cache.insert(key, "/b".to_string(), Arc::from(vec![1].as_slice()));
+        cache.insert(key, "/c".to_string(), Arc::from(vec![2].as_slice()));
+
+        // Cache has capacity 2, so /a should have been evicted
+        assert!(cache.get(&key, "/a").is_none());
+        // /b and /c should still exist
+        assert!(cache.get(&key, "/b").is_some());
+        assert!(cache.get(&key, "/c").is_some());
+    }
+}

@@ -896,6 +896,47 @@ sites:
     }
 
     #[test]
+    fn test_yaml_with_unknown_fields_passes() {
+        // serde_yaml default behavior: unknown fields are silently ignored
+        // unless deny_unknown_fields is set. Our config structs do not use it,
+        // so unknown fields should be accepted without error.
+        let yaml = r#"
+server:
+  http_addr: "0.0.0.0:9090"
+  unknown_field: "should be ignored"
+  another_mystery: 42
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+    extra_site_field: true
+"#;
+        let file = create_temp_config(yaml);
+        let config = ConfigLoader::load(file.path()).unwrap();
+        assert_eq!(config.server.http_addr, "0.0.0.0:9090");
+        assert_eq!(config.sites.len(), 1);
+        assert_eq!(config.sites[0].hostname, "example.com");
+    }
+
+    #[test]
+    fn test_yaml_with_unknown_top_level_field_passes() {
+        // Unknown top-level keys should also be silently ignored
+        let yaml = r#"
+some_future_feature:
+  enabled: true
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+"#;
+        let file = create_temp_config(yaml);
+        let config = ConfigLoader::load(file.path()).unwrap();
+        assert_eq!(config.sites.len(), 1);
+    }
+
+    #[test]
     fn test_path_traversal_detection() {
         use super::contains_path_traversal;
 

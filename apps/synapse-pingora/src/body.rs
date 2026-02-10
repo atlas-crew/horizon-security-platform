@@ -484,6 +484,82 @@ mod tests {
     }
 
     #[test]
+    fn test_form_urlencoded_duplicate_keys() {
+        let inspector = BodyInspector::default();
+        let body = b"name=alice&name=bob";
+        let result = inspector
+            .inspect(body, Some("application/x-www-form-urlencoded"))
+            .unwrap();
+
+        assert_eq!(result.content_type, ContentType::FormUrlencoded);
+        assert!(result.parse_success);
+
+        match result.parsed_structure.unwrap() {
+            ParsedBody::Form(form) => {
+                let names = form.get("name").expect("key 'name' should exist");
+                assert_eq!(names, &vec!["alice".to_string(), "bob".to_string()]);
+            }
+            other => panic!("expected ParsedBody::Form, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_form_urlencoded_single_key() {
+        let inspector = BodyInspector::default();
+        let body = b"key=value";
+        let result = inspector
+            .inspect(body, Some("application/x-www-form-urlencoded"))
+            .unwrap();
+
+        assert!(result.parse_success);
+        match result.parsed_structure.unwrap() {
+            ParsedBody::Form(form) => {
+                assert_eq!(form.get("key").unwrap(), &vec!["value".to_string()]);
+            }
+            other => panic!("expected ParsedBody::Form, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_form_urlencoded_key_without_value() {
+        let inspector = BodyInspector::default();
+        let body = b"flag&key=val";
+        let result = inspector
+            .inspect(body, Some("application/x-www-form-urlencoded"))
+            .unwrap();
+
+        assert!(result.parse_success);
+        match result.parsed_structure.unwrap() {
+            ParsedBody::Form(form) => {
+                // "flag" has no '=' so value is ""
+                assert_eq!(form.get("flag").unwrap(), &vec!["".to_string()]);
+                assert_eq!(form.get("key").unwrap(), &vec!["val".to_string()]);
+            }
+            other => panic!("expected ParsedBody::Form, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_form_urlencoded_empty_pairs_skipped() {
+        let inspector = BodyInspector::default();
+        // Trailing & and double && should be skipped
+        let body = b"a=1&&b=2&";
+        let result = inspector
+            .inspect(body, Some("application/x-www-form-urlencoded"))
+            .unwrap();
+
+        assert!(result.parse_success);
+        match result.parsed_structure.unwrap() {
+            ParsedBody::Form(form) => {
+                assert_eq!(form.len(), 2);
+                assert_eq!(form.get("a").unwrap(), &vec!["1".to_string()]);
+                assert_eq!(form.get("b").unwrap(), &vec!["2".to_string()]);
+            }
+            other => panic!("expected ParsedBody::Form, got {:?}", other),
+        }
+    }
+
+    #[test]
     fn test_json_mixed_depth_limit() {
         let mut config = BodyConfig::default();
         config.max_parse_depth = 3;

@@ -96,6 +96,7 @@ pub mod waf;
 
 // Dashboard support
 pub mod block_log;
+pub mod tui;
 
 // Header Manipulation
 pub mod headers;

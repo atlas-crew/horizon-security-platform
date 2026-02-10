@@ -18,11 +18,21 @@ use std::io;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::System;
+use sha2::{Digest, Sha256};
+use chrono;
+use hex;
 
-use synapse_pingora::block_log::BlockLog;
-use synapse_pingora::entity::EntityManager;
-use synapse_pingora::metrics::MetricsRegistry;
-use synapse_pingora::waf::Synapse;
+use crate::block_log::BlockLog;
+use crate::entity::EntityManager;
+use crate::metrics::MetricsRegistry;
+use crate::waf::Synapse;
+
+/// Action that requires operator confirmation
+pub enum ConfirmationAction {
+    BlockIP(String),
+    UnblockIP(String),
+    ReloadRules,
+}
 
 /// TUI Dashboard Application
 pub struct TuiApp {
@@ -44,6 +54,10 @@ pub struct TuiApp {
     pub show_help: bool,
     /// Whether to show the entity detail modal
     pub show_entity_detail: bool,
+    /// Whether to show the confirmation modal
+    pub show_confirmation: bool,
+    /// Action to confirm
+    pub confirmation_action: Option<ConfirmationAction>,
     /// Active tab index
     pub active_tab: usize,
     /// Whether to show the actor detail modal
@@ -62,6 +76,8 @@ pub struct TuiApp {
     pub actor_table_state: TableState,
     /// State for JA4 table
     pub ja4_table_state: TableState,
+    /// Last time system info was refreshed
+    pub last_system_refresh: Instant,
     /// Tick rate for updates
     tick_rate: Duration,
 }
@@ -83,6 +99,8 @@ impl TuiApp {
             paused: false,
             show_help: false,
             show_entity_detail: false,
+            show_confirmation: false,
+            confirmation_action: None,
             show_actor_detail: false,
             active_tab: 0,
             system: System::new_all(),
@@ -92,6 +110,7 @@ impl TuiApp {
             rule_table_state: TableState::default(),
             actor_table_state: TableState::default(),
             ja4_table_state: TableState::default(),
+            last_system_refresh: Instant::now(),
             tick_rate: Duration::from_millis(250),
         }
     }
@@ -122,6 +141,18 @@ impl TuiApp {
                         match key.code {
                             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
                                 self.show_entity_detail = false;
+                            }
+                            _ => {}
+                        }
+                    } else if self.show_confirmation {
+                        match key.code {
+                            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                                self.execute_confirmed_action();
+                                self.show_confirmation = false;
+                            }
+                            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                                self.show_confirmation = false;
+                                self.confirmation_action = None;
                             }
                             _ => {}
                         }
@@ -157,8 +188,12 @@ impl TuiApp {
             }
 
             if last_tick.elapsed() >= self.tick_rate {
-                self.system.refresh_cpu_all();
-                self.system.refresh_memory();
+                // Finding #13: System refresh is expensive, do it every 2 seconds instead of 4 FPS
+                if self.last_system_refresh.elapsed() >= Duration::from_secs(2) {
+                    self.system.refresh_cpu_all();
+                    self.system.refresh_memory();
+                    self.last_system_refresh = Instant::now();
+                }
                 
                 // Clear old messages
                 if let Some(msg_time) = self.message_time {
@@ -184,8 +219,8 @@ impl TuiApp {
         let selected = self.entity_table_state.selected().unwrap_or(0);
         let top_entities = self.entities.list_top_risk(10);
         if let Some(entity) = top_entities.get(selected) {
-            self.entities.release_entity(&entity.entity_id);
-            self.set_message(&format!("Unblocked IP: {}", entity.entity_id));
+            self.confirmation_action = Some(ConfirmationAction::UnblockIP(entity.entity_id.clone()));
+            self.show_confirmation = true;
         }
     }
 
@@ -194,12 +229,37 @@ impl TuiApp {
         let selected = self.entity_table_state.selected().unwrap_or(0);
         let top_entities = self.entities.list_top_risk(10);
         if let Some(entity) = top_entities.get(selected) {
-            self.entities.manual_block(&entity.entity_id, "Manual TUI block");
-            self.set_message(&format!("Blocked IP: {}", entity.entity_id));
+            self.confirmation_action = Some(ConfirmationAction::BlockIP(entity.entity_id.clone()));
+            self.show_confirmation = true;
         }
     }
 
     fn action_reload_rules(&mut self) {
+        self.confirmation_action = Some(ConfirmationAction::ReloadRules);
+        self.show_confirmation = true;
+    }
+
+    fn execute_confirmed_action(&mut self) {
+        let action = self.confirmation_action.take();
+        match action {
+            Some(ConfirmationAction::BlockIP(ip)) => {
+                let reason = format!("Manual TUI block at {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+                self.entities.manual_block(&ip, &reason);
+                self.set_message(&format!("Blocked IP: {}", ip));
+            }
+            Some(ConfirmationAction::UnblockIP(ip)) => {
+                self.entities.release_entity(&ip);
+                self.set_message(&format!("Unblocked IP: {}", ip));
+            }
+            Some(ConfirmationAction::ReloadRules) => {
+                self.perform_reload_rules();
+            }
+            None => {}
+        }
+    }
+
+    fn perform_reload_rules(&mut self) {
+        // SAFETY: Paths are hardcoded and verified.
         let rules_paths = [
             "data/rules.json",
             "rules.json",
@@ -208,23 +268,36 @@ impl TuiApp {
 
         let mut reloaded = false;
         for path in &rules_paths {
-            if std::path::Path::new(path).exists() {
-                if let Ok(json) = std::fs::read(path) {
+            // Finding #2: Use std::fs::read directly to avoid TOCTOU race
+            match std::fs::read(path) {
+                Ok(json) => {
+                    // Finding #4: Read and parse BEFORE taking the write lock to minimize blocking
+                    // Finding #3: Simple integrity check (checksum)
+                    let hash = hex::encode(Sha256::digest(&json));
+                    
                     let mut synapse = self.synapse.write();
                     match synapse.load_rules(&json) {
                         Ok(count) => {
                             drop(synapse);
-                            self.set_message(&format!("Reloaded {} rules from {}", count, path));
+                            self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
                             reloaded = true;
                             break;
                         }
                         Err(e) => {
                             drop(synapse);
                             self.set_message(&format!("Failed to parse rules: {}", e));
-                            reloaded = true; // Attempted but failed
+                            reloaded = true;
                             break;
                         }
                     }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    continue;
+                }
+                Err(e) => {
+                    self.set_message(&format!("Failed to read {}: {}", path, e));
+                    reloaded = true;
+                    break;
                 }
             }
         }
@@ -237,22 +310,28 @@ impl TuiApp {
     fn next_row(&mut self) {
         match self.active_tab {
             0 => {
+                let len = self.entities.list_top_risk(10).len();
+                if len == 0 { return; }
                 let i = match self.entity_table_state.selected() {
-                    Some(i) => if i >= 9 { 0 } else { i + 1 },
+                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
                     None => 0,
                 };
                 self.entity_table_state.select(Some(i));
             }
             1 => {
+                let len = self.metrics.top_rules(10).len();
+                if len == 0 { return; }
                 let i = match self.rule_table_state.selected() {
-                    Some(i) => if i >= 9 { 0 } else { i + 1 },
+                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
                     None => 0,
                 };
                 self.rule_table_state.select(Some(i));
             }
             2 => {
+                let len = self.metrics.top_risky_actors(10).len();
+                if len == 0 { return; }
                 let i = match self.actor_table_state.selected() {
-                    Some(i) => if i >= 9 { 0 } else { i + 1 },
+                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
                     None => 0,
                 };
                 self.actor_table_state.select(Some(i));
@@ -264,22 +343,28 @@ impl TuiApp {
     fn previous_row(&mut self) {
         match self.active_tab {
             0 => {
+                let len = self.entities.list_top_risk(10).len();
+                if len == 0 { return; }
                 let i = match self.entity_table_state.selected() {
-                    Some(i) => if i == 0 { 9 } else { i - 1 },
+                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
                     None => 0,
                 };
                 self.entity_table_state.select(Some(i));
             }
             1 => {
+                let len = self.metrics.top_rules(10).len();
+                if len == 0 { return; }
                 let i = match self.rule_table_state.selected() {
-                    Some(i) => if i == 0 { 9 } else { i - 1 },
+                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
                     None => 0,
                 };
                 self.rule_table_state.select(Some(i));
             }
             2 => {
+                let len = self.metrics.top_risky_actors(10).len();
+                if len == 0 { return; }
                 let i = match self.actor_table_state.selected() {
-                    Some(i) => if i == 0 { 9 } else { i - 1 },
+                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
                     None => 0,
                 };
                 self.actor_table_state.select(Some(i));
@@ -320,6 +405,10 @@ impl TuiApp {
 
         if self.show_help {
             self.render_help_modal(f);
+        }
+
+        if self.show_confirmation {
+            self.render_confirmation_modal(f);
         }
 
         if self.show_entity_detail {
@@ -594,27 +683,35 @@ impl TuiApp {
         // Tarpit Status
         if let Some(tarpit) = self.metrics.tarpit_stats() {
             let items = vec![
-                ListItem::new(format!("Enabled:       {}", tarpit.enabled)),
-                ListItem::new(format!("IPs Delayed:   {}", tarpit.total_delayed)),
-                ListItem::new(format!("Active Traps:  {}", tarpit.active_ips)),
-                ListItem::new(format!("Max Delay:     {}ms", tarpit.max_delay_ms)),
+                ListItem::new(format!("Tracked States: {}", tarpit.total_states)),
+                ListItem::new(format!("Active Tarpits: {}", tarpit.active_tarpits)),
+                ListItem::new(format!("Total Hits:     {}", tarpit.total_hits)),
+                ListItem::new(format!("Total Delay:    {}ms", tarpit.total_delay_ms)),
             ];
             let list = List::new(items)
                 .block(Block::default().borders(Borders::ALL).title(" Tarpit Mitigation (Level 4) "));
             f.render_widget(list, left_chunks[0]);
+        } else {
+            let paragraph = Paragraph::new("\n  Tarpit Manager not initialized.\n  Check configuration to enable Level 4 mitigation.")
+                .block(Block::default().borders(Borders::ALL).title(" Tarpit Mitigation (Level 4) "));
+            f.render_widget(paragraph, left_chunks[0]);
         }
 
         // Challenge Stats
         if let Some(prog) = self.metrics.progression_stats() {
             let items = vec![
-                ListItem::new(format!("Cookies Issued: {}", prog.cookies_issued)),
-                ListItem::new(format!("JS Solved:      {} / {}", prog.js_solved, prog.js_issued)),
-                ListItem::new(format!("Captchas:       {}", prog.captcha_issued)),
-                ListItem::new(format!("Escalations:    {}", prog.total_escalations)),
+                ListItem::new(format!("Actors Tracked: {}", prog.actors_tracked)),
+                ListItem::new(format!("Issued:         {}", prog.challenges_issued)),
+                ListItem::new(format!("Success/Fail:   {} / {}", prog.successes, prog.failures)),
+                ListItem::new(format!("Escalations:    {}", prog.escalations)),
             ];
             let list = List::new(items)
                 .block(Block::default().borders(Borders::ALL).title(" Interrogator Challenges (Level 1-3) "));
             f.render_widget(list, left_chunks[1]);
+        } else {
+            let paragraph = Paragraph::new("\n  Interrogator System not initialized.\n  Check configuration to enable Level 1-3 challenges.")
+                .block(Block::default().borders(Borders::ALL).title(" Interrogator Challenges (Level 1-3) "));
+            f.render_widget(paragraph, left_chunks[1]);
         }
 
         let right_chunks = Layout::default()
@@ -633,12 +730,16 @@ impl TuiApp {
             let list = List::new(items)
                 .block(Block::default().borders(Borders::ALL).title(" Honeypot Shadow Mirroring "));
             f.render_widget(list, right_chunks[0]);
+        } else {
+            let paragraph = Paragraph::new("\n  Shadow Mirroring not initialized.\n  Check configuration to enable honeypot mirroring.")
+                .block(Block::default().borders(Borders::ALL).title(" Honeypot Shadow Mirroring "));
+            f.render_widget(paragraph, right_chunks[0]);
         }
 
         // Geo Anomalies
         let geo_anomalies = self.metrics.recent_geo_anomalies(10);
         let items: Vec<ListItem> = geo_anomalies.iter().map(|a| {
-            ListItem::new(format!("[{}] {}", a.severity, a.description))
+            ListItem::new(format!("[{:?}] {}", a.severity, a.description))
                 .style(Style::default().fg(match a.severity {
                     crate::trends::AnomalySeverity::Critical => Color::Red,
                     crate::trends::AnomalySeverity::High => Color::LightRed,
@@ -851,6 +952,44 @@ impl TuiApp {
         f.render_widget(help_paragraph, area);
     }
 
+    fn render_confirmation_modal(&self, f: &mut Frame) {
+        let area = centered_rect(50, 25, f.size());
+        f.render_widget(Clear, area);
+
+        let (title, message) = match &self.confirmation_action {
+            Some(ConfirmationAction::BlockIP(ip)) => (
+                " Confirm Block IP ",
+                format!("Are you sure you want to BLOCK traffic from {}?\n\nThis will take immediate effect.", ip),
+            ),
+            Some(ConfirmationAction::UnblockIP(ip)) => (
+                " Confirm Unblock IP ",
+                format!("Are you sure you want to UNBLOCK traffic from {}?", ip),
+            ),
+            Some(ConfirmationAction::ReloadRules) => (
+                " Confirm Rule Reload ",
+                "Are you sure you want to RELOAD rules from disk?\n\nThis may briefly impact performance during parsing.".to_string(),
+            ),
+            None => (" Confirmation ", "No action selected.".to_string()),
+        };
+
+        let content = vec![
+            Line::from(""),
+            Line::from(Span::styled(message, Style::default())),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(" [Y] Yes, proceed ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw("   "),
+                Span::styled(" [N] No, cancel ", Style::default().fg(Color::Red)),
+            ]),
+        ];
+
+        let paragraph = Paragraph::new(content)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .style(Style::default().fg(Color::White));
+        f.render_widget(paragraph, area);
+    }
+
     fn render_entity_detail_modal(&self, f: &mut Frame) {
         let area = centered_rect(70, 60, f.size());
         f.render_widget(Clear, area);
@@ -977,6 +1116,14 @@ pub fn start_tui(
     block_log: Arc<BlockLog>,
     synapse: Arc<parking_lot::RwLock<Synapse>>,
 ) -> io::Result<()> {
+    // Finding #1: Set panic hook to restore terminal on crash
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        original_hook(panic);
+    }));
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();

@@ -96,7 +96,6 @@ use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
-pub mod tui;
 
 // Phase 5: Actor and Session State Management (previously sleeping capabilities)
 use parking_lot::{Mutex, RwLock};
@@ -4689,7 +4688,9 @@ fn main() {
     let cli = Cli::parse();
 
     // Initialize logging (only if TUI is NOT enabled to prevent terminal corruption)
-    if !cli.tui {
+    if cli.tui {
+        init_tui_logging();
+    } else {
         init_logging();
     }
 
@@ -5592,13 +5593,63 @@ fn main() {
         });
 
         // Run TUI in main thread (blocks until 'q' is pressed)
-        if let Err(e) = tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
+        if let Err(e) = synapse_pingora::tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
             eprintln!("TUI error: {}", e);
         }
-        std::process::exit(0);
+
+        // Finding #8: Graceful shutdown. Send SIGINT to self to trigger Pingora's shutdown sequence.
+        info!("TUI exited, shutting down server...");
+        #[cfg(unix)]
+        {
+            unsafe {
+                libc::kill(libc::getpid(), libc::SIGINT);
+            }
+            // Give it a moment to process the signal before main exits
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        #[cfg(not(unix))]
+        {
+            std::process::exit(0);
+        }
     } else {
         server.run_forever();
     }
+}
+
+fn init_tui_logging() {
+    use std::fs::OpenOptions;
+    
+    let log_file = match OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("synapse-tui.log")
+    {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("Failed to open TUI log file: {}", e);
+            return;
+        }
+    };
+
+    let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    builder.format(|buf, record| {
+        use std::io::Write;
+        let level = format!("{:<5}", record.level());
+        writeln!(
+            buf,
+            "{} {} [{}] {}",
+            buf.timestamp_millis(),
+            level,
+            record.target(),
+            record.args()
+        )
+    });
+    
+    // Redirect all logs to the file
+    builder.target(env_logger::Target::Pipe(Box::new(log_file)));
+    builder.init();
+    
+    info!("TUI logging initialized, writing to synapse-tui.log");
 }
 
 fn init_logging() {

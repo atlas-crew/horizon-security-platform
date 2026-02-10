@@ -8,6 +8,7 @@ use super::config::CrawlerConfig;
 use super::detector::CrawlerVerificationResult;
 
 /// Cache for crawler verification results and DNS lookups.
+#[derive(Debug)]
 pub struct VerificationCache {
     /// Cache for full verification results
     verification_cache: Cache<String, CrawlerVerificationResult>,

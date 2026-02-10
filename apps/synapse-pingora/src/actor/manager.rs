@@ -7,9 +7,10 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
+use parking_lot::RwLock as PLRwLock;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
@@ -337,6 +338,7 @@ pub struct ActorStatsSnapshot {
 /// Manages actor state with LRU eviction.
 ///
 /// Thread-safe implementation using DashMap for lock-free concurrent access.
+#[derive(Debug)]
 pub struct ActorManager {
     /// Actors by actor_id (primary storage).
     actors: DashMap<String, ActorState>,
@@ -358,6 +360,9 @@ pub struct ActorManager {
 
     /// Touch counter for lazy eviction.
     touch_counter: AtomicU32,
+
+    /// JA4 cluster cache for TUI performance (labs-tui optimization).
+    fingerprint_groups_cache: PLRwLock<Option<(Instant, Vec<(String, Vec<String>, f64)>)>>,
 }
 
 impl ActorManager {
@@ -371,6 +376,7 @@ impl ActorManager {
             stats: Arc::new(ActorStats::new()),
             shutdown: Arc::new(Notify::new()),
             touch_counter: AtomicU32::new(0),
+            fingerprint_groups_cache: PLRwLock::new(None),
         }
     }
 
@@ -639,6 +645,53 @@ impl ActorManager {
             .filter(|entry| entry.is_blocked)
             .map(|entry| entry.value().clone())
             .collect()
+    }
+
+    /// Returns groups of actors sharing the same fingerprints.
+    /// Used for identifying botnet clusters in the TUI.
+    ///
+    /// Optimized with a 1-second cache to avoid full table scans on every TUI tick.
+    pub fn get_fingerprint_groups(&self, limit: usize) -> Vec<(String, Vec<String>, f64)> {
+        // Check cache first
+        {
+            let cache = self.fingerprint_groups_cache.read();
+            if let Some((timestamp, data)) = &*cache {
+                if timestamp.elapsed() < Duration::from_secs(1) {
+                    let mut result = data.clone();
+                    result.truncate(limit);
+                    return result;
+                }
+            }
+        }
+
+        use std::collections::HashMap;
+        let mut groups: HashMap<String, (Vec<String>, f64)> = HashMap::new();
+
+        for entry in self.actors.iter() {
+            let actor = entry.value();
+            for fp in &actor.fingerprints {
+                let group = groups.entry(fp.clone()).or_insert_with(|| (Vec::new(), 0.0));
+                group.0.push(actor.actor_id.clone());
+                group.1 = group.1.max(actor.risk_score);
+            }
+        }
+
+        let mut sorted_groups: Vec<_> = groups
+            .into_iter()
+            .map(|(fp, (actors, risk))| (fp, actors, risk))
+            .collect();
+
+        // Sort by number of actors in group (descending)
+        sorted_groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        
+        // Update cache
+        {
+            let mut cache = self.fingerprint_groups_cache.write();
+            *cache = Some((Instant::now(), sorted_groups.clone()));
+        }
+
+        sorted_groups.truncate(limit);
+        sorted_groups
     }
 
     /// Start background tasks (decay, cleanup).

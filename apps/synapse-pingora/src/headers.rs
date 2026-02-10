@@ -339,6 +339,139 @@ mod tests {
     }
 
     #[test]
+    fn test_set_header_overwrites_existing_response_header() {
+        let mut ops = HeaderOps::default();
+        ops.set
+            .insert("x-custom".to_string(), "new-value".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+        resp.insert_header("x-custom", "old-value").unwrap();
+
+        apply_response_headers(&mut resp, &compiled);
+
+        // set should overwrite the existing value
+        let values: Vec<&str> = resp
+            .headers
+            .get_all("x-custom")
+            .iter()
+            .map(|v| v.to_str().unwrap())
+            .collect();
+        assert_eq!(values, vec!["new-value"]);
+    }
+
+    #[test]
+    fn test_add_header_appends_to_existing_response_header() {
+        let mut ops = HeaderOps::default();
+        ops.add
+            .insert("x-custom".to_string(), "second".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+        resp.insert_header("x-custom", "first").unwrap();
+
+        apply_response_headers(&mut resp, &compiled);
+
+        // add should append, so both values should be present
+        let values: Vec<&str> = resp
+            .headers
+            .get_all("x-custom")
+            .iter()
+            .map(|v| v.to_str().unwrap())
+            .collect();
+        assert_eq!(values.len(), 2);
+        assert!(values.contains(&"first"));
+        assert!(values.contains(&"second"));
+    }
+
+    #[test]
+    fn test_remove_header_removes_response_header() {
+        let mut ops = HeaderOps::default();
+        ops.remove.push("x-unwanted".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+        resp.insert_header("x-unwanted", "bye").unwrap();
+        resp.insert_header("x-keep", "stay").unwrap();
+
+        apply_response_headers(&mut resp, &compiled);
+
+        assert!(resp.headers.get("x-unwanted").is_none());
+        assert_eq!(
+            resp.headers.get("x-keep").unwrap().to_str().unwrap(),
+            "stay"
+        );
+    }
+
+    #[test]
+    fn test_response_header_ops_order_remove_then_set_then_add() {
+        // The function processes: remove -> set -> add
+        // Verify that removing and then setting the same header works correctly
+        let mut ops = HeaderOps::default();
+        ops.remove.push("x-replaced".to_string());
+        ops.set
+            .insert("x-replaced".to_string(), "set-after-remove".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+        resp.insert_header("x-replaced", "original").unwrap();
+
+        apply_response_headers(&mut resp, &compiled);
+
+        // Should have been removed, then set to the new value
+        assert_eq!(
+            resp.headers
+                .get("x-replaced")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "set-after-remove"
+        );
+    }
+
+    #[test]
+    fn test_set_header_creates_new_response_header() {
+        let mut ops = HeaderOps::default();
+        ops.set
+            .insert("x-new-header".to_string(), "fresh".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+
+        // Header does not exist yet
+        assert!(resp.headers.get("x-new-header").is_none());
+
+        apply_response_headers(&mut resp, &compiled);
+
+        assert_eq!(
+            resp.headers
+                .get("x-new-header")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "fresh"
+        );
+    }
+
+    #[test]
+    fn test_remove_nonexistent_response_header_is_noop() {
+        let mut ops = HeaderOps::default();
+        ops.remove.push("x-does-not-exist".to_string());
+
+        let compiled = ops.compile();
+        let mut resp = ResponseHeader::build(200, None).unwrap();
+        resp.insert_header("x-keep", "kept").unwrap();
+
+        apply_response_headers(&mut resp, &compiled);
+
+        // No panic, and existing headers are untouched
+        assert_eq!(
+            resp.headers.get("x-keep").unwrap().to_str().unwrap(),
+            "kept"
+        );
+    }
+
+    #[test]
     fn test_apply_security_response_headers_sets_missing_only() {
         let mut resp = ResponseHeader::build(200, None).unwrap();
 

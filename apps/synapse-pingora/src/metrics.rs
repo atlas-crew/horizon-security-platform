@@ -23,17 +23,17 @@ const MAX_METRICS_MAP_SIZE: usize = 1000;
 #[derive(Default)]
 pub struct MetricsRegistry {
     /// Actor manager for intelligence aggregation (labs-tui)
-    pub actor_manager: Option<Arc<ActorManager>>,
+    pub(crate) actor_manager: Option<Arc<ActorManager>>,
     /// Crawler detector for intelligence aggregation (labs-tui)
-    pub crawler_detector: Option<Arc<CrawlerDetector>>,
+    pub(crate) crawler_detector: Option<Arc<CrawlerDetector>>,
     /// Tarpit manager for mitigation visibility (labs-tui)
-    pub tarpit_manager: Option<Arc<TarpitManager>>,
+    pub(crate) tarpit_manager: Option<Arc<TarpitManager>>,
     /// Progression manager for challenge visibility (labs-tui)
-    pub progression_manager: Option<Arc<ProgressionManager>>,
+    pub(crate) progression_manager: Option<Arc<ProgressionManager>>,
     /// Shadow mirror manager for honeypot visibility (labs-tui)
-    pub shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
+    pub(crate) shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
     /// Trends manager for geo-anomaly visibility (labs-tui)
-    pub trends_manager: Option<Arc<TrendsManager>>,
+    pub(crate) trends_manager: Option<Arc<TrendsManager>>,
     /// Request counters by status code
     request_counts: RequestCounters,
     /// Latency histograms

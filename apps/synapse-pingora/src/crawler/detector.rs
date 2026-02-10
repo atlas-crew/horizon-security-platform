@@ -6,13 +6,15 @@
 //! - Stats map size limits prevent memory exhaustion
 
 use dashmap::DashMap;
+use parking_lot::RwLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
-use super::bad_bots::{BadBotSeverity, BadBotSignature, BAD_BOT_SIGNATURES};
+pub use super::bad_bots::{BadBotSeverity, BadBotSignature, BAD_BOT_SIGNATURES};
 use super::cache::VerificationCache;
 use super::config::{CrawlerConfig, DnsFailurePolicy};
 use super::dns_resolver::{DnsError, DnsResolver};
@@ -130,6 +132,7 @@ impl Default for CrawlerVerificationResult {
 }
 
 /// Statistics for crawler detection.
+#[derive(Debug)]
 pub struct CrawlerStats {
     pub total_verifications: AtomicU64,
     pub verified_crawlers: AtomicU64,
@@ -205,6 +208,7 @@ impl From<&CrawlerStats> for CrawlerStatsSnapshot {
 }
 
 /// Compiled regex pattern with associated crawler definition.
+#[derive(Debug)]
 struct CompiledCrawlerPattern {
     ua_regex: Regex,
     dns_regex: Regex,
@@ -212,12 +216,14 @@ struct CompiledCrawlerPattern {
 }
 
 /// Compiled regex pattern with associated bad bot signature.
+#[derive(Debug)]
 struct CompiledBadBotPattern {
     regex: Regex,
     signature: &'static BadBotSignature,
 }
 
 /// Main crawler detection engine.
+#[derive(Debug)]
 pub struct CrawlerDetector {
     config: CrawlerConfig,
     cache: VerificationCache,
@@ -225,6 +231,11 @@ pub struct CrawlerDetector {
     stats: CrawlerStats,
     crawler_patterns: Vec<CompiledCrawlerPattern>,
     bad_bot_patterns: Vec<CompiledBadBotPattern>,
+
+    /// Cache for crawler distribution (labs-tui optimization)
+    crawler_dist_cache: RwLock<Option<(Instant, Vec<(String, u64)>)>>,
+    /// Cache for bad bot distribution (labs-tui optimization)
+    bad_bot_dist_cache: RwLock<Option<(Instant, Vec<(String, u64)>)>>,
 }
 
 impl CrawlerDetector {
@@ -278,6 +289,8 @@ impl CrawlerDetector {
             stats: CrawlerStats::new(),
             crawler_patterns,
             bad_bot_patterns,
+            crawler_dist_cache: RwLock::new(None),
+            bad_bot_dist_cache: RwLock::new(None),
         })
     }
 
@@ -295,6 +308,8 @@ impl CrawlerDetector {
             crawler_patterns: Vec::new(),
             bad_bot_patterns: Vec::new(),
             config,
+            crawler_dist_cache: RwLock::new(None),
+            bad_bot_dist_cache: RwLock::new(None),
         }
     }
 
@@ -607,6 +622,56 @@ impl CrawlerDetector {
     /// Check if bad bots should be blocked.
     pub fn should_block_bad_bots(&self) -> bool {
         self.config.block_bad_bots
+    }
+
+    /// Returns the distribution of crawler hits by name.
+    pub fn get_crawler_distribution(&self, limit: usize) -> Vec<(String, u64)> {
+        {
+            let cache = self.crawler_dist_cache.read();
+            if let Some((timestamp, data)) = &*cache {
+                if timestamp.elapsed() < Duration::from_secs(1) {
+                    let mut result = data.clone();
+                    result.truncate(limit);
+                    return result;
+                }
+            }
+        }
+
+        let mut dist: Vec<_> = self.stats.by_crawler_name.iter().map(|entry| (entry.key().clone(), *entry.value())).collect();
+        dist.sort_by(|a, b| b.1.cmp(&a.1));
+
+        {
+            let mut cache = self.crawler_dist_cache.write();
+            *cache = Some((Instant::now(), dist.clone()));
+        }
+
+        dist.truncate(limit);
+        dist
+    }
+
+    /// Returns the distribution of bad bot hits by signature.
+    pub fn get_bad_bot_distribution(&self, limit: usize) -> Vec<(String, u64)> {
+        {
+            let cache = self.bad_bot_dist_cache.read();
+            if let Some((timestamp, data)) = &*cache {
+                if timestamp.elapsed() < Duration::from_secs(1) {
+                    let mut result = data.clone();
+                    result.truncate(limit);
+                    return result;
+                }
+            }
+        }
+
+        let mut dist: Vec<_> = self.stats.by_bad_bot.iter().map(|entry| (entry.key().clone(), *entry.value())).collect();
+        dist.sort_by(|a, b| b.1.cmp(&a.1));
+
+        {
+            let mut cache = self.bad_bot_dist_cache.write();
+            *cache = Some((Instant::now(), dist.clone()));
+        }
+
+        dist.truncate(limit);
+        dist
     }
 }
 

@@ -37,6 +37,7 @@ impl From<trust_dns_resolver::error::ResolveError> for DnsError {
 }
 
 /// Async DNS resolver for crawler verification with rate limiting.
+#[derive(Debug)]
 pub struct DnsResolver {
     resolver: TokioAsyncResolver,
     timeout: Duration,

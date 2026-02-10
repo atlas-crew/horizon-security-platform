@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import {
   BarChart,
   Bar,
@@ -11,15 +11,15 @@ import {
   LabelList,
 } from 'recharts';
 import {
-  TOOLTIP_CONTENT_STYLE,
-  TOOLTIP_LABEL_STYLE,
-  TOOLTIP_ITEM_STYLE,
-  lighten,
+  axisDefaults,
+  ChartValueLabel,
+  colors,
   darken,
-  getGridStroke,
-  getCursorFill,
-  getValueLabelStyle,
-} from '../../../lib/chartTheme';
+  gridDefaults,
+  lighten,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 interface ResponseTimeBucket {
   range: string;
@@ -34,12 +34,12 @@ interface ResponseTimeDistributionChartProps {
 
 // Latency buckets are time ranges; keep them one color and only warn/danger at the tail.
 const bucketColors = [
-  '#0057B7', // <25ms - Atlas Crew Blue
-  '#0057B7', // 25-50ms - Atlas Crew Blue
-  '#0057B7', // 50-100ms - Atlas Crew Blue
-  '#0057B7', // 100-250ms - Atlas Crew Blue
-  '#E35205', // 250-500ms - Orange (warning)
-  '#EF3340', // >500ms - Red (danger)
+  colors.blue,
+  colors.blue,
+  colors.blue,
+  colors.blue,
+  colors.orange,
+  colors.red,
 ];
 
 // Pre-compute unique colors for gradient defs
@@ -53,10 +53,6 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
   data,
   className = '',
 }: ResponseTimeDistributionChartProps) {
-  const gridStroke = useMemo(() => getGridStroke(), []);
-  const cursorFill = useMemo(() => getCursorFill(), []);
-  const valueLabelStyle = useMemo(() => getValueLabelStyle(), []);
-
   return (
     <div className={`h-64 ${className}`} role="img" aria-label="Bar chart showing response time distribution across latency buckets">
       <ResponsiveContainer width="100%" height="100%">
@@ -72,17 +68,13 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="4 4" stroke={gridStroke} vertical={false} />
+          <CartesianGrid {...gridDefaults} />
           <XAxis
             dataKey="range"
-            tick={{ fontSize: 12, fontFamily: 'Rubik', fill: '#7F7F7F' }}
-            tickLine={false}
-            axisLine={false}
+            {...xAxisNoLine}
           />
           <YAxis
-            tick={{ fontSize: 12, fontFamily: 'Rubik', fill: '#7F7F7F' }}
-            tickLine={false}
-            axisLine={false}
+            {...axisDefaults.y}
             tickFormatter={(value) => `${value}%`}
           />
           <Tooltip
@@ -90,17 +82,12 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
               `${value.toFixed(1)}%`,
               'Requests',
             ]}
-            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px', fontFamily: 'Rubik' }}
-            labelStyle={{ ...TOOLTIP_LABEL_STYLE, fontWeight: 600 }}
-            itemStyle={TOOLTIP_ITEM_STYLE}
-            cursor={{ fill: cursorFill }}
+            {...tooltipDefaults}
           />
           <Bar dataKey="percentage" fillOpacity={0.9} radius={[0, 0, 0, 0]}>
             <LabelList
               dataKey="percentage"
-              position="top"
-              style={valueLabelStyle}
-              formatter={(value: number) => `${value.toFixed(1)}%`}
+              content={<ChartValueLabel formatter={(value: number) => `${value.toFixed(1)}%`} />}
             />
             {data.map((_entry, index) => (
               <Cell

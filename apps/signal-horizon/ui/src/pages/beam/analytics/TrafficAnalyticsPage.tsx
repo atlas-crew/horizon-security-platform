@@ -30,7 +30,7 @@ import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStat
 import { GeoTrafficMap } from '../../../components/beam/analytics/GeoTrafficMap';
 import { LatencyHistogram } from '../../../components/beam/analytics/LatencyHistogram';
 import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChart';
-import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
+import { alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -71,12 +71,12 @@ const DEMO_TOP_ENDPOINTS = [
 
 // Atlas Crew brand colors
 const CHART_COLORS = {
-  allowed: '#0057B7',   // Atlas Crew Blue (primary series)
-  blocked: '#EF3340',   // Atlas Crew Red (danger/error)
-  get: '#0057B7',       // Atlas Crew Blue
-  post: '#00B140',      // Atlas Crew Green
-  put: '#E35205',       // Atlas Crew Orange
-  delete: '#D62598',    // Atlas Crew Magenta
+  allowed: colors.blue,
+  blocked: colors.red,
+  get: colors.blue,
+  post: colors.green,
+  put: colors.orange,
+  delete: colors.magenta,
 };
 
 // Time Range Selector
@@ -156,10 +156,6 @@ function StatCard({
 
 // Traffic Timeline Chart
 function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-
   return (
     <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
       <div className="flex items-center justify-between mb-6">
@@ -191,23 +187,17 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
                 <stop offset="100%" stopColor={CHART_COLORS.blocked} stopOpacity={0.03} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <CartesianGrid {...gridDefaultsSoft} />
             <XAxis
               dataKey="time"
-              tick={{ fill: tickColor, fontSize: 12, fontFamily: 'Rubik' }}
-              axisLine={false}
-              tickLine={false}
+              {...xAxisNoLine}
             />
             <YAxis
-              tick={{ fill: tickColor, fontSize: 12, fontFamily: 'Rubik' }}
-              axisLine={false}
-              tickLine={false}
+              {...axisDefaults.y}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Area
@@ -218,9 +208,9 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               fill="url(#allowedGrad)"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 3.5, fill: '#F0F4F8', stroke: CHART_COLORS.allowed, strokeWidth: 2 }}
+              activeDot={{ r: 3.5, fill: colors.gray.light, stroke: CHART_COLORS.allowed, strokeWidth: 2 }}
               name="Allowed"
-              style={{ filter: 'drop-shadow(0 0 6px rgba(0, 87, 183, 0.35))' }}
+              style={{ filter: `drop-shadow(0 0 6px ${alpha(CHART_COLORS.allowed, 0.35)})` }}
             />
             <Area
               type="monotone"
@@ -230,9 +220,9 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               fill="url(#blockedGrad)"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 3.5, fill: '#F0F4F8', stroke: CHART_COLORS.blocked, strokeWidth: 2 }}
+              activeDot={{ r: 3.5, fill: colors.gray.light, stroke: CHART_COLORS.blocked, strokeWidth: 2 }}
               name="Blocked"
-              style={{ filter: 'drop-shadow(0 0 6px rgba(239, 51, 64, 0.28))' }}
+              style={{ filter: `drop-shadow(0 0 6px ${alpha(CHART_COLORS.blocked, 0.28)})` }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -243,11 +233,7 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
 
 // Method Breakdown Chart
 function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-
-  const colors: Record<string, string> = {
+  const methodColors: Record<string, string> = {
     GET: CHART_COLORS.get,
     POST: CHART_COLORS.post,
     PUT: CHART_COLORS.put,
@@ -260,10 +246,10 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} horizontal={false} />
+            <CartesianGrid {...gridDefaultsSoft} horizontal={false} />
             <XAxis
               type="number"
-              tick={{ fill: tickColor, fontSize: 12 }}
+              tick={axisDefaults.x.tick}
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
@@ -271,15 +257,13 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
             <YAxis
               type="category"
               dataKey="method"
-              tick={{ fill: tickColor, fontSize: 12 }}
+              tick={axisDefaults.y.tick}
               axisLine={false}
               tickLine={false}
               width={60}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar
@@ -294,7 +278,7 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
                     y={y}
                     width={width}
                     height={height}
-                    fill={colors[payload.method] || CHART_COLORS.allowed}
+                    fill={methodColors[payload.method] || CHART_COLORS.allowed}
                     rx={0}
                     ry={0}
                   />
@@ -309,7 +293,7 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
           <div key={item.method} className="text-center">
             <div
               className="w-4 h-4 mx-auto mb-1"
-              style={{ backgroundColor: colors[item.method] }}
+              style={{ backgroundColor: methodColors[item.method] }}
             />
             <p className="text-xs text-ink-secondary">{item.method}</p>
             <p className="text-sm font-medium text-ink-primary">{item.percentage}%</p>

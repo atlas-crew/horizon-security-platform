@@ -26,7 +26,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
+import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -66,10 +66,10 @@ const DEMO_LATENCY_DISTRIBUTION = [
 
 // Atlas Crew brand colors for latency
 const CHART_COLORS = {
-  p50: '#00B140',   // Atlas Crew Green (fast)
-  p95: '#529EEC',   // Sky Blue
-  p99: '#D62598',   // Atlas Crew Magenta (slow)
-  distribution: '#0057B7', // Atlas Crew Blue
+  p50: colors.green,
+  p95: colors.skyBlue,
+  p99: colors.magenta,
+  distribution: colors.blue,
 };
 
 // Time Range Selector
@@ -162,10 +162,6 @@ function StatCard({
 
 // Latency Percentile Chart
 function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }) {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
@@ -191,23 +187,17 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <CartesianGrid {...gridDefaultsSoft} />
             <XAxis
               dataKey="time"
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...xAxisNoLine}
             />
             <YAxis
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...axisDefaults.y}
               tickFormatter={(v) => `${v}ms`}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
               formatter={(value: number, name: string) => [
                 `${value}ms`,
                 name.toUpperCase(),
@@ -246,33 +236,23 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
 
 // Latency Distribution Chart
 function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBUTION }) {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <h3 className="text-lg font-semibold text-ink-primary mb-4">Latency Distribution</h3>
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <CartesianGrid {...gridDefaultsSoft} />
             <XAxis
               dataKey="range"
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...xAxisNoLine}
             />
             <YAxis
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...axisDefaults.y}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar

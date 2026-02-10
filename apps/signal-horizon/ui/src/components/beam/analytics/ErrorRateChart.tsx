@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -10,14 +9,15 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import {
-  getTooltipStyle,
-  getAxisTickColor,
-  getGridStroke,
-  getCursorFill,
-  isDarkMode,
-  lighten,
+  axisDefaults,
+  barDefaults,
+  colors,
   darken,
-} from '../../../lib/chartTheme';
+  gridDefaults,
+  legendDefaults,
+  lighten,
+  tooltipDefaults,
+} from '@/ui';
 
 // Demo Data: Status codes per service
 const DEMO_ERROR_DATA = [
@@ -31,18 +31,12 @@ const DEMO_ERROR_DATA = [
 
 // Chart series colors per brand chart standards
 const SERIES = {
-  serverError: { color: '#EF3340', label: '5xx Error' },
-  clientError: { color: '#E35205', label: '4xx Error' },
-  success: { color: '#0057B7', label: '2xx Success' },
+  serverError: { color: colors.red, label: '5xx Error' },
+  clientError: { color: colors.orange, label: '4xx Error' },
+  success: { color: colors.blue, label: '2xx Success' },
 };
 
 export function ErrorRateChart() {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-  const cursorFill = useMemo(() => getCursorFill(), []);
-  const legendColor = useMemo(() => isDarkMode() ? '#B0C4DE' : '#334E68', []);
-
   return (
     <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
       <div className="flex items-center justify-between mb-4">
@@ -68,31 +62,47 @@ export function ErrorRateChart() {
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid strokeDasharray="4 4" stroke={gridStroke} horizontal={true} vertical={false} />
+            <CartesianGrid {...gridDefaults} horizontal={true} vertical={false} />
             <XAxis type="number" hide />
             <YAxis
               type="category"
               dataKey="service"
-              tick={{ fill: tickColor, fontSize: 12, fontFamily: 'Rubik' }}
+              tick={axisDefaults.y.tick}
               axisLine={false}
               tickLine={false}
               width={70}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
-              cursor={{ fill: cursorFill }}
+              {...tooltipDefaults}
             />
             <Legend
-              iconType="square"
-              iconSize={12}
-              wrapperStyle={{ fontSize: '12px', fontFamily: 'Rubik', paddingTop: '10px', color: legendColor }}
+              {...legendDefaults}
+              wrapperStyle={{ ...legendDefaults.wrapperStyle, paddingTop: '10px' }}
             />
 
-            <Bar dataKey="serverError" name={SERIES.serverError.label} stackId="a" fill="url(#bar-h-serverError)" fillOpacity={0.9} radius={[0, 0, 0, 0]} />
-            <Bar dataKey="clientError" name={SERIES.clientError.label} stackId="a" fill="url(#bar-h-clientError)" fillOpacity={0.9} />
-            <Bar dataKey="success" name={SERIES.success.label} stackId="a" fill="url(#bar-h-success)" fillOpacity={0.9} radius={[0, 0, 0, 0]} />
+            <Bar
+              dataKey="serverError"
+              name={SERIES.serverError.label}
+              stackId="a"
+              fill="url(#bar-h-serverError)"
+              fillOpacity={barDefaults.opacity}
+              radius={barDefaults.radius}
+            />
+            <Bar
+              dataKey="clientError"
+              name={SERIES.clientError.label}
+              stackId="a"
+              fill="url(#bar-h-clientError)"
+              fillOpacity={barDefaults.opacity}
+            />
+            <Bar
+              dataKey="success"
+              name={SERIES.success.label}
+              stackId="a"
+              fill="url(#bar-h-success)"
+              fillOpacity={barDefaults.opacity}
+              radius={barDefaults.radius}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
+import { colors, fontFamily, legendDefaults, tooltipDefaults } from '@/ui';
 
 interface StatusCodeData {
   name: string;
@@ -15,10 +15,10 @@ interface StatusCodesDonutProps {
 
 // Atlas Crew brand chart colors for status codes
 const statusCodeColors: Record<string, string> = {
-  '2xx': '#00B140', // success - Green
-  '3xx': '#0057B7', // redirect - Atlas Crew Blue
-  '4xx': '#E35205', // client error - Orange
-  '5xx': '#EF3340', // server error - Red
+  '2xx': colors.green,
+  '3xx': colors.blue,
+  '4xx': colors.orange,
+  '5xx': colors.red,
 };
 
 /**
@@ -53,20 +53,19 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
               name,
             ]}
-            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px', fontFamily: 'Rubik' }}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-            itemStyle={TOOLTIP_ITEM_STYLE}
+            {...tooltipDefaults}
+            contentStyle={{ ...tooltipDefaults.contentStyle, fontSize: '12px' }}
           />
           <Legend
             verticalAlign="bottom"
             height={36}
-            iconType="square"
-            iconSize={12}
+            iconType={legendDefaults.iconType}
+            iconSize={legendDefaults.iconSize}
             formatter={(value, _entry) => {
               const item = data.find((d) => d.name === value);
               const percentage = item ? ((item.value / total) * 100).toFixed(1) : '0';
               return (
-                <span style={{ fontFamily: 'Rubik', fontSize: 12 }} className="text-ink-secondary">
+                <span style={{ fontFamily, fontSize: 12 }} className="text-ink-secondary">
                   {value} ({percentage}%)
                 </span>
               );

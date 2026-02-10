@@ -27,7 +27,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
+import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -60,9 +60,9 @@ const DEMO_ERROR_TYPES = [
 
 // Demo data - error breakdown by category (Atlas Crew brand colors)
 const DEMO_ERROR_CATEGORIES = [
-  { name: 'Client Errors (4xx)', value: 3100, color: '#E35205' }, // Atlas Crew Orange
-  { name: 'Server Errors (5xx)', value: 460, color: '#D62598' },  // Atlas Crew Magenta
-  { name: 'Blocked by WAF', value: 890, color: '#440099' },       // Atlas Crew Purple
+  { name: 'Client Errors (4xx)', value: 3100, color: colors.orange },
+  { name: 'Server Errors (5xx)', value: 460, color: colors.magenta },
+  { name: 'Blocked by WAF', value: 890, color: colors.purple },
 ];
 
 // Demo data - endpoints with highest errors
@@ -76,10 +76,10 @@ const DEMO_ERROR_ENDPOINTS = [
 
 // Atlas Crew brand colors
 const CHART_COLORS = {
-  total: '#0057B7',     // Atlas Crew Blue
-  errors4xx: '#E35205', // Atlas Crew Orange
-  errors5xx: '#D62598', // Atlas Crew Magenta
-  blocked: '#440099',   // Atlas Crew Purple
+  total: colors.blue,
+  errors4xx: colors.orange,
+  errors5xx: colors.magenta,
+  blocked: colors.purple,
 };
 
 // Time Range Selector
@@ -172,10 +172,6 @@ function StatCard({
 
 // Error Timeline Chart
 function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
-  const tickColor = useMemo(() => getAxisTickColor(), []);
-  const gridStroke = useMemo(() => getGridStroke(), []);
-
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
@@ -215,22 +211,16 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
                 <stop offset="95%" stopColor={CHART_COLORS.blocked} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <CartesianGrid {...gridDefaultsSoft} />
             <XAxis
               dataKey="time"
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...xAxisNoLine}
             />
             <YAxis
-              tick={{ fill: tickColor, fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              {...axisDefaults.y}
             />
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
             />
             <Area
               type="monotone"
@@ -266,7 +256,6 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
 // Error Category Pie Chart
 function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
-  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
 
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
@@ -288,9 +277,7 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
               ))}
             </Pie>
             <Tooltip
-              contentStyle={tooltipStyle.contentStyle}
-              labelStyle={tooltipStyle.labelStyle}
-              itemStyle={tooltipStyle.itemStyle}
+              {...tooltipDefaults}
               formatter={(value: number) => [
                 `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
                 'Errors',

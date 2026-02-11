@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 12:00_
+_Generated: 2026-02-11 12:05_
 
 ## Summary
 
-**Total findings: 624**
+**Total findings: 618**
 
 ### Findings by Component
 
@@ -15,7 +15,7 @@ _Generated: 2026-02-11 12:00_
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
 | Tabs | 15 | Raw tab implementations → use <Tabs> |
 | Stack (inline) | 15 | Inline flex style → use <Stack> primitive |
-| Modal | 15 | Raw modal/overlay patterns → use <Modal> |
+| Modal | 9 | Raw modal/overlay patterns → use <Modal> |
 | Text | 7 | Raw styled text elements → use <Text> primitive |
 
 ### Files by Hit Count (Work Order)
@@ -26,8 +26,8 @@ Priority files to migrate first (most raw patterns):
 |------|------|
 | 30 | `pages/AdminSettingsPage.tsx` |
 | 22 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
-| 22 | `pages/fleet/ReleasesPage.tsx` |
 | 22 | `components/fleet/FileBrowser.tsx` |
+| 19 | `pages/fleet/ReleasesPage.tsx` |
 | 16 | `App.tsx` |
 | 13 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
@@ -53,7 +53,6 @@ Priority files to migrate first (most raw patterns):
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 7 | `pages/hunting/RequestTimelinePage.tsx` |
-| 7 | `pages/fleet/SensorKeysPage.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
 | 7 | `pages/fleet/ConfigManagerPage.tsx` |
@@ -64,6 +63,7 @@ Priority files to migrate first (most raw patterns):
 | 6 | `pages/soc/LiveMapPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 6 | `pages/WarRoomPage.tsx` |
+| 6 | `pages/SupportPage.tsx` |
 
 ---
 
@@ -251,12 +251,6 @@ Raw modal/overlay patterns → use <Modal>
 | `components/fleet/EmbeddedDashboard.tsx` | 142 | `state.fullscreen && 'fixed inset-0 z-50'` |
 | `components/fleet/FileBrowser.tsx` | 481 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
 | `pages/beam/threats/BlockedRequestsPage.tsx` | 284 | `className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"` |
-| `pages/fleet/ReleasesPage.tsx` | 211 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
-| `pages/fleet/ReleasesPage.tsx` | 451 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
-| `pages/fleet/ReleasesPage.tsx` | 561 | `<div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />` |
-| `pages/fleet/SensorKeysPage.tsx` | 391 | `<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"` |
-| `pages/fleet/SensorKeysPage.tsx` | 421 | `<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"` |
-| `pages/fleet/SensorKeysPage.tsx` | 498 | `<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"` |
 | `pages/fleet/ConfigManagerPage.tsx` | 1000 | `className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"` |
 | `pages/fleet/ConfigManagerPage.tsx` | 1116 | `className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"` |
 

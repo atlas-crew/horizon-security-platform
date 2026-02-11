@@ -3,7 +3,7 @@
  * Main page for release management including upload, listing, and rollout control
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Package,
   Upload,
@@ -25,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { SectionHeader, Spinner } from '@/ui';
+import { Modal, SectionHeader, Spinner } from '@/ui';
 
 // ============================================================================
 // Types
@@ -208,35 +208,8 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-
-      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle sticky top-0 bg-surface-card">
-          <SectionHeader
-            title="Upload Release"
-            icon={
-              <div className="p-2 bg-ac-blue/10">
-                <Upload className="w-5 h-5 text-ac-blue" />
-              </div>
-            }
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={SECTION_HEADER_TITLE_STYLE}
-            actions={
-              <button
-                onClick={handleClose}
-                className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            }
-          />
-        </div>
-
-        {/* Form */}
-        <div className="p-6 space-y-5">
+    <Modal open onClose={handleClose} size="560px" title="Upload Release">
+      <div className="space-y-5">
           {/* Version */}
           <div>
             <label className="block text-sm font-medium text-ink-secondary mb-1.5">
@@ -406,34 +379,34 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle bg-surface-raised sticky bottom-0">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <>
-                <Spinner size={16} color="#FFFFFF" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4" />
-                Upload Release
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+        <Modal.Footer>
+          <div className="flex items-center justify-end gap-3 w-full">
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner size={16} color="#FFFFFF" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Upload Release
+                </>
+              )}
+            </button>
+          </div>
+        </Modal.Footer>
+    </Modal>
   );
 }
 
@@ -448,52 +421,46 @@ function ConfirmDeleteModal({
   if (!isOpen || !release) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-status-error/10">
-            <AlertTriangle className="w-6 h-6 text-status-error" />
-          </div>
-          <h3 className="text-lg font-semibold text-ink-primary">Delete Release?</h3>
-        </div>
-
-        <p className="text-sm text-ink-secondary mb-2">
-          Are you sure you want to delete release{' '}
-          <span className="font-semibold">v{release.version}</span>?
-        </p>
-        <p className="text-sm text-ink-muted mb-6">
-          This action cannot be undone. Sensors currently using this version will not be affected.
-        </p>
-
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
-          >
-            {isDeleting ? (
-              <>
-                <Spinner size={16} color="#FFFFFF" />
-                Deleting...
-              </>
-            ) : (
-              <>
-                <Trash2 className="w-4 h-4" />
-                Delete Release
-              </>
-            )}
-          </button>
+    <Modal open onClose={onClose} size="520px" title="Delete Release?">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-status-error/10">
+          <AlertTriangle className="w-6 h-6 text-status-error" />
         </div>
       </div>
-    </div>
+
+      <p className="text-sm text-ink-secondary mb-2">
+        Are you sure you want to delete release <span className="font-semibold">v{release.version}</span>?
+      </p>
+      <p className="text-sm text-ink-muted mb-6">
+        This action cannot be undone. Sensors currently using this version will not be affected.
+      </p>
+
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={isDeleting}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
+        >
+          {isDeleting ? (
+            <>
+              <Spinner size={16} color="#FFFFFF" />
+              Deleting...
+            </>
+          ) : (
+            <>
+              <Trash2 className="w-4 h-4" />
+              Delete Release
+            </>
+          )}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -511,6 +478,20 @@ function ReleaseRow({
 }) {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   return (
     <>
@@ -549,7 +530,7 @@ function ReleaseRow({
               <Rocket className="w-3.5 h-3.5" />
               Deploy
             </button>
-            <div className="relative">
+            <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
@@ -557,42 +538,39 @@ function ReleaseRow({
                 <MoreVertical className="w-4 h-4" />
               </button>
               {showMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-20 bg-surface-card border border-border-subtle shadow-lg py-1 min-w-[140px]">
-                    <button
-                      onClick={() => {
-                        window.open(release.binaryUrl, '_blank');
-                        setShowMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(release.sha256);
-                        setShowMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
-                    >
-                      <Hash className="w-4 h-4" />
-                      Copy SHA-256
-                    </button>
-                    <hr className="my-1 border-border-subtle" />
-                    <button
-                      onClick={() => {
-                        onDelete(release);
-                        setShowMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-error hover:bg-status-error/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
-                  </div>
-                </>
+                <div className="absolute right-0 top-full mt-1 z-20 bg-surface-card border border-border-subtle shadow-lg py-1 min-w-[140px]">
+                  <button
+                    onClick={() => {
+                      window.open(release.binaryUrl, '_blank');
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(release.sha256);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
+                  >
+                    <Hash className="w-4 h-4" />
+                    Copy SHA-256
+                  </button>
+                  <hr className="my-1 border-border-subtle" />
+                  <button
+                    onClick={() => {
+                      onDelete(release);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-error hover:bg-status-error/10"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </div>
               )}
             </div>
           </div>

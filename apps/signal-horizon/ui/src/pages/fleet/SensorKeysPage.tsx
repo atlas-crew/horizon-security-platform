@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { SectionHeader } from '@/ui';
+import { Modal, SectionHeader } from '@/ui';
 
 interface SensorKey {
   id: string;
@@ -388,61 +388,53 @@ export function SensorKeysPage(): React.ReactElement {
 
       {/* Generated Key Display (after rotation) */}
       {generatedKey && !isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-white mb-4">Key Rotated Successfully</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              Save this key securely. It won't be shown again.
-            </p>
-            <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
-              <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={handleCopyKey}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              >
-                {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copiedKey ? 'Copied!' : 'Copy'}
-              </button>
-              <button
-                onClick={() => setGeneratedKey(null)}
-                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              >
-                Done
-              </button>
-            </div>
+        <Modal open onClose={() => setGeneratedKey(null)} size="520px" title="Key Rotated Successfully">
+          <p className="text-sm text-gray-400 mb-4">Save this key securely. It won't be shown again.</p>
+          <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
+            <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
           </div>
-        </div>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={handleCopyKey}
+              className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copiedKey ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={() => setGeneratedKey(null)}
+              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              Done
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Revoke Confirmation Modal */}
       {keyToRevoke && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-white mb-2">Revoke API Key</h3>
-            <p className="text-sm text-gray-400 mb-6">
-              Are you sure you want to revoke this API key? This action cannot be undone and will
-              immediately invalidate the key.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setKeyToRevoke(null)}
-                disabled={revokeMutation.isPending}
-                className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => revokeMutation.mutate(keyToRevoke)}
-                disabled={revokeMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-              >
-                {revokeMutation.isPending ? 'Revoking...' : 'Revoke Key'}
-              </button>
-            </div>
+        <Modal open onClose={() => setKeyToRevoke(null)} size="520px" title="Revoke API Key">
+          <p className="text-sm text-gray-400 mb-6">
+            Are you sure you want to revoke this API key? This action cannot be undone and will
+            immediately invalidate the key.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setKeyToRevoke(null)}
+              disabled={revokeMutation.isPending}
+              className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => revokeMutation.mutate(keyToRevoke)}
+              disabled={revokeMutation.isPending}
+              className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+            >
+              {revokeMutation.isPending ? 'Revoking...' : 'Revoke Key'}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -495,116 +487,113 @@ function GenerateKeyModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 border border-gray-700 p-6 max-w-md w-full mx-4">
-        {generatedKey ? (
-          <>
-            <h3 className="text-lg font-semibold text-white mb-4">API Key Generated</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              Save this key securely. It won't be shown again.
-            </p>
-            <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
-              <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
+    <Modal
+      open
+      onClose={onClose}
+      size="520px"
+      title={generatedKey ? 'API Key Generated' : 'Generate New API Key'}
+    >
+      {generatedKey ? (
+        <>
+          <p className="text-sm text-gray-400 mb-4">Save this key securely. It won't be shown again.</p>
+          <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
+            <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onCopyKey}
+              className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copiedKey ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">Key Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Production API Key"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">Sensor</label>
+            <select
+              value={sensorId}
+              onChange={(e) => setSensorId(e.target.value)}
+              required
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a sensor</option>
+              {sensors.map((sensor) => (
+                <option key={sensor.id} value={sensor.id}>
+                  {sensor.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">Expiration</label>
+            <select
+              value={expiresIn}
+              onChange={(e) => setExpiresIn(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+              <option value="180">180 days</option>
+              <option value="365">1 year</option>
+              <option value="never">Never</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">Permissions</label>
+            <div className="space-y-2">
+              {availablePermissions.map((perm) => (
+                <label key={perm.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={permissions.includes(perm.id)}
+                    onChange={() => togglePermission(perm.id)}
+                    className="w-4 h-4 text-blue-600 border-gray-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-white">{perm.label}</span>
+                </label>
+              ))}
             </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={onCopyKey}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              >
-                {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copiedKey ? 'Copied!' : 'Copy'}
-              </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              >
-                Done
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h3 className="text-lg font-semibold text-white mb-4">Generate New API Key</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-1">Key Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Production API Key"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-1">Sensor</label>
-                <select
-                  value={sensorId}
-                  onChange={(e) => setSensorId(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a sensor</option>
-                  {sensors.map((sensor) => (
-                    <option key={sensor.id} value={sensor.id}>
-                      {sensor.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-1">Expiration</label>
-                <select
-                  value={expiresIn}
-                  onChange={(e) => setExpiresIn(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="30">30 days</option>
-                  <option value="90">90 days</option>
-                  <option value="180">180 days</option>
-                  <option value="365">1 year</option>
-                  <option value="never">Never</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">Permissions</label>
-                <div className="space-y-2">
-                  {availablePermissions.map((perm) => (
-                    <label key={perm.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permissions.includes(perm.id)}
-                        onChange={() => togglePermission(perm.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-white">{perm.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={isGenerating}
-                  className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isGenerating || !name || !sensorId || permissions.length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                  {isGenerating ? 'Generating...' : 'Generate Key'}
-                </button>
-              </div>
-            </form>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isGenerating}
+              className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isGenerating || !name || !sensorId || permissions.length === 0}
+              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              {isGenerating ? 'Generating...' : 'Generate Key'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
   );
 }
 

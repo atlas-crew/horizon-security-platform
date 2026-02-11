@@ -448,12 +448,12 @@ export default function CampaignDetailPage() {
 
       {/* Response Actions */}
       <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <ActionButton icon={Swords} label="Block All IPs" tone={colors.red} />
-        <ActionButton icon={Shield} label="Block Fingerprint" tone={colors.red} />
-        <ActionButton icon={Network} label="Block ASN" tone={colors.red} />
-        <ActionButton icon={Flame} label="Challenge Mode" tone={colors.orange} />
-        <ActionButton icon={ExternalLink} label="Export IOCs" tone={colors.blue} />
-        <ActionButton icon={Building} label="Notify Customers" tone={colors.blue} />
+        <ActionButton icon={Swords} label="Block All IPs" tone="red" />
+        <ActionButton icon={Shield} label="Block Fingerprint" tone="red" />
+        <ActionButton icon={Network} label="Block ASN" tone="red" />
+        <ActionButton icon={Flame} label="Challenge Mode" tone="orange" />
+        <ActionButton icon={ExternalLink} label="Export IOCs" tone="blue" />
+        <ActionButton icon={Building} label="Notify Customers" tone="blue" />
       </section>
     </div>
   );
@@ -470,8 +470,8 @@ function StatMini({
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center">
-        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: colors.blue }} />
+      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center text-ink-muted">
+        <Icon aria-hidden="true" className="w-5 h-5" />
       </div>
       <div>
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
@@ -488,16 +488,18 @@ function ActionButton({
 }: {
   icon: typeof Target;
   label: string;
-  tone: string;
+  tone: 'red' | 'orange' | 'blue';
 }) {
+  const toneColor = tone === 'red' ? colors.red : tone === 'orange' ? colors.orange : colors.blue;
+
   return (
     <Button
       size="sm"
       fill
       icon={<Icon aria-hidden="true" className="w-4 h-4" />}
       style={{
-        background: tone,
-        border: `1px solid ${alpha(tone, 0.6)}`,
+        background: toneColor,
+        border: `1px solid ${alpha(toneColor, 0.6)}`,
         color: '#FFFFFF',
       }}
     >

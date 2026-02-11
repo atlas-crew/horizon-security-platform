@@ -23,7 +23,7 @@ import {
   updatePingoraConfig,
   runPingoraAction,
 } from './shared';
-import { Tabs } from '@/ui';
+import { Spinner, Tabs } from '@/ui';
 
 interface ConfigurationTabProps {
   sensor: any;
@@ -295,7 +295,11 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 disabled={isPingoraFetching}
                 className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
-                <RefreshCw className={`w-4 h-4 ${isPingoraFetching ? 'animate-spin' : ''}`} />
+                {isPingoraFetching ? (
+                  <Spinner size={16} color="#FFFFFF" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
                 {isPingoraFetching ? 'Retrying...' : 'Retry'}
               </button>
             </div>
@@ -342,7 +346,11 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 disabled={isSystemConfigFetching}
                 className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
-                <RefreshCw className={`w-4 h-4 ${isSystemConfigFetching ? 'animate-spin' : ''}`} />
+                {isSystemConfigFetching ? (
+                  <Spinner size={16} color="#FFFFFF" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
                 {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
               </button>
             </div>
@@ -496,7 +504,11 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 disabled={isHistoryFetching}
                 className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
-                <RefreshCw className={`w-4 h-4 ${isHistoryFetching ? 'animate-spin' : ''}`} />
+                {isHistoryFetching ? (
+                  <Spinner size={16} color="#FFFFFF" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
                 {isHistoryFetching ? 'Retrying...' : 'Retry'}
               </button>
             </div>

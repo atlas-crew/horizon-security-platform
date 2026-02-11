@@ -15,6 +15,7 @@ import {
   CARD_HEADER_TITLE_STYLE,
   Input,
   SectionHeader,
+  Spinner,
   Tabs,
   TRUNCATED_CARD_HEADER_TITLE_STYLE,
   spacing,
@@ -178,10 +179,11 @@ export default function RequestTimelinePage() {
               aria-label="Refresh"
               title="Refresh"
               icon={
-                <RefreshCw
-                  aria-hidden="true"
-                  className={isLoading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'}
-                />
+                isLoading ? (
+                  <Spinner size={16} color="#0057B7" />
+                ) : (
+                  <RefreshCw aria-hidden="true" className="w-4 h-4" />
+                )
               }
             >
               Refresh

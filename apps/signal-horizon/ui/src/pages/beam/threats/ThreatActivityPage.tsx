@@ -35,6 +35,7 @@ import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
 import {
   Button,
   SectionHeader,
+  Spinner,
   axisDefaults,
   colors,
   gridDefaultsSoft,
@@ -500,7 +501,7 @@ export default function ThreatActivityPage() {
               className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
               disabled={hookLoading}
             >
-              <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+              {hookLoading ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
               Refresh
             </button>
             <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

@@ -13,7 +13,6 @@ import {
   Hash,
   AlertTriangle,
   X,
-  Loader2,
   Check,
   RefreshCw,
   ChevronDown,
@@ -26,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { SectionHeader } from '@/ui';
+import { SectionHeader, Spinner } from '@/ui';
 
 // ============================================================================
 // Types
@@ -395,7 +394,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               />
               {isCalculatingSha && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Loader2 className="w-4 h-4 animate-spin text-ink-muted" />
+                  <Spinner size={16} color="#7F7F7F" />
                 </div>
               )}
             </div>
@@ -422,7 +421,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size={16} color="#FFFFFF" />
                 Uploading...
               </>
             ) : (
@@ -482,7 +481,7 @@ function ConfirmDeleteModal({
           >
             {isDeleting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size={16} color="#FFFFFF" />
                 Deleting...
               </>
             ) : (
@@ -812,7 +811,7 @@ export function ReleasesPage() {
 
         {isLoadingReleases ? (
           <div className="p-12 text-center">
-            <Loader2 className="w-8 h-8 mx-auto animate-spin text-ink-muted" />
+            <Spinner size={32} color="#7F7F7F" style={{ margin: '0 auto' }} />
             <p className="mt-4 text-sm text-ink-muted">Loading releases...</p>
           </div>
         ) : safeReleases.length === 0 ? (

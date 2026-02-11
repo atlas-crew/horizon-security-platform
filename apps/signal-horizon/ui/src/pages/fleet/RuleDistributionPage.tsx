@@ -23,7 +23,6 @@ import {
   Clock,
   RefreshCw,
   Zap,
-  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useBeamRules } from '../../hooks/useBeamRules';
@@ -33,7 +32,7 @@ import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import type { Rule } from '../../types/beam';
-import { Box, Button, SectionHeader, alpha, colors, spacing } from '@/ui';
+import { Box, Button, SectionHeader, Spinner, alpha, colors, spacing } from '@/ui';
 
 type RuleStatus = 'active' | 'paused' | 'deploying' | 'failed';
 type RuleSeverity = 'critical' | 'high' | 'medium' | 'low';
@@ -280,7 +279,7 @@ function RuleCard({
                 size="sm"
                 icon={
                   isUpdating ? (
-                    <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" />
+                    <Spinner size={14} color="#FFFFFF" />
                   ) : rule.enabled ? (
                     <Pause aria-hidden="true" className="w-3.5 h-3.5" />
                   ) : (
@@ -454,10 +453,11 @@ export function RuleDistributionPage() {
                 size="sm"
                 onClick={() => refetch()}
                 icon={
-                  <RefreshCw
-                    aria-hidden="true"
-                    className={clsx('w-4 h-4', rulesLoading && 'animate-spin')}
-                  />
+                  rulesLoading ? (
+                    <Spinner size={16} color="#0057B7" />
+                  ) : (
+                    <RefreshCw aria-hidden="true" className="w-4 h-4" />
+                  )
                 }
               >
                 Refresh State
@@ -469,7 +469,7 @@ export function RuleDistributionPage() {
                 disabled={deployMutation.isPending}
                 icon={
                   deployMutation.isPending ? (
-                    <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                    <Spinner size={16} color="#FFFFFF" />
                   ) : (
                     <Zap aria-hidden="true" className="w-4 h-4" />
                   )

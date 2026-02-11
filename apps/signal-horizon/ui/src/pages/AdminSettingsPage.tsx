@@ -45,7 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader } from '@/ui';
+import { Button, SectionHeader, Spinner } from '@/ui';
 
 const PAGE_TITLE_STYLE = {
   fontSize: '20px',
@@ -658,7 +658,7 @@ const AdminSettingsPage: React.FC = () => {
 
                   <div className="p-6 border border-status-error/20 bg-status-error/5 space-y-4">
                     <div className="flex items-center gap-3 text-status-error">
-                      <RefreshCw className="w-5 h-5 animate-spin-slow" />
+                      <Spinner size={20} color="#EF3340" />
                       <h3 className="font-bold text-sm uppercase tracking-wider">
                         Invalidate All Sessions
                       </h3>

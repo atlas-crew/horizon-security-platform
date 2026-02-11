@@ -22,7 +22,6 @@ import {
   Copy,
   Check,
   X,
-  Loader2,
   AlertCircle,
   Hash,
   ChevronDown,
@@ -36,6 +35,7 @@ import {
   type FileInfo,
   type DownloadProgress,
 } from '../../hooks/fleet/useFileTransfer';
+import { Spinner } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -324,7 +324,7 @@ const FileRow = memo(function FileRow({
               title="Download file"
             >
               {isDownloading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size={16} color="#0057B7" />
               ) : (
                 <Download className="w-4 h-4" />
               )}
@@ -502,7 +502,7 @@ const ChecksumModal = memo(function ChecksumModal({
 
           {isLoading && (
             <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin text-ink-muted" />
+              <Spinner size={24} color="#7F7F7F" />
             </div>
           )}
 
@@ -781,7 +781,7 @@ export const FileBrowser = memo(function FileBrowser({
               className="p-1.5 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50"
               title="Refresh (Ctrl+R)"
             >
-              <RefreshCw className={clsx('w-4 h-4', isLoadingFiles && 'animate-spin')} />
+              {isLoadingFiles ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
             </button>
 
             {/* Close */}
@@ -841,7 +841,7 @@ export const FileBrowser = memo(function FileBrowser({
         <div className="flex-1 overflow-auto">
           {isLoadingFiles ? (
             <div className="flex flex-col items-center justify-center h-full text-ink-muted">
-              <Loader2 className="w-8 h-8 animate-spin mb-3" />
+              <Spinner size={32} color="#7F7F7F" style={{ marginBottom: '12px' }} />
               <p className="text-sm">Loading directory...</p>
             </div>
           ) : filesError ? (

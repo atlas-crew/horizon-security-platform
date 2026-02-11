@@ -4,6 +4,7 @@
  */
 
 import { clsx } from 'clsx';
+import { Spinner as UiSpinner } from '@/ui';
 
 /**
  * Skeleton loading placeholder
@@ -162,24 +163,16 @@ export function LoadingSpinner({
   message?: string;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const sizeClasses = {
-    sm: 'w-4 h-4 border-2',
-    md: 'w-8 h-8 border-2',
-    lg: 'w-12 h-12 border-3',
-  };
-
   return (
     <div
       role="status"
       aria-live="polite"
       className="flex flex-col items-center justify-center gap-3 py-8"
     >
-      <div
-        className={clsx(
-          'border-border-subtle border-t-accent animate-spin',
-          sizeClasses[size]
-        )}
-        aria-hidden="true"
+      <UiSpinner
+        size={size === 'sm' ? 16 : size === 'md' ? 32 : 48}
+        color="#0057B7"
+        style={size === 'lg' ? { borderWidth: '3px' } : undefined}
       />
       <span className="text-ink-secondary text-sm" aria-hidden="true">{message}</span>
       <span className="sr-only">{message}</span>
@@ -432,7 +425,7 @@ export function ConnectionBanner({
     >
       {isReconnecting && !hasExhaustedAttempts ? (
         <>
-          <div className="w-3 h-3 border-2 border-ac-orange border-t-transparent animate-spin" />
+          <UiSpinner size={12} color="#F0A202" />
           <span>
             Reconnecting to server...
             {reconnectAttempt != null && maxReconnectAttempts != null && (

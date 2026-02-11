@@ -23,7 +23,7 @@ import {
   updatePingoraConfig,
   runPingoraAction,
 } from './shared';
-import { Spinner, Tabs } from '@/ui';
+import { Spinner, Stack, Tabs } from '@/ui';
 
 interface ConfigurationTabProps {
   sensor: any;
@@ -285,7 +285,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           {isLoading ? (
             <ConfigPanelSkeleton />
           ) : pingoraError ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <Stack direction="column" align="center" justify="center" gap="md" className="py-12">
               <div className="flex items-center gap-2 text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(pingoraError as Error).message}</span>
@@ -302,7 +302,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 )}
                 {isPingoraFetching ? 'Retrying...' : 'Retry'}
               </button>
-            </div>
+            </Stack>
           ) : (
             <>
               {isTunnelActive ? (
@@ -336,7 +336,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           ) : isSystemConfigLoading ? (
             <ConfigPanelSkeleton />
           ) : systemConfigError ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <Stack direction="column" align="center" justify="center" gap="md" className="py-12">
               <div className="flex items-center gap-2 text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(systemConfigError as Error).message}</span>
@@ -353,7 +353,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 )}
                 {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
               </button>
-            </div>
+            </Stack>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
@@ -494,7 +494,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           {isHistoryLoading ? (
             <ConfigPanelSkeleton />
           ) : historyError ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-3">
+            <Stack direction="column" align="center" justify="center" gap="sm" className="py-8">
               <div className="flex items-center gap-2 text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(historyError as Error).message}</span>
@@ -511,7 +511,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 )}
                 {isHistoryFetching ? 'Retrying...' : 'Retry'}
               </button>
-            </div>
+            </Stack>
           ) : configHistoryEntries.length === 0 ? (
             <div className="text-sm text-ink-secondary">No configuration changes recorded yet.</div>
           ) : (

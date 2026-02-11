@@ -494,7 +494,7 @@ export default function OverviewPage() {
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topAttackers.map((a) => (
-              <div key={a.label} className="flex flex-col gap-1.5">
+              <Stack key={a.label} direction="column" style={{ gap: '0.375rem' }}>
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-ink-secondary truncate pr-2">{a.label}</span>
                   <span className="text-ink-muted font-bold">{a.value.toLocaleString()}</span>
@@ -508,7 +508,7 @@ export default function OverviewPage() {
                     }}
                   />
                 </div>
-              </div>
+              </Stack>
             ))}
           </div>
         </section>
@@ -537,7 +537,7 @@ export default function OverviewPage() {
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topFingerprints.map((f) => (
-              <div key={f.label} className="flex flex-col gap-1.5">
+              <Stack key={f.label} direction="column" style={{ gap: '0.375rem' }}>
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-ink-secondary truncate pr-2">{f.label}</span>
                   <span className="text-ink-muted font-bold">{f.value.toLocaleString()}</span>
@@ -551,7 +551,7 @@ export default function OverviewPage() {
                     }}
                   />
                 </div>
-              </div>
+              </Stack>
             ))}
           </div>
         </section>

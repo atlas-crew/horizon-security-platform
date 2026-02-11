@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, SectionHeader, Spinner } from '@/ui';
+import { Breadcrumb, SectionHeader, Spinner, Stack } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -177,16 +177,16 @@ export function SensorConfigPage() {
   };
 
   if (isLoading) return (
-    <div className="flex flex-col h-full bg-surface-base min-h-[calc(100vh-64px)]">
+    <Stack direction="column" className="h-full bg-surface-base min-h-[calc(100vh-64px)]">
       <div className="px-6 py-4 border-b border-border-subtle bg-surface-card">
         <Skeleton className="h-4 w-48 mb-2" />
         <Skeleton className="h-6 w-64" />
       </div>
       <ConfigPanelSkeleton />
-    </div>
+    </Stack>
   );
   if (error) return (
-    <div className="p-12 flex flex-col items-center justify-center gap-4">
+    <Stack direction="column" align="center" justify="center" gap="md" className="p-12">
       <div className="flex items-center gap-2 text-status-error">
         <AlertCircle className="w-5 h-5" />
         <span>Error: {formatApiError(error, 'Failed to load configuration')}</span>
@@ -199,7 +199,7 @@ export function SensorConfigPage() {
         {isFetching ? <Spinner size={16} color="#FFFFFF" /> : <RefreshCw className="w-4 h-4" />}
         {isFetching ? 'Retrying...' : 'Retry'}
       </button>
-    </div>
+    </Stack>
   );
 
   return (
@@ -271,7 +271,7 @@ export function SensorConfigPage() {
             onChange={handleAdvancedConfigChange}
           />
 	        ) : (
-	          <div className="h-full p-6 flex flex-col gap-4">
+	          <Stack direction="column" gap="md" className="h-full p-6">
 	            <div className="bg-status-info/10 border border-status-info/20 p-4 flex items-start gap-3 flex-shrink-0">
 	              <span className="text-status-info text-xl">&#x2139;&#xFE0F;</span>
 	              <div className="text-sm text-ink-secondary">
@@ -354,7 +354,7 @@ export function SensorConfigPage() {
                 className="h-full font-mono text-sm"
               />
             </div>
-          </div>
+          </Stack>
         )}
       </div>
     </div>

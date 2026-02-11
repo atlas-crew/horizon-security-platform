@@ -18,6 +18,7 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
+import { Button } from '@/ui';
 
 const authHeaders = {
   Authorization: `Bearer ${API_KEY}`,
@@ -861,12 +862,22 @@ Track these metrics:
               className="w-full pl-10 pr-10 py-2.5 bg-surface-base border border-border-subtle text-sm focus:outline-none focus:ring-2 focus:ring-ac-blue/20 focus:border-ac-blue transition-all"
             />
             {searchQuery && (
-              <button 
+              <Button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors"
+                variant="ghost"
+                size="sm"
+                icon={<X className="w-3.5 h-3.5" />}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  height: '24px',
+                  padding: 0,
+                  color: '#7F7F7F',
+                }}
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -1076,14 +1087,24 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
               </div>
               <p className="text-xs text-ink-secondary mb-6 leading-relaxed">{check.details}</p>
               {onSelectDoc && (
-                <button 
+                <Button
                   onClick={() => onSelectDoc(check.link)}
-                  className="inline-flex items-center text-[10px] font-bold text-ac-blue uppercase tracking-widest hover:text-ac-magenta transition-colors group/link"
+                  variant="ghost"
+                  size="sm"
+                  icon={<BookOpen className="w-3.5 h-3.5" />}
+                  iconAfter={<ChevronRight className="w-3 h-3" />}
+                  style={{
+                    height: '24px',
+                    padding: 0,
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: '#0057B7',
+                  }}
                 >
-                  <BookOpen className="w-3.5 h-3.5 mr-2" />
                   Resolution Guide
-                  <ChevronRight className="w-3 h-3 ml-1 group-hover/link:translate-x-1 transition-transform" />
-                </button>
+                </Button>
               )}
             </div>
           ))}
@@ -1116,9 +1137,21 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
                   </span>
                 </td>
                 <td className="px-8 py-5 text-right">
-                  <button className="text-ac-blue group-hover:text-ac-magenta font-bold uppercase text-xs tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{
+                      height: '24px',
+                      padding: 0,
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: '#0057B7',
+                    }}
+                  >
                     Download
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -1145,9 +1178,20 @@ function ContactSupport() {
           <textarea id="contact-message" rows={6} className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Describe the problem you're experiencing..." />
         </div>
         <div className="flex items-center justify-between pt-4">
-          <button type="button" className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-10 py-4 font-bold uppercase tracking-widest text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-ac-magenta/50">
+          <Button
+            type="button"
+            variant="magenta"
+            size="lg"
+            style={{
+              padding: '0 40px',
+              fontSize: '12px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}
+          >
             Send Message
-          </button>
+          </Button>
           <div className="text-right">
             <p className="text-xs font-bold text-ac-magenta uppercase tracking-widest">SLA: &lt; 2 hours</p>
             <p className="text-[10px] text-ink-muted mt-1">24/7 Enterprise Support</p>

@@ -45,6 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { Button } from '@/ui';
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -690,9 +691,20 @@ const AdminSettingsPage: React.FC = () => {
                             Please review and accept the global data sharing policy.
                           </p>
                         </div>
-                        <button className="ml-auto px-4 py-2 bg-ac-blue text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-dark transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1">
+                        <Button
+                          className="ml-auto"
+                          size="sm"
+                          style={{
+                            height: '36px',
+                            padding: '0 16px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.08em',
+                          }}
+                        >
                           Review Policy
-                        </button>
+                        </Button>
                       </>
                     )}
                   </div>
@@ -710,20 +722,42 @@ const AdminSettingsPage: React.FC = () => {
                     all tenant telemetry.
                   </p>
                   <div className="flex gap-4">
-                    <button
+                    <Button
                       onClick={() => handleWithdrawal('CONTRIBUTION')}
                       disabled={isWithdrawing}
-                      className="flex-1 h-12 border-2 border-border-subtle text-ink-primary text-xs font-bold uppercase tracking-widest hover:bg-surface-subtle disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      variant="outlined"
+                      size="sm"
+                      fill
+                      style={{
+                        height: '48px',
+                        borderWidth: '2px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                      }}
                     >
                       Withdraw Contribution
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => handleWithdrawal('GDPR_ERASURE')}
                       disabled={isWithdrawing}
-                      className="flex-1 h-12 border-2 border-status-error text-status-error text-xs font-bold uppercase tracking-widest hover:bg-status-error/5 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      variant="outlined"
+                      size="sm"
+                      fill
+                      style={{
+                        height: '48px',
+                        borderWidth: '2px',
+                        borderColor: '#EF3340',
+                        color: '#EF3340',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                      }}
                     >
                       Request Full Erasure
-                    </button>
+                    </Button>
                   </div>
                 </section>
               </div>
@@ -1788,9 +1822,23 @@ const AdminSettingsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <button className="w-full h-12 border-2 border-status-error text-status-error text-xs font-bold uppercase tracking-widest hover:bg-status-error hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1">
+                    <Button
+                      variant="outlined"
+                      size="sm"
+                      fill
+                      style={{
+                        height: '48px',
+                        borderWidth: '2px',
+                        borderColor: '#EF3340',
+                        color: '#EF3340',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                      }}
+                    >
                       Initiate Apparatus Sync
-                    </button>
+                    </Button>
                   </section>
 
                   {/* Active Defense Panel */}

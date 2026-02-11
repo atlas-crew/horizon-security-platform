@@ -247,7 +247,7 @@ function App() {
             aria-expanded={isSectionOpen}
             className="w-full flex items-center justify-between px-3 py-2 mb-0.5 group transition-colors hover:bg-surface-card focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50"
           >
-            <div className="flex items-center gap-2.5">
+            <Stack direction="row" align="center" style={{ gap: '10px' }}>
               <span
                 className={clsx(
                   'w-0.5 h-3.5 flex-shrink-0 transition-opacity',
@@ -261,7 +261,7 @@ function App() {
               {!isSectionOpen && hasActive && (
                 <span className={clsx('w-1.5 h-1.5 flex-shrink-0 animate-pulse', accent)} />
               )}
-            </div>
+            </Stack>
             <ChevronRight
               className={clsx(
                 'w-3 h-3 text-ink-muted transition-transform duration-200',
@@ -335,90 +335,104 @@ function App() {
            Navy header maintains brand identity in both light and dark modes */}
       <header className="h-14 border-b border-ac-navy-light bg-ac-navy relative z-10 surface-hero-gradient edge-highlight">
         <div className="h-full px-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
+          <Stack direction="row" align="center" gap="lg">
             {/* Status Indicators - Tactical Display */}
-            <div className="hidden lg:flex items-center gap-6">
-              <Link to="/campaigns" className="flex items-center gap-2 hover:text-white transition-colors group">
-                <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
-                  <Target className={clsx('w-4 h-4 transition-colors', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70 group-hover:text-white')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                  <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
-                </span>
+            <Stack direction="row" align="center" gap="lg" className="!hidden lg:!flex">
+              <Link to="/campaigns" className="hover:text-white transition-colors group">
+                <Stack direction="row" align="center" gap="sm">
+                  <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
+                    <Target className={clsx('w-4 h-4 transition-colors', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70 group-hover:text-white')} />
+                  </span>
+                  <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                    <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
+                  </span>
+                </Stack>
               </Link>
-              <Link to="/" className="flex items-center gap-2 hover:text-white transition-colors group">
-                <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
-                  <AlertTriangle className={clsx('w-4 h-4 transition-colors', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/70 group-hover:text-white')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                  <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
-                </span>
+              <Link to="/" className="hover:text-white transition-colors group">
+                <Stack direction="row" align="center" gap="sm">
+                  <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
+                    <AlertTriangle className={clsx('w-4 h-4 transition-colors', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/70 group-hover:text-white')} />
+                  </span>
+                  <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                    <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
+                  </span>
+                </Stack>
               </Link>
-              <Link to="/search" className="flex items-center gap-2 hover:text-white transition-colors group">
-                <Bell className={clsx('w-4 h-4 transition-colors', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/70 group-hover:text-white')} />
-                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                  <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
-                </span>
+              <Link to="/search" className="hover:text-white transition-colors group">
+                <Stack direction="row" align="center" gap="sm">
+                  <Bell className={clsx('w-4 h-4 transition-colors', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/70 group-hover:text-white')} />
+                  <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                    <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
+                  </span>
+                </Stack>
               </Link>
-              <Link to="/fleet" className="flex items-center gap-2 hover:text-white transition-colors group">
-                <span className={clsx(sensorCount > 0 && 'status-blink')}>
-                  <Server className={clsx('w-4 h-4 transition-colors', sensorCount > 0 ? 'text-ac-green' : 'text-white/70 group-hover:text-white')} />
-                </span>
-                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                  <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
-                </span>
+              <Link to="/fleet" className="hover:text-white transition-colors group">
+                <Stack direction="row" align="center" gap="sm">
+                  <span className={clsx(sensorCount > 0 && 'status-blink')}>
+                    <Server className={clsx('w-4 h-4 transition-colors', sensorCount > 0 ? 'text-ac-green' : 'text-white/70 group-hover:text-white')} />
+                  </span>
+                  <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                    <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
+                  </span>
+                </Stack>
               </Link>
               {/* API Connection Status */}
-              <Link to="/fleet/connectivity" className="flex items-center gap-2 pl-4 border-l border-white/20 hover:text-white transition-colors group">
-                {connectionState === 'connected' ? (
-                  <Wifi className="w-4 h-4 text-status-success" />
-                ) : connectionState === 'connecting' ? (
-                  <Wifi className="w-4 h-4 text-ac-orange animate-pulse" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-ac-red" />
-                )}
-                <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                  <span className={clsx(
-                    'font-semibold uppercase',
-                    connectionState === 'connected' ? 'text-status-success' :
-                    connectionState === 'connecting' ? 'text-ac-orange' : 'text-ac-red'
-                  )}>
-                    {connectionState === 'connected' ? 'HUB' : connectionState === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+              <Link to="/fleet/connectivity" className="pl-4 border-l border-white/20 hover:text-white transition-colors group">
+                <Stack direction="row" align="center" gap="sm">
+                  {connectionState === 'connected' ? (
+                    <Wifi className="w-4 h-4 text-status-success" />
+                  ) : connectionState === 'connecting' ? (
+                    <Wifi className="w-4 h-4 text-ac-orange animate-pulse" />
+                  ) : (
+                    <WifiOff className="w-4 h-4 text-ac-red" />
+                  )}
+                  <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                    <span className={clsx(
+                      'font-semibold uppercase',
+                      connectionState === 'connected' ? 'text-status-success' :
+                      connectionState === 'connecting' ? 'text-ac-orange' : 'text-ac-red'
+                    )}>
+                      {connectionState === 'connected' ? 'HUB' : connectionState === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+                    </span>
                   </span>
-                </span>
+                </Stack>
               </Link>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+            </Stack>
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <button
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 hover:bg-white/20 transition-colors text-white hover:text-white mr-2"
+              className="px-3 h-8 bg-white/10 border border-white/20 hover:bg-white/20 transition-colors text-white hover:text-white mr-2"
               title="Open Command Palette (Ctrl+K)"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span className="text-[10px] uppercase tracking-widest font-bold">Search</span>
-              <kbd className="ml-2 px-1.5 py-0.5 bg-white/10 border border-white/20 text-[9px] font-sans text-white/90">
-                {navigator.platform?.includes('Mac') ? '⌘K' : 'Ctrl+K'}
-              </kbd>
+              <Stack direction="row" align="center" gap="sm">
+                <Search className="w-3.5 h-3.5" />
+                <span className="text-[10px] uppercase tracking-widest font-bold">Search</span>
+                <kbd className="ml-2 px-1.5 py-0.5 bg-white/10 border border-white/20 text-[9px] font-sans text-white/90">
+                  {navigator.platform?.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+                </kbd>
+              </Stack>
             </button>
             <DemoModeControls />
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsTimeRangeOpen(!isTimeRangeOpen)}
-                className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70 hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                className="hidden md:flex border border-white/20 px-2 h-8 text-xs text-white/70 hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
               >
-                {(() => {
-                  switch (timeRange) {
-                    case '1h': return 'Last hour';
-                    case '6h': return 'Last 6 hours';
-                    case '24h': return 'Last 24 hours';
-                    case '7d': return 'Last 7 days';
-                    case '30d': return 'Last 30 days';
-                    default: return timeRange;
-                  }
-                })()}
-                <ChevronDown className={clsx("w-3 h-3 transition-transform", isTimeRangeOpen && "rotate-180")} />
+                <Stack direction="row" align="center" gap="sm">
+                  {(() => {
+                    switch (timeRange) {
+                      case '1h': return 'Last hour';
+                      case '6h': return 'Last 6 hours';
+                      case '24h': return 'Last 24 hours';
+                      case '7d': return 'Last 7 days';
+                      case '30d': return 'Last 30 days';
+                      default: return timeRange;
+                    }
+                  })()}
+                  <ChevronDown className={clsx("w-3 h-3 transition-transform", isTimeRangeOpen && "rotate-180")} />
+                </Stack>
               </button>
               
               {isTimeRangeOpen && (
@@ -456,7 +470,7 @@ function App() {
             >
               <ThemeIcon className="w-4 h-4" />
             </button>
-          </div>
+          </Stack>
         </div>
       </header>
 
@@ -464,7 +478,12 @@ function App() {
         {/* Sidebar with gradient depth */}
         <aside className={clsx('transition-all duration-200 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative', sidebarCollapsed ? 'w-16' : 'w-64')}>
           <div className={clsx('border-b border-border-subtle overflow-hidden', sidebarCollapsed ? 'p-2' : 'p-6')}>
-            <div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : 'gap-4')}>
+            <Stack
+              direction="row"
+              align="center"
+              justify={sidebarCollapsed ? 'center' : undefined}
+              style={sidebarCollapsed ? undefined : { gap: '16px' }}
+            >
               <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
                 <img
                   src={signalHorizonLogoLight}
@@ -482,7 +501,7 @@ function App() {
                   <div className="text-[1.7rem] font-light text-ink-primary tracking-tight leading-tight">Signal Horizon</div>
                 </div>
               )}
-            </div>
+            </Stack>
             {!sidebarCollapsed && (
               <div className="mt-[10px]">
                 <p className="text-[10px] font-medium text-ac-magenta uppercase tracking-[0.15em]">See Further. Act Faster.</p>
@@ -558,7 +577,7 @@ function App() {
               </Stack>
             ) : (
               <>
-                <div className="flex items-center gap-2 text-sm">
+                <Stack direction="row" align="center" gap="sm" className="text-sm">
                   {isConnected ? (
                     <>
                       <Wifi className="w-4 h-4 text-ac-green" />
@@ -572,7 +591,7 @@ function App() {
                       </span>
                     </>
                   )}
-                </div>
+                </Stack>
                 <div className="mt-2 text-xs text-ink-muted">
                   {sensorCount} sensors online
                 </div>
@@ -591,13 +610,13 @@ function App() {
               {sidebarCollapsed ? (
                 <PanelLeftOpen className="w-4 h-4" />
               ) : (
-                <div className="flex items-center gap-2 text-xs">
+                <Stack direction="row" align="center" gap="sm" className="text-xs">
                   <PanelLeftClose className="w-4 h-4" />
                   <span>Collapse</span>
                   <kbd className="ml-auto text-[10px] text-ink-muted border border-border-subtle px-1 py-0.5">
                     {navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}B
                   </kbd>
-                </div>
+                </Stack>
               )}
             </button>
           </div>

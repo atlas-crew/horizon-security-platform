@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 18:14_
+_Generated: 2026-02-11 18:18_
 
 ## Summary
 
-**Total findings: 449**
+**Total findings: 435**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 449 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 435 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -20,7 +20,6 @@ Priority files to migrate first (most raw patterns):
 | 19 | `pages/fleet/ReleasesPage.tsx` |
 | 18 | `components/fleet/FileBrowser.tsx` |
 | 17 | `pages/AdminSettingsPage.tsx` |
-| 14 | `App.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/soc/LiveMapPage.tsx` |
 | 4 | `pages/soc/CampaignsPage.tsx` |
 | 4 | `pages/fleet/SensorKeysPage.tsx` |
+| 4 | `pages/beam/catalog/ServicesPage.tsx` |
 
 ---
 
@@ -67,20 +67,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 
 | File | Line | Match |
 |------|------|-------|
-| `App.tsx` | 250 | `<div className="flex items-center gap-2.5">` |
-| `App.tsx` | 338 | `<div className="flex items-center gap-6">` |
-| `App.tsx` | 340 | `<div className="hidden lg:flex items-center gap-6">` |
-| `App.tsx` | 341 | `<Link to="/campaigns" className="flex items-center gap-2 hover:text-white transi` |
-| `App.tsx` | 349 | `<Link to="/" className="flex items-center gap-2 hover:text-white transition-colo` |
-| `App.tsx` | 357 | `<Link to="/search" className="flex items-center gap-2 hover:text-white transitio` |
-| `App.tsx` | 363 | `<Link to="/fleet" className="flex items-center gap-2 hover:text-white transition` |
-| `App.tsx` | 372 | `<Link to="/fleet/connectivity" className="flex items-center gap-2 pl-4 border-l ` |
-| `App.tsx` | 392 | `<div className="flex items-center gap-2">` |
-| `App.tsx` | 395 | `className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 h` |
-| `App.tsx` | 409 | `className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 tex` |
-| `App.tsx` | 467 | `<div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : ` |
-| `App.tsx` | 561 | `<div className="flex items-center gap-2 text-sm">` |
-| `App.tsx` | 594 | `<div className="flex items-center gap-2 text-xs">` |
 | `components/ui/CommandPalette.tsx` | 573 | `<div className="flex items-center gap-1.5 px-2 py-1 border border-border-subtle ` |
 | `components/ui/CommandPalette.tsx` | 600 | `<div className="flex items-center gap-2">` |
 | `components/ui/CommandPalette.tsx` | 609 | `<span className="text-[8px] font-mono text-ink-muted/60 flex items-center gap-1"` |
@@ -97,4 +83,18 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/feedback/DemoModeBanner.tsx` | 97 | `<div className="flex items-center gap-2">` |
 | `components/feedback/LoadingSkeletons.tsx` | 20 | `<div className="flex items-center gap-2">` |
 | `components/feedback/EmptyState.tsx` | 51 | `className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-med` |
+| `components/hunting/SigmaLeadsPanel.tsx` | 107 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/SigmaLeadsPanel.tsx` | 144 | `<div className="ml-auto flex items-center gap-2">` |
+| `components/hunting/SigmaRulesPanel.tsx` | 124 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/SigmaRulesPanel.tsx` | 140 | `<div className="flex items-center gap-2">` |
+| `components/hunting/SigmaRulesPanel.tsx` | 207 | `className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-a1` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 141 | `<div className="flex items-center gap-2">` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 146 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 164 | `<div className="flex items-center gap-2">` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 189 | `<div className="ml-auto flex items-center gap-2">` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 227 | `<span className="inline-flex items-center gap-2">` |
+| `components/hunting/BehavioralAnomaliesPanel.tsx` | 253 | `<div className="flex items-center gap-2">` |
+| `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
+| `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
 

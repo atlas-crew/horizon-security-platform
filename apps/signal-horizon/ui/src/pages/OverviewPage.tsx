@@ -218,12 +218,13 @@ export default function OverviewPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading threat overview">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-light text-ink-primary">Threat Overview</h1>
-            <p className="text-ink-secondary mt-1">Loading fleet intelligence...</p>
-          </div>
-        </div>
+        <SectionHeader
+          eyebrow={`Signal Horizon · Last ${timeRange}`}
+          title="Threat Overview"
+          description="Loading fleet intelligence..."
+          size="h3"
+          mb="sm"
+        />
         <StatsGridSkeleton />
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2"><CampaignListSkeleton /></div>
@@ -243,7 +244,7 @@ export default function OverviewPage() {
         eyebrow={`Signal Horizon · Last ${timeRange}`}
         title="Threat Overview"
         description={`Fleet threat intelligence and collective defense across ${stats.sensorsOnline} sensors${lastUpdatedSuffix}`}
-        size="h2"
+        size="h3"
         mb="sm"
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>

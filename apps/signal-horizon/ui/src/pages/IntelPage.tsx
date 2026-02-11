@@ -112,7 +112,7 @@ export default function IntelPage() {
               variant="pills"
               size="sm"
               active={timeRange}
-              onChange={(key) => setTimeRange(key as any)}
+              onChange={(key) => setTimeRange(key)}
               tabs={timeRanges.map((range) => ({ key: range, label: range }))}
             />
             <Button

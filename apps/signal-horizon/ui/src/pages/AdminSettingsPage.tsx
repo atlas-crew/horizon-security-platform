@@ -45,7 +45,16 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
+
+const PAGE_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  fontWeight: 300,
+  textTransform: 'uppercase',
+  letterSpacing: '-0.02em',
+  color: 'var(--text-primary)',
+};
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -456,9 +465,12 @@ const AdminSettingsPage: React.FC = () => {
     <div className="p-8 max-w-7xl mx-auto space-y-8 font-sans">
       <header className="flex justify-between items-end border-b border-border-subtle pb-6">
         <div>
-          <h1 className="text-xl font-light text-ink-primary mb-2 uppercase tracking-tight">
-            Admin Settings
-          </h1>
+          <SectionHeader
+            title="Admin Settings"
+            size="h1"
+            style={{ marginBottom: '8px' }}
+            titleStyle={PAGE_TITLE_STYLE}
+          />
           <p className="text-ink-secondary">
             Global configuration and fleet management for Signal Horizon.
           </p>
@@ -550,10 +562,13 @@ const AdminSettingsPage: React.FC = () => {
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Collective Defense & Privacy
-                    </h2>
-                    <Share2 className="w-5 h-5 text-ac-blue" />
+                    <SectionHeader
+                      title="Collective Defense & Privacy"
+                      icon={<Share2 className="w-5 h-5 text-ac-blue" />}
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                    />
                   </div>
 
                   <p className="text-sm text-ink-secondary leading-relaxed">
@@ -627,10 +642,13 @@ const AdminSettingsPage: React.FC = () => {
 
                 <section className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Security Panic Button
-                    </h2>
-                    <Lock className="w-5 h-5 text-status-error" />
+                    <SectionHeader
+                      title="Security Panic Button"
+                      icon={<Lock className="w-5 h-5 text-status-error" />}
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                    />
                   </div>
 
                   <p className="text-sm text-ink-secondary leading-relaxed">
@@ -712,10 +730,13 @@ const AdminSettingsPage: React.FC = () => {
 
                 <section className="bg-surface-card border-t-4 border-ink-muted p-8 shadow-card space-y-6">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Data Sovereignty
-                    </h2>
-                    <Shield className="w-5 h-5 text-ink-muted" />
+                    <SectionHeader
+                      title="Data Sovereignty"
+                      icon={<Shield className="w-5 h-5 text-ink-muted" />}
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                    />
                   </div>
                   <p className="text-sm text-ink-secondary">
                     Retroactively withdraw contributed signals or exercise GDPR Right to Erasure for
@@ -775,18 +796,26 @@ const AdminSettingsPage: React.FC = () => {
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                   <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Security Policy Templates
-                    </h2>
-                    <button
-                      onClick={() => openPolicyEditor('create')}
-                      disabled={
-                        isCreatingPolicy || isUpdatingPolicy || isDeletingPolicy || isCloningPolicy
+                    <SectionHeader
+                      title="Security Policy Templates"
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                      actions={
+                        <button
+                          onClick={() => openPolicyEditor('create')}
+                          disabled={
+                            isCreatingPolicy ||
+                            isUpdatingPolicy ||
+                            isDeletingPolicy ||
+                            isCloningPolicy
+                          }
+                          className="px-4 py-2 bg-ac-blue text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                        >
+                          New Template
+                        </button>
                       }
-                      className="px-4 py-2 bg-ac-blue text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                    >
-                      New Template
-                    </button>
+                    />
                   </div>
 
                   <div className="space-y-4">
@@ -1011,16 +1040,21 @@ const AdminSettingsPage: React.FC = () => {
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                   <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Active Blocklist
-                    </h2>
-                    <button
-                      onClick={() => setShowBlockForm(true)}
-                      disabled={isAddingBlock || showBlockForm}
-                      className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-magenta-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                    >
-                      {isAddingBlock ? 'Adding...' : 'Add Manual Block'}
-                    </button>
+                    <SectionHeader
+                      title="Active Blocklist"
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                      actions={
+                        <button
+                          onClick={() => setShowBlockForm(true)}
+                          disabled={isAddingBlock || showBlockForm}
+                          className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-magenta-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                        >
+                          {isAddingBlock ? 'Adding...' : 'Add Manual Block'}
+                        </button>
+                      }
+                    />
                   </div>
 
                   {showBlockForm && (
@@ -1176,9 +1210,12 @@ const AdminSettingsPage: React.FC = () => {
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
-                  <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight mb-6">
-                    Fleet-Wide Actions
-                  </h2>
+                  <SectionHeader
+                    title="Fleet-Wide Actions"
+                    size="h2"
+                    style={{ marginBottom: '24px' }}
+                    titleStyle={PAGE_TITLE_STYLE}
+                  />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="p-6 border border-border-subtle space-y-4">
                       <div className="flex items-center gap-3 text-ac-blue">
@@ -1220,16 +1257,21 @@ const AdminSettingsPage: React.FC = () => {
 
                 <section className="bg-surface-card border-t-4 border-status-success p-8 shadow-card">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Provisioning & Onboarding
-                    </h2>
-                    <button
-                      onClick={() => setShowTokenForm(true)}
-                      disabled={isCreatingToken || showTokenForm}
-                      className="px-4 py-2 bg-status-success text-white text-xs font-bold uppercase tracking-widest hover:bg-status-success/80 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                    >
-                      {isCreatingToken ? 'Generating...' : 'New Registration Token'}
-                    </button>
+                    <SectionHeader
+                      title="Provisioning & Onboarding"
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                      actions={
+                        <button
+                          onClick={() => setShowTokenForm(true)}
+                          disabled={isCreatingToken || showTokenForm}
+                          className="px-4 py-2 bg-status-success text-white text-xs font-bold uppercase tracking-widest hover:bg-status-success/80 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                        >
+                          {isCreatingToken ? 'Generating...' : 'New Registration Token'}
+                        </button>
+                      }
+                    />
                   </div>
 
                   {showTokenForm && (
@@ -1405,9 +1447,12 @@ const AdminSettingsPage: React.FC = () => {
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
-                  <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                    Synapse-Pingora Connectivity
-                  </h2>
+                  <SectionHeader
+                    title="Synapse-Pingora Connectivity"
+                    size="h2"
+                    style={{ marginBottom: 0 }}
+                    titleStyle={PAGE_TITLE_STYLE}
+                  />
                   {hubLoading ? (
                     <div className="py-6 text-center text-ink-muted">Loading hub config...</div>
                   ) : (
@@ -1464,16 +1509,21 @@ const AdminSettingsPage: React.FC = () => {
 
                 <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
                   <div className="flex items-center justify-between gap-4">
-                    <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                      Connectivity Status
-                    </h2>
-                    <button
-                      onClick={() => refreshConnectivityStatus()}
-                      disabled={connectivityLoading}
-                      className="h-10 px-4 bg-ac-navy text-white text-[10px] font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                    >
-                      Refresh
-                    </button>
+                    <SectionHeader
+                      title="Connectivity Status"
+                      size="h2"
+                      style={{ marginBottom: 0 }}
+                      titleStyle={PAGE_TITLE_STYLE}
+                      actions={
+                        <button
+                          onClick={() => refreshConnectivityStatus()}
+                          disabled={connectivityLoading}
+                          className="h-10 px-4 bg-ac-navy text-white text-[10px] font-bold uppercase tracking-widest hover:bg-ac-blue-darker transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                        >
+                          Refresh
+                        </button>
+                      }
+                    />
                   </div>
 
                   {connectivityLoading ? (
@@ -1797,10 +1847,13 @@ const AdminSettingsPage: React.FC = () => {
                   {/* Red Team Panel */}
                   <section className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                        Red-Team Simulation
-                      </h2>
-                      <Target className="w-5 h-5 text-status-error" />
+                      <SectionHeader
+                        title="Red-Team Simulation"
+                        icon={<Target className="w-5 h-5 text-status-error" />}
+                        size="h2"
+                        style={{ marginBottom: 0 }}
+                        titleStyle={PAGE_TITLE_STYLE}
+                      />
                     </div>
                     <p className="text-xs text-ink-muted">
                       Coordinate with the Apparatus cluster to generate controlled attack
@@ -1844,10 +1897,13 @@ const AdminSettingsPage: React.FC = () => {
                   {/* Active Defense Panel */}
                   <section className="bg-surface-card border-t-4 border-status-success p-8 shadow-card space-y-6">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">
-                        Active Defense (Apparatus)
-                      </h2>
-                      <Zap className="w-5 h-5 text-status-success" />
+                      <SectionHeader
+                        title="Active Defense (Apparatus)"
+                        icon={<Zap className="w-5 h-5 text-status-success" />}
+                        size="h2"
+                        style={{ marginBottom: 0 }}
+                        titleStyle={PAGE_TITLE_STYLE}
+                      />
                     </div>
                     <p className="text-xs text-ink-muted">
                       Advanced deception and resilience controls managed via Apparatus integration.
@@ -1953,9 +2009,12 @@ const AdminSettingsPage: React.FC = () => {
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
-                  <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight mb-8">
-                    Hub Runtime Configuration
-                  </h2>
+                  <SectionHeader
+                    title="Hub Runtime Configuration"
+                    size="h2"
+                    style={{ marginBottom: '32px' }}
+                    titleStyle={PAGE_TITLE_STYLE}
+                  />
 
                   {hubLoading ? (
                     <div className="py-12 text-center text-ink-muted">

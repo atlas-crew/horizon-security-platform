@@ -37,7 +37,7 @@ import type {
   RolloutProgressStatus,
 } from '../../hooks/fleet/useReleases';
 import { useSensors } from '../../hooks/fleet/useSensors';
-import { Spinner } from '@/ui';
+import { Modal, Spinner } from '@/ui';
 
 // ============================================================================
 // Types
@@ -613,35 +613,31 @@ export const RolloutManager = memo(function RolloutManager({
 
         {/* Cancel confirmation dialog */}
         {showConfirmCancel && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirmCancel(false)} />
-            <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertTriangle className="w-6 h-6 text-status-warning" />
-                <h3 className="text-lg font-semibold text-ink-primary">Cancel Rollout?</h3>
-              </div>
-              <p className="text-sm text-ink-secondary mb-6">
-                This will stop the rollout immediately. Sensors that have already been updated will remain on the new
-                version. This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowConfirmCancel(false)}
-                  className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-                >
-                  Keep Running
-                </button>
-                <button
-                  onClick={handleCancelRollout}
-                  disabled={isCancellingRollout}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
-                >
-                  {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
-                  Cancel Rollout
-                </button>
-              </div>
+          <Modal open onClose={() => setShowConfirmCancel(false)} size="520px" title="Cancel Rollout?">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-status-warning" />
             </div>
-          </div>
+            <p className="text-sm text-ink-secondary mb-6">
+              This will stop the rollout immediately. Sensors that have already been updated will
+              remain on the new version. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowConfirmCancel(false)}
+                className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
+              >
+                Keep Running
+              </button>
+              <button
+                onClick={handleCancelRollout}
+                disabled={isCancellingRollout}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
+              >
+                {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
+                Cancel Rollout
+              </button>
+            </div>
+          </Modal>
         )}
       </div>
     );

@@ -139,8 +139,9 @@ export function EmbeddedDashboard({
     <div
       className={clsx(
         'bg-surface-card border border-border-subtle overflow-hidden',
-        state.fullscreen && 'fixed inset-0 z-50'
+        state.fullscreen && 'z-50'
       )}
+      style={state.fullscreen ? { position: 'fixed', inset: 0 } : undefined}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">

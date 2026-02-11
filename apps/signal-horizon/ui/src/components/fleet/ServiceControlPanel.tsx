@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useServiceControl, type ServiceState, type ControlCommand, type ControlResult } from '../../hooks/fleet/useServiceControl';
-import { Spinner } from '@/ui';
+import { Modal, Spinner } from '@/ui';
 
 export interface ServiceControlPanelProps {
   /** Target sensor ID */
@@ -147,66 +147,45 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
     typedValue.toLowerCase() === requireTypedConfirmation.toLowerCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-
-      {/* Dialog */}
-      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-status-warning" />
-            <h3 className="text-sm font-semibold text-ink-primary">{title}</h3>
-          </div>
-          <button
-            onClick={onCancel}
-            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-4 space-y-4">
+    <Modal open onClose={onCancel} size="520px" title={title}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-status-warning" />
           <p className="text-sm text-ink-secondary">{message}</p>
-
-          {warningMessage && (
-            <div className="flex items-start gap-2 p-3 bg-status-warning/10 border border-status-warning/20">
-              <AlertTriangle className="w-4 h-4 text-status-warning shrink-0 mt-0.5" />
-              <p className="text-xs text-status-warning">{warningMessage}</p>
-            </div>
-          )}
-
-          {requireTypedConfirmation && (
-            <div className="space-y-2">
-              <label className="block text-xs text-ink-muted">
-                Type <span className="font-mono font-semibold text-ink-primary">{requireTypedConfirmation}</span> to confirm
-              </label>
-              <input
-                ref={inputRef}
-                type="text"
-                value={typedValue}
-                onChange={(e) => setTypedValue(e.target.value)}
-                placeholder={requireTypedConfirmation}
-                className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                disabled={isExecuting}
-              />
-            </div>
-          )}
-
-          {/* Countdown */}
-          <div className="flex items-center justify-center gap-1 text-xs text-ink-muted">
-            <Clock className="w-3 h-3" />
-            <span>Auto-cancel in {countdown}s</span>
-          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-subtle bg-surface-raised">
+        {warningMessage && (
+          <div className="flex items-start gap-2 p-3 bg-status-warning/10 border border-status-warning/20">
+            <AlertTriangle className="w-4 h-4 text-status-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-status-warning">{warningMessage}</p>
+          </div>
+        )}
+
+        {requireTypedConfirmation && (
+          <div className="space-y-2">
+            <label className="block text-xs text-ink-muted">
+              Type <span className="font-mono font-semibold text-ink-primary">{requireTypedConfirmation}</span> to confirm
+            </label>
+            <input
+              ref={inputRef}
+              type="text"
+              value={typedValue}
+              onChange={(e) => setTypedValue(e.target.value)}
+              placeholder={requireTypedConfirmation}
+              className="w-full px-3 py-2 text-sm bg-surface-inset border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+              disabled={isExecuting}
+            />
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-1 text-xs text-ink-muted">
+          <Clock className="w-3 h-3" />
+          <span>Auto-cancel in {countdown}s</span>
+        </div>
+      </div>
+
+      <Modal.Footer>
+        <div className="flex items-center justify-end gap-2 w-full">
           <button
             onClick={onCancel}
             disabled={isExecuting}
@@ -227,8 +206,8 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
             {confirmText}
           </button>
         </div>
-      </div>
-    </div>
+      </Modal.Footer>
+    </Modal>
   );
 });
 

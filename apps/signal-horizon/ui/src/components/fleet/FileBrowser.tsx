@@ -35,7 +35,7 @@ import {
   type FileInfo,
   type DownloadProgress,
 } from '../../hooks/fleet/useFileTransfer';
-import { Spinner } from '@/ui';
+import { Modal, Spinner } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -478,61 +478,47 @@ const ChecksumModal = memo(function ChecksumModal({
   if (!file) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
-          <h3 className="text-sm font-semibold text-ink-primary">File Checksum</h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+    <Modal open onClose={onClose} size="520px" title="File Checksum">
+      <div className="space-y-4">
+        <div>
+          <div className="text-xs text-ink-muted mb-1">File</div>
+          <div className="text-sm text-ink-primary font-mono truncate" title={file.path}>
+            {file.name}
+          </div>
         </div>
 
-        <div className="p-4 space-y-4">
+        {isLoading && (
+          <div className="flex items-center justify-center py-4">
+            <Spinner size={24} color="#7F7F7F" />
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20">
+            <AlertCircle className="w-4 h-4 text-status-error shrink-0 mt-0.5" />
+            <p className="text-xs text-status-error">{error}</p>
+          </div>
+        )}
+
+        {checksum && !isLoading && (
           <div>
-            <div className="text-xs text-ink-muted mb-1">File</div>
-            <div className="text-sm text-ink-primary font-mono truncate" title={file.path}>
-              {file.name}
+            <div className="text-xs text-ink-muted mb-1">SHA-256</div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 p-2 text-xs bg-surface-inset font-mono text-ink-secondary break-all">
+                {checksum}
+              </code>
+              <button
+                onClick={handleCopy}
+                className="p-2 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors shrink-0"
+                title="Copy checksum"
+              >
+                {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
+              </button>
             </div>
           </div>
-
-          {isLoading && (
-            <div className="flex items-center justify-center py-4">
-              <Spinner size={24} color="#7F7F7F" />
-            </div>
-          )}
-
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-status-error/10 border border-status-error/20">
-              <AlertCircle className="w-4 h-4 text-status-error shrink-0 mt-0.5" />
-              <p className="text-xs text-status-error">{error}</p>
-            </div>
-          )}
-
-          {checksum && !isLoading && (
-            <div>
-              <div className="text-xs text-ink-muted mb-1">SHA-256</div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 p-2 text-xs bg-surface-inset font-mono text-ink-secondary break-all">
-                  {checksum}
-                </code>
-                <button
-                  onClick={handleCopy}
-                  className="p-2 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors shrink-0"
-                  title="Copy checksum"
-                >
-                  {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 });
 

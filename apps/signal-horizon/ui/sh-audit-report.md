@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 12:12_
+_Generated: 2026-02-11 12:20_
 
 ## Summary
 
-**Total findings: 615**
+**Total findings: 609**
 
 ### Findings by Component
 
@@ -16,7 +16,6 @@ _Generated: 2026-02-11 12:12_
 | Tabs | 15 | Raw tab implementations → use <Tabs> |
 | Stack (inline) | 15 | Inline flex style → use <Stack> primitive |
 | Text | 7 | Raw styled text elements → use <Text> primitive |
-| Modal | 6 | Raw modal/overlay patterns → use <Modal> |
 
 ### Files by Hit Count (Work Order)
 
@@ -26,21 +25,19 @@ Priority files to migrate first (most raw patterns):
 |------|------|
 | 30 | `pages/AdminSettingsPage.tsx` |
 | 22 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
-| 22 | `components/fleet/FileBrowser.tsx` |
+| 21 | `components/fleet/FileBrowser.tsx` |
 | 19 | `pages/fleet/ReleasesPage.tsx` |
 | 16 | `App.tsx` |
 | 13 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
 | 11 | `pages/soc/SessionsPage.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
-| 11 | `components/ui/CommandPalette.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
-| 11 | `components/fleet/ServiceControlPanel.tsx` |
 | 11 | `components/fleet/RemoteShell.tsx` |
 | 10 | `pages/soc/ActorsPage.tsx` |
 | 10 | `pages/OverviewPage.tsx` |
 | 10 | `components/fleet/WebTerminal.tsx` |
-| 10 | `components/fleet/RolloutManager.tsx` |
+| 10 | `components/fleet/ServiceControlPanel.tsx` |
 | 10 | `components/fleet/LogViewer.tsx` |
 | 10 | `components/LoadingStates.tsx` |
 | 9 | `pages/soc/CampaignsPage.tsx` |
@@ -49,7 +46,9 @@ Priority files to migrate first (most raw patterns):
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `pages/beam/BeamDashboardPage.tsx` |
+| 9 | `components/ui/CommandPalette.tsx` |
 | 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
+| 9 | `components/fleet/RolloutManager.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 7 | `pages/hunting/RequestTimelinePage.tsx` |
@@ -151,10 +150,10 @@ Tailwind flex-col + gap → use <Stack direction=column>
 | `components/AuthCoverageMap/AuthCoverageMap.tsx` | 148 | `<div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:i` |
 | `components/fleet/WebTerminal.tsx` | 264 | `<div className="flex flex-col items-center gap-3">` |
 | `components/fleet/WebTerminal.tsx` | 273 | `<div className="flex flex-col items-center gap-3 max-w-md text-center">` |
-| `components/fleet/ServiceControlPanel.tsx` | 475 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
+| `components/fleet/ServiceControlPanel.tsx` | 454 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
 | `components/fleet/RemoteShell.tsx` | 386 | `<div className="flex flex-col items-center gap-3">` |
 | `components/fleet/RemoteShell.tsx` | 400 | `<div className="flex flex-col items-center gap-3 max-w-md text-center">` |
-| `components/fleet/EmbeddedDashboard.tsx` | 232 | `<div className="flex flex-col items-center gap-3">` |
+| `components/fleet/EmbeddedDashboard.tsx` | 233 | `<div className="flex flex-col items-center gap-3">` |
 | `components/fleet/FileBrowser.tsx` | 376 | `<div className="flex flex-col gap-1 p-2 bg-surface-subtle">` |
 | `components/LoadingStates.tsx` | 170 | `className="flex flex-col items-center justify-center gap-3 py-8"` |
 | `pages/OverviewPage.tsx` | 497 | `<div key={a.label} className="flex flex-col gap-1.5">` |
@@ -190,15 +189,15 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `App.tsx` | 551 | `<div className="flex flex-col items-center gap-2">` |
 | `App.tsx` | 560 | `<div className="flex items-center gap-2 text-sm">` |
 | `App.tsx` | 593 | `<div className="flex items-center gap-2 text-xs">` |
-| `components/ui/CommandPalette.tsx` | 569 | `<div className="flex items-center gap-1.5 px-2 py-1 border border-border-subtle ` |
-| `components/ui/CommandPalette.tsx` | 596 | `<div className="flex items-center gap-2">` |
-| `components/ui/CommandPalette.tsx` | 605 | `<span className="text-[8px] font-mono text-ink-muted/60 flex items-center gap-1"` |
-| `components/ui/CommandPalette.tsx` | 632 | `<div className="flex items-center gap-4 min-w-0">` |
-| `components/ui/CommandPalette.tsx` | 643 | `<div className="flex items-center gap-2 flex-shrink-0">` |
-| `components/ui/CommandPalette.tsx` | 671 | `<div className="flex items-center gap-4">` |
-| `components/ui/CommandPalette.tsx` | 672 | `<div className="flex items-center gap-1.5">` |
-| `components/ui/CommandPalette.tsx` | 678 | `<div className="flex items-center gap-1.5">` |
-| `components/ui/CommandPalette.tsx` | 685 | `<div className="flex items-center gap-1.5">` |
+| `components/ui/CommandPalette.tsx` | 573 | `<div className="flex items-center gap-1.5 px-2 py-1 border border-border-subtle ` |
+| `components/ui/CommandPalette.tsx` | 600 | `<div className="flex items-center gap-2">` |
+| `components/ui/CommandPalette.tsx` | 609 | `<span className="text-[8px] font-mono text-ink-muted/60 flex items-center gap-1"` |
+| `components/ui/CommandPalette.tsx` | 636 | `<div className="flex items-center gap-4 min-w-0">` |
+| `components/ui/CommandPalette.tsx` | 647 | `<div className="flex items-center gap-2 flex-shrink-0">` |
+| `components/ui/CommandPalette.tsx` | 675 | `<div className="flex items-center gap-4">` |
+| `components/ui/CommandPalette.tsx` | 676 | `<div className="flex items-center gap-1.5">` |
+| `components/ui/CommandPalette.tsx` | 682 | `<div className="flex items-center gap-1.5">` |
+| `components/ui/CommandPalette.tsx` | 689 | `<div className="flex items-center gap-1.5">` |
 | `components/ui/ShortcutHelpModal.tsx` | 37 | `<div className="flex items-center gap-1">` |
 | `components/soc/CampaignGraph.tsx` | 314 | `<div className="flex items-center gap-3 text-ink-muted">` |
 | `components/soc/CampaignGraph.tsx` | 357 | `<div className="flex items-center gap-1.5">` |
@@ -224,7 +223,7 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | `components/hunting/RequestTimelineGraph.tsx` | 111 | `<div className="flex items-center justify-between gap-3">` |
 | `components/hunting/RequestTimelineGraph.tsx` | 227 | `<div className="flex items-start justify-between gap-3">` |
 | `components/AuthCoverageMap/AuthCoverageMap.tsx` | 148 | `<div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:i` |
-| `components/fleet/ServiceControlPanel.tsx` | 475 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
+| `components/fleet/ServiceControlPanel.tsx` | 454 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
 | `components/fleet/FileBrowser.tsx` | 377 | `<div className="flex items-center justify-between gap-2">` |
 | `pages/WarRoomPage.tsx` | 361 | `<div className="flex items-end justify-between gap-4">` |
 | `pages/hunting/RequestTimelinePage.tsx` | 214 | `<div className="card-header flex items-center justify-between gap-4">` |
@@ -238,18 +237,6 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | `pages/fleet/ConfigManagerPage.tsx` | 974 | `<div key={log.id} className="p-4 flex items-start justify-between gap-4">` |
 | `pages/fleet/ConfigManagerPage.tsx` | 1175 | `<div className="flex items-center justify-between gap-4 mb-2">` |
 | `pages/fleet/SensorDetailPage.tsx` | 163 | `<div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">` |
-
-### Modal
-Raw modal/overlay patterns → use <Modal>
-
-| File | Line | Match |
-|------|------|-------|
-| `components/ui/CommandPalette.tsx` | 533 | `<div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] ` |
-| `components/ui/CommandPalette.tsx` | 538 | `className="fixed inset-0 bg-black/60 backdrop-blur-sm"` |
-| `components/fleet/ServiceControlPanel.tsx` | 150 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
-| `components/fleet/RolloutManager.tsx` | 616 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
-| `components/fleet/EmbeddedDashboard.tsx` | 142 | `state.fullscreen && 'fixed inset-0 z-50'` |
-| `components/fleet/FileBrowser.tsx` | 481 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
 
 ### Tabs
 Raw tab implementations → use <Tabs>

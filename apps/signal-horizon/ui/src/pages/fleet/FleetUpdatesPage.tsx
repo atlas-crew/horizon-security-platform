@@ -2,10 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
+import { Button, SectionHeader, alpha, colors } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
+const authHeaders = { Authorization: `Bearer ${API_KEY}` };
 
 interface SensorVersion {
   sensorId: string;
@@ -24,13 +25,17 @@ interface AvailableUpdate {
 }
 
 async function fetchVersions(): Promise<SensorVersion[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/versions`, { headers: authHeaders });
+  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/versions`, {
+    headers: authHeaders,
+  });
   if (!response.ok) throw new Error('Failed to fetch versions');
   return response.json();
 }
 
 async function fetchAvailableUpdates(): Promise<AvailableUpdate[]> {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/available`, { headers: authHeaders });
+  const response = await fetch(`${API_BASE}/api/v1/fleet/updates/available`, {
+    headers: authHeaders,
+  });
   if (!response.ok) throw new Error('Failed to fetch updates');
   return response.json();
 }
@@ -96,7 +101,7 @@ export function FleetUpdatesPage() {
         acc[s.updateStatus]++;
         return acc;
       },
-      { up_to_date: 0, update_available: 0, updating: 0, failed: 0 }
+      { up_to_date: 0, update_available: 0, updating: 0, failed: 0 },
     );
 
     return {
@@ -112,11 +117,30 @@ export function FleetUpdatesPage() {
 
   const { upToDate, needsUpdate, updating, failed } = statusCounts;
 
-  const statusColors = {
-    up_to_date: 'bg-ac-green/10 text-ac-green border-ac-green/30',
-    update_available: 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
-    updating: 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
-    failed: 'bg-ac-red/10 text-ac-red border-ac-red/30',
+  const statusStyles: Record<
+    SensorVersion['updateStatus'],
+    { bg: string; text: string; border: string }
+  > = {
+    up_to_date: {
+      bg: alpha(colors.green, 0.1),
+      text: colors.green,
+      border: alpha(colors.green, 0.3),
+    },
+    update_available: {
+      bg: alpha(colors.orange, 0.1),
+      text: colors.orange,
+      border: alpha(colors.orange, 0.3),
+    },
+    updating: {
+      bg: alpha(colors.blue, 0.1),
+      text: colors.blue,
+      border: alpha(colors.blue, 0.3),
+    },
+    failed: {
+      bg: alpha(colors.red, 0.1),
+      text: colors.red,
+      border: alpha(colors.red, 0.3),
+    },
   };
 
   const statusLabels = {
@@ -128,42 +152,26 @@ export function FleetUpdatesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary">Fleet Updates</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Manage sensor firmware and software updates
-          </p>
-        </div>
-        <button
-          onClick={() => updateMutation.mutate()}
-          disabled={selectedSensors.size === 0 || !targetVersion || updateMutation.isPending}
-          className="btn-primary h-12 px-6 text-sm"
-        >
-          {updateMutation.isPending
-            ? 'Updating...'
-            : `Update Selected (${selectedSensors.size})`}
-        </button>
-      </div>
+      <SectionHeader
+        title="Fleet Updates"
+        description="Manage sensor firmware and software updates"
+        actions={
+          <Button
+            onClick={() => updateMutation.mutate()}
+            disabled={selectedSensors.size === 0 || !targetVersion || updateMutation.isPending}
+            size="lg"
+          >
+            {updateMutation.isPending ? 'Updating...' : `Update Selected (${selectedSensors.size})`}
+          </Button>
+        }
+      />
 
       {/* Status Overview */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <MetricCard label="Up to Date" value={upToDate} className="border-ac-green/40" />
-        <MetricCard
-          label="Needs Update"
-          value={needsUpdate}
-          className={needsUpdate > 0 ? 'border-ac-orange/40' : ''}
-        />
-        <MetricCard
-          label="Updating"
-          value={updating}
-          className={updating > 0 ? 'border-ac-blue/40' : ''}
-        />
-        <MetricCard
-          label="Failed"
-          value={failed}
-          className={failed > 0 ? 'border-ac-red/40' : ''}
-        />
+        <MetricCard label="Up to Date" value={upToDate} />
+        <MetricCard label="Needs Update" value={needsUpdate} />
+        <MetricCard label="Updating" value={updating} />
+        <MetricCard label="Failed" value={failed} />
       </div>
 
       {/* Available Updates */}
@@ -174,9 +182,15 @@ export function FleetUpdatesPage() {
             {availableUpdates.map((update) => (
               <div
                 key={update.version}
-                className={`p-4 border ${
-                  update.critical ? 'border-ac-red/40 bg-ac-red/10' : 'border-border-subtle'
-                }`}
+                className="p-4 border"
+                style={
+                  update.critical
+                    ? {
+                        borderColor: alpha(colors.red, 0.4),
+                        background: alpha(colors.red, 0.1),
+                      }
+                    : { borderColor: alpha(colors.white, 0.08) }
+                }
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -185,7 +199,14 @@ export function FleetUpdatesPage() {
                         Version {update.version}
                       </span>
                       {update.critical && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-ac-red/15 text-ac-red border border-ac-red/30">
+                        <span
+                          className="px-2 py-0.5 text-xs font-medium border"
+                          style={{
+                            background: alpha(colors.red, 0.15),
+                            color: colors.red,
+                            borderColor: alpha(colors.red, 0.3),
+                          }}
+                        >
                           Critical
                         </span>
                       )}
@@ -194,16 +215,13 @@ export function FleetUpdatesPage() {
                       Released {new Date(update.releaseDate).toLocaleDateString()}
                     </div>
                   </div>
-                  <button
+                  <Button
                     onClick={() => setTargetVersion(update.version)}
-                    className={`px-3 py-1.5 text-sm font-medium border ${
-                      targetVersion === update.version
-                        ? 'bg-ac-blue text-ac-white border-ac-blue'
-                        : 'border-ac-blue text-ac-blue hover:bg-ac-blue hover:text-ac-white'
-                    }`}
+                    variant={targetVersion === update.version ? 'primary' : 'outlined'}
+                    size="sm"
                   >
                     {targetVersion === update.version ? 'Selected' : 'Select'}
-                  </button>
+                  </Button>
                 </div>
                 <ul className="mt-3 space-y-1">
                   {update.changelog.map((item, idx) => (
@@ -224,26 +242,24 @@ export function FleetUpdatesPage() {
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
           <h2 className="text-lg font-medium text-ink-primary">Sensor Versions</h2>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="outlined"
+              size="sm"
               onClick={() =>
                 setSelectedSensors(
                   new Set(
                     sensorVersions
                       .filter((s) => s.updateStatus === 'update_available')
-                      .map((s) => s.id)
-                  )
+                      .map((s) => s.id),
+                  ),
                 )
               }
-              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
             >
               Select Outdated
-            </button>
-            <button
-              onClick={() => setSelectedSensors(new Set())}
-              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-            >
+            </Button>
+            <Button variant="outlined" size="sm" onClick={() => setSelectedSensors(new Set())}>
               Clear Selection
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -280,7 +296,8 @@ export function FleetUpdatesPage() {
                     checked={selectedSensors.has(sensor.id)}
                     onChange={() => toggleSensor(sensor.id)}
                     disabled={sensor.updateStatus === 'updating'}
-                    className="w-4 h-4 text-ac-blue border-border-subtle disabled:opacity-50"
+                    className="w-4 h-4 border-border-subtle disabled:opacity-50"
+                    style={{ accentColor: colors.blue }}
                   />
                 </td>
                 <td className="px-6 py-4">
@@ -297,15 +314,18 @@ export function FleetUpdatesPage() {
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`px-2 py-1 text-xs font-medium border ${statusColors[sensor.updateStatus]}`}
+                    className="px-2 py-1 text-xs font-medium border"
+                    style={{
+                      background: statusStyles[sensor.updateStatus].bg,
+                      color: statusStyles[sensor.updateStatus].text,
+                      borderColor: statusStyles[sensor.updateStatus].border,
+                    }}
                   >
                     {statusLabels[sensor.updateStatus]}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-ink-muted">
-                  {sensor.lastUpdated
-                    ? new Date(sensor.lastUpdated).toLocaleDateString()
-                    : '-'}
+                  {sensor.lastUpdated ? new Date(sensor.lastUpdated).toLocaleDateString() : '-'}
                 </td>
               </tr>
             ))}

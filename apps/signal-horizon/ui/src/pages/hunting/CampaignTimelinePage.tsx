@@ -9,6 +9,7 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type CampaignTimelineEvent } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
+import { Alert, Button, Input, SectionHeader, spacing } from '@/ui';
 
 function formatConfidenceOrNa(confidence: unknown): string {
   if (typeof confidence !== 'number') return 'n/a';
@@ -46,23 +47,26 @@ export default function CampaignTimelinePage() {
     }
   }, [routeCampaignId]);
 
-  const run = useCallback(async (id: string) => {
-    const seq = ++runSeqRef.current;
-    clearError();
-    setLocalError(null);
-    try {
-      const res = await getCampaignTimeline(id, {
-        startTime: startTime.trim() || undefined,
-        endTime: endTime.trim() || undefined,
-      });
-      if (seq !== runSeqRef.current) return;
-      setEvents(res.events);
-    } catch (err) {
-      if (seq !== runSeqRef.current) return;
-      setEvents(null);
-      setLocalError(err instanceof Error ? err.message : 'Campaign timeline query failed');
-    }
-  }, [clearError, endTime, getCampaignTimeline, startTime]);
+  const run = useCallback(
+    async (id: string) => {
+      const seq = ++runSeqRef.current;
+      clearError();
+      setLocalError(null);
+      try {
+        const res = await getCampaignTimeline(id, {
+          startTime: startTime.trim() || undefined,
+          endTime: endTime.trim() || undefined,
+        });
+        if (seq !== runSeqRef.current) return;
+        setEvents(res.events);
+      } catch (err) {
+        if (seq !== runSeqRef.current) return;
+        setEvents(null);
+        setLocalError(err instanceof Error ? err.message : 'Campaign timeline query failed');
+      }
+    },
+    [clearError, endTime, getCampaignTimeline, startTime],
+  );
 
   // Auto-run when deep-linked.
   useEffect(() => {
@@ -111,50 +115,60 @@ export default function CampaignTimelinePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary">Campaign Timeline</h1>
-          <p className="text-ink-secondary mt-1">
-            Pivot ClickHouse telemetry by <span className="font-mono">campaign_id</span>.
-            <span className="ml-2 text-ink-muted">
-              <Link className="text-link hover:text-link-hover" to="/hunting">Back to hunting</Link>
-            </span>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="btn-outline h-10 px-3 text-sm inline-flex items-center gap-2"
-            disabled={!campaignId.trim()}
-            aria-label="Copy campaign id"
-            title="Copy campaign id"
-          >
-            <Clipboard className="w-4 h-4" />
-            Copy
-          </button>
-          <button
-            type="button"
-            onClick={() => campaignId.trim() && void run(campaignId.trim())}
-            className="btn-primary h-10 px-3 text-sm inline-flex items-center gap-2"
-            disabled={!campaignId.trim() || isLoading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={isLoading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} />
-            Refresh
-          </button>
-        </div>
+      <SectionHeader
+        title="Campaign Timeline"
+        description="Pivot ClickHouse telemetry by campaign_id."
+        size="h3"
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Button
+              type="button"
+              variant="outlined"
+              size="sm"
+              onClick={handleCopy}
+              disabled={!campaignId.trim()}
+              aria-label="Copy campaign id"
+              title="Copy campaign id"
+              icon={<Clipboard aria-hidden="true" className="w-4 h-4" />}
+            >
+              Copy
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => campaignId.trim() && void run(campaignId.trim())}
+              disabled={!campaignId.trim() || isLoading}
+              aria-label="Refresh"
+              title="Refresh"
+              icon={
+                <RefreshCw
+                  aria-hidden="true"
+                  className={isLoading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'}
+                />
+              }
+            >
+              Refresh
+            </Button>
+          </div>
+        }
+      />
+      <div className="text-ink-secondary -mt-3">
+        <Link className="text-link hover:text-link-hover" to="/hunting">
+          Back to hunting
+        </Link>
       </div>
 
       {(error || localError) && (
-        <div className="p-4 bg-ac-red/10 border border-ac-red/30 text-ac-red flex items-center justify-between gap-4">
-          <span className="text-sm">{localError ?? error}</span>
-          <button onClick={() => { clearError(); setLocalError(null); }} className="text-sm hover:text-ac-red/80">
-            Dismiss
-          </button>
-        </div>
+        <Alert
+          status="error"
+          dismissible
+          onDismiss={() => {
+            clearError();
+            setLocalError(null);
+          }}
+        >
+          {localError ?? error}
+        </Alert>
       )}
 
       <div className="card">
@@ -168,52 +182,45 @@ export default function CampaignTimelinePage() {
         <div className="card-body">
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-4">
-              <label htmlFor="campaign-id" className="block text-xs text-ink-muted mb-1 font-mono">
-                campaign_id
-              </label>
-              <input
+              <Input
                 id="campaign-id"
-                className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
+                label="campaign_id"
                 value={campaignId}
                 onChange={(e) => setCampaignId(e.target.value)}
                 placeholder="campaign-123"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="md:col-span-3">
-              <label htmlFor="start-time" className="block text-xs text-ink-muted mb-1 font-mono">
-                startTime (optional)
-              </label>
-              <input
+              <Input
                 id="start-time"
-                className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
+                label="startTime (optional)"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 placeholder="2026-02-09T00:00:00.000Z"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="md:col-span-3">
-              <label htmlFor="end-time" className="block text-xs text-ink-muted mb-1 font-mono">
-                endTime (optional)
-              </label>
-              <input
+              <Input
                 id="end-time"
-                className="w-full px-3 py-2 border border-border-subtle bg-surface-base text-ink-primary font-mono"
+                label="endTime (optional)"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 placeholder="2026-02-09T12:00:00.000Z"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="md:col-span-2 flex items-end">
-              <button
-                type="submit"
-                disabled={!canRun}
-                className="btn-primary w-full h-10 px-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <Button type="submit" disabled={!canRun} size="sm" fill>
                 Run
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -267,7 +274,9 @@ export default function CampaignTimelinePage() {
                       <td className="py-2 pr-3 font-mono text-xs">{e.status}</td>
                       <td className="py-2 pr-3 font-mono text-xs">{e.severity}</td>
                       <td className="py-2 pr-3 text-right font-mono">{e.tenantsAffected}</td>
-                      <td className="py-2 text-right font-mono">{formatConfidenceOrNa(e.confidence)}</td>
+                      <td className="py-2 text-right font-mono">
+                        {formatConfidenceOrNa(e.confidence)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

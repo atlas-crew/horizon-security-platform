@@ -9,6 +9,7 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type RecentRequest, type RequestTimelineEvent } from '../../hooks/useHunt';
 import RequestTimelineGraph from '../../components/hunting/RequestTimelineGraph';
+import { Alert, Button, Input, SectionHeader, Tabs, spacing } from '@/ui';
 
 function summarizeEvent(e: RequestTimelineEvent): string {
   switch (e.kind) {
@@ -81,25 +82,30 @@ export default function RequestTimelinePage() {
     }
   }, [routeRequestId]);
 
-  const run = useCallback(async (id: string) => {
-    clearError();
-    setLocalError(null);
-    setTimelineNote(null);
-    try {
-      const res = await getRequestTimeline(id, {
-        startTime: startTime.trim() || undefined,
-        endTime: endTime.trim() || undefined,
-        limit,
-      });
-      setEvents(res.events);
-      if (res.events.length >= Math.max(1, limit)) {
-        setTimelineNote('Results may be truncated. Reduce limit or narrow the time window for full fidelity.');
+  const run = useCallback(
+    async (id: string) => {
+      clearError();
+      setLocalError(null);
+      setTimelineNote(null);
+      try {
+        const res = await getRequestTimeline(id, {
+          startTime: startTime.trim() || undefined,
+          endTime: endTime.trim() || undefined,
+          limit,
+        });
+        setEvents(res.events);
+        if (res.events.length >= Math.max(1, limit)) {
+          setTimelineNote(
+            'Results may be truncated. Reduce limit or narrow the time window for full fidelity.',
+          );
+        }
+      } catch (err) {
+        setEvents(null);
+        setLocalError(err instanceof Error ? err.message : 'Request timeline query failed');
       }
-    } catch (err) {
-      setEvents(null);
-      setLocalError(err instanceof Error ? err.message : 'Request timeline query failed');
-    }
-  }, [clearError, endTime, getRequestTimeline, limit, startTime]);
+    },
+    [clearError, endTime, getRequestTimeline, limit, startTime],
+  );
 
   // Auto-run when deep-linked.
   useEffect(() => {
@@ -137,50 +143,60 @@ export default function RequestTimelinePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary">Request Timeline</h1>
-          <p className="text-ink-secondary mt-1">
-            Pivot ClickHouse telemetry by <span className="font-mono">request_id</span>.
-            <span className="ml-2 text-ink-muted">
-              <Link className="text-link hover:text-link-hover" to="/hunting">Back to hunting</Link>
-            </span>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="btn-outline h-10 px-3 text-sm inline-flex items-center gap-2"
-            disabled={!requestId.trim()}
-            aria-label="Copy request id"
-            title="Copy request id"
-          >
-            <Clipboard className="w-4 h-4" />
-            Copy
-          </button>
-          <button
-            type="button"
-            onClick={() => requestId.trim() && void run(requestId.trim())}
-            className="btn-primary h-10 px-3 text-sm inline-flex items-center gap-2"
-            disabled={!requestId.trim() || isLoading}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className={isLoading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} />
-            Refresh
-          </button>
-        </div>
+      <SectionHeader
+        title="Request Timeline"
+        description="Pivot ClickHouse telemetry by request_id."
+        size="h3"
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Button
+              type="button"
+              variant="outlined"
+              size="sm"
+              onClick={handleCopy}
+              disabled={!requestId.trim()}
+              aria-label="Copy request id"
+              title="Copy request id"
+              icon={<Clipboard aria-hidden="true" className="w-4 h-4" />}
+            >
+              Copy
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => requestId.trim() && void run(requestId.trim())}
+              disabled={!requestId.trim() || isLoading}
+              aria-label="Refresh"
+              title="Refresh"
+              icon={
+                <RefreshCw
+                  aria-hidden="true"
+                  className={isLoading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'}
+                />
+              }
+            >
+              Refresh
+            </Button>
+          </div>
+        }
+      />
+      <div className="text-ink-secondary -mt-3">
+        <Link className="text-link hover:text-link-hover" to="/hunting">
+          Back to hunting
+        </Link>
       </div>
 
       {(error || localError) && (
-        <div className="p-4 bg-ac-red/10 border border-ac-red/30 text-ac-red flex items-center justify-between gap-4">
-          <span className="text-sm">{localError ?? error}</span>
-          <button onClick={() => { clearError(); setLocalError(null); }} className="text-sm hover:text-ac-red/80">
-            Dismiss
-          </button>
-        </div>
+        <Alert
+          status="error"
+          dismissible
+          onDismiss={() => {
+            clearError();
+            setLocalError(null);
+          }}
+        >
+          {localError ?? error}
+        </Alert>
       )}
 
       <div className="card">
@@ -191,27 +207,22 @@ export default function RequestTimelinePage() {
               Latest <span className="font-mono">request_id</span> values (ClickHouse).
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outlined"
+            size="sm"
             onClick={() => void loadRecent()}
-            className="btn-outline h-9 px-3 text-sm inline-flex items-center gap-2"
             aria-label="Refresh recent request ids"
             title="Refresh recent"
+            icon={<RefreshCw aria-hidden="true" className="w-4 h-4" />}
           >
-            <RefreshCw className="w-4 h-4" />
             Refresh
-          </button>
+          </Button>
         </div>
         <div className="card-body">
-          {recentError && (
-            <div className="text-sm text-ac-red">
-              {recentError}
-            </div>
-          )}
+          {recentError && <Alert status="error">{recentError}</Alert>}
 
-          {!recent && (
-            <div className="text-sm text-ink-secondary">Loading…</div>
-          )}
+          {!recent && <div className="text-sm text-ink-secondary">Loading…</div>}
 
           {recent && recent.length === 0 && !recentError && (
             <div className="text-sm text-ink-secondary">No recent request ids yet.</div>
@@ -239,16 +250,16 @@ export default function RequestTimelinePage() {
                       <td className="py-2 pr-3 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => navigate(`/hunting/request/${encodeURIComponent(r.requestId)}`)}
+                          onClick={() =>
+                            navigate(`/hunting/request/${encodeURIComponent(r.requestId)}`)
+                          }
                           className="text-link hover:text-link-hover font-mono text-xs"
                           title="Open timeline"
                         >
                           {r.requestId}
                         </button>
                       </td>
-                      <td className="py-2 pr-3 font-mono text-xs text-ink-primary">
-                        {r.path}
-                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs text-ink-primary">{r.path}</td>
                       <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-ink-primary">
                         {r.statusCode}
                       </td>
@@ -269,69 +280,64 @@ export default function RequestTimelinePage() {
           <h2 className="font-medium text-ink-primary">Lookup</h2>
         </div>
         <div className="card-body">
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end"
+          >
             <div className="lg:col-span-6">
-              <label htmlFor="request-id" className="block text-sm font-medium text-ink-secondary mb-1">
-                request_id
-              </label>
-              <input
+              <Input
                 id="request-id"
+                label="request_id"
                 value={requestId}
                 onChange={(e) => setRequestId(e.target.value)}
                 placeholder="req_abc123"
-                className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue font-mono"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="lg:col-span-2">
-              <label htmlFor="start-time" className="block text-sm font-medium text-ink-secondary mb-1">
-                startTime (ISO)
-              </label>
-              <input
+              <Input
                 id="start-time"
+                label="startTime (ISO)"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 placeholder="2026-02-06T12:00:00Z"
-                className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue font-mono text-xs"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="lg:col-span-2">
-              <label htmlFor="end-time" className="block text-sm font-medium text-ink-secondary mb-1">
-                endTime (ISO)
-              </label>
-              <input
+              <Input
                 id="end-time"
+                label="endTime (ISO)"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 placeholder="2026-02-06T13:00:00Z"
-                className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue font-mono text-xs"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="lg:col-span-1">
-              <label htmlFor="limit" className="block text-sm font-medium text-ink-secondary mb-1">
-                limit
-              </label>
-              <input
+              <Input
                 id="limit"
+                label="limit"
                 type="number"
                 min={1}
                 max={5000}
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary focus:outline-none focus:border-ac-blue font-mono"
+                size="sm"
+                style={{ fontFamily: 'monospace' }}
               />
             </div>
 
             <div className="lg:col-span-1 flex gap-2">
-              <button
-                type="submit"
-                className="btn-primary h-10 px-4 text-sm w-full"
-                disabled={!canRun}
-              >
+              <Button type="submit" size="sm" fill disabled={!canRun}>
                 Run
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -344,37 +350,23 @@ export default function RequestTimelinePage() {
             <p className="text-xs text-ink-muted mt-1 font-mono truncate">{header}</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="inline-flex border border-border-subtle bg-surface-inset">
-              <button
-                type="button"
-                onClick={() => setView('graph')}
-                className={view === 'graph'
-                  ? 'h-8 px-3 text-[10px] font-mono bg-ac-navy text-white'
-                  : 'h-8 px-3 text-[10px] font-mono text-ink-secondary hover:text-ink-primary'}
-              >
-                Graph
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('table')}
-                className={view === 'table'
-                  ? 'h-8 px-3 text-[10px] font-mono bg-ac-navy text-white'
-                  : 'h-8 px-3 text-[10px] font-mono text-ink-secondary hover:text-ink-primary'}
-              >
-                Table
-              </button>
-            </div>
+            <Tabs
+              tabs={[
+                { key: 'graph', label: 'Graph' },
+                { key: 'table', label: 'Table' },
+              ]}
+              active={view}
+              onChange={(key) => setView(key as 'graph' | 'table')}
+              variant="pills"
+              size="sm"
+            />
             <div className="text-xs text-ink-muted font-mono whitespace-nowrap">
               {events ? `${events.length} events` : 'no data'}
             </div>
           </div>
         </div>
         <div className="card-body">
-          {timelineNote && (
-            <div className="mb-3 text-xs text-ac-orange border border-ac-orange/30 bg-ac-orange/10 p-3">
-              {timelineNote}
-            </div>
-          )}
+          {timelineNote && <Alert status="warning">{timelineNote}</Alert>}
 
           {!events && (
             <div className="text-sm text-ink-secondary">
@@ -390,14 +382,14 @@ export default function RequestTimelinePage() {
 
           {events && events.length > 0 && (
             <>
-              {view === 'graph' && (
-                <RequestTimelineGraph events={events} />
-              )}
+              {view === 'graph' && <RequestTimelineGraph events={events} />}
 
               {view === 'table' && (
                 <div className="overflow-auto">
                   <table className="w-full text-sm">
-                    <caption className="sr-only">Request timeline events correlated by request id</caption>
+                    <caption className="sr-only">
+                      Request timeline events correlated by request id
+                    </caption>
                     <thead className="text-xs text-ink-muted border-b border-border-subtle">
                       <tr>
                         <th className="text-left py-2 pr-3">Time</th>
@@ -423,8 +415,17 @@ export default function RequestTimelinePage() {
                           <td className="py-2 pr-3">
                             {e.kind === 'signal_event' && jsonDetails('metadata', e.metadata)}
                             {e.kind === 'sensor_log' && jsonDetails('fields', e.fields)}
-                            {e.kind === 'actor_event' && jsonDetails('actor', { actorId: e.actorId, ruleId: e.ruleId, ruleCategory: e.ruleCategory })}
-                            {e.kind === 'session_event' && jsonDetails('session', { sessionId: e.sessionId, actorId: e.actorId })}
+                            {e.kind === 'actor_event' &&
+                              jsonDetails('actor', {
+                                actorId: e.actorId,
+                                ruleId: e.ruleId,
+                                ruleCategory: e.ruleCategory,
+                              })}
+                            {e.kind === 'session_event' &&
+                              jsonDetails('session', {
+                                sessionId: e.sessionId,
+                                actorId: e.actorId,
+                              })}
                           </td>
                         </tr>
                       ))}

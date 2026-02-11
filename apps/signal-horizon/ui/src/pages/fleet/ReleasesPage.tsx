@@ -26,6 +26,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
+import { SectionHeader } from '@/ui';
 
 // ============================================================================
 // Types
@@ -51,6 +52,18 @@ interface ConfirmDeleteModalProps {
   onConfirm: () => Promise<void>;
   isDeleting: boolean;
 }
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const SECTION_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
 
 // ============================================================================
 // Helper Functions
@@ -202,18 +215,25 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
       <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle sticky top-0 bg-surface-card">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-ac-blue/10">
-              <Upload className="w-5 h-5 text-ac-blue" />
-            </div>
-            <h2 className="text-lg font-semibold text-ink-primary">Upload Release</h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <SectionHeader
+            title="Upload Release"
+            icon={
+              <div className="p-2 bg-ac-blue/10">
+                <Upload className="w-5 h-5 text-ac-blue" />
+              </div>
+            }
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={SECTION_HEADER_TITLE_STYLE}
+            actions={
+              <button
+                onClick={handleClose}
+                className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            }
+          />
         </div>
 
         {/* Form */}
@@ -700,33 +720,34 @@ export function ReleasesPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Release Management</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Manage and deploy sensor releases across your fleet
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              refreshReleases();
-              refreshRollouts();
-            }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Upload Release
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        title="Release Management"
+        description="Manage and deploy sensor releases across your fleet"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                refreshReleases();
+                refreshRollouts();
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Release
+            </button>
+          </div>
+        }
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
@@ -740,20 +761,25 @@ export function ReleasesPage() {
       {(activeRollout || showRolloutManager) && (
         <div className="card">
           <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-            <h2 className="text-lg font-medium text-ink-primary">
-              {activeRollout ? 'Active Rollout' : 'New Rollout'}
-            </h2>
-            {!activeRollout && (
-              <button
-                onClick={() => {
-                  setShowRolloutManager(false);
-                  setDeployingRelease(null);
-                }}
-                className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            <SectionHeader
+              title={activeRollout ? 'Active Rollout' : 'New Rollout'}
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={SECTION_HEADER_TITLE_STYLE}
+              actions={
+                !activeRollout ? (
+                  <button
+                    onClick={() => {
+                      setShowRolloutManager(false);
+                      setDeployingRelease(null);
+                    }}
+                    className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : undefined
+              }
+            />
           </div>
           <div className="p-6">
             <RolloutManager
@@ -775,8 +801,13 @@ export function ReleasesPage() {
       {/* Releases Table */}
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <h2 className="text-lg font-medium text-ink-primary">Available Releases</h2>
-          <span className="text-sm text-ink-muted">{safeReleases.length} releases</span>
+          <SectionHeader
+            title="Available Releases"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={SECTION_HEADER_TITLE_STYLE}
+            actions={<span className="text-sm text-ink-muted">{safeReleases.length} releases</span>}
+          />
         </div>
 
         {isLoadingReleases ? (
@@ -839,10 +870,13 @@ export function ReleasesPage() {
       {recentRollouts.length > 0 && (
         <div className="card">
           <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="w-5 h-5 text-ink-muted" />
-              <h2 className="text-lg font-medium text-ink-primary">Recent Rollouts</h2>
-            </div>
+            <SectionHeader
+              title="Recent Rollouts"
+              icon={<History className="w-5 h-5 text-ink-muted" />}
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={SECTION_HEADER_TITLE_STYLE}
+            />
           </div>
           <div className="divide-y divide-border-subtle">
             {recentRollouts.map((rollout) => (

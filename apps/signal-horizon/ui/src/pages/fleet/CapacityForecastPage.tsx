@@ -15,6 +15,7 @@ import { TrendingUp, TrendingDown, AlertTriangle, Calendar, Server } from 'lucid
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
 import {
+  SectionHeader,
   axisDefaults,
   colors,
   gridDefaultsSoft,
@@ -30,6 +31,18 @@ import {
 const REGIONS = ['US-East', 'EU-West', 'AP-South'];
 const HISTORY_DAYS = 30;
 const FORECAST_DAYS = 14;
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const CARD_HEADER_TITLE_STYLE = {
+  fontSize: '16px',
+  lineHeight: '22px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
 
 interface DailyMetric {
   day: number;
@@ -129,32 +142,31 @@ export default function CapacityForecastPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Capacity Forecasting</h1>
-          <p className="text-ink-secondary mt-1">
-            Predictive resource planning based on historical trends
-          </p>
-        </div>
-
-        {/* Region Selector */}
-        <div className="flex bg-surface-subtle p-1 border border-border-subtle">
-          {REGIONS.map((region) => (
-            <button
-              key={region}
-              onClick={() => setSelectedRegion(region)}
-              className={clsx(
-                'px-4 py-2 text-sm font-medium transition-colors ',
-                selectedRegion === region
-                  ? 'bg-surface-base text-ink-primary shadow-sm'
-                  : 'text-ink-secondary hover:text-ink-primary',
-              )}
-            >
-              {region}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SectionHeader
+        title="Capacity Forecasting"
+        description="Predictive resource planning based on historical trends"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <div className="flex bg-surface-subtle p-1 border border-border-subtle">
+            {REGIONS.map((region) => (
+              <button
+                key={region}
+                onClick={() => setSelectedRegion(region)}
+                className={clsx(
+                  'px-4 py-2 text-sm font-medium transition-colors ',
+                  selectedRegion === region
+                    ? 'bg-surface-base text-ink-primary shadow-sm'
+                    : 'text-ink-secondary hover:text-ink-primary',
+                )}
+              >
+                {region}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {/* Insight Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -196,18 +208,21 @@ export default function CapacityForecastPage() {
 
       {/* Main Chart */}
       <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-medium text-ink-primary flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-ac-blue" />
-            Load Projection (30 Days History + 14 Day Forecast)
-          </h2>
-          {forecastStats.daysToWarning < 14 && forecastStats.daysToWarning > 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border border-ac-orange/30 text-ac-orange text-sm font-medium">
-              <AlertTriangle className="w-4 h-4" />
-              Projected to hit 80% warning threshold in {forecastStats.daysToWarning} days
-            </div>
-          )}
-        </div>
+        <SectionHeader
+          title="Load Projection (30 Days History + 14 Day Forecast)"
+          icon={<TrendingUp className="w-5 h-5 text-ac-blue" />}
+          size="h4"
+          style={{ marginBottom: '24px' }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+          actions={
+            forecastStats.daysToWarning < 14 && forecastStats.daysToWarning > 0 ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border border-ac-orange/30 text-ac-orange text-sm font-medium">
+                <AlertTriangle className="w-4 h-4" />
+                Projected to hit 80% warning threshold in {forecastStats.daysToWarning} days
+              </div>
+            ) : undefined
+          }
+        />
 
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">

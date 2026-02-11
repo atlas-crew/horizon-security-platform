@@ -18,6 +18,7 @@ import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
 import { deepMergeConfig } from '../../utils';
 import YAML from 'yaml';
+import { SectionHeader } from '@/ui';
 
 interface ConfigTemplate {
   id: string;
@@ -59,6 +60,18 @@ interface ConfigAuditResponse {
   limit: number;
   offset: number;
 }
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const CARD_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
 
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
   const data = await apiFetch<any>('/fleet/config/templates');
@@ -564,12 +577,13 @@ export function ConfigManagerPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Configuration Manager</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Manage and deploy configuration templates across your fleet
-          </p>
-        </div>
+        <SectionHeader
+          title="Configuration Manager"
+          description="Manage and deploy configuration templates across your fleet"
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <button
           onClick={openCreateModal}
           disabled={isDemoMode}
@@ -633,7 +647,12 @@ export function ConfigManagerPage() {
       {/* Pingora Presets */}
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle">
-          <h2 className="text-lg font-medium text-ink-primary">Pingora Upstream Presets</h2>
+          <SectionHeader
+            title="Pingora Upstream Presets"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
           <p className="mt-1 text-sm text-ink-secondary">
             Deploy upstream rewrites to existing sensor configs (pushes immediately).
           </p>
@@ -781,21 +800,28 @@ export function ConfigManagerPage() {
       {/* Templates */}
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <h2 className="text-lg font-medium text-ink-primary">Configuration Templates</h2>
-          <div className="flex gap-2">
-            {['all', 'production', 'staging', 'dev'].map((env) => (
-              <button
-                key={env}
-                type="button"
-                onClick={() => setEnvFilter(env as any)}
-                className={`px-3 py-1 text-xs font-medium border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                  envFilter === env ? 'bg-surface-subtle text-ink-primary' : 'text-ink-secondary'
-                }`}
-              >
-                {env}
-              </button>
-            ))}
-          </div>
+          <SectionHeader
+            title="Configuration Templates"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+            actions={
+              <div className="flex gap-2">
+                {['all', 'production', 'staging', 'dev'].map((env) => (
+                  <button
+                    key={env}
+                    type="button"
+                    onClick={() => setEnvFilter(env as any)}
+                    className={`px-3 py-1 text-xs font-medium border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+                      envFilter === env ? 'bg-surface-subtle text-ink-primary' : 'text-ink-secondary'
+                    }`}
+                  >
+                    {env}
+                  </button>
+                ))}
+              </div>
+            }
+          />
         </div>
 
         {templatesLoading ? (
@@ -912,13 +938,14 @@ export function ConfigManagerPage() {
       {/* Audit Trail */}
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-medium text-ink-primary">Configuration Audit Trail</h2>
-            <p className="text-xs text-ink-muted">Recent config changes across the fleet</p>
-          </div>
-          <span className="text-xs text-ink-muted">
-            {auditData?.total ?? auditLogs.length} events
-          </span>
+          <SectionHeader
+            title="Configuration Audit Trail"
+            description="Recent config changes across the fleet"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+            actions={<span className="text-xs text-ink-muted">{auditData?.total ?? auditLogs.length} events</span>}
+          />
         </div>
 
         {isDemoMode ? (
@@ -976,9 +1003,13 @@ export function ConfigManagerPage() {
           aria-labelledby="push-config-title"
         >
           <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
-            <h2 id="push-config-title" className="text-xl font-light text-ink-primary mb-4">
-              Push Template To Sensors
-            </h2>
+            <SectionHeader
+              title="Push Template To Sensors"
+              titleId="push-config-title"
+              size="h1"
+              style={{ marginBottom: '16px' }}
+              titleStyle={PAGE_HEADER_TITLE_STYLE}
+            />
 
             <div className="flex items-center justify-between mb-3">
               <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
@@ -1088,11 +1119,17 @@ export function ConfigManagerPage() {
           aria-labelledby="template-modal-title"
         >
           <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col relative">
-            <h2 id="template-modal-title" className="text-xl font-light text-ink-primary mb-4">
-              {templateModalMode === 'create'
-                ? 'Create Configuration Template'
-                : 'Edit Configuration Template'}
-            </h2>
+            <SectionHeader
+              title={
+                templateModalMode === 'create'
+                  ? 'Create Configuration Template'
+                  : 'Edit Configuration Template'
+              }
+              titleId="template-modal-title"
+              size="h1"
+              style={{ marginBottom: '16px' }}
+              titleStyle={PAGE_HEADER_TITLE_STYLE}
+            />
 
             {templateDetailError && templateModalMode === 'edit' && (
               <div className="mb-4 border border-ac-red/30 bg-ac-red/10 px-4 py-2 text-sm text-ac-red">

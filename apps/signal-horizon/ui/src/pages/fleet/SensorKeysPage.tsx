@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
+import { SectionHeader } from '@/ui';
 
 interface SensorKey {
   id: string;
@@ -54,6 +55,12 @@ interface NewKeyRequest {
   expiresIn?: number; // days
   permissions: string[];
 }
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: '#FFFFFF',
+};
 
 export function SensorKeysPage(): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -212,10 +219,13 @@ export function SensorKeysPage(): React.ReactElement {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-light text-white">API Key Management</h1>
-          <p className="text-gray-400 mt-1">Manage sensor authentication keys and permissions</p>
-        </div>
+        <SectionHeader
+          title="API Key Management"
+          description="Manage sensor authentication keys and permissions"
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <button
           onClick={() => setIsModalOpen(true)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"

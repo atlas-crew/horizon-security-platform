@@ -7,6 +7,12 @@ import { Button, SectionHeader, alpha, colors } from '@/ui';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 const authHeaders = { Authorization: `Bearer ${API_KEY}` };
+const CARD_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
 
 interface SensorVersion {
   sensorId: string;
@@ -240,27 +246,34 @@ export function FleetUpdatesPage() {
       {/* Sensor Versions Table */}
       <div className="card">
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <h2 className="text-lg font-medium text-ink-primary">Sensor Versions</h2>
-          <div className="flex gap-2">
-            <Button
-              variant="outlined"
-              size="sm"
-              onClick={() =>
-                setSelectedSensors(
-                  new Set(
-                    sensorVersions
-                      .filter((s) => s.updateStatus === 'update_available')
-                      .map((s) => s.id),
-                  ),
-                )
-              }
-            >
-              Select Outdated
-            </Button>
-            <Button variant="outlined" size="sm" onClick={() => setSelectedSensors(new Set())}>
-              Clear Selection
-            </Button>
-          </div>
+          <SectionHeader
+            title="Sensor Versions"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+            actions={
+              <div className="flex gap-2">
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  onClick={() =>
+                    setSelectedSensors(
+                      new Set(
+                        sensorVersions
+                          .filter((s) => s.updateStatus === 'update_available')
+                          .map((s) => s.id),
+                      ),
+                    )
+                  }
+                >
+                  Select Outdated
+                </Button>
+                <Button variant="outlined" size="sm" onClick={() => setSelectedSensors(new Set())}>
+                  Clear Selection
+                </Button>
+              </div>
+            }
+          />
         </div>
 
         <table className="min-w-full divide-y divide-border-subtle">

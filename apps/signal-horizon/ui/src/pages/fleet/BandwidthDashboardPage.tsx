@@ -30,7 +30,15 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { alpha, axisDefaults, barDefaults, chartColors, colors, tooltipDefaults } from '@/ui';
+import {
+  SectionHeader,
+  alpha,
+  axisDefaults,
+  barDefaults,
+  chartColors,
+  colors,
+  tooltipDefaults,
+} from '@/ui';
 import {
   useBandwidthDashboard,
   type BandwidthDataPoint,
@@ -48,6 +56,17 @@ const COLORS = {
   primary: colors.blue,
   secondary: colors.skyBlue,
   accent: colors.red,
+};
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const STATE_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 600,
 };
 
 // ============================================================================
@@ -467,10 +486,13 @@ export default function BandwidthDashboardPage() {
         aria-label="Loading bandwidth dashboard"
       >
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-light text-ink-primary">Bandwidth Dashboard</h1>
-            <p className="text-ink-secondary mt-1">Loading bandwidth metrics...</p>
-          </div>
+          <SectionHeader
+            title="Bandwidth Dashboard"
+            description="Loading bandwidth metrics..."
+            size="h1"
+            style={PAGE_HEADER_STYLE}
+            titleStyle={PAGE_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="grid grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -498,9 +520,12 @@ export default function BandwidthDashboardPage() {
             borderColor: alpha(colors.red, 0.5),
           }}
         >
-          <h2 className="text-lg font-semibold" style={{ color: colors.red }}>
-            Error Loading Dashboard
-          </h2>
+          <SectionHeader
+            title="Error Loading Dashboard"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ ...STATE_HEADER_TITLE_STYLE, color: colors.red }}
+          />
           <p className="text-ink-secondary mt-1">
             {error instanceof Error ? error.message : 'Unknown error'}
           </p>
@@ -526,9 +551,12 @@ export default function BandwidthDashboardPage() {
             borderColor: alpha(colors.orange, 0.5),
           }}
         >
-          <h2 className="text-lg font-semibold" style={{ color: colors.orange }}>
-            No Data Available
-          </h2>
+          <SectionHeader
+            title="No Data Available"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ ...STATE_HEADER_TITLE_STYLE, color: colors.orange }}
+          />
           <p className="text-ink-secondary mt-1">
             Bandwidth data is not currently available. This may be because no sensors are connected
             or reporting metrics.
@@ -542,12 +570,13 @@ export default function BandwidthDashboardPage() {
     <div className="p-6 space-y-6" role="main" aria-label="Bandwidth dashboard">
       {/* Header */}
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Bandwidth Dashboard</h1>
-          <p className="text-ink-secondary mt-1">
-            Fleet-wide bandwidth metrics and billing analysis
-          </p>
-        </div>
+        <SectionHeader
+          title="Bandwidth Dashboard"
+          description="Fleet-wide bandwidth metrics and billing analysis"
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <div className="flex items-center gap-4">
           <select
             value={timelineGranularity}

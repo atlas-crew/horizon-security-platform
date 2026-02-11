@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '@/ui';
+import { Breadcrumb, SectionHeader } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -24,6 +24,12 @@ async function updateFullConfig(id: string, config: unknown) {
 }
 
 type ViewMode = 'guided' | 'json';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 type UpstreamPresetResult = { json: string; sitesUpdated: number };
 
@@ -206,7 +212,12 @@ export function SensorConfigPage() {
             { label: sensor?.name || 'Sensor', to: `/fleet/sensors/${id}` },
             { label: 'Advanced Configuration' },
           ]} />
-          <h1 className="text-xl font-light text-ink-primary">Advanced Configuration</h1>
+          <SectionHeader
+            title="Advanced Configuration"
+            size="h1"
+            style={PAGE_HEADER_STYLE}
+            titleStyle={PAGE_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="flex items-center gap-3">
           {/* View Mode Tabs */}

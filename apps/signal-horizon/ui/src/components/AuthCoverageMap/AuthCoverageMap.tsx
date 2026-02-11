@@ -4,7 +4,7 @@ import { Shield, Search, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react
 import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
 import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
-import { SectionHeader, Spinner } from '@/ui';
+import { Button, SectionHeader, Spinner } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -100,12 +100,13 @@ export const AuthCoverageMap: React.FC = () => {
           titleStyle={{ fontSize: '24px', lineHeight: '30px', fontWeight: 500 }}
         />
         <p className="text-ink-muted mb-6">{(summaryError || endpointsError)?.message}</p>
-        <button 
+        <Button
           onClick={() => window.location.reload()}
-          className="px-6 py-2 bg-ac-blue text-white font-medium hover:bg-ac-blue-shade transition-colors"
+          size="sm"
+          style={{ padding: '0 24px' }}
         >
           Retry Connection
-        </button>
+        </Button>
       </div>
     );
   }

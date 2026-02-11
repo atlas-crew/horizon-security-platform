@@ -3,7 +3,7 @@ import { X, ArrowRight, FileText } from 'lucide-react';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { convertSigmaToSql } from '../../utils/sigmaToSql';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { SectionHeader } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
 
 interface SigmaImportModalProps {
   onImport: (sql: string) => void;
@@ -85,9 +85,14 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-ink-muted hover:text-ink-primary">
-            <X className="w-5 h-5" />
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            aria-label="Close import modal"
+            icon={<X className="w-5 h-5" />}
+            style={{ height: '36px', padding: '0 8px', color: '#7F7F7F' }}
+          />
         </div>
 
         {/* Body */}
@@ -159,27 +164,29 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
             </div>
           </div>
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={onClose}
-              className="btn-outline px-4 py-2 text-sm"
+              variant="outlined"
+              size="sm"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleSaveBackgroundHunt}
               disabled={!onSaveBackgroundHunt || saveStatus === 'saving'}
-              className="btn-ghost px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="ghost"
+              size="sm"
               title="Persist rule and enable scheduled background hunting"
             >
               {saveStatus === 'saving' ? 'Saving...' : 'Save Background Hunt'}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleImport}
-              className="btn-primary px-4 py-2 text-sm flex items-center gap-2"
+              size="sm"
+              iconAfter={<ArrowRight className="w-4 h-4" />}
             >
               Import Query
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

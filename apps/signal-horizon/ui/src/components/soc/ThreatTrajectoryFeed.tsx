@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
-import { SectionHeader } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
 
 interface ThreatTrajectoryFeedProps {
   threats: Threat[];
@@ -125,9 +125,20 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
       </div>
 
       <div className="px-4 py-2 bg-surface-subtle/50 border-t border-border-subtle">
-        <button className="w-full py-2 text-[9px] font-bold text-ac-blue dark:text-ac-sky-blue tracking-[0.2em] hover:text-ink-primary transition-colors">
+        <Button
+          variant="ghost"
+          size="sm"
+          fill
+          style={{
+            fontSize: '9px',
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: '#0057B7',
+            height: '32px',
+          }}
+        >
           Access Full Terminal Feed &gt;
-        </button>
+        </Button>
       </div>
     </section>
   );

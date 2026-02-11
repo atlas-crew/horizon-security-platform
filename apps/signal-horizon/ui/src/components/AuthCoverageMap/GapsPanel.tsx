@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { RiskBadge } from './RiskBadge.js';
-import { SectionHeader } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
@@ -109,12 +109,21 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
         
         {hasMore && (
           <div className="mt-4 pt-4 border-t border-border-subtle text-center">
-            <button 
-              className="text-xs font-semibold uppercase tracking-widest text-ac-blue hover:text-ac-blue-shade transition-colors"
+            <Button
+              variant="ghost"
+              size="sm"
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#0057B7',
+                height: '32px',
+              }}
               onClick={() => {}}
             >
               View all {endpoints.length} gaps
-            </button>
+            </Button>
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useCallback, memo } from 'react';
 import { Shield } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Button } from '@/ui';
 
 export interface WafConfigData {
   enabled: boolean;
@@ -83,15 +84,17 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-ink-primary">Rule Overrides</h4>
-              <button 
+              <Button
                 onClick={() => {
                   const id = prompt('Enter Rule ID (e.g., XSS-001)');
                   if (id) handleRuleOverride(id, { enabled: false, action: 'allow' });
                 }}
-                className="text-xs text-ac-blue hover:underline"
+                variant="ghost"
+                size="sm"
+                style={{ height: '24px', padding: 0, fontSize: '12px', color: '#0057B7' }}
               >
                 + Add Override
-              </button>
+              </Button>
             </div>
             
             {Object.keys(config.rule_overrides).length === 0 ? (
@@ -113,12 +116,14 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
                         <option value="log">Log Only</option>
                         <option value="allow">Allow</option>
                       </select>
-                      <button 
+                      <Button
                         onClick={() => handleRuleOverride(id, null)}
-                        className="text-xs text-ac-red hover:underline"
+                        variant="ghost"
+                        size="sm"
+                        style={{ height: '24px', padding: 0, fontSize: '12px', color: '#EF3340' }}
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}

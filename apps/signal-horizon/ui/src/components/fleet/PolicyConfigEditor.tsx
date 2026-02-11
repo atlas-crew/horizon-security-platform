@@ -17,6 +17,7 @@ import {
 import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import type { PolicyConfig, EnforcementMode } from '@signal-horizon/shared/types';
+import { Button } from '@/ui';
 
 export interface PolicyConfigEditorProps {
   value: PolicyConfig;
@@ -449,7 +450,21 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                           ))
                         )}
                       </div>
-                      <button className="text-[10px] font-bold text-ac-blue uppercase tracking-widest hover:underline">+ Define Pattern</button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        style={{
+                          height: '24px',
+                          padding: 0,
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.08em',
+                          color: '#0057B7',
+                        }}
+                      >
+                        + Define Pattern
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -497,9 +512,19 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                           {c}
                         </span>
                       ))}
-                      <button className="px-2 py-1 bg-surface-subtle border border-border-subtle text-ink-muted text-[10px] font-bold hover:bg-surface-elevated transition-colors">
+                      <Button
+                        variant="outlined"
+                        size="sm"
+                        style={{
+                          height: '24px',
+                          padding: '0 8px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: '#7F7F7F',
+                        }}
+                      >
                         + ADD
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -563,7 +588,13 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                 <label className="text-[10px] font-bold text-ink-muted uppercase tracking-widest block">Header Injections</label>
                 <div className="bg-surface-subtle border border-border-subtle p-2 text-[10px] font-mono h-9 overflow-hidden flex items-center justify-between">
                   <span className="text-ink-muted">{Object.keys(value.customHeaders).length} Keys defined</span>
-                  <button className="text-ac-blue font-bold hover:underline">MANAGE</button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{ height: '20px', padding: 0, color: '#0057B7', fontWeight: 700 }}
+                  >
+                    MANAGE
+                  </Button>
                 </div>
               </div>
             </div>

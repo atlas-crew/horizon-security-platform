@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, CheckCircle, ArrowRight, GitCommit } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
+import { Button } from '@/ui';
 
 interface ConfigDriftViewerProps {
   expectedConfig: string;
@@ -40,33 +41,35 @@ export function ConfigDriftViewer({
         </div>
         
         {driftDetected && (
-          <button className="px-3 py-1.5 bg-surface-base border border-ac-orange/30 text-ink-primary text-xs font-medium hover:bg-surface-subtle transition-colors">
+          <Button
+            variant="outlined"
+            size="sm"
+            style={{ height: '32px', borderColor: 'rgba(227,82,5,0.3)' }}
+          >
             Force Sync
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Editor Controls */}
       <div className="flex justify-end">
         <div className="flex bg-surface-subtle p-1 border border-border-subtle">
-          <button
+          <Button
             onClick={() => setViewMode('split')}
-            className={clsx(
-              "px-3 py-1 text-xs font-medium  transition-colors",
-              viewMode === 'split' ? "bg-surface-base shadow-sm text-ink-primary" : "text-ink-secondary hover:text-ink-primary"
-            )}
+            variant={viewMode === 'split' ? 'secondary' : 'ghost'}
+            size="sm"
+            style={{ height: '28px', padding: '0 12px', fontSize: '12px' }}
           >
             Split View
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setViewMode('unified')}
-            className={clsx(
-              "px-3 py-1 text-xs font-medium  transition-colors",
-              viewMode === 'unified' ? "bg-surface-base shadow-sm text-ink-primary" : "text-ink-secondary hover:text-ink-primary"
-            )}
+            variant={viewMode === 'unified' ? 'secondary' : 'ghost'}
+            size="sm"
+            style={{ height: '28px', padding: '0 12px', fontSize: '12px' }}
           >
             Unified
-          </button>
+          </Button>
         </div>
       </div>
 

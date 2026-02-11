@@ -8,7 +8,7 @@ import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Ter
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
 import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
-import { SectionHeader, Spinner } from '@/ui';
+import { Button, SectionHeader, Spinner } from '@/ui';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -186,10 +186,14 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
               <tr>
                 <th className="w-10"></th>
                 <th>
-                  <button className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{ height: 'auto', padding: 0, fontSize: 'inherit' }}
+                    iconAfter={<ChevronDown className="w-3 h-3" />}
+                  >
                     Timestamp
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
+                  </Button>
                 </th>
                 <th>Signal Type</th>
                 <th>Source IP</th>

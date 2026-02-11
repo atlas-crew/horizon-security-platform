@@ -1,16 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 14:08_
+_Generated: 2026-02-11 14:11_
 
 ## Summary
 
-**Total findings: 468**
+**Total findings: 463**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 464 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
-| Stack (col+gap) | 4 | Tailwind flex-col + gap → use <Stack direction=column> |
+| Stack (row+align+gap) | 463 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -19,9 +18,9 @@ Priority files to migrate first (most raw patterns):
 | Hits | File |
 |------|------|
 | 19 | `pages/fleet/ReleasesPage.tsx` |
-| 18 | `pages/AdminSettingsPage.tsx` |
 | 18 | `components/fleet/FileBrowser.tsx` |
-| 16 | `App.tsx` |
+| 17 | `pages/AdminSettingsPage.tsx` |
+| 14 | `App.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
@@ -63,36 +62,25 @@ Priority files to migrate first (most raw patterns):
 
 ## Detailed Findings
 
-### Stack (col+gap)
-Tailwind flex-col + gap → use <Stack direction=column>
-
-| File | Line | Match |
-|------|------|-------|
-| `App.tsx` | 551 | `<div className="flex flex-col items-center gap-2">` |
-| `components/AdminSettingsSkeleton.tsx` | 12 | `<div className="flex flex-col lg:flex-row gap-8">` |
-| `pages/AdminSettingsPage.tsx` | 487 | `<div className="flex flex-col lg:flex-row gap-8">` |
-| `pages/fleet/ConnectivityPage.tsx` | 481 | `<div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">` |
-
 ### Stack (row+align+gap)
 Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 
 | File | Line | Match |
 |------|------|-------|
-| `App.tsx` | 249 | `<div className="flex items-center gap-2.5">` |
-| `App.tsx` | 337 | `<div className="flex items-center gap-6">` |
-| `App.tsx` | 339 | `<div className="hidden lg:flex items-center gap-6">` |
-| `App.tsx` | 340 | `<Link to="/campaigns" className="flex items-center gap-2 hover:text-white transi` |
-| `App.tsx` | 348 | `<Link to="/" className="flex items-center gap-2 hover:text-white transition-colo` |
-| `App.tsx` | 356 | `<Link to="/search" className="flex items-center gap-2 hover:text-white transitio` |
-| `App.tsx` | 362 | `<Link to="/fleet" className="flex items-center gap-2 hover:text-white transition` |
-| `App.tsx` | 371 | `<Link to="/fleet/connectivity" className="flex items-center gap-2 pl-4 border-l ` |
-| `App.tsx` | 391 | `<div className="flex items-center gap-2">` |
-| `App.tsx` | 394 | `className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 h` |
-| `App.tsx` | 408 | `className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 tex` |
-| `App.tsx` | 466 | `<div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : ` |
-| `App.tsx` | 551 | `<div className="flex flex-col items-center gap-2">` |
-| `App.tsx` | 560 | `<div className="flex items-center gap-2 text-sm">` |
-| `App.tsx` | 593 | `<div className="flex items-center gap-2 text-xs">` |
+| `App.tsx` | 250 | `<div className="flex items-center gap-2.5">` |
+| `App.tsx` | 338 | `<div className="flex items-center gap-6">` |
+| `App.tsx` | 340 | `<div className="hidden lg:flex items-center gap-6">` |
+| `App.tsx` | 341 | `<Link to="/campaigns" className="flex items-center gap-2 hover:text-white transi` |
+| `App.tsx` | 349 | `<Link to="/" className="flex items-center gap-2 hover:text-white transition-colo` |
+| `App.tsx` | 357 | `<Link to="/search" className="flex items-center gap-2 hover:text-white transitio` |
+| `App.tsx` | 363 | `<Link to="/fleet" className="flex items-center gap-2 hover:text-white transition` |
+| `App.tsx` | 372 | `<Link to="/fleet/connectivity" className="flex items-center gap-2 pl-4 border-l ` |
+| `App.tsx` | 392 | `<div className="flex items-center gap-2">` |
+| `App.tsx` | 395 | `className="flex items-center gap-2 px-3 h-8 bg-white/10 border border-white/20 h` |
+| `App.tsx` | 409 | `className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 tex` |
+| `App.tsx` | 467 | `<div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : ` |
+| `App.tsx` | 561 | `<div className="flex items-center gap-2 text-sm">` |
+| `App.tsx` | 594 | `<div className="flex items-center gap-2 text-xs">` |
 | `components/ui/CommandPalette.tsx` | 573 | `<div className="flex items-center gap-1.5 px-2 py-1 border border-border-subtle ` |
 | `components/ui/CommandPalette.tsx` | 600 | `<div className="flex items-center gap-2">` |
 | `components/ui/CommandPalette.tsx` | 609 | `<span className="text-[8px] font-mono text-ink-muted/60 flex items-center gap-1"` |
@@ -108,4 +96,5 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/soc/CampaignGraph.tsx` | 361 | `<div className="flex items-center gap-1.5">` |
 | `components/soc/CampaignGraph.tsx` | 365 | `<div className="flex items-center gap-1.5">` |
 | `components/soc/CampaignGraph.tsx` | 369 | `<div className="flex items-center gap-1.5">` |
+| `components/soc/ActiveCampaignList.tsx` | 85 | `<div className="flex items-center gap-3 mb-1">` |
 

@@ -484,7 +484,7 @@ const AdminSettingsPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row gap-8">
+      <Stack direction="column" gap="xl" className="lg:!flex-row">
         {/* Sidebar Navigation */}
         <aside className="w-full lg:w-64 flex-shrink-0">
           <Tabs
@@ -2241,7 +2241,7 @@ const AdminSettingsPage: React.FC = () => {
             </ErrorBoundary>
           )}
         </main>
-      </div>
+      </Stack>
 
       {confirmDialog && (
         <ConfirmDialog

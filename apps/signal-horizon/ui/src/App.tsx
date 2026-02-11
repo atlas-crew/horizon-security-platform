@@ -61,6 +61,7 @@ import { fleetRoutes } from './routes/fleet.routes';
 import { beamRoutes } from './routes/beam.routes';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useHorizonStore } from './stores/horizonStore';
+import { Stack } from '@/ui';
 
 const primaryNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Threat Overview' },
@@ -548,13 +549,13 @@ function App() {
           {/* Connection Status & Collapse Toggle */}
           <div className={clsx('border-t border-border-subtle', sidebarCollapsed ? 'p-2' : 'p-4')}>
             {sidebarCollapsed ? (
-              <div className="flex flex-col items-center gap-2">
+              <Stack direction="column" align="center" gap="sm">
                 {isConnected ? (
                   <Wifi className="w-4 h-4 text-ac-green" />
                 ) : (
                   <WifiOff className="w-4 h-4 text-ac-gray-mid" />
                 )}
-              </div>
+              </Stack>
             ) : (
               <>
                 <div className="flex items-center gap-2 text-sm">

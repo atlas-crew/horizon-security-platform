@@ -478,7 +478,11 @@ export function ConnectivityPage(): React.ReactElement {
           style={{ marginBottom: '16px' }}
           titleStyle={SECTION_HEADER_TITLE_STYLE}
         />
-        <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+        <Stack
+          direction="column"
+          className="mb-4 md:!flex-row md:!items-end"
+          style={{ gap: '12px' }}
+        >
           <div className="space-y-1">
             <label
               htmlFor="connectivity-target-host"
@@ -498,7 +502,7 @@ export function ConnectivityPage(): React.ReactElement {
             Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt,
             6379 redis, 2525 smtp, 1344 icap, 5140 syslog
           </div>
-        </div>
+        </Stack>
         {/* Live region for screen reader announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {runningTest && `Running ${runningTest} test...`}

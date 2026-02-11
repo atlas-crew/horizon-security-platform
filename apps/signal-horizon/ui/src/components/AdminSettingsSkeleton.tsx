@@ -1,4 +1,5 @@
 import { Skeleton } from './LoadingStates';
+import { Stack } from '@/ui';
 
 export function AdminSettingsSkeleton() {
   return (
@@ -9,7 +10,7 @@ export function AdminSettingsSkeleton() {
         <Skeleton className="h-4 w-80" />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
+      <Stack direction="column" gap="xl" className="lg:!flex-row">
         {/* Sidebar */}
         <aside className="w-full lg:w-64 flex-shrink-0">
           <nav className="flex flex-col space-y-1">
@@ -42,7 +43,7 @@ export function AdminSettingsSkeleton() {
             <Skeleton className="h-12 w-48 mt-4" />
           </div>
         </main>
-      </div>
+      </Stack>
     </div>
   );
 }

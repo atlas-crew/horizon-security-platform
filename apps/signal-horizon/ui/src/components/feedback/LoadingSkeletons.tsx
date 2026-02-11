@@ -2,6 +2,7 @@
  * Skeleton loading components for Signal Horizon UI
  * Uses Tailwind animate-pulse for shimmer effect
  */
+import { Stack } from '@/ui';
 
 interface SkeletonProps {
   className?: string;
@@ -17,10 +18,10 @@ export function StatCardSkeleton({ className = '' }: SkeletonProps) {
     >
       <div className="mb-3 h-4 w-24 animate-pulse bg-gray-700" />
       <div className="mb-2 h-8 w-20 animate-pulse bg-gray-700" />
-      <div className="flex items-center gap-2">
+      <Stack direction="row" align="center" gap="sm">
         <div className="h-4 w-4 animate-pulse bg-gray-700" />
         <div className="h-3 w-16 animate-pulse bg-gray-700" />
-      </div>
+      </Stack>
     </div>
   );
 }

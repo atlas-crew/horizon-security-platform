@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 18:18_
+_Generated: 2026-02-11 18:23_
 
 ## Summary
 
-**Total findings: 435**
+**Total findings: 431**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 435 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 431 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -79,10 +79,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
 | `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
 | `components/warroom/PlaybookSelector.tsx` | 109 | `<div className="flex items-center gap-2">` |
-| `components/feedback/DemoModeBanner.tsx` | 92 | `<div className="flex items-center gap-3">` |
-| `components/feedback/DemoModeBanner.tsx` | 97 | `<div className="flex items-center gap-2">` |
-| `components/feedback/LoadingSkeletons.tsx` | 20 | `<div className="flex items-center gap-2">` |
-| `components/feedback/EmptyState.tsx` | 51 | `className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-med` |
 | `components/hunting/SigmaLeadsPanel.tsx` | 107 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/SigmaLeadsPanel.tsx` | 144 | `<div className="ml-auto flex items-center gap-2">` |
 | `components/hunting/SigmaRulesPanel.tsx` | 124 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
@@ -97,4 +93,8 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
+| `components/hunting/SigmaImportModal.tsx` | 65 | `<div className="flex items-center gap-3">` |
+| `components/hunting/HuntResultsTable.tsx` | 143 | `<div className="flex items-center gap-4">` |
+| `components/hunting/HuntResultsTable.tsx` | 151 | `<div className="flex items-center gap-3 text-sm text-ink-muted">` |
+| `components/hunting/HuntResultsTable.tsx` | 154 | `<span className="flex items-center gap-1">` |
 

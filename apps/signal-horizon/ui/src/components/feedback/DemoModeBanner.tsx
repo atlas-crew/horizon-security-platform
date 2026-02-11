@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { clsx } from 'clsx';
 import type { DemoScenario } from '../../stores/demoModeStore';
 import { SCENARIO_PROFILES } from '../../lib/demoData/scenarios';
+import { Stack } from '@/ui';
 
 interface DemoModeBannerProps {
   /** Current demo scenario */
@@ -80,34 +81,40 @@ export function DemoModeBanner({
   );
 
   return (
-    <div
+    <Stack
       role="status"
       aria-live="polite"
+      direction="row"
+      align="center"
+      justify="space-between"
+      style={{ gap: '12px' }}
       className={clsx(
-        'flex items-center justify-between gap-3 border px-4 py-3 mb-4',
+        'border px-4 py-3 mb-4',
         styles.border,
         styles.bg
       )}
     >
-      <div className="flex items-center gap-3">
+      <Stack direction="row" align="center" style={{ gap: '12px' }}>
         <Icon className={clsx('h-5 w-5 flex-shrink-0', styles.icon)} aria-hidden="true" />
         <span className={clsx('text-sm font-medium', styles.text)}>{displayMessage}</span>
-      </div>
+      </Stack>
 
-      <div className="flex items-center gap-2">
+      <Stack direction="row" align="center" gap="sm">
         {onSwitchScenario && variant === 'demo' && (
           <button
             type="button"
             onClick={onSwitchScenario}
             className={clsx(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+              'px-3 py-1.5 text-xs font-medium transition-colors',
               'bg-surface-card border border-border-subtle text-ink-secondary',
               'hover:bg-surface-subtle hover:text-ink-primary',
               'focus:outline-none focus:ring-2 focus:ring-link'
             )}
           >
-            <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-            Switch Scenario
+            <Stack direction="row" align="center" style={{ gap: '6px' }}>
+              <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Switch Scenario</span>
+            </Stack>
           </button>
         )}
 
@@ -116,14 +123,16 @@ export function DemoModeBanner({
             type="button"
             onClick={onRetry}
             className={clsx(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+              'px-3 py-1.5 text-xs font-medium transition-colors',
               'bg-surface-card border border-border-subtle text-ink-secondary',
               'hover:bg-surface-subtle hover:text-ink-primary',
               'focus:outline-none focus:ring-2 focus:ring-link'
             )}
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Retry Connection
+            <Stack direction="row" align="center" style={{ gap: '6px' }}>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Retry Connection</span>
+            </Stack>
           </button>
         )}
 
@@ -137,8 +146,8 @@ export function DemoModeBanner({
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 

@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Inbox } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Stack } from '@/ui';
 
 interface EmptyStateProps {
   /** Icon component from lucide-react */
@@ -48,10 +49,12 @@ export function EmptyStateButton({ children, onClick, icon: Icon }: EmptyStateBu
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
-      {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
-      {children}
+      <Stack direction="row" align="center" gap="sm">
+        {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
+        <span>{children}</span>
+      </Stack>
     </button>
   );
 }

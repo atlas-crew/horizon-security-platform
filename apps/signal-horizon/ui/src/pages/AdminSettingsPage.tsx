@@ -455,7 +455,7 @@ const AdminSettingsPage: React.FC = () => {
     <div className="p-8 max-w-7xl mx-auto space-y-8 font-sans">
       <header className="flex justify-between items-end border-b border-border-subtle pb-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary mb-2 uppercase tracking-tight">
+          <h1 className="text-xl font-light text-ink-primary mb-2 uppercase tracking-tight">
             Admin Settings
           </h1>
           <p className="text-ink-secondary">

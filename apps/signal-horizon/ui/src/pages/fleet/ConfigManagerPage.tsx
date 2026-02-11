@@ -565,7 +565,7 @@ export function ConfigManagerPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Configuration Manager</h1>
+          <h1 className="text-xl font-light text-ink-primary">Configuration Manager</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Manage and deploy configuration templates across your fleet
           </p>

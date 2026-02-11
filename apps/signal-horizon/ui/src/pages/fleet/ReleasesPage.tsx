@@ -702,7 +702,7 @@ export function ReleasesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Release Management</h1>
+          <h1 className="text-xl font-light text-ink-primary">Release Management</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Manage and deploy sensor releases across your fleet
           </p>

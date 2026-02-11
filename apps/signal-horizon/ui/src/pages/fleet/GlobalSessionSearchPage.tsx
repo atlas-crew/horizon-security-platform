@@ -271,7 +271,7 @@ export function GlobalSessionSearchPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Global Session Search</h1>
+          <h1 className="text-xl font-light text-ink-primary">Global Session Search</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Search and manage sessions across all sensors in your fleet
           </p>

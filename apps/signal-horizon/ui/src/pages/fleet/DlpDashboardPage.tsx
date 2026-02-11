@@ -67,7 +67,7 @@ export function DlpDashboardPage() {
     <div className="p-6 space-y-6 min-h-screen bg-surface-base">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Data Loss Prevention</h1>
+          <h1 className="text-xl font-light text-ink-primary">Data Loss Prevention</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Monitor sensitive data leaks and fleet-wide DLP violations
           </p>

@@ -131,7 +131,7 @@ export default function CapacityForecastPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Capacity Forecasting</h1>
+          <h1 className="text-xl font-light text-ink-primary">Capacity Forecasting</h1>
           <p className="text-ink-secondary mt-1">
             Predictive resource planning based on historical trends
           </p>

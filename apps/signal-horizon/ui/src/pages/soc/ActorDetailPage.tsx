@@ -8,10 +8,10 @@ import {
   Button,
   EmptyState,
   SectionHeader,
+  Stack,
   StatusBadge,
   alpha,
   colors,
-  spacing,
 } from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { useDemoMode } from '../../stores/demoModeStore';
@@ -155,7 +155,7 @@ export default function ActorDetailPage() {
           description={`First seen ${new Date(actor.firstSeen).toLocaleString()}`}
           size="h3"
           actions={
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Stack direction="row" align="center" gap="sm">
               <Button
                 variant="outlined"
                 size="sm"
@@ -177,7 +177,7 @@ export default function ActorDetailPage() {
               >
                 {actor.isBlocked ? 'Blocked' : 'Active'}
               </StatusBadge>
-            </div>
+            </Stack>
           }
         />
         <div className="flex items-center gap-3">

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Shield, Activity, Fingerprint } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, Button, EmptyState, SectionHeader, alpha, colors, spacing } from '@/ui';
+import { Breadcrumb, Button, EmptyState, SectionHeader, Stack, alpha, colors } from '@/ui';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
@@ -105,14 +105,14 @@ export default function SessionDetailPage() {
           description={`Created ${new Date(session.creationTime).toLocaleString()}`}
           size="h3"
           actions={
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Stack direction="row" align="center" gap="sm">
               <Button variant="outlined" size="sm">
                 Revoke Session
               </Button>
               <span className="px-2 py-1 text-xs border" style={sessionStateStyle}>
                 {session.isSuspicious ? 'Suspicious' : 'Active'}
               </span>
-            </div>
+            </Stack>
           }
         />
         {session.actorId && (

@@ -8,7 +8,7 @@ import { fetchSessions } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocSession, SocSessionListResponse } from '../../types/soc';
-import { Button, Input, SectionHeader, alpha, colors, spacing } from '@/ui';
+import { Box, Button, Input, SectionHeader, Stack, Text, alpha, colors } from '@/ui';
 
 function buildDemoSessions(scenario: string): SocSessionListResponse {
   const now = Date.now();
@@ -128,20 +128,20 @@ export default function SessionsPage() {
         title="Sessions"
         description="Inspect session behavior, hijack alerts, and enforcement actions."
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={sensorId}
                 onChange={(event) => setSensorId(event.target.value)}
                 placeholder="synapse-pingora-1"
                 size="sm"
               />
-            </div>
+            </Box>
             <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
               Export CSV
             </Button>
-          </div>
+          </Stack>
         }
       />
 
@@ -178,14 +178,14 @@ export default function SessionsPage() {
         <div className="card-header flex flex-wrap items-center gap-3">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={actorFilter}
                 onChange={(event) => setActorFilter(event.target.value)}
                 placeholder="Actor ID"
                 size="sm"
               />
-            </div>
+            </Box>
             <label className="flex items-center gap-2 text-sm text-ink-secondary">
               <input
                 type="checkbox"
@@ -200,7 +200,11 @@ export default function SessionsPage() {
         </div>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading sessions...</div>}
-          {error && <div style={{ color: colors.red }}>Failed to load sessions.</div>}
+          {error && (
+            <Text as="div" color={colors.red} noMargin>
+              Failed to load sessions.
+            </Text>
+          )}
           {!isLoading && sessions.length === 0 && (
             <div className="text-ink-muted">No sessions match the current filters.</div>
           )}

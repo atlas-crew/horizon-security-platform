@@ -8,7 +8,7 @@ import { fetchActors } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocActor, SocActorListResponse } from '../../types/soc';
-import { Button, Input, SectionHeader, alpha, colors, spacing } from '@/ui';
+import { Box, Button, Input, SectionHeader, Stack, Text, alpha, colors } from '@/ui';
 
 function buildDemoActors(scenario: string): SocActorListResponse {
   const baseRisk = scenario === 'high-threat' ? 82 : scenario === 'normal' ? 55 : 28;
@@ -102,20 +102,20 @@ export default function ActorsPage() {
         title="Actors"
         description="Track correlated actors and behavioral risk across the fleet."
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={sensorId}
                 onChange={(event) => setSensorId(event.target.value)}
                 placeholder="synapse-pingora-1"
                 size="sm"
               />
-            </div>
+            </Box>
             <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
               Export CSV
             </Button>
-          </div>
+          </Stack>
         }
       />
 
@@ -144,23 +144,23 @@ export default function ActorsPage() {
         <div className="card-header flex flex-wrap items-center gap-3">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div style={{ width: 160 }}>
+            <Box style={{ width: 160 }}>
               <Input
                 value={ipFilter}
                 onChange={(event) => setIpFilter(event.target.value)}
                 placeholder="IP address"
                 size="sm"
               />
-            </div>
-            <div style={{ width: 180 }}>
+            </Box>
+            <Box style={{ width: 180 }}>
               <Input
                 value={fingerprintFilter}
                 onChange={(event) => setFingerprintFilter(event.target.value)}
                 placeholder="Fingerprint"
                 size="sm"
               />
-            </div>
-            <div style={{ width: 96 }}>
+            </Box>
+            <Box style={{ width: 96 }}>
               <Input
                 value={minRisk}
                 onChange={(event) => setMinRisk(event.target.value)}
@@ -169,12 +169,16 @@ export default function ActorsPage() {
                 max={100}
                 size="sm"
               />
-            </div>
+            </Box>
           </div>
         </div>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading actors...</div>}
-          {error && <div style={{ color: colors.red }}>Failed to load actors.</div>}
+          {error && (
+            <Text as="div" color={colors.red} noMargin>
+              Failed to load actors.
+            </Text>
+          )}
           {!isLoading && actors.length === 0 && (
             <div className="text-ink-muted">No actors match the current filters.</div>
           )}

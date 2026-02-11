@@ -8,7 +8,7 @@ import { fetchCampaigns } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocCampaign, SocCampaignListResponse } from '../../types/soc';
-import { Button, Input, SectionHeader, Tabs, alpha, colors, spacing } from '@/ui';
+import { Box, Button, Input, SectionHeader, Stack, Tabs, Text, alpha, colors } from '@/ui';
 
 const statusTabs = [
   { label: 'Active', value: 'ACTIVE' },
@@ -126,20 +126,20 @@ export default function CampaignsPage() {
         title="Campaigns"
         description="Coordinate response to active multi-actor campaigns across the fleet."
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={sensorId}
                 onChange={(event) => setSensorId(event.target.value)}
                 placeholder="synapse-pingora-1"
                 size="sm"
               />
-            </div>
+            </Box>
             <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
               Export CSV
             </Button>
-          </div>
+          </Stack>
         }
       />
 
@@ -175,7 +175,7 @@ export default function CampaignsPage() {
             size="sm"
           />
           <div className="ml-auto">
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
@@ -183,12 +183,16 @@ export default function CampaignsPage() {
                 aria-label="Search campaigns"
                 size="sm"
               />
-            </div>
+            </Box>
           </div>
         </div>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading campaigns...</div>}
-          {error && <div style={{ color: colors.red }}>Failed to load campaigns.</div>}
+          {error && (
+            <Text as="div" color={colors.red} noMargin>
+              Failed to load campaigns.
+            </Text>
+          )}
           {!isLoading && filteredCampaigns.length === 0 && (
             <div className="text-ink-muted">No campaigns match the current filters.</div>
           )}

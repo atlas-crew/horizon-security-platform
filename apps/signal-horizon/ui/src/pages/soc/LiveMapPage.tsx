@@ -1,7 +1,7 @@
 import { LiveAttackMap } from '../../components/soc/LiveAttackMap';
 import { Shield, Globe } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { SectionHeader, StatusBadge, colors, spacing } from '@/ui';
+import { SectionHeader, Stack, StatusBadge, colors } from '@/ui';
 
 export default function LiveMapPage() {
   useDocumentTitle('SOC - Live Map');
@@ -12,9 +12,9 @@ export default function LiveMapPage() {
         description="Real-time visualization of fleet-wide attack vectors"
         size="h3"
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <StatusBadge status="info" variant="subtle" size="sm">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: spacing.xs }}>
+              <span className="inline-flex items-center gap-1">
                 <Globe aria-hidden="true" className="w-4 h-4" />
                 Global Fleet Connected
                 <span
@@ -23,7 +23,7 @@ export default function LiveMapPage() {
                 />
               </span>
             </StatusBadge>
-          </div>
+          </Stack>
         }
       />
       <div className="grid grid-cols-1 gap-6">

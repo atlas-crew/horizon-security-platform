@@ -7,7 +7,7 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchActorDetail, fetchActors, fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import type { SocActor, SocSession } from '../../types/soc';
-import { Alert, Button, Input, SectionHeader, Select, StatusBadge, spacing } from '@/ui';
+import { Alert, Box, Button, Input, SectionHeader, Select, Stack, StatusBadge } from '@/ui';
 
 type SearchType = 'auto' | 'ip' | 'fingerprint' | 'actor' | 'session';
 
@@ -123,17 +123,17 @@ export default function SocSearchPage() {
         title="Global Search"
         description="Search actors, sessions, IPs, and fingerprints across the fleet."
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <div style={{ width: 180 }}>
+            <Box style={{ width: 180 }}>
               <Input
                 value={sensorId}
                 onChange={(event) => setSensorId(event.target.value)}
                 placeholder="synapse-pingora-1"
                 size="sm"
               />
-            </div>
-          </div>
+            </Box>
+          </Stack>
         }
       />
 

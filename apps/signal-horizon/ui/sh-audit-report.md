@@ -1,20 +1,20 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:03_
+_Generated: 2026-02-11 13:13_
 
 ## Summary
 
-**Total findings: 593**
+**Total findings: 565**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 486 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
-| Box | 33 | Raw styled div → use <Box> primitive |
+| Stack (row+align+gap) | 487 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
-| Stack (inline) | 15 | Inline flex style → use <Stack> primitive |
-| Text | 7 | Raw styled text elements → use <Text> primitive |
+| Box | 13 | Raw styled div → use <Box> primitive |
+| Stack (inline) | 7 | Inline flex style → use <Stack> primitive |
+| Text | 6 | Raw styled text elements → use <Text> primitive |
 
 ### Files by Hit Count (Work Order)
 
@@ -29,17 +29,14 @@ Priority files to migrate first (most raw patterns):
 | 16 | `App.tsx` |
 | 13 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
-| 11 | `pages/soc/SessionsPage.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
 | 11 | `components/fleet/RemoteShell.tsx` |
-| 10 | `pages/soc/ActorsPage.tsx` |
 | 10 | `pages/OverviewPage.tsx` |
 | 10 | `components/fleet/WebTerminal.tsx` |
 | 10 | `components/fleet/ServiceControlPanel.tsx` |
 | 10 | `components/fleet/LogViewer.tsx` |
 | 10 | `components/LoadingStates.tsx` |
-| 9 | `pages/soc/CampaignsPage.tsx` |
 | 9 | `pages/fleet/SensorConfigPage.tsx` |
 | 9 | `pages/fleet/FleetOverviewPage.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
@@ -56,12 +53,15 @@ Priority files to migrate first (most raw patterns):
 | 7 | `components/hunting/HuntResultsTable.tsx` |
 | 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
-| 6 | `pages/soc/SessionDetailPage.tsx` |
-| 6 | `pages/soc/LiveMapPage.tsx` |
+| 6 | `pages/soc/SessionsPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 6 | `pages/WarRoomPage.tsx` |
 | 6 | `pages/SupportPage.tsx` |
 | 6 | `components/soc/CampaignGraph.tsx` |
+| 6 | `components/AuthCoverageMap/AuthCoverageMap.tsx` |
+| 5 | `pages/fleet/OnboardingPage.tsx` |
+| 5 | `pages/fleet/FleetHealthPage.tsx` |
+| 5 | `pages/fleet/ConfigManagerPage.tsx` |
 
 ---
 
@@ -73,26 +73,6 @@ Raw styled div → use <Box> primitive
 | File | Line | Match |
 |------|------|-------|
 | `components/fleet/LogViewer.tsx` | 120 | `<div style={style} className="group">` |
-| `pages/soc/SocSearchPage.tsx` | 126 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/SocSearchPage.tsx` | 128 | `<div style={{ width: 180 }}>` |
-| `pages/soc/SessionsPage.tsx` | 131 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/SessionsPage.tsx` | 133 | `<div style={{ width: 180 }}>` |
-| `pages/soc/SessionsPage.tsx` | 181 | `<div style={{ width: 180 }}>` |
-| `pages/soc/SessionsPage.tsx` | 203 | `{error && <div style={{ color: colors.red }}>Failed to load sessions.</div>}` |
-| `pages/soc/CampaignsPage.tsx` | 129 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/CampaignsPage.tsx` | 131 | `<div style={{ width: 180 }}>` |
-| `pages/soc/CampaignsPage.tsx` | 178 | `<div style={{ width: 180 }}>` |
-| `pages/soc/CampaignsPage.tsx` | 191 | `{error && <div style={{ color: colors.red }}>Failed to load campaigns.</div>}` |
-| `pages/soc/ActorDetailPage.tsx` | 158 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/ActorsPage.tsx` | 105 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/ActorsPage.tsx` | 107 | `<div style={{ width: 180 }}>` |
-| `pages/soc/ActorsPage.tsx` | 147 | `<div style={{ width: 160 }}>` |
-| `pages/soc/ActorsPage.tsx` | 155 | `<div style={{ width: 180 }}>` |
-| `pages/soc/ActorsPage.tsx` | 163 | `<div style={{ width: 96 }}>` |
-| `pages/soc/ActorsPage.tsx` | 177 | `{error && <div style={{ color: colors.red }}>Failed to load actors.</div>}` |
-| `pages/soc/LiveMapPage.tsx` | 15 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/SessionDetailPage.tsx` | 108 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/CampaignDetailPage.tsx` | 213 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
 | `pages/OverviewPage.tsx` | 295 | `<div style={{ display: 'flex', gap: '8px' }}>` |
 | `pages/ApiIntelligencePage.tsx` | 169 | `<div style={{ width: 320 }}>` |
 | `pages/hunting/RequestTimelinePage.tsx` | 161 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
@@ -102,6 +82,9 @@ Raw styled div → use <Box> primitive
 | `pages/fleet/FleetOverviewPage.tsx` | 322 | `<div style={{ width: 260 }}>` |
 | `pages/fleet/FleetOverviewPage.tsx` | 331 | `<div style={{ width: 160 }}>` |
 | `pages/fleet/FleetOverviewPage.tsx` | 445 | `<div style={{ width: `${onlinePct}%`, background: colors.status.success }} />` |
+| `pages/fleet/FleetOverviewPage.tsx` | 448 | `<div style={{ width: `${warningPct}%`, background: colors.status.warning }} />` |
+| `pages/fleet/FleetOverviewPage.tsx` | 451 | `<div style={{ width: `${offlinePct}%`, background: colors.status.error }} />` |
+| `pages/fleet/SensorDetailPage.tsx` | 109 | `<div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>` |
 
 ### Text
 Raw styled text elements → use <Text> primitive
@@ -110,7 +93,6 @@ Raw styled text elements → use <Text> primitive
 |------|------|-------|
 | `components/ui/PersistentTooltip.tsx` | 152 | `<p style={{ ...tooltipDefaults.labelStyle, margin: '0 0 4px' }}>` |
 | `components/beam/analytics/StatusCodesDonut.tsx` | 68 | `<span style={{ fontFamily, fontSize: 12 }} className="text-ink-secondary">` |
-| `pages/soc/LiveMapPage.tsx` | 17 | `<span style={{ display: 'inline-flex', alignItems: 'center', gap: spacing.xs }}>` |
 | `pages/OverviewPage.tsx` | 447 | `<span style={{ color: colors.orange }}>Elevated</span>` |
 | `pages/IntelPage.tsx` | 240 | `<span style={{ color: colors.red }}>{fp.hits.toLocaleString()} hits</span>` |
 | `pages/beam/BeamDashboardPage.tsx` | 597 | `<span style={{ color: colors.green, fontSize: '14px' }}>Protected</span>` |
@@ -122,14 +104,6 @@ Inline flex style → use <Stack> primitive
 | File | Line | Match |
 |------|------|-------|
 | `components/ui/PersistentTooltip.tsx` | 162 | `display: 'flex',` |
-| `pages/soc/SocSearchPage.tsx` | 126 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/SessionsPage.tsx` | 131 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/CampaignsPage.tsx` | 129 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/ActorDetailPage.tsx` | 158 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/ActorsPage.tsx` | 105 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/LiveMapPage.tsx` | 15 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/SessionDetailPage.tsx` | 108 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/soc/CampaignDetailPage.tsx` | 213 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
 | `pages/OverviewPage.tsx` | 295 | `<div style={{ display: 'flex', gap: '8px' }}>` |
 | `pages/hunting/RequestTimelinePage.tsx` | 161 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
 | `pages/hunting/CampaignTimelinePage.tsx` | 123 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |

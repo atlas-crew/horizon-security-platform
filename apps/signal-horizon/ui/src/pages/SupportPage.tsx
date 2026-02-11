@@ -18,11 +18,44 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
-import { Button, Input } from '@/ui';
+import { Button, Input, SectionHeader } from '@/ui';
+import type { CSSProperties } from 'react';
 
 const authHeaders = {
   Authorization: `Bearer ${API_KEY}`,
   'Content-Type': 'application/json',
+};
+
+const HEADER_NO_MARGIN_STYLE: CSSProperties = { marginBottom: 0 };
+const SUPPORT_HUB_TITLE_STYLE: CSSProperties = {
+  fontSize: '16px',
+  lineHeight: '22px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  color: '#FFFFFF',
+};
+const DIAGNOSTICS_TITLE_STYLE: CSSProperties = {
+  fontSize: '48px',
+  lineHeight: '56px',
+  fontWeight: 300,
+  letterSpacing: '-0.02em',
+  color: 'var(--text-primary)',
+};
+const CATEGORY_TITLE_STYLE: CSSProperties = {
+  fontSize: '11px',
+  lineHeight: '16px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.2em',
+  color: '#0057B7',
+};
+const CONTACT_TITLE_STYLE: CSSProperties = {
+  fontSize: '32px',
+  lineHeight: '40px',
+  fontWeight: 300,
+  letterSpacing: '-0.02em',
+  color: 'var(--text-primary)',
 };
 
 // Escape HTML entities for safe rendering
@@ -218,7 +251,12 @@ export function SupportPage() {
 
           <div className="flex items-center gap-10">
 
-            <h2 className="text-base font-bold text-white uppercase tracking-[0.1em]">Support Hub</h2>
+            <SectionHeader
+              title="Support Hub"
+              size="h4"
+              style={HEADER_NO_MARGIN_STYLE}
+              titleStyle={SUPPORT_HUB_TITLE_STYLE}
+            />
 
             
 
@@ -1057,7 +1095,12 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
     <div className="p-12 max-w-5xl mx-auto">
       <div className="flex justify-between items-end mb-12 border-b border-border-subtle pb-8">
         <div>
-          <h1 className="text-[48px] font-light text-ac-navy dark:text-white tracking-tight">System Diagnostics</h1>
+          <SectionHeader
+            title="System Diagnostics"
+            size="h1"
+            style={HEADER_NO_MARGIN_STYLE}
+            titleStyle={DIAGNOSTICS_TITLE_STYLE}
+          />
           <p className="text-lg text-ink-secondary mt-2">Fleet health verification and forensic bundle generation.</p>
         </div>
         <button
@@ -1071,7 +1114,12 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
 
       {/* System Health Overview */}
       <div className="mb-16">
-        <h2 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.2em] mb-6">System Health Overview</h2>
+        <SectionHeader
+          title="System Health Overview"
+          size="h4"
+          style={{ marginBottom: '24px' }}
+          titleStyle={CATEGORY_TITLE_STYLE}
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {systemChecks.map((check) => (
             <div key={check.id} className="bg-white dark:bg-surface-card border border-border-subtle p-6 flex flex-col justify-between group transition-all hover:border-ac-blue/30 hover:shadow-md">
@@ -1111,7 +1159,12 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
         </div>
       </div>
 
-      <h2 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.2em] mb-6">Forensic Data Bundles</h2>
+      <SectionHeader
+        title="Forensic Data Bundles"
+        size="h4"
+        style={{ marginBottom: '24px' }}
+        titleStyle={CATEGORY_TITLE_STYLE}
+      />
       <div className="bg-white dark:bg-surface-card shadow-card overflow-hidden border border-border-subtle">
         <table className="w-full text-sm text-left">
           <thead className="bg-ac-navy text-white uppercase tracking-widest text-[10px] font-bold">
@@ -1165,7 +1218,12 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
 function ContactSupport() {
   return (
     <div className="max-w-2xl w-full bg-white dark:bg-surface-card p-12 shadow-card-strong border border-border-subtle">
-      <h1 className="text-[32px] font-light text-ac-navy dark:text-white tracking-tight mb-2">Contact Support</h1>
+      <SectionHeader
+        title="Contact Support"
+        size="h1"
+        style={{ marginBottom: '8px' }}
+        titleStyle={CONTACT_TITLE_STYLE}
+      />
       <p className="text-ink-secondary mb-10">Direct access to the Atlas Crew security engineering team.</p>
 
       <form className="space-y-8">

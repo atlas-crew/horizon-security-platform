@@ -7,6 +7,7 @@ import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Button,
+  CARD_HEADER_TITLE_STYLE,
   SectionHeader,
   Tabs,
   alpha,
@@ -37,6 +38,7 @@ import {
   BarChart,
   Bar,
 } from 'recharts';
+import type { CSSProperties, ReactNode } from 'react';
 
 const timeRanges = ['1h', '6h', '24h', '7d', '30d'];
 
@@ -95,6 +97,30 @@ const mockIOCs = [
   { type: 'IP', value: '45.134.26.0/24', firstSeen: '12h ago', hits: 2567, status: 'BLOCKED' },
 ];
 
+const CARD_HEADER_STYLE: CSSProperties = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE: CSSProperties = { fontSize: '24px', lineHeight: '32px' };
+
+function CardHeader({
+  title,
+  icon,
+  actions,
+}: {
+  title: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <SectionHeader
+      title={title}
+      icon={icon}
+      actions={actions}
+      size="h4"
+      style={CARD_HEADER_STYLE}
+      titleStyle={CARD_HEADER_TITLE_STYLE}
+    />
+  );
+}
+
 export default function IntelPage() {
   useDocumentTitle('Intel');
   const timeRange = useTimeRange();
@@ -106,6 +132,8 @@ export default function IntelPage() {
       <SectionHeader
         title="Global Intelligence"
         description="Fleet-wide attack trends and IOC export"
+        size="h1"
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
         actions={
           <div className="flex items-center gap-3">
             <Tabs
@@ -128,12 +156,12 @@ export default function IntelPage() {
 
       {/* Attack Volume Trend */}
       <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-ink-muted" />
-            <h2 className="font-medium text-ink-primary">Attack Volume Trend</h2>
-          </div>
-          <span className="text-xs text-ink-muted">Last {timeRange}</span>
+        <div className="card-header">
+          <CardHeader
+            title="Attack Volume Trend"
+            icon={<BarChart3 className="w-4 h-4 text-ink-muted" />}
+            actions={<span className="text-xs text-ink-muted">Last {timeRange}</span>}
+          />
         </div>
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -172,7 +200,9 @@ export default function IntelPage() {
         {/* Trending Threats */}
         <div className="card">
           <div className="card-header">
-            <h2 className="font-medium text-ink-primary">Trending Threats</h2>
+            <CardHeader
+              title="Trending Threats"
+            />
           </div>
           <div className="card-body space-y-3">
             {trendingThreats.map((threat) => (
@@ -197,9 +227,11 @@ export default function IntelPage() {
 
         {/* New Fingerprints */}
         <div className="card">
-          <div className="card-header flex items-center gap-2">
-            <Fingerprint className="w-4 h-4 text-ink-muted" />
-            <h2 className="font-medium text-ink-primary">New Fingerprints (24h)</h2>
+          <div className="card-header">
+            <CardHeader
+              title="New Fingerprints (24h)"
+              icon={<Fingerprint className="w-4 h-4 text-ink-muted" />}
+            />
           </div>
           <div className="card-body space-y-3">
             {newFingerprints.map((fp) => (
@@ -218,9 +250,11 @@ export default function IntelPage() {
 
         {/* Quick Stats */}
         <div className="card">
-          <div className="card-header flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-ink-muted" />
-            <h2 className="font-medium text-ink-primary">Intel Summary</h2>
+          <div className="card-header">
+            <CardHeader
+              title="Intel Summary"
+              icon={<Calendar className="w-4 h-4 text-ink-muted" />}
+            />
           </div>
           <div className="card-body space-y-4">
             <SummaryRow label="Total Threats" value="156,234" delta="+12%" positive={false} />
@@ -234,9 +268,11 @@ export default function IntelPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Attack Origins */}
         <div className="card">
-          <div className="card-header flex items-center gap-2">
-            <MapPinned className="w-4 h-4 text-ink-muted" />
-            <h2 className="font-medium text-ink-primary">Top Attack Origins</h2>
+          <div className="card-header">
+            <CardHeader
+              title="Top Attack Origins"
+              icon={<MapPinned className="w-4 h-4 text-ink-muted" />}
+            />
           </div>
           <div className="card-body h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -264,9 +300,11 @@ export default function IntelPage() {
 
         {/* Most Targeted Endpoints */}
         <div className="card">
-          <div className="card-header flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-ink-muted" />
-            <h2 className="font-medium text-ink-primary">Most Targeted Endpoints</h2>
+          <div className="card-header">
+            <CardHeader
+              title="Most Targeted Endpoints"
+              icon={<TrendingUp className="w-4 h-4 text-ink-muted" />}
+            />
           </div>
           <div className="card-body h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -295,31 +333,35 @@ export default function IntelPage() {
 
       {/* IOC Table */}
       <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="font-medium text-ink-primary">Recent IOCs (Indicators of Compromise)</h2>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<FileJson className="w-4 h-4" aria-hidden="true" />}
-            >
-              JSON
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<FileText className="w-4 h-4" aria-hidden="true" />}
-            >
-              CSV
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Download className="w-4 h-4" aria-hidden="true" />}
-            >
-              Export
-            </Button>
-          </div>
+        <div className="card-header">
+          <CardHeader
+            title="Recent IOCs (Indicators of Compromise)"
+            actions={
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<FileJson className="w-4 h-4" aria-hidden="true" />}
+                >
+                  JSON
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<FileText className="w-4 h-4" aria-hidden="true" />}
+                >
+                  CSV
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={<Download className="w-4 h-4" aria-hidden="true" />}
+                >
+                  Export
+                </Button>
+              </div>
+            }
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="data-table">

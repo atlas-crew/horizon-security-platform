@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 12:05_
+_Generated: 2026-02-11 12:12_
 
 ## Summary
 
-**Total findings: 618**
+**Total findings: 615**
 
 ### Findings by Component
 
@@ -15,8 +15,8 @@ _Generated: 2026-02-11 12:05_
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
 | Tabs | 15 | Raw tab implementations → use <Tabs> |
 | Stack (inline) | 15 | Inline flex style → use <Stack> primitive |
-| Modal | 9 | Raw modal/overlay patterns → use <Modal> |
 | Text | 7 | Raw styled text elements → use <Text> primitive |
+| Modal | 6 | Raw modal/overlay patterns → use <Modal> |
 
 ### Files by Hit Count (Work Order)
 
@@ -38,7 +38,6 @@ Priority files to migrate first (most raw patterns):
 | 11 | `components/fleet/ServiceControlPanel.tsx` |
 | 11 | `components/fleet/RemoteShell.tsx` |
 | 10 | `pages/soc/ActorsPage.tsx` |
-| 10 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 10 | `pages/OverviewPage.tsx` |
 | 10 | `components/fleet/WebTerminal.tsx` |
 | 10 | `components/fleet/RolloutManager.tsx` |
@@ -47,6 +46,7 @@ Priority files to migrate first (most raw patterns):
 | 9 | `pages/soc/CampaignsPage.tsx` |
 | 9 | `pages/fleet/SensorConfigPage.tsx` |
 | 9 | `pages/fleet/FleetOverviewPage.tsx` |
+| 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `pages/beam/BeamDashboardPage.tsx` |
 | 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
@@ -55,7 +55,6 @@ Priority files to migrate first (most raw patterns):
 | 7 | `pages/hunting/RequestTimelinePage.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
-| 7 | `pages/fleet/ConfigManagerPage.tsx` |
 | 7 | `components/hunting/HuntResultsTable.tsx` |
 | 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
@@ -64,6 +63,7 @@ Priority files to migrate first (most raw patterns):
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 6 | `pages/WarRoomPage.tsx` |
 | 6 | `pages/SupportPage.tsx` |
+| 6 | `components/soc/CampaignGraph.tsx` |
 
 ---
 
@@ -168,7 +168,7 @@ Tailwind flex-col + gap → use <Stack direction=column>
 | `pages/fleet/ConnectivityPage.tsx` | 480 | `<div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">` |
 | `pages/fleet/SensorConfigPage.tsx` | 189 | `<div className="p-12 flex flex-col items-center justify-center gap-4">` |
 | `pages/fleet/SensorConfigPage.tsx` | 274 | `<div className="h-full p-6 flex flex-col gap-4">` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1253 | `<div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">` |
+| `pages/fleet/ConfigManagerPage.tsx` | 1239 | `<div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">` |
 
 ### Stack (row+align+gap)
 Tailwind flex + items-center + gap → use <Stack direction=row align=center>
@@ -236,7 +236,7 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | `pages/fleet/ConnectivityPage.tsx` | 525 | `<div className="flex items-start justify-between gap-3">` |
 | `pages/fleet/SensorConfigPage.tsx` | 283 | `<div className="border border-border-subtle bg-surface-card p-4 flex items-start` |
 | `pages/fleet/ConfigManagerPage.tsx` | 974 | `<div key={log.id} className="p-4 flex items-start justify-between gap-4">` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1189 | `<div className="flex items-center justify-between gap-4 mb-2">` |
+| `pages/fleet/ConfigManagerPage.tsx` | 1175 | `<div className="flex items-center justify-between gap-4 mb-2">` |
 | `pages/fleet/SensorDetailPage.tsx` | 163 | `<div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">` |
 
 ### Modal
@@ -250,9 +250,6 @@ Raw modal/overlay patterns → use <Modal>
 | `components/fleet/RolloutManager.tsx` | 616 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
 | `components/fleet/EmbeddedDashboard.tsx` | 142 | `state.fullscreen && 'fixed inset-0 z-50'` |
 | `components/fleet/FileBrowser.tsx` | 481 | `<div className="fixed inset-0 z-50 flex items-center justify-center p-4">` |
-| `pages/beam/threats/BlockedRequestsPage.tsx` | 284 | `className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1000 | `className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1116 | `className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"` |
 
 ### Tabs
 Raw tab implementations → use <Tabs>

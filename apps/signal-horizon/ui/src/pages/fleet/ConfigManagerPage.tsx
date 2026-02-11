@@ -18,7 +18,7 @@ import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
 import { deepMergeConfig } from '../../utils';
 import YAML from 'yaml';
-import { SectionHeader } from '@/ui';
+import { Modal, SectionHeader } from '@/ui';
 
 interface ConfigTemplate {
   id: string;
@@ -996,21 +996,14 @@ export function ConfigManagerPage() {
 
       {/* Push Modal */}
       {showPushModal && (
-        <div
-          className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="push-config-title"
+        <Modal
+          open
+          onClose={() => setShowPushModal(false)}
+          size="1200px"
+          title="Push Template To Sensors"
+          style={{ height: '80vh', maxHeight: '80vh' }}
         >
-          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col">
-            <SectionHeader
-              title="Push Template To Sensors"
-              titleId="push-config-title"
-              size="h1"
-              style={{ marginBottom: '16px' }}
-              titleStyle={PAGE_HEADER_TITLE_STYLE}
-            />
-
+          <div className="h-full flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
                 Target Sensors
@@ -1107,30 +1100,23 @@ export function ConfigManagerPage() {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Template Modal */}
       {showTemplateModal && (
-        <div
-          className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="template-modal-title"
+        <Modal
+          open
+          onClose={() => setShowTemplateModal(false)}
+          size="1200px"
+          title={
+            templateModalMode === 'create'
+              ? 'Create Configuration Template'
+              : 'Edit Configuration Template'
+          }
+          style={{ height: '80vh', maxHeight: '80vh' }}
         >
-          <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col relative">
-            <SectionHeader
-              title={
-                templateModalMode === 'create'
-                  ? 'Create Configuration Template'
-                  : 'Edit Configuration Template'
-              }
-              titleId="template-modal-title"
-              size="h1"
-              style={{ marginBottom: '16px' }}
-              titleStyle={PAGE_HEADER_TITLE_STYLE}
-            />
-
+          <div className="h-full flex flex-col relative">
             {templateDetailError && templateModalMode === 'edit' && (
               <div className="mb-4 border border-ac-red/30 bg-ac-red/10 px-4 py-2 text-sm text-ac-red">
                 {templateDetailError}
@@ -1335,7 +1321,7 @@ export function ConfigManagerPage() {
               </div>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

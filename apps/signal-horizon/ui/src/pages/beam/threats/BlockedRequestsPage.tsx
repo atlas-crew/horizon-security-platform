@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   ShieldX,
@@ -14,14 +14,13 @@ import {
   MapPin,
   Target,
   AlertTriangle,
-  X,
   ChevronRight,
   Eye,
   RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { Button, CARD_HEADER_TITLE_STYLE, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader } from '@/ui';
 
 type BlockReason =
   | 'sql_injection'
@@ -276,46 +275,11 @@ function DecisionTraceModal({
   ];
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-surface-card border border-border-subtle w-full max-w-2xl max-h-[80vh] overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-            <SectionHeader
-              title="Decision Trace"
-              description="Why was this request blocked?"
-              size="h4"
-              style={{ marginBottom: 0 }}
-              titleStyle={CARD_HEADER_TITLE_STYLE}
-              actions={
-                <Button
-                  onClick={onClose}
-                  variant="ghost"
-                  size="sm"
-                  icon={<X className="w-5 h-5 text-ink-secondary" />}
-                  style={{ height: '32px', padding: 0 }}
-                  aria-label="Close decision trace"
-                />
-              }
-            />
-          </div>
-
-          {/* Content */}
-          <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-            {/* Request Summary */}
-            <div className="bg-surface-subtle p-4 mb-6">
+    <Modal open onClose={onClose} size="960px" title="Decision Trace">
+      <p className="text-sm text-ink-secondary mb-4">Why was this request blocked?</p>
+      <div className="overflow-y-auto max-h-[calc(80vh-180px)] pr-1">
+        {/* Request Summary */}
+        <div className="bg-surface-subtle p-4 mb-6">
               <h3 className="text-sm font-medium text-ink-secondary mb-3">Request Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -352,103 +316,94 @@ function DecisionTraceModal({
               </div>
             </div>
 
-            {/* Final Decision */}
-            <div className="bg-red-500/10 border border-red-500/30 p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <ShieldX className="w-6 h-6 text-red-400 mt-0.5" />
-                <div>
-                  <h3 className="text-ink-primary font-medium">Request Blocked</h3>
-                  <p className="text-sm text-ink-secondary mt-1">
-                    Reason:{' '}
-                    <span className={clsx('font-medium', reasonConfig.color)}>
-                      {reasonConfig.label}
-                    </span>
-                  </p>
-                  <p className="text-sm text-ink-secondary">
-                    Risk Score:{' '}
-                    <span className={clsx('font-medium', riskConfig.color)}>
-                      {request.riskScore}/100
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Decision Trace Steps */}
+        {/* Final Decision */}
+        <div className="bg-red-500/10 border border-red-500/30 p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <ShieldX className="w-6 h-6 text-red-400 mt-0.5" />
             <div>
-              <h3 className="text-sm font-medium text-ink-secondary mb-3">Rule Evaluation Chain</h3>
-              <div className="space-y-3">
-                {decisionTrace.map((step, idx) => (
-                  <div
-                    key={step.step}
-                    className={clsx(
-                      'p-4 border',
-                      step.result === 'fail'
-                        ? 'bg-red-500/10 border-red-500/30'
-                        : 'bg-surface-subtle border-border-subtle',
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={clsx(
-                            'w-6 h-6 flex items-center justify-center text-xs font-medium',
-                            step.result === 'fail'
-                              ? 'bg-red-500 text-white'
-                              : 'bg-surface-subtle text-ink-secondary',
-                          )}
-                        >
-                          {step.step}
-                        </span>
-                        <div>
-                          <p className="text-ink-primary font-medium">{step.rule}</p>
-                          <p className="text-sm text-ink-secondary">{step.detail}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span
-                          className={clsx(
-                            'px-2 py-0.5 text-xs font-medium',
-                            step.result === 'fail'
-                              ? 'bg-red-500/20 text-red-400'
-                              : 'bg-green-500/20 text-green-400',
-                          )}
-                        >
-                          {step.result === 'fail' ? 'BLOCKED' : 'PASS'}
-                        </span>
-                        {step.score > 0 && (
-                          <p className="text-xs text-ink-muted mt-1">+{step.score} risk</p>
-                        )}
-                      </div>
-                    </div>
-                    {idx < decisionTrace.length - 1 && step.result !== 'fail' && (
-                      <div className="flex justify-center mt-2">
-                        <ChevronRight className="w-4 h-4 text-ink-muted rotate-90" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Matched Patterns */}
-            <div className="mt-6">
-              <h3 className="text-sm font-medium text-ink-secondary mb-3">Matched Patterns</h3>
-              <div className="flex flex-wrap gap-2">
-                {request.matchedPatterns.map((pattern, idx) => (
-                  <code
-                    key={idx}
-                    className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 text-sm"
-                  >
-                    {pattern}
-                  </code>
-                ))}
-              </div>
+              <h3 className="text-ink-primary font-medium">Request Blocked</h3>
+              <p className="text-sm text-ink-secondary mt-1">
+                Reason: <span className={clsx('font-medium', reasonConfig.color)}>{reasonConfig.label}</span>
+              </p>
+              <p className="text-sm text-ink-secondary">
+                Risk Score:{' '}
+                <span className={clsx('font-medium', riskConfig.color)}>{request.riskScore}/100</span>
+              </p>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        </div>
+
+        {/* Decision Trace Steps */}
+        <div>
+          <h3 className="text-sm font-medium text-ink-secondary mb-3">Rule Evaluation Chain</h3>
+          <div className="space-y-3">
+            {decisionTrace.map((step, idx) => (
+              <div
+                key={step.step}
+                className={clsx(
+                  'p-4 border',
+                  step.result === 'fail'
+                    ? 'bg-red-500/10 border-red-500/30'
+                    : 'bg-surface-subtle border-border-subtle',
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={clsx(
+                        'w-6 h-6 flex items-center justify-center text-xs font-medium',
+                        step.result === 'fail'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-surface-subtle text-ink-secondary',
+                      )}
+                    >
+                      {step.step}
+                    </span>
+                    <div>
+                      <p className="text-ink-primary font-medium">{step.rule}</p>
+                      <p className="text-sm text-ink-secondary">{step.detail}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 text-xs font-medium',
+                        step.result === 'fail'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-green-500/20 text-green-400',
+                      )}
+                    >
+                      {step.result === 'fail' ? 'BLOCKED' : 'PASS'}
+                    </span>
+                    {step.score > 0 && <p className="text-xs text-ink-muted mt-1">+{step.score} risk</p>}
+                  </div>
+                </div>
+                {idx < decisionTrace.length - 1 && step.result !== 'fail' && (
+                  <div className="flex justify-center mt-2">
+                    <ChevronRight className="w-4 h-4 text-ink-muted rotate-90" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Matched Patterns */}
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-ink-secondary mb-3">Matched Patterns</h3>
+          <div className="flex flex-wrap gap-2">
+            {request.matchedPatterns.map((pattern, idx) => (
+              <code
+                key={idx}
+                className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 text-sm"
+              >
+                {pattern}
+              </code>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

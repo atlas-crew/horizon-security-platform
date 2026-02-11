@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 14:20_
+_Generated: 2026-02-11 18:14_
 
 ## Summary
 
-**Total findings: 456**
+**Total findings: 449**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 456 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 449 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -90,11 +90,11 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/ui/CommandPalette.tsx` | 676 | `<div className="flex items-center gap-1.5">` |
 | `components/ui/CommandPalette.tsx` | 682 | `<div className="flex items-center gap-1.5">` |
 | `components/ui/CommandPalette.tsx` | 689 | `<div className="flex items-center gap-1.5">` |
-| `components/ui/ShortcutHelpModal.tsx` | 37 | `<div className="flex items-center gap-1">` |
-| `components/soc/ActiveCampaignList.tsx` | 85 | `<div className="flex items-center gap-3 mb-1">` |
-| `components/soc/ActiveCampaignList.tsx` | 101 | `<div className="flex items-center gap-4 text-[10px] text-ink-muted group-hover:t` |
-| `components/soc/ActiveCampaignList.tsx` | 104 | `<span className="flex items-center gap-1">` |
-| `components/soc/ActiveCampaignList.tsx` | 111 | `<div className="flex items-center gap-4">` |
-| `components/soc/LiveAttackMap.tsx` | 256 | `<div className="flex items-center gap-3">` |
-| `components/soc/ThreatTrajectoryFeed.tsx` | 113 | `<div className="mt-2 flex items-center gap-3">` |
+| `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
+| `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
+| `components/warroom/PlaybookSelector.tsx` | 109 | `<div className="flex items-center gap-2">` |
+| `components/feedback/DemoModeBanner.tsx` | 92 | `<div className="flex items-center gap-3">` |
+| `components/feedback/DemoModeBanner.tsx` | 97 | `<div className="flex items-center gap-2">` |
+| `components/feedback/LoadingSkeletons.tsx` | 20 | `<div className="flex items-center gap-2">` |
+| `components/feedback/EmptyState.tsx` | 51 | `className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-med` |
 

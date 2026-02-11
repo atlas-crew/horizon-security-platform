@@ -6,7 +6,7 @@ import type { PickingInfo } from '@deck.gl/core';
 import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import { useLiveAttacks, type Attack, type SensorLocation } from '../../hooks/useLiveAttacks';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 // Hide shader debug text that luma.gl injects into the DOM
 function hideShaderDebugText() {
@@ -253,7 +253,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
       {/* Overlay Stats */}
       <div className="absolute top-4 left-4 p-4 bg-surface-base/80 backdrop-blur-sm border border-border-subtle pointer-events-none">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">Live Activity</h3>
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" style={{ gap: '12px' }}>
           <div className="flex flex-col">
             <span className="text-2xl font-light text-ink-primary">{attacks.length}</span>
             <span className="text-xs text-ink-secondary">Active Threats</span>
@@ -263,7 +263,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
             <span className="text-2xl font-light text-ink-primary">{sensors.length}</span>
             <span className="text-xs text-ink-secondary">Sensors Online</span>
           </div>
-        </div>
+        </Stack>
       </div>
 
       {tooltip && (

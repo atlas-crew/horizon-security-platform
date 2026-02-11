@@ -1,5 +1,5 @@
 import { Keyboard } from 'lucide-react';
-import { Modal, SectionHeader } from '@/ui';
+import { Modal, SectionHeader, Stack } from '@/ui';
 
 interface ShortcutHelpModalProps {
   isOpen: boolean;
@@ -34,7 +34,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
         {shortcuts.map((shortcut, i) => (
           <div key={i} className="flex items-center justify-between">
             <span className="text-sm text-ink-secondary">{shortcut.label}</span>
-            <div className="flex items-center gap-1">
+            <Stack direction="row" align="center" gap="xs">
               {shortcuts[i].keys.map((key, j) => (
                 <kbd
                   key={j}
@@ -44,7 +44,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
                   {key !== 'Ctrl' && key}
                 </kbd>
               ))}
-            </div>
+            </Stack>
           </div>
         ))}
       </div>

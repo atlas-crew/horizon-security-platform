@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
-import { Button, SectionHeader } from '@/ui';
+import { Button, SectionHeader, Stack } from '@/ui';
 
 interface ThreatTrajectoryFeedProps {
   threats: Threat[];
@@ -110,14 +110,14 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
               </div>
 
               {item.type === 'threat' && (
-                <div className="mt-2 flex items-center gap-3">
+                <Stack direction="row" align="center" style={{ gap: '12px' }} className="mt-2">
                   <div className="text-[9px] text-ink-secondary font-bold uppercase">
                     Risk: <span className="text-ink-primary font-bold">{item.data.riskScore}%</span>
                   </div>
                   <div className="text-[9px] text-ink-secondary font-bold uppercase">
                     Hits: <span className="text-ink-primary font-bold">{item.data.hitCount}</span>
                   </div>
-                </div>
+                </Stack>
               )}
             </div>
           ))

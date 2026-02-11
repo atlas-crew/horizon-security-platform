@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Campaign } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { EmptyState } from '../feedback/EmptyState';
+import { Stack } from '@/ui';
 
 interface ActiveCampaignListProps {
   campaigns: Campaign[];
@@ -82,7 +83,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
             )}
           >
             <div className="flex-1 min-w-0 pr-4">
-              <div className="flex items-center gap-3 mb-1">
+              <Stack direction="row" align="center" style={{ gap: '12px' }} className="mb-1">
                 <h3 className="font-medium truncate group-hover:text-white">
                   {campaign.name}
                 </h3>
@@ -97,18 +98,18 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
                 {campaign.isCrossTenant && (
                   <Globe className="w-3.5 h-3.5 text-ac-blue-tint" aria-label="Cross-tenant campaign" role="img" />
                 )}
-              </div>
-              <div className="flex items-center gap-4 text-[10px] text-ink-muted group-hover:text-white/60">
+              </Stack>
+              <Stack direction="row" align="center" style={{ gap: '16px' }} className="text-[10px] text-ink-muted group-hover:text-white/60">
                 <span>Confidence: {campaign.confidence}%</span>
                 <span>Tenants: {campaign.tenantsAffected}</span>
-                <span className="flex items-center gap-1">
+                <Stack direction="row" align="center" gap="xs">
                   <TrendingUp className="w-3 h-3" />
                   Last Activity: <RelativeTime timestamp={lastSeen} />
-                </span>
-              </div>
+                </Stack>
+              </Stack>
             </div>
 
-            <div className="flex items-center gap-4">
+            <Stack direction="row" align="center" style={{ gap: '16px' }}>
               <div className="text-right hidden sm:block">
                 <div className="text-xs font-bold text-ink-primary group-hover:text-white tracking-tighter">
                   Status: {campaign.status}
@@ -117,7 +118,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
               <div className="w-8 h-8 flex items-center justify-center border border-border-subtle group-hover:border-white/20">
                 <span className="text-[10px] font-bold group-hover:text-ac-magenta transition-colors">&gt;</span>
               </div>
-            </div>
+            </Stack>
           </motion.div>
         );
       })}

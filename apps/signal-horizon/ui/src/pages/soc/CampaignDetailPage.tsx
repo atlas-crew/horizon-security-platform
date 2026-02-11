@@ -2,7 +2,20 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  Breadcrumb,
+  Button,
+  EmptyState,
+  SectionHeader,
+  StatusBadge,
+  alpha,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  spacing,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 import {
   Target,
   Clock,
@@ -17,7 +30,6 @@ import {
   Network,
   Building,
 } from 'lucide-react';
-import { clsx } from 'clsx';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -32,11 +44,40 @@ import { fetchCampaignActors, fetchCampaignDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { CampaignGraph } from '../../components/soc/CampaignGraph';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
-import type { SocCampaign, SocCampaignActor, SocCampaignDetailResponse, SocCampaignActorsResponse, SocCampaignSignal } from '../../types/soc';
+import type {
+  SocCampaign,
+  SocCampaignActor,
+  SocCampaignDetailResponse,
+  SocCampaignActorsResponse,
+  SocCampaignSignal,
+} from '../../types/soc';
+
+function campaignStatusToBadge(
+  status: SocCampaign['status'],
+): 'error' | 'warning' | 'info' | 'success' {
+  if (status === 'ACTIVE') return 'error';
+  if (status === 'DETECTED') return 'warning';
+  if (status === 'DORMANT') return 'info';
+  return 'success';
+}
+
+function severityToBadge(severity: SocCampaign['severity']): 'error' | 'warning' | 'info' {
+  if (severity === 'CRITICAL') return 'error';
+  if (severity === 'HIGH' || severity === 'MEDIUM') return 'warning';
+  return 'info';
+}
 
 const demoSignals: SocCampaignSignal[] = [
-  { type: 'HTTP Fingerprint Match', confidence: 0.96, reason: 'Shared fingerprint across 4 sensors.' },
-  { type: 'Timing Correlation', confidence: 0.89, reason: 'Burst pattern repeats every 15 minutes.' },
+  {
+    type: 'HTTP Fingerprint Match',
+    confidence: 0.96,
+    reason: 'Shared fingerprint across 4 sensors.',
+  },
+  {
+    type: 'Timing Correlation',
+    confidence: 0.89,
+    reason: 'Burst pattern repeats every 15 minutes.',
+  },
   { type: 'Target Overlap', confidence: 0.81, reason: 'Same endpoint matrix across tenants.' },
 ];
 
@@ -145,78 +186,76 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="p-6">
-        <div className="card p-6 text-center">
-          <AlertTriangle className="w-8 h-8 text-ink-muted mx-auto mb-3" />
-          <p className="text-ink-secondary">Campaign not found.</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={<AlertTriangle aria-hidden="true" />}
+        title="Campaign Not Found"
+        description="The requested campaign could not be found."
+      />
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <Breadcrumb items={[
-        { label: 'Campaigns', to: '/campaigns' },
-        { label: campaign.name },
-      ]} />
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <Link to="/campaigns" className="text-sm text-link hover:text-link-hover flex items-center gap-1">
-            <ChevronRight className="w-4 h-4 rotate-180" />
-            Back to Campaigns
-          </Link>
-          <div className="mt-2 flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl font-light text-ink-primary">{campaign.name}</h1>
-            <span
-              className={clsx(
-                'px-2 py-0.5 text-xs border',
-                campaign.status === 'ACTIVE' && 'bg-ac-red/15 text-ac-red border-ac-red/40',
-                campaign.status === 'DETECTED' && 'bg-ac-orange/15 text-ac-orange border-ac-orange/40',
-                campaign.status === 'DORMANT' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/40',
-                campaign.status === 'RESOLVED' && 'bg-ac-green/10 text-ac-green border-ac-green/40'
-              )}
-            >
-              {campaign.status}
-            </span>
-            <span
-              className={clsx(
-                'px-2 py-0.5 text-xs border',
-                campaign.severity === 'CRITICAL' && 'bg-ac-red/15 text-ac-red border-ac-red/40',
-                campaign.severity === 'HIGH' && 'bg-ac-orange/20 text-ac-orange border-ac-orange/40',
-                campaign.severity === 'MEDIUM' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
-                campaign.severity === 'LOW' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/30'
-              )}
-            >
-              {campaign.severity}
-            </span>
-            {campaign.actorCount > 5 && (
-              <span className="px-2 py-0.5 text-xs border bg-ac-purple/10 text-ac-purple border-ac-purple/30">
-                Cross-Tenant
-              </span>
-            )}
-          </div>
-          <p className="text-ink-secondary mt-2">
-            {campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
-          </p>
-        </div>
+      <Breadcrumb items={[{ label: 'Campaigns', to: '/campaigns' }, { label: campaign.name }]} />
+      <header className="space-y-2">
+        <Link
+          to="/campaigns"
+          className="text-sm text-link hover:text-link-hover flex items-center gap-1"
+        >
+          <ChevronRight aria-hidden="true" className="w-4 h-4 rotate-180" />
+          Back to Campaigns
+        </Link>
+        <SectionHeader
+          title={campaign.name}
+          description={campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
+          size="h3"
+          actions={
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <Button
+                variant="outlined"
+                size="sm"
+                icon={<ExternalLink aria-hidden="true" className="w-4 h-4" />}
+              >
+                Export IOCs
+              </Button>
+              <Button size="sm" icon={<Shield aria-hidden="true" className="w-4 h-4" />}>
+                Open War Room
+              </Button>
+            </div>
+          }
+        />
         <div className="flex items-center gap-2">
-          <button className="btn-outline h-10 px-4 text-xs">
-            <ExternalLink className="w-4 h-4 mr-2" />
-            Export IOCs
-          </button>
-          <button className="btn-primary h-10 px-4 text-xs">
-            <Shield className="w-4 h-4 mr-2" />
-            Open War Room
-          </button>
+          <StatusBadge status={campaignStatusToBadge(campaign.status)} variant="subtle" size="sm">
+            {campaign.status}
+          </StatusBadge>
+          <StatusBadge status={severityToBadge(campaign.severity)} variant="subtle" size="sm">
+            {campaign.severity}
+          </StatusBadge>
+          {campaign.actorCount > 5 && (
+            <StatusBadge status="accent" variant="subtle" size="sm">
+              Cross-Tenant
+            </StatusBadge>
+          )}
         </div>
-      </div>
+      </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatMini icon={Users} label="Actors" value={campaign.actorCount.toString()} />
-        <StatMini icon={Activity} label="Confidence" value={`${Math.round(campaign.confidence * 100)}%`} />
-        <StatMini icon={Clock} label="First Seen" value={new Date(campaign.firstSeen).toLocaleDateString()} />
-        <StatMini icon={Target} label="Last Seen" value={new Date(campaign.lastSeen).toLocaleTimeString()} />
+        <StatMini
+          icon={Activity}
+          label="Confidence"
+          value={`${Math.round(campaign.confidence * 100)}%`}
+        />
+        <StatMini
+          icon={Clock}
+          label="First Seen"
+          value={new Date(campaign.firstSeen).toLocaleDateString()}
+        />
+        <StatMini
+          icon={Target}
+          label="Last Seen"
+          value={new Date(campaign.lastSeen).toLocaleTimeString()}
+        />
       </div>
 
       {/* Campaign Correlation Graph */}
@@ -235,7 +274,13 @@ export default function CampaignDetailPage() {
               <XAxis dataKey="time" {...xAxisNoLine} />
               <YAxis {...axisDefaults.y} />
               <Tooltip {...tooltipDefaults} />
-              <Area type="monotone" dataKey="volume" stroke={colors.red} fill={colors.red} fillOpacity={0.25} />
+              <Area
+                type="monotone"
+                dataKey="volume"
+                stroke={colors.red}
+                fill={colors.red}
+                fillOpacity={0.25}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -247,17 +292,24 @@ export default function CampaignDetailPage() {
             <h2 className="font-medium text-ink-primary">Correlation Signals</h2>
           </div>
           <div className="card-body space-y-4">
-            {signals.length === 0 && <div className="text-ink-muted">No correlation signals yet.</div>}
+            {signals.length === 0 && (
+              <div className="text-ink-muted">No correlation signals yet.</div>
+            )}
             {signals.map((signal) => (
               <div key={signal.type} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-ink-secondary">{signal.type}</span>
-                  <span className="text-ink-primary font-medium">{Math.round(signal.confidence * 100)}%</span>
+                  <span className="text-ink-primary font-medium">
+                    {Math.round(signal.confidence * 100)}%
+                  </span>
                 </div>
                 <div className="h-2 bg-surface-subtle border border-border-subtle">
                   <div
-                    className="h-full bg-ac-green"
-                    style={{ width: `${Math.round(signal.confidence * 100)}%` }}
+                    className="h-full"
+                    style={{
+                      background: colors.green,
+                      width: `${Math.round(signal.confidence * 100)}%`,
+                    }}
                   />
                 </div>
                 {signal.reason && <p className="text-xs text-ink-muted">{signal.reason}</p>}
@@ -269,7 +321,9 @@ export default function CampaignDetailPage() {
         <section className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="font-medium text-ink-primary">Associated Actors</h2>
-            <button className="btn-outline h-8 px-3 text-xs">Add to Watchlist</button>
+            <Button variant="outlined" size="sm">
+              Add to Watchlist
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -293,13 +347,18 @@ export default function CampaignDetailPage() {
                 {actors.map((actor) => (
                   <tr key={actor.actorId}>
                     <td className="font-mono text-sm text-ink-primary">
-                      <Link to={`/actors/${actor.actorId}`} className="text-link hover:text-link-hover">
+                      <Link
+                        to={`/actors/${actor.actorId}`}
+                        className="text-link hover:text-link-hover"
+                      >
                         {actor.actorId}
                       </Link>
                     </td>
                     <td className="text-ink-secondary">{Math.round(actor.riskScore)}</td>
                     <td className="text-ink-secondary">{actor.ips.length}</td>
-                    <td className="text-ink-secondary">{new Date(actor.lastSeen).toLocaleString()}</td>
+                    <td className="text-ink-secondary">
+                      {new Date(actor.lastSeen).toLocaleString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -313,7 +372,9 @@ export default function CampaignDetailPage() {
         <section className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="font-medium text-ink-primary">Participating IPs</h2>
-            <button className="btn-outline h-8 px-3 text-xs">Block All</button>
+            <Button variant="outlined" size="sm">
+              Block All
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -331,16 +392,13 @@ export default function CampaignDetailPage() {
                     <td className="font-mono text-sm text-ink-primary">{ip.ip}</td>
                     <td className="text-ink-secondary">{ip.hits.toLocaleString()}</td>
                     <td>
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 text-xs border',
-                          ip.status === 'BLOCKED'
-                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                            : 'bg-ac-orange/10 text-ac-orange border-ac-orange/30'
-                        )}
+                      <StatusBadge
+                        status={ip.status === 'BLOCKED' ? 'error' : 'warning'}
+                        variant="subtle"
+                        size="sm"
                       >
                         {ip.status}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -352,7 +410,9 @@ export default function CampaignDetailPage() {
         <section className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="font-medium text-ink-primary">Affected Customers</h2>
-            <button className="btn-outline h-8 px-3 text-xs">View All</button>
+            <Button variant="outlined" size="sm">
+              View All
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -370,16 +430,13 @@ export default function CampaignDetailPage() {
                     <td className="text-ink-primary">{customer.name}</td>
                     <td className="text-ink-secondary">{customer.attempts.toLocaleString()}</td>
                     <td>
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 text-xs border',
-                          customer.status === 'ACTIVE'
-                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                            : 'bg-ac-green/10 text-ac-green border-ac-green/30'
-                        )}
+                      <StatusBadge
+                        status={customer.status === 'ACTIVE' ? 'error' : 'success'}
+                        variant="subtle"
+                        size="sm"
                       >
                         {customer.status}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -391,12 +448,12 @@ export default function CampaignDetailPage() {
 
       {/* Response Actions */}
       <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <ActionButton icon={Swords} label="Block All IPs" tone="bg-ac-red" />
-        <ActionButton icon={Shield} label="Block Fingerprint" tone="bg-ac-red" />
-        <ActionButton icon={Network} label="Block ASN" tone="bg-ac-red" />
-        <ActionButton icon={Flame} label="Challenge Mode" tone="bg-ac-orange" />
-        <ActionButton icon={ExternalLink} label="Export IOCs" tone="bg-ac-blue" />
-        <ActionButton icon={Building} label="Notify Customers" tone="bg-ac-blue" />
+        <ActionButton icon={Swords} label="Block All IPs" tone={colors.red} />
+        <ActionButton icon={Shield} label="Block Fingerprint" tone={colors.red} />
+        <ActionButton icon={Network} label="Block ASN" tone={colors.red} />
+        <ActionButton icon={Flame} label="Challenge Mode" tone={colors.orange} />
+        <ActionButton icon={ExternalLink} label="Export IOCs" tone={colors.blue} />
+        <ActionButton icon={Building} label="Notify Customers" tone={colors.blue} />
       </section>
     </div>
   );
@@ -413,8 +470,8 @@ function StatMini({
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center text-ink-muted">
-        <Icon className="w-5 h-5" />
+      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center">
+        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: colors.blue }} />
       </div>
       <div>
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
@@ -434,14 +491,17 @@ function ActionButton({
   tone: string;
 }) {
   return (
-    <button
-      className={clsx(
-        'px-4 py-3 text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors hover:brightness-110',
-        tone
-      )}
+    <Button
+      size="sm"
+      fill
+      icon={<Icon aria-hidden="true" className="w-4 h-4" />}
+      style={{
+        background: tone,
+        border: `1px solid ${alpha(tone, 0.6)}`,
+        color: '#FFFFFF',
+      }}
     >
-      <Icon className="w-4 h-4" />
       {label}
-    </button>
+    </Button>
   );
 }

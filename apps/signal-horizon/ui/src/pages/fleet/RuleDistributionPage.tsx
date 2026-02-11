@@ -196,7 +196,11 @@ function RuleCard({
               )}
             />
           </button>
-          <button onClick={onToggle}>
+          <button
+            onClick={onToggle}
+            aria-label={isExpanded ? 'Collapse rule details' : 'Expand rule details'}
+            title={isExpanded ? 'Collapse' : 'Expand'}
+          >
             {isExpanded ? (
               <ChevronDown aria-hidden="true" className="w-5 h-5 text-ink-secondary" />
             ) : (

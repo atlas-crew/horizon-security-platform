@@ -6,10 +6,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, ClickHouseOpsPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, RecentRequestsPanel, SavedQueries, SigmaLeadsPanel, SigmaRulesPanel } from '../components/hunting';
+import {
+  BehavioralAnomaliesPanel,
+  ClickHouseOpsPanel,
+  FleetIntelligencePanel,
+  HuntQueryBuilder,
+  HuntResultsTable,
+  LowAndSlowPanel,
+  RecentRequestsPanel,
+  SavedQueries,
+  SigmaLeadsPanel,
+  SigmaRulesPanel,
+} from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { Alert, Box, Button, Input, SectionHeader, alpha, colors, spacing } from '@/ui';
 
 export default function HuntingPage() {
   useDocumentTitle('Threat Hunting');
@@ -118,9 +130,9 @@ export default function HuntingPage() {
 
     // Split by AND
     const parts = queryString.split(' AND ');
-    
-    parts.forEach(part => {
-      const [key, value] = part.split(':').map(s => s.trim());
+
+    parts.forEach((part) => {
+      const [key, value] = part.split(':').map((s) => s.trim());
       if (!key || !value) return;
 
       const cleanValue = value.replace(/"/g, ''); // Remove quotes
@@ -154,49 +166,50 @@ export default function HuntingPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary">Threat Hunting</h1>
-          <p className="text-ink-secondary mt-1">
-            Search and analyze threats across the fleet
-          </p>
-          <div className="mt-2 text-xs text-ink-muted">
-            <Link className="text-link hover:text-link-hover font-mono" to="/hunting/request">
-              Pivot by request_id →
-            </Link>
-            <span className="mx-2 text-ink-muted/50">|</span>
-            <Link className="text-link hover:text-link-hover font-mono" to="/hunting/campaign">
-              Campaign timeline →
-            </Link>
-          </div>
-        </div>
-
-        {/* Status Badge */}
-        <div className="flex items-center gap-2 px-3 py-2 border border-border-subtle bg-surface-card">
-          <Database className="w-4 h-4 text-ink-muted" />
-          <span className="text-sm text-ink-secondary">
-            {status?.historical ? 'Historical queries enabled' : 'Real-time only'}
-          </span>
-          <span
-            className={`w-2 h-2  ${
-              status?.historical ? 'bg-ac-green' : 'bg-ac-orange'
-            }`}
-          />
-        </div>
+      <SectionHeader
+        title="Threat Hunting"
+        description="Search and analyze threats across the fleet"
+        actions={
+          <Box
+            bg="card"
+            border="subtle"
+            flex
+            direction="row"
+            align="center"
+            gap="sm"
+            style={{ padding: `${spacing.sm} ${spacing.md}` }}
+          >
+            <Database aria-hidden="true" className="w-4 h-4" style={{ color: colors.gray.mid }} />
+            <span className="text-sm text-ink-secondary">
+              {status?.historical ? 'Historical queries enabled' : 'Real-time only'}
+            </span>
+            <span
+              aria-hidden="true"
+              style={{
+                width: 8,
+                height: 8,
+                background: status?.historical ? colors.green : colors.orange,
+                display: 'inline-block',
+              }}
+            />
+          </Box>
+        }
+      />
+      <div className="text-xs text-ink-muted">
+        <Link className="text-link hover:text-link-hover font-mono" to="/hunting/request">
+          Pivot by request_id →
+        </Link>
+        <span className="mx-2 text-ink-muted/50">|</span>
+        <Link className="text-link hover:text-link-hover font-mono" to="/hunting/campaign">
+          Campaign timeline →
+        </Link>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-ac-red/10 border border-ac-red/30">
-          <AlertCircle className="w-5 h-5 text-ac-red" />
-          <span className="text-ac-red">{error}</span>
-          <button
-            onClick={clearError}
-            className="ml-auto text-sm text-ac-red hover:text-ac-red/80"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Alert status="error" dismissible onDismiss={clearError}>
+          {error}
+        </Alert>
       )}
 
       {/* Query Builder */}
@@ -314,52 +327,45 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
-      <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="save-query-title" className="bg-surface-base border border-border-subtle p-6 w-full max-w-md">
-        <h2 id="save-query-title" className="text-lg font-medium text-ink-primary mb-4">Save Query</h2>
+    <div
+      className="fixed inset-0 flex items-center justify-center z-50"
+      style={{ background: alpha(colors.black, 0.6) }}
+    >
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="save-query-title"
+        className="bg-surface-base border border-border-subtle p-6 w-full max-w-md"
+      >
+        <h2 id="save-query-title" className="text-lg font-medium text-ink-primary mb-4">
+          Save Query
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="save-query-name" className="block text-sm font-medium text-ink-secondary mb-1">
-              Name *
-            </label>
-            <input
-              id="save-query-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My saved query"
-              autoFocus
-              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue"
-            />
-          </div>
-          <div>
-            <label htmlFor="save-query-description" className="block text-sm font-medium text-ink-secondary mb-1">
-              Description
-            </label>
-            <textarea
-              id="save-query-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description..."
-              rows={2}
-              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue resize-none"
-            />
-          </div>
+          <Input
+            label="Name *"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My saved query"
+            autoFocus
+            size="md"
+          />
+          <Input
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description..."
+            multiline
+            rows={2}
+            size="md"
+          />
           <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="btn-outline h-10 px-4 text-sm"
-            >
+            <Button variant="outlined" type="button" onClick={onCancel}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="btn-primary h-10 px-4 text-sm"
-            >
+            </Button>
+            <Button type="submit" disabled={!name.trim()}>
               Save Query
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -391,12 +397,9 @@ function QueryExamples({ onRun }: { onRun: (query: string) => void }) {
             className="flex items-center justify-between px-3 py-2 border border-border-subtle bg-surface-inset text-sm text-ink-secondary"
           >
             <span className="font-mono">{example}</span>
-            <button
-              onClick={() => onRun(example)}
-              className="text-link text-xs font-semibold tracking-[0.14em] uppercase hover:text-link-hover"
-            >
+            <Button variant="ghost" size="sm" onClick={() => onRun(example)}>
               Run →
-            </button>
+            </Button>
           </div>
         ))}
       </div>

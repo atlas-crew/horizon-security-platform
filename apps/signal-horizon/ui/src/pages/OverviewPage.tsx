@@ -31,16 +31,16 @@ import {
   TableSkeleton,
 } from '../components/LoadingStates';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
+import {
+  useAttackMap,
+  type AttackPoint,
+  type AttackRoute,
+  type AttackSeverity,
+} from '../hooks/useAttackMap';
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
 // ─── @/ui library imports ────────────────────────────────────────────────────
-import {
-  SectionHeader,
-  KpiStrip,
-  Button,
-  colors,
-} from '@/ui';
+import { SectionHeader, KpiStrip, Button, colors } from '@/ui';
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
@@ -52,10 +52,7 @@ function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRo
   const W = 920;
   const H = 520;
 
-  const projection = useMemo(
-    () => geoNaturalEarth1().fitSize([W, H], LAND_GEO),
-    [],
-  );
+  const projection = useMemo(() => geoNaturalEarth1().fitSize([W, H], LAND_GEO), []);
 
   const path = useMemo(() => geoPath(projection), [projection]);
 
@@ -68,8 +65,7 @@ function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRo
     return colors.skyBlue;
   };
 
-  const projPoint = (p: AttackPoint): [number, number] | null =>
-    projection([p.lon, p.lat]);
+  const projPoint = (p: AttackPoint): [number, number] | null => projection([p.lon, p.lat]);
 
   const routePath = (from: AttackPoint, to: AttackPoint) => {
     const a = projPoint(from);
@@ -130,7 +126,9 @@ function AttackMap({ points, routes }: { points: AttackPoint[]; routes: AttackRo
             <g key={p.id}>
               <circle cx={x} cy={y} r={r + 4} fill={fill} opacity={0.08} />
               <circle cx={x} cy={y} r={r} fill={fill} opacity={0.9}>
-                <title>{p.label} · {p.count.toLocaleString()}</title>
+                <title>
+                  {p.label} · {p.count.toLocaleString()}
+                </title>
               </circle>
             </g>
           );
@@ -162,7 +160,14 @@ export default function OverviewPage() {
   useDocumentTitle('Overview');
   const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
   const timeRange = useTimeRange();
-  const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
+  const timeRangeLabel = timeRange || '24h';
+  const {
+    points: mapPoints,
+    routes: mapRoutes,
+    isLoading: isMapLoading,
+    error,
+    refetch,
+  } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
@@ -207,19 +212,57 @@ export default function OverviewPage() {
       .map((t) => ({ label: t.indicator, value: t.hitCount }));
   }, [threats]);
 
-  const kpiMetrics = useMemo(() => [
-    { label: 'Active Campaigns', value: stats.activeCampaigns, subtitle: '+2 from yesterday', borderColor: colors.red, icon: <Shield className="w-4 h-4" /> },
-    { label: 'Campaigns (24h)', value: campaigns.length, subtitle: '+4 from yesterday', borderColor: colors.orange, icon: <AlertTriangle className="w-4 h-4" /> },
-    { label: 'Blocked', value: stats.blockedIndicators, subtitle: '+12% from yesterday', borderColor: colors.green, icon: <Activity className="w-4 h-4" /> },
-    { label: 'Sensors Reporting', value: `${stats.sensorsOnline}`, subtitle: '1 sensor offline', borderColor: colors.blue, icon: <Server className="w-4 h-4" /> },
-    { label: 'API Discovery', value: stats.apiStats?.discoveryEvents ?? 0, subtitle: `${stats.apiStats?.schemaViolations ?? 0} schema changes`, borderColor: colors.purple, icon: <Database className="w-4 h-4" /> },
-  ], [stats, campaigns.length]);
+  const kpiMetrics = useMemo(
+    () => [
+      {
+        label: 'Active Campaigns',
+        value: stats.activeCampaigns,
+        subtitle: '+2 from yesterday',
+        borderColor: colors.red,
+        icon: <Shield className="w-4 h-4" />,
+      },
+      {
+        label: 'Campaigns (24h)',
+        value: campaigns.length,
+        subtitle: '+4 from yesterday',
+        borderColor: colors.orange,
+        icon: <AlertTriangle className="w-4 h-4" />,
+      },
+      {
+        label: 'Blocked',
+        value: stats.blockedIndicators,
+        subtitle: '+12% from yesterday',
+        borderColor: colors.green,
+        icon: <Activity className="w-4 h-4" />,
+      },
+      {
+        label: 'Sensors Reporting',
+        value: `${stats.sensorsOnline}`,
+        subtitle: '1 sensor offline',
+        borderColor: colors.blue,
+        icon: <Server className="w-4 h-4" />,
+      },
+      {
+        label: 'API Discovery',
+        value: stats.apiStats?.discoveryEvents ?? 0,
+        subtitle: `${stats.apiStats?.schemaViolations ?? 0} schema changes`,
+        borderColor: colors.purple,
+        icon: <Database className="w-4 h-4" />,
+      },
+    ],
+    [stats, campaigns.length],
+  );
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading threat overview">
+      <div
+        className="p-6 space-y-6"
+        role="main"
+        aria-busy="true"
+        aria-label="Loading threat overview"
+      >
         <SectionHeader
-          eyebrow={`Signal Horizon · Last ${timeRange}`}
+          eyebrow={`Signal Horizon · Last ${timeRangeLabel}`}
           title="Threat Overview"
           description="Loading fleet intelligence..."
           size="h3"
@@ -227,7 +270,9 @@ export default function OverviewPage() {
         />
         <StatsGridSkeleton />
         <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2"><CampaignListSkeleton /></div>
+          <div className="col-span-2">
+            <CampaignListSkeleton />
+          </div>
           <AlertFeedSkeleton />
         </div>
         <TableSkeleton rows={5} />
@@ -241,16 +286,27 @@ export default function OverviewPage() {
     <div className="p-6 space-y-6" role="main" aria-label="Threat overview dashboard">
       {/* ─── Header ──────────────────────────────────────────────────── */}
       <SectionHeader
-        eyebrow={`Signal Horizon · Last ${timeRange}`}
+        eyebrow={`Signal Horizon · Last ${timeRangeLabel}`}
         title="Threat Overview"
         description={`Fleet threat intelligence and collective defense across ${stats.sensorsOnline} sensors${lastUpdatedSuffix}`}
         size="h3"
         mb="sm"
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>
-            <Button variant="outlined" size="sm" icon={<RefreshCw className="w-4 h-4" />} onClick={() => refetch()}>Refresh</Button>
-            <Button variant="outlined" size="sm" icon={<Download className="w-4 h-4" />}>Export Report</Button>
-            <Button variant="secondary" size="sm" icon={<Settings className="w-4 h-4" />}>Settings</Button>
+            <Button
+              variant="outlined"
+              size="sm"
+              icon={<RefreshCw className="w-4 h-4" />}
+              onClick={() => refetch()}
+            >
+              Refresh
+            </Button>
+            <Button variant="outlined" size="sm" icon={<Download className="w-4 h-4" />}>
+              Export Report
+            </Button>
+            <Button variant="secondary" size="sm" icon={<Settings className="w-4 h-4" />}>
+              Settings
+            </Button>
           </div>
         }
       />
@@ -260,14 +316,20 @@ export default function OverviewPage() {
 
       {/* ─── Attack Map + Threat Feed ────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <section className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden" aria-labelledby="attack-map-heading">
+        <section
+          className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden"
+          aria-labelledby="attack-map-heading"
+        >
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
           <div className="card-header flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
-              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">Live Attack Map</h2>
+              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
+                Live Attack Map
+              </h2>
               {error && (
                 <span className="text-xs text-ac-orange flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />Using cached data
+                  <AlertTriangle className="w-3 h-3" />
+                  Using cached data
                 </span>
               )}
             </div>
@@ -301,14 +363,23 @@ export default function OverviewPage() {
       </div>
 
       {/* ─── Active Campaigns ────────────────────────────────────────── */}
-      <section className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]" aria-labelledby="campaigns-heading">
+      <section
+        className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]"
+        aria-labelledby="campaigns-heading"
+      >
         <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
-          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary tracking-tight">Active Campaigns</h2>
+          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary tracking-tight">
+            Active Campaigns
+          </h2>
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">
-              {campaigns.filter(c => c.status === 'ACTIVE').length} ACTIVE
+              {campaigns.filter((c) => c.status === 'ACTIVE').length} ACTIVE
             </span>
-            <Button variant="ghost" size="sm" style={{ fontSize: '10px', height: '24px', letterSpacing: '0.1em' }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              style={{ fontSize: '10px', height: '24px', letterSpacing: '0.1em' }}
+            >
               View All Campaigns &gt;
             </Button>
           </div>
@@ -325,37 +396,69 @@ export default function OverviewPage() {
       {/* ─── Strategic Insights + Top Metrics ────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Strategic Insight hero */}
-        <div className="group flex flex-col justify-center min-h-[450px] relative overflow-hidden" style={{ background: colors.navy, padding: '24px' }}>
+        <div
+          className="group flex flex-col justify-center min-h-[450px] relative overflow-hidden"
+          style={{ background: colors.navy, padding: '24px' }}
+        >
           <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-3" style={{ color: colors.skyBlue }}>
               <Shield className="w-4 h-4" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Insight</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
+                Strategic Insight
+              </span>
             </div>
-            <h3 className="text-xl font-light mb-4 tracking-tight" style={{ color: colors.gray.light }}>Fleet Vulnerability Analysis</h3>
+            <h3
+              className="text-xl font-light mb-4 tracking-tight"
+              style={{ color: colors.gray.light }}
+            >
+              Fleet Vulnerability Analysis
+            </h3>
             <p className="text-sm leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api.
-              Edge sensors have automatically shifted to aggressive rate-limiting.
+              Current telemetry indicates a 14% increase in credential stuffing attempts targeting
+              the catalog-api. Edge sensors have automatically shifted to aggressive rate-limiting.
             </p>
             <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <div
+                className="flex items-center justify-between text-[10px] uppercase tracking-widest"
+                style={{ color: 'rgba(255,255,255,0.5)' }}
+              >
                 <span>Threat Level</span>
                 <span style={{ color: colors.orange }}>Elevated</span>
               </div>
-              <div className="h-1 w-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+              <div
+                className="h-1 w-full overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              >
                 <div className="h-full w-[65%]" style={{ background: colors.orange }} />
               </div>
             </div>
-            <Button variant="ghost" size="sm" iconAfter={<Activity className="w-3 h-3" />} style={{ color: colors.magenta, fontSize: '10px', letterSpacing: '0.1em', padding: 0, height: 'auto' }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              iconAfter={<Activity className="w-3 h-3" />}
+              style={{
+                color: colors.magenta,
+                fontSize: '10px',
+                letterSpacing: '0.1em',
+                padding: 0,
+                height: 'auto',
+              }}
+            >
               Review Recommended Policies
             </Button>
           </div>
         </div>
 
         {/* Top Attackers */}
-        <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="attackers-heading">
+        <section
+          className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]"
+          aria-labelledby="attackers-heading"
+        >
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Attackers (24h)</h2>
+            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted tracking-widest">
+              Top Attackers (24h)
+            </h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topAttackers.map((a) => (
@@ -365,7 +468,13 @@ export default function OverviewPage() {
                   <span className="text-ink-muted font-bold">{a.value.toLocaleString()}</span>
                 </div>
                 <div className="h-1 w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                  <div className="h-full" style={{ background: `${colors.blue}B3`, width: `${Math.min(100, (a.value / (topAttackers[0]?.value || 1)) * 100)}%` }} />
+                  <div
+                    className="h-full"
+                    style={{
+                      background: `${colors.blue}B3`,
+                      width: `${Math.min(100, (a.value / (topAttackers[0]?.value || 1)) * 100)}%`,
+                    }}
+                  />
                 </div>
               </div>
             ))}
@@ -373,9 +482,17 @@ export default function OverviewPage() {
         </section>
 
         {/* Top Fingerprints */}
-        <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="fingerprints-heading">
+        <section
+          className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]"
+          aria-labelledby="fingerprints-heading"
+        >
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2 id="fingerprints-heading" className="text-xs font-bold text-ink-muted tracking-widest">Top Fingerprints (24h)</h2>
+            <h2
+              id="fingerprints-heading"
+              className="text-xs font-bold text-ink-muted tracking-widest"
+            >
+              Top Fingerprints (24h)
+            </h2>
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topFingerprints.map((f) => (
@@ -385,7 +502,13 @@ export default function OverviewPage() {
                   <span className="text-ink-muted font-bold">{f.value.toLocaleString()}</span>
                 </div>
                 <div className="h-1 w-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                  <div className="h-full" style={{ background: `${colors.magenta}B3`, width: `${Math.min(100, (f.value / (topFingerprints[0]?.value || 1)) * 100)}%` }} />
+                  <div
+                    className="h-full"
+                    style={{
+                      background: `${colors.magenta}B3`,
+                      width: `${Math.min(100, (f.value / (topFingerprints[0]?.value || 1)) * 100)}%`,
+                    }}
+                  />
                 </div>
               </div>
             ))}

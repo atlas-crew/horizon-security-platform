@@ -323,9 +323,19 @@ export default function OverviewPage() {
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
           <div className="card-header flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
-              <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
-                Live Attack Map
-              </h2>
+              <SectionHeader
+                titleId="attack-map-heading"
+                title="Live Attack Map"
+                size="h4"
+                mb="xs"
+                style={{ marginBottom: 0 }}
+                titleStyle={{
+                  fontSize: '16px',
+                  lineHeight: '24px',
+                  fontWeight: 500,
+                  letterSpacing: '0.02em',
+                }}
+              />
               {error && (
                 <span className="text-xs text-ac-orange flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" />
@@ -368,9 +378,19 @@ export default function OverviewPage() {
         aria-labelledby="campaigns-heading"
       >
         <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
-          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary tracking-tight">
-            Active Campaigns
-          </h2>
+          <SectionHeader
+            titleId="campaigns-heading"
+            title="Active Campaigns"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{
+              fontSize: '14px',
+              lineHeight: '20px',
+              fontWeight: 700,
+              letterSpacing: '0.01em',
+            }}
+          />
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">
               {campaigns.filter((c) => c.status === 'ACTIVE').length} ACTIVE
@@ -456,9 +476,21 @@ export default function OverviewPage() {
           aria-labelledby="attackers-heading"
         >
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted tracking-widest">
-              Top Attackers (24h)
-            </h2>
+            <SectionHeader
+              titleId="attackers-heading"
+              title="Top Attackers (24h)"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{
+                fontSize: '12px',
+                lineHeight: '16px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#7F7F7F',
+              }}
+            />
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topAttackers.map((a) => (
@@ -487,12 +519,21 @@ export default function OverviewPage() {
           aria-labelledby="fingerprints-heading"
         >
           <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
-            <h2
-              id="fingerprints-heading"
-              className="text-xs font-bold text-ink-muted tracking-widest"
-            >
-              Top Fingerprints (24h)
-            </h2>
+            <SectionHeader
+              titleId="fingerprints-heading"
+              title="Top Fingerprints (24h)"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{
+                fontSize: '12px',
+                lineHeight: '16px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#7F7F7F',
+              }}
+            />
           </div>
           <div className="card-body space-y-5 overflow-auto flex-grow">
             {topFingerprints.map((f) => (

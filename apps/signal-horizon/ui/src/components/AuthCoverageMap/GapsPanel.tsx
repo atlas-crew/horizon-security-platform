@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { RiskBadge } from './RiskBadge.js';
+import { SectionHeader } from '@/ui';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
@@ -22,7 +23,13 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
     return (
       <div className="bg-success/10 border border-success/30 p-8 flex flex-col items-center text-center">
         <CheckCircle2 className="w-10 h-10 text-success mb-3" />
-        <h2 className="text-lg font-medium text-ink-primary mb-1">No Authorization Gaps Detected</h2>
+        <SectionHeader
+          title="No Authorization Gaps Detected"
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: '4px', display: 'inline-block' }}
+          titleStyle={{ fontSize: '18px', lineHeight: '24px', fontWeight: 500 }}
+        />
         <p className="text-sm text-ink-secondary">All observed endpoints show proper authentication enforcement.</p>
       </div>
     );
@@ -36,9 +43,20 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
       <div className="p-4 border-b border-danger/10 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-danger" />
-          <h2 className="font-semibold text-danger uppercase tracking-wider text-sm">
-            Critical Authorization Gaps ({endpoints.length})
-          </h2>
+          <SectionHeader
+            title={`Critical Authorization Gaps (${endpoints.length})`}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{
+              fontSize: '14px',
+              lineHeight: '20px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: '#EF3340',
+            }}
+          />
         </div>
         <div className="flex items-center gap-1 text-[10px] bg-danger/10 text-danger px-2 py-0.5 font-bold uppercase status-blink">
           <Zap className="w-3 h-3" /> Action Required

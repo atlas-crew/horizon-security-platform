@@ -265,7 +265,13 @@ export default function CampaignDetailPage() {
 
       <section className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Campaign Velocity</h2>
+          <SectionHeader
+            title="Campaign Velocity"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+          />
         </div>
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -289,7 +295,13 @@ export default function CampaignDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="card">
           <div className="card-header">
-            <h2 className="font-medium text-ink-primary">Correlation Signals</h2>
+            <SectionHeader
+              title="Correlation Signals"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+            />
           </div>
           <div className="card-body space-y-4">
             {signals.length === 0 && (
@@ -320,7 +332,13 @@ export default function CampaignDetailPage() {
 
         <section className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-ink-primary">Associated Actors</h2>
+            <SectionHeader
+              title="Associated Actors"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+            />
             <Button variant="outlined" size="sm">
               Add to Watchlist
             </Button>
@@ -371,7 +389,13 @@ export default function CampaignDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-ink-primary">Participating IPs</h2>
+            <SectionHeader
+              title="Participating IPs"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+            />
             <Button variant="outlined" size="sm">
               Block All
             </Button>
@@ -409,7 +433,13 @@ export default function CampaignDetailPage() {
 
         <section className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-ink-primary">Affected Customers</h2>
+            <SectionHeader
+              title="Affected Customers"
+              size="h4"
+              mb="xs"
+              style={{ marginBottom: 0 }}
+              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+            />
             <Button variant="outlined" size="sm">
               View All
             </Button>

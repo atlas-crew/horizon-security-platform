@@ -4,6 +4,7 @@ import { Shield, Search, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react
 import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
 import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
+import { SectionHeader } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -91,7 +92,13 @@ export const AuthCoverageMap: React.FC = () => {
         <div className="w-16 h-16 bg-danger/10 flex items-center justify-center border border-danger/30 mb-4">
           <AlertTriangle className="w-8 h-8 text-danger" />
         </div>
-        <h2 className="text-xl font-medium text-ink-primary mb-2">Error Loading Data</h2>
+        <SectionHeader
+          title="Error Loading Data"
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: '8px', display: 'inline-block' }}
+          titleStyle={{ fontSize: '24px', lineHeight: '30px', fontWeight: 500 }}
+        />
         <p className="text-ink-muted mb-6">{(summaryError || endpointsError)?.message}</p>
         <button 
           onClick={() => window.location.reload()}
@@ -106,14 +113,20 @@ export const AuthCoverageMap: React.FC = () => {
   return (
     <div className="p-6 bg-surface-base min-h-full">
       <header className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <Shield className="w-6 h-6 text-ac-blue" />
-          <h1 className="text-2xl font-medium tracking-tight text-ink-primary uppercase">Authorization Coverage Map</h1>
-        </div>
-        <p className="text-ink-secondary max-w-2xl">
-          Real-time visibility into authentication enforcement across your fleet. 
-          Identifies shadow APIs and logical endpoints receiving authenticated traffic without enforcement.
-        </p>
+        <SectionHeader
+          title="Authorization Coverage Map"
+          description="Real-time visibility into authentication enforcement across your fleet. Identifies shadow APIs and logical endpoints receiving authenticated traffic without enforcement."
+          icon={<Shield className="w-6 h-6 text-ac-blue" />}
+          size="h3"
+          mb="sm"
+          style={{ marginBottom: 0, maxWidth: '52rem' }}
+          titleStyle={{
+            fontSize: '32px',
+            lineHeight: '40px',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+          }}
+        />
       </header>
       
       {summaryLoading ? (
@@ -132,7 +145,20 @@ export const AuthCoverageMap: React.FC = () => {
       
       <section className="bg-surface-card border border-border-subtle shadow-sm">
         <div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">All Observed Endpoints</h2>
+          <SectionHeader
+            title="All Observed Endpoints"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{
+              fontSize: '14px',
+              lineHeight: '20px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: '#7F7F7F',
+            }}
+          />
           
           <div className="flex flex-wrap items-center gap-3">
             {/* Search */}

@@ -11,7 +11,7 @@ import { useToast } from '../components/ui/Toast';
 import { Clock, Send, UserPlus, Shield } from 'lucide-react';
 import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
 import { PlaybookRunner } from '../components/warroom/PlaybookRunner';
-import { Button, Input, alpha, colors } from '@/ui';
+import { Button, Input, SectionHeader, alpha, colors } from '@/ui';
 
 interface Activity {
   id: string;
@@ -115,13 +115,25 @@ export default function WarRoomPage() {
         <div className="relative z-10 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div
-                className="w-2.5 h-2.5 animate-pulse"
-                style={{ background: colors.red, boxShadow: `0 0 10px ${alpha(colors.red, 0.8)}` }}
+              <SectionHeader
+                title={id ? `WAR ROOM: ${id}` : 'SIGNAL HORIZON: TACTICAL HUB'}
+                icon={(
+                  <div
+                    className="w-2.5 h-2.5 animate-pulse"
+                    style={{ background: colors.red, boxShadow: `0 0 10px ${alpha(colors.red, 0.8)}` }}
+                  />
+                )}
+                size="h4"
+                mb="xs"
+                style={{ marginBottom: 0 }}
+                titleStyle={{
+                  fontSize: '20px',
+                  lineHeight: '28px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.01em',
+                  color: '#FFFFFF',
+                }}
               />
-              <h1 className="text-xl font-light text-white tracking-tight uppercase">
-                {id ? `WAR ROOM: ${id}` : 'SIGNAL HORIZON: TACTICAL HUB'}
-              </h1>
             </div>
             <p className="text-sm text-white/60 mt-1 max-w-2xl font-medium tracking-wide">
               Operation Dark Phoenix · Collective Response Active · Priority One Incident

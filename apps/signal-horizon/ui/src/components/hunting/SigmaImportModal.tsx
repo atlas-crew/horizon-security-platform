@@ -1,9 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
-import { X, ArrowRight, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, FileText } from 'lucide-react';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { convertSigmaToSql } from '../../utils/sigmaToSql';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { Button, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader } from '@/ui';
 
 interface SigmaImportModalProps {
   onImport: (sql: string) => void;
@@ -27,9 +26,6 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
   const [ruleDescription, setRuleDescription] = useState('Detects suspicious cURL user agents often used by bots');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const stableOnClose = useCallback(() => onClose(), [onClose]);
-  useFocusTrap(modalRef, true, stableOnClose);
 
   const handleYamlChange = (value: string) => {
     setSigmaYaml(value);
@@ -63,10 +59,9 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
   };
 
   return (
-    <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
-      <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="sigma-import-title" className="bg-surface-base border border-border-subtle w-full max-w-5xl h-[80vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+    <Modal open onClose={onClose} size="1100px">
+      <div role="dialog" aria-modal="true" aria-labelledby="sigma-import-title">
+        <div className="border-b border-border-subtle pb-4 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-ac-blue/10">
               <FileText className="w-5 h-5 text-ac-blue" />
@@ -85,18 +80,10 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="Close import modal"
-            icon={<X className="w-5 h-5" />}
-            style={{ height: '36px', padding: '0 8px', color: '#7F7F7F' }}
-          />
         </div>
 
         {/* Body */}
-        <div className="flex-1 grid grid-cols-2 divide-x divide-border-subtle overflow-hidden">
+        <div className="grid grid-cols-2 divide-x divide-border-subtle overflow-hidden min-h-[52vh]">
           {/* Left: YAML Input */}
           <div className="flex flex-col h-full">
             <div className="px-4 py-2 bg-surface-subtle border-b border-border-subtle text-xs font-semibold text-ink-secondary uppercase tracking-wider">
@@ -135,7 +122,7 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border-subtle flex justify-between items-center bg-surface-base">
+        <div className="pt-4 border-t border-border-subtle flex justify-between items-center">
           <div className="min-w-0 flex-1 pr-4">
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-ink-secondary">
@@ -190,6 +177,6 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

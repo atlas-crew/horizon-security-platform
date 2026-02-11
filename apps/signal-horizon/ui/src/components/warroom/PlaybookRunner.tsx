@@ -122,7 +122,13 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
                   )}
                 </div>
                 
-                <div className="flex-1 flex items-center justify-between gap-4">
+                <Stack
+                  direction="row"
+                  align="center"
+                  justify="space-between"
+                  gap="md"
+                  className="flex-1"
+                >
                   <span className={clsx(
                     "text-sm transition-colors",
                     isCompleted ? "text-ink-primary" :
@@ -142,7 +148,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
                   )}>
                     {step.type}
                   </span>
-                </div>
+                </Stack>
               </div>
 
               {isWaiting && (

@@ -1,16 +1,16 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:59_
+_Generated: 2026-02-11 14:03_
 
 ## Summary
 
-**Total findings: 497**
+**Total findings: 479**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 474 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
-| Stack (row+justify+gap) | 17 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
+| Stack (row+align+gap) | 467 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+justify+gap) | 6 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 6 | Tailwind flex-col + gap → use <Stack direction=column> |
 
 ### Files by Hit Count (Work Order)
@@ -20,15 +20,15 @@ Priority files to migrate first (most raw patterns):
 | Hits | File |
 |------|------|
 | 21 | `pages/AdminSettingsPage.tsx` |
-| 20 | `components/fleet/FileBrowser.tsx` |
 | 19 | `pages/fleet/ReleasesPage.tsx` |
+| 18 | `components/fleet/FileBrowser.tsx` |
 | 16 | `App.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
-| 11 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
 | 10 | `components/fleet/ServiceControlPanel.tsx` |
+| 9 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `components/ui/CommandPalette.tsx` |
@@ -45,20 +45,20 @@ Priority files to migrate first (most raw patterns):
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
 | 7 | `components/fleet/RemoteShell.tsx` |
 | 6 | `pages/soc/SessionsPage.tsx` |
-| 6 | `pages/fleet/SensorConfigPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
-| 6 | `pages/WarRoomPage.tsx` |
 | 6 | `components/soc/CampaignGraph.tsx` |
 | 6 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
 | 6 | `components/fleet/WebTerminal.tsx` |
 | 6 | `components/AuthCoverageMap/AuthCoverageMap.tsx` |
-| 5 | `pages/hunting/RequestTimelinePage.tsx` |
+| 5 | `pages/fleet/SensorConfigPage.tsx` |
 | 5 | `pages/fleet/OnboardingPage.tsx` |
 | 5 | `pages/fleet/FleetHealthPage.tsx` |
 | 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
+| 5 | `pages/WarRoomPage.tsx` |
 | 5 | `pages/OverviewPage.tsx` |
 | 5 | `components/fleet/pingora/CrawlerConfig.tsx` |
 | 4 | `pages/soc/SessionDetailPage.tsx` |
+| 4 | `pages/soc/LiveMapPage.tsx` |
 
 ---
 
@@ -118,20 +118,9 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | File | Line | Match |
 |------|------|-------|
 | `components/soc/CampaignGraph.tsx` | 344 | `<div key={key} className="flex justify-between gap-4 text-[11px]">` |
-| `components/warroom/PlaybookRunner.tsx` | 125 | `<div className="flex-1 flex items-center justify-between gap-4">` |
 | `components/AuthCoverageMap/AuthCoverageMap.tsx` | 148 | `<div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:i` |
 | `components/fleet/ServiceControlPanel.tsx` | 454 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
-| `components/fleet/FileBrowser.tsx` | 377 | `<div className="flex items-center justify-between gap-2">` |
-| `pages/WarRoomPage.tsx` | 361 | `<div className="flex items-end justify-between gap-4">` |
-| `pages/hunting/RequestTimelinePage.tsx` | 214 | `<div className="card-header flex items-center justify-between gap-4">` |
-| `pages/hunting/RequestTimelinePage.tsx` | 368 | `<div className="card-header flex items-center justify-between gap-4">` |
 | `pages/AdminSettingsPage.tsx` | 858 | `<div className="flex items-start justify-between gap-4">` |
 | `pages/AdminSettingsPage.tsx` | 1482 | `<div className="flex items-center justify-between gap-4">` |
-| `pages/fleet/sensor-detail/OverviewTab.tsx` | 286 | `className="flex items-center justify-between gap-4 border border-border-subtle b` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 232 | `<div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">` |
 | `pages/fleet/ConnectivityPage.tsx` | 525 | `<div className="flex items-start justify-between gap-3">` |
-| `pages/fleet/SensorConfigPage.tsx` | 283 | `<div className="border border-border-subtle bg-surface-card p-4 flex items-start` |
-| `pages/fleet/ConfigManagerPage.tsx` | 974 | `<div key={log.id} className="p-4 flex items-start justify-between gap-4">` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1175 | `<div className="flex items-center justify-between gap-4 mb-2">` |
-| `pages/fleet/SensorDetailPage.tsx` | 163 | `<div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">` |
 

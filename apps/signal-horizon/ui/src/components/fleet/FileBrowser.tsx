@@ -374,7 +374,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
 
   return (
     <Stack direction="column" gap="xs" className="p-2 bg-surface-subtle">
-      <div className="flex items-center justify-between gap-2">
+      <Stack direction="row" align="center" justify="space-between" gap="sm">
         <span className="text-xs font-medium text-ink-primary truncate" title={download.path}>
           {filename}
         </span>
@@ -400,7 +400,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
             </button>
           )}
         </div>
-      </div>
+      </Stack>
 
       {/* Progress bar */}
       <div className="h-1.5 bg-surface-card overflow-hidden">

@@ -971,7 +971,14 @@ export function ConfigManagerPage() {
               const changeCount = resolveChangeCount(log);
               const summary = `${resolveResourceLabel(log)} ${formatAuditAction(log.action)}`;
               return (
-                <div key={log.id} className="p-4 flex items-start justify-between gap-4">
+                <Stack
+                  key={log.id}
+                  direction="row"
+                  align="flex-start"
+                  justify="space-between"
+                  gap="md"
+                  className="p-4"
+                >
                   <div className="space-y-1">
                     <div className="text-sm font-medium text-ink-primary">{summary}</div>
                     <div className="text-xs text-ink-muted">
@@ -987,7 +994,7 @@ export function ConfigManagerPage() {
                   <div className="text-xs text-ink-muted">
                     {new Date(log.createdAt).toLocaleString()}
                   </div>
-                </div>
+                </Stack>
               );
             })}
           </div>
@@ -1172,7 +1179,13 @@ export function ConfigManagerPage() {
 
               {/* Right Column: Config Editor */}
               <div className="col-span-2 flex flex-col h-full overflow-hidden">
-                <div className="flex items-center justify-between gap-4 mb-2">
+                <Stack
+                  direction="row"
+                  align="center"
+                  justify="space-between"
+                  gap="md"
+                  className="mb-2"
+                >
                   <label className="block text-sm font-medium text-ink-secondary">
                     Sensor Configuration
                   </label>
@@ -1211,7 +1224,7 @@ export function ConfigManagerPage() {
                       JSON
                     </button>
                   </div>
-                </div>
+                </Stack>
 
                 {templateConfigView === 'base' && (
                   <div className="flex-1 overflow-hidden flex flex-col min-h-0">

@@ -229,7 +229,13 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
     <div className="space-y-6">
       {/* Config Tabs — ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
-        <div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">
+        <Stack
+          direction="row"
+          align="center"
+          justify="space-between"
+          gap="md"
+          className="p-4 bg-surface-inset"
+        >
           <div className="min-w-0 flex-1">
             <Tabs
               tabs={CONFIG_TABS}
@@ -266,7 +272,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             </button>
           )}
           </div>
-        </div>
+        </Stack>
       </div>
 
       {configTab === 'drift' && (

@@ -211,7 +211,13 @@ export default function RequestTimelinePage() {
       )}
 
       <div className="card">
-        <div className="card-header flex items-center justify-between gap-4">
+        <Stack
+          direction="row"
+          align="center"
+          justify="space-between"
+          style={{ gap: '16px' }}
+          className="card-header"
+        >
           <div className="min-w-0">
             <SectionHeader
               title="Recent"
@@ -234,7 +240,7 @@ export default function RequestTimelinePage() {
           >
             Refresh
           </Button>
-        </div>
+        </Stack>
         <div className="card-body">
           {recentError && <Alert status="error">{recentError}</Alert>}
 
@@ -365,7 +371,13 @@ export default function RequestTimelinePage() {
       </div>
 
       <div className="card">
-        <div className="card-header flex items-center justify-between gap-4">
+        <Stack
+          direction="row"
+          align="center"
+          justify="space-between"
+          style={{ gap: '16px' }}
+          className="card-header"
+        >
           <div className="min-w-0">
             <SectionHeader
               title="Timeline"
@@ -390,7 +402,7 @@ export default function RequestTimelinePage() {
               {events ? `${events.length} events` : 'no data'}
             </div>
           </div>
-        </div>
+        </Stack>
         <div className="card-body">
           {timelineNote && <Alert status="warning">{timelineNote}</Alert>}
 

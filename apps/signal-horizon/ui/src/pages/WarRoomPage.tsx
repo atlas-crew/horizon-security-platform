@@ -11,7 +11,7 @@ import { useToast } from '../components/ui/Toast';
 import { Clock, Send, UserPlus, Shield } from 'lucide-react';
 import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
 import { PlaybookRunner } from '../components/warroom/PlaybookRunner';
-import { Button, Input, SectionHeader, alpha, colors } from '@/ui';
+import { Button, Input, SectionHeader, Stack, alpha, colors } from '@/ui';
 
 interface Activity {
   id: string;
@@ -358,7 +358,7 @@ function MetricTile({
       <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-ink-muted mb-2">
         {label}
       </div>
-      <div className="flex items-end justify-between gap-4">
+      <Stack direction="row" align="flex-end" justify="space-between" gap="md">
         <span
           className="text-3xl font-light"
           style={{ color: isAlert ? colors.red : isWarning ? colors.orange : undefined }}
@@ -369,7 +369,7 @@ function MetricTile({
           className={`h-1 flex-1 mb-2 ${isAlert || isWarning ? 'animate-pulse' : ''}`}
           style={{ background: toneColor }}
         />
-      </div>
+      </Stack>
     </div>
   );
 }

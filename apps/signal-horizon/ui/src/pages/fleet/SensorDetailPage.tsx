@@ -160,7 +160,13 @@ export function SensorDetailPage() {
       />
       {/* Header */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
-        <div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">
+        <Stack
+          direction="row"
+          align="flex-start"
+          justify="space-between"
+          style={{ gap: '24px' }}
+          className="p-6 bg-surface-inset"
+        >
           <div>
             <Button
               variant="ghost"
@@ -200,7 +206,7 @@ export function SensorDetailPage() {
               {restartMutation.isPending ? 'Restarting...' : 'Restart Sensor'}
             </Button>
           </div>
-        </div>
+        </Stack>
       </div>
 
       {/* Tabs — WCAG 1.3.1 ARIA tab pattern */}

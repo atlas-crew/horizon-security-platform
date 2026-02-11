@@ -280,7 +280,13 @@ export function SensorConfigPage() {
 	              </div>
 	            </div>
 
-              <div className="border border-border-subtle bg-surface-card p-4 flex items-start justify-between gap-4 flex-shrink-0">
+              <Stack
+                direction="row"
+                align="flex-start"
+                justify="space-between"
+                gap="md"
+                className="border border-border-subtle bg-surface-card p-4 flex-shrink-0"
+              >
                 <div className="space-y-1">
                   <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
                     Preset: Apparatus Echo Target (13 protocols)
@@ -343,7 +349,7 @@ export function SensorConfigPage() {
                     Apply Upstream
                   </button>
                 </div>
-              </div>
+              </Stack>
 	
 	            <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
 	              <CodeEditor

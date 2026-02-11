@@ -12,6 +12,7 @@ import {
 import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { MetricCard } from '../../../components/fleet';
+import { Stack } from '@/ui';
 import { InfoRow, ActionButton, formatUptime } from './shared';
 import { apiFetch } from '../../../lib/api';
 
@@ -281,9 +282,13 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
               const srcIp = sig.sourceIp || sig.source_ip || sig.ip;
 
               return (
-                <div
+                <Stack
                   key={sig.id}
-                  className="flex items-center justify-between gap-4 border border-border-subtle bg-surface-card px-3 py-2"
+                  direction="row"
+                  align="center"
+                  justify="space-between"
+                  gap="md"
+                  className="border border-border-subtle bg-surface-card px-3 py-2"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
@@ -308,7 +313,7 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
                   <div className="text-xs text-ink-muted font-mono whitespace-nowrap">
                     {ts ? new Date(ts).toLocaleString() : ''}
                   </div>
-                </div>
+                </Stack>
               );
             })}
           </div>

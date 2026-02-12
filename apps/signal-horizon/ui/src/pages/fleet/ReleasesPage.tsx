@@ -25,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { Modal, SectionHeader, Spinner } from '@/ui';
+import { Modal, SectionHeader, Spinner, Stack } from '@/ui';
 
 // ============================================================================
 // Types
@@ -332,11 +332,11 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                 )}
               >
                 {binaryFile ? (
-                  <div className="flex items-center justify-center gap-2">
+                  <Stack direction="row" align="center" justify="center" gap="sm">
                     <Check className="w-5 h-5 text-status-success" />
                     <span className="text-sm text-ink-primary">{binaryFile.name}</span>
                     <span className="text-xs text-ink-muted">({formatBytes(binaryFile.size)})</span>
-                  </div>
+                  </Stack>
                 ) : (
                   <div>
                     <Upload className="w-8 h-8 mx-auto text-ink-muted" />
@@ -380,7 +380,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
         </div>
 
         <Modal.Footer>
-          <div className="flex items-center justify-end gap-3 w-full">
+          <Stack direction="row" align="center" justify="flex-end" gap="smPlus" fill>
             <button
               onClick={handleClose}
               className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
@@ -390,21 +390,21 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
             >
               {isSubmitting ? (
-                <>
+                <Stack as="span" inline align="center" gap="sm">
                   <Spinner size={16} color="#FFFFFF" />
                   Uploading...
-                </>
+                </Stack>
               ) : (
-                <>
+                <Stack as="span" inline align="center" gap="sm">
                   <Upload className="w-4 h-4" />
                   Upload Release
-                </>
+                </Stack>
               )}
             </button>
-          </div>
+          </Stack>
         </Modal.Footer>
     </Modal>
   );
@@ -422,11 +422,11 @@ function ConfirmDeleteModal({
 
   return (
     <Modal open onClose={onClose} size="520px" title="Delete Release?">
-      <div className="flex items-center gap-3 mb-4">
+      <Stack direction="row" align="center" gap="smPlus" className="mb-4">
         <div className="p-2 bg-status-error/10">
           <AlertTriangle className="w-6 h-6 text-status-error" />
         </div>
-      </div>
+      </Stack>
 
       <p className="text-sm text-ink-secondary mb-2">
         Are you sure you want to delete release <span className="font-semibold">v{release.version}</span>?
@@ -445,18 +445,18 @@ function ConfirmDeleteModal({
         <button
           onClick={onConfirm}
           disabled={isDeleting}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
         >
           {isDeleting ? (
-            <>
+            <Stack as="span" inline align="center" gap="sm">
               <Spinner size={16} color="#FFFFFF" />
               Deleting...
-            </>
+            </Stack>
           ) : (
-            <>
+            <Stack as="span" inline align="center" gap="sm">
               <Trash2 className="w-4 h-4" />
               Delete Release
-            </>
+            </Stack>
           )}
         </button>
       </div>
@@ -497,7 +497,7 @@ function ReleaseRow({
     <>
       <tr className="border-b border-border-subtle hover:bg-surface-subtle">
         <td className="px-6 py-4">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             <button
               onClick={() => setShowChangelog(!showChangelog)}
               className="p-1 hover:bg-surface-subtle transition-colors"
@@ -514,7 +514,7 @@ function ReleaseRow({
                 Latest
               </span>
             )}
-          </div>
+          </Stack>
         </td>
         <td className="px-6 py-4 text-sm text-ink-secondary">{formatDate(release.createdAt)}</td>
         <td className="px-6 py-4 text-sm text-ink-secondary">{formatBytes(release.size)}</td>
@@ -522,13 +522,15 @@ function ReleaseRow({
           {release.createdBy}
         </td>
         <td className="px-6 py-4">
-          <div className="flex items-center justify-end gap-2">
+          <Stack direction="row" align="center" justify="flex-end" gap="sm">
             <button
               onClick={() => onDeploy(release)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-ac-blue bg-ac-blue/10 border border-ac-blue/30 hover:bg-ac-blue/20 transition-colors"
+              className="px-3 py-1.5 text-sm font-medium text-ac-blue bg-ac-blue/10 border border-ac-blue/30 hover:bg-ac-blue/20 transition-colors"
             >
-              <Rocket className="w-3.5 h-3.5" />
-              Deploy
+              <Stack as="span" inline align="center" gap="xsPlus">
+                <Rocket className="w-3.5 h-3.5" />
+                Deploy
+              </Stack>
             </button>
             <div className="relative" ref={menuRef}>
               <button
@@ -544,20 +546,24 @@ function ReleaseRow({
                       window.open(release.binaryUrl, '_blank');
                       setShowMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
+                    className="w-full px-3 py-2 text-sm text-left text-ink-secondary hover:bg-surface-subtle"
                   >
-                    <Download className="w-4 h-4" />
-                    Download
+                    <Stack as="span" inline align="center" gap="sm">
+                      <Download className="w-4 h-4" />
+                      Download
+                    </Stack>
                   </button>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(release.sha256);
                       setShowMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-secondary hover:bg-surface-subtle"
+                    className="w-full px-3 py-2 text-sm text-left text-ink-secondary hover:bg-surface-subtle"
                   >
-                    <Hash className="w-4 h-4" />
-                    Copy SHA-256
+                    <Stack as="span" inline align="center" gap="sm">
+                      <Hash className="w-4 h-4" />
+                      Copy SHA-256
+                    </Stack>
                   </button>
                   <hr className="my-1 border-border-subtle" />
                   <button
@@ -565,15 +571,17 @@ function ReleaseRow({
                       onDelete(release);
                       setShowMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-error hover:bg-status-error/10"
+                    className="w-full px-3 py-2 text-sm text-left text-status-error hover:bg-status-error/10"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
+                    <Stack as="span" inline align="center" gap="sm">
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </Stack>
                   </button>
                 </div>
               )}
             </div>
-          </div>
+          </Stack>
         </td>
       </tr>
       {showChangelog && (
@@ -584,16 +592,16 @@ function ReleaseRow({
                 {release.changelog}
               </pre>
             </div>
-            <div className="mt-3 flex items-center gap-4 text-xs text-ink-muted">
-              <span className="flex items-center gap-1">
+            <Stack direction="row" align="center" gap="md" className="mt-3 text-xs text-ink-muted">
+              <Stack as="span" inline align="center" gap="xs">
                 <Hash className="w-3.5 h-3.5" />
                 <span className="font-mono truncate max-w-[200px]">{release.sha256}</span>
-              </span>
-              <span className="flex items-center gap-1">
+              </Stack>
+              <Stack as="span" inline align="center" gap="xs">
                 <Shield className="w-3.5 h-3.5" />
                 Verified
-              </span>
-            </div>
+              </Stack>
+            </Stack>
           </td>
         </tr>
       )}
@@ -704,25 +712,29 @@ export function ReleasesPage() {
         style={PAGE_HEADER_STYLE}
         titleStyle={PAGE_HEADER_TITLE_STYLE}
         actions={
-          <div className="flex items-center gap-3">
+          <Stack direction="row" align="center" gap="smPlus">
             <button
               onClick={() => {
                 refreshReleases();
                 refreshRollouts();
               }}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
+              className="px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
             >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
+              <Stack as="span" inline align="center" gap="sm">
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </Stack>
             </button>
             <button
               onClick={() => setShowUploadModal(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
             >
-              <Upload className="w-4 h-4" />
-              Upload Release
+              <Stack as="span" inline align="center" gap="sm">
+                <Upload className="w-4 h-4" />
+                Upload Release
+              </Stack>
             </button>
-          </div>
+          </Stack>
         }
       />
 
@@ -799,10 +811,12 @@ export function ReleasesPage() {
             <p className="text-sm text-ink-muted">Upload your first release to get started.</p>
             <button
               onClick={() => setShowUploadModal(true)}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
+              className="mt-4 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
             >
-              <Upload className="w-4 h-4" />
-              Upload Release
+              <Stack as="span" inline align="center" gap="sm">
+                <Upload className="w-4 h-4" />
+                Upload Release
+              </Stack>
             </button>
           </div>
         ) : (
@@ -858,7 +872,7 @@ export function ReleasesPage() {
           <div className="divide-y divide-border-subtle">
             {recentRollouts.map((rollout) => (
               <div key={rollout.id} className="px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
+                <Stack direction="row" align="center" gap="md">
                   <div className="p-2 bg-status-success/10">
                     <Check className="w-4 h-4 text-status-success" />
                   </div>
@@ -873,7 +887,7 @@ export function ReleasesPage() {
                       sensors updated
                     </div>
                   </div>
-                </div>
+                </Stack>
                 <div className="text-right">
                   <div className="text-sm text-ink-secondary capitalize">{rollout.strategy}</div>
                   <div className="text-xs text-ink-muted">

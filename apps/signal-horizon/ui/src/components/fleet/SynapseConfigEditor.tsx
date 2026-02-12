@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Code, Settings, Plus, Trash2, ChevronDown, ChevronRight, Globe } from 'lucide-react';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import YAML from 'yaml';
+import { Stack } from '@/ui';
 
 // Upstream backend configuration
 interface UpstreamConfig {
@@ -361,32 +362,36 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Mode Toggle */}
-      <div className="flex items-center gap-2 mb-4">
+      <Stack direction="row" align="center" gap="sm" className="mb-4">
         <button
           type="button"
           onClick={() => setMode('visual')}
-          className={`flex items-center gap-2 px-4 py-2  text-sm font-medium transition-colors ${
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
             mode === 'visual'
               ? 'bg-ac-blue text-white'
               : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
           }`}
         >
-          <Settings className="w-4 h-4" />
-          Visual Editor
+          <Stack direction="row" align="center" gap="sm">
+            <Settings className="w-4 h-4" />
+            <span>Visual Editor</span>
+          </Stack>
         </button>
         <button
           type="button"
           onClick={() => setMode('yaml')}
-          className={`flex items-center gap-2 px-4 py-2  text-sm font-medium transition-colors ${
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
             mode === 'yaml'
               ? 'bg-ac-blue text-white'
               : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
           }`}
         >
-          <Code className="w-4 h-4" />
-          YAML Editor
+          <Stack direction="row" align="center" gap="sm">
+            <Code className="w-4 h-4" />
+            <span>YAML Editor</span>
+          </Stack>
         </button>
-      </div>
+      </Stack>
 
       {mode === 'yaml' ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -540,23 +545,27 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   key={idx}
                   type="button"
                   onClick={() => setActiveSiteIndex(idx)}
-                  className={`flex items-center gap-2 px-3 py-1.5  text-sm transition-colors ${
+                  className={`px-3 py-1.5 text-sm transition-colors ${
                     idx === activeSiteIndex
                       ? 'bg-ac-blue text-white'
                       : 'bg-surface-elevated text-ink-secondary hover:text-ink-primary'
                   }`}
                 >
-                  <Globe className="w-3 h-3" />
-                  {site.hostname.length > 20 ? site.hostname.slice(0, 20) + '...' : site.hostname}
+                  <Stack direction="row" align="center" gap="sm">
+                    <Globe className="w-3 h-3" />
+                    <span>{site.hostname.length > 20 ? site.hostname.slice(0, 20) + '...' : site.hostname}</span>
+                  </Stack>
                 </button>
               ))}
               <button
                 type="button"
                 onClick={addSite}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm text-ac-blue hover:bg-surface-elevated transition-colors"
+                className="px-3 py-1.5 text-sm text-ac-blue hover:bg-surface-elevated transition-colors"
               >
-                <Plus className="w-3 h-3" />
-                Add Site
+                <Stack direction="row" align="center" gap="xs">
+                  <Plus className="w-3 h-3" />
+                  <span>Add Site</span>
+                </Stack>
               </button>
             </div>
 
@@ -594,7 +603,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   <label className="block text-sm text-ink-secondary mb-2">Upstream Backends</label>
                   <div className="space-y-2">
                     {activeSite.upstreams.map((upstream, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                      <Stack key={idx} direction="row" align="center" gap="sm">
                         <input
                           type="text"
                           value={upstream.host}
@@ -646,7 +655,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      </div>
+                      </Stack>
                     ))}
                     <button
                       type="button"
@@ -655,10 +664,12 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                           upstreams: [...activeSite.upstreams, { host: '127.0.0.1', port: 8080 }],
                         });
                       }}
-                      className="flex items-center gap-2 text-sm text-ac-blue hover:text-ac-blue/80 transition-colors"
+                      className="text-sm text-ac-blue hover:text-ac-blue/80 transition-colors"
                     >
-                      <Plus className="w-4 h-4" />
-                      Add Upstream
+                      <Stack direction="row" align="center" gap="sm">
+                        <Plus className="w-4 h-4" />
+                        <span>Add Upstream</span>
+                      </Stack>
                     </button>
                   </div>
                 </div>

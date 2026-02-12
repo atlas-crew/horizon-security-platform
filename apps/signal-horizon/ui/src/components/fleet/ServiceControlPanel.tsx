@@ -149,10 +149,10 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
   return (
     <Modal open onClose={onCancel} size="520px" title={title}>
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <AlertTriangle className="w-5 h-5 text-status-warning" />
           <p className="text-sm text-ink-secondary">{message}</p>
-        </div>
+        </Stack>
 
         {warningMessage && (
           <div className="flex items-start gap-2 p-3 bg-status-warning/10 border border-status-warning/20">
@@ -178,14 +178,14 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-1 text-xs text-ink-muted">
+        <Stack direction="row" align="center" justify="center" gap="xs" className="text-xs text-ink-muted">
           <Clock className="w-3 h-3" />
           <span>Auto-cancel in {countdown}s</span>
-        </div>
+        </Stack>
       </div>
 
       <Modal.Footer>
-        <div className="flex items-center justify-end gap-2 w-full">
+        <Stack direction="row" align="center" justify="flex-end" gap="sm" className="w-full">
           <button
             onClick={onCancel}
             disabled={isExecuting}
@@ -197,15 +197,17 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
             onClick={onConfirm}
             disabled={!isConfirmEnabled || isExecuting}
             className={clsx(
-              'px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
+              'px-4 py-2 text-sm font-medium transition-colors',
               'bg-status-error text-white hover:bg-status-error/90',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
-            {isExecuting && <Spinner size={14} color="#FFFFFF" />}
-            {confirmText}
+            <Stack direction="row" align="center" gap="sm">
+              {isExecuting && <Spinner size={14} color="#FFFFFF" />}
+              <span>{confirmText}</span>
+            </Stack>
           </button>
-        </div>
+        </Stack>
       </Modal.Footer>
     </Modal>
   );
@@ -231,9 +233,12 @@ const Toast = memo(function Toast({ message, type, onClose }: ToastProps) {
   };
 
   return (
-    <div
+    <Stack
+      direction="row"
+      align="center"
+      gap="sm"
       className={clsx(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 border shadow-lg',
+        'fixed bottom-4 right-4 z-50 px-4 py-3 border shadow-lg',
         typeConfig[type]
       )}
     >
@@ -244,7 +249,7 @@ const Toast = memo(function Toast({ message, type, onClose }: ToastProps) {
       >
         <X className="w-4 h-4" />
       </button>
-    </div>
+    </Stack>
   );
 });
 
@@ -460,26 +465,28 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             {/* State Badge */}
             <div
               className={clsx(
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border',
+                'inline-flex px-2.5 py-1.5 text-xs font-medium border',
                 currentStateConfig.className
               )}
             >
-              {currentStateConfig.icon}
-              <span>{currentStateConfig.label}</span>
+              <Stack direction="row" align="center" style={{ gap: '0.375rem' }}>
+                {currentStateConfig.icon}
+                <span>{currentStateConfig.label}</span>
+              </Stack>
             </div>
 
             {/* Active Connections */}
-            <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
+            <Stack direction="row" align="center" style={{ gap: '0.375rem' }} className="text-xs text-ink-secondary">
               <Wifi className="w-3.5 h-3.5" />
               <span>
                 {activeConnections} connection{activeConnections !== 1 ? 's' : ''}
               </span>
-            </div>
+            </Stack>
           </Stack>
 
           {/* Uptime and Last Reload */}
           <div className={clsx('grid gap-3', compact ? 'grid-cols-1' : 'grid-cols-2')}>
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <Clock className="w-4 h-4 text-ink-muted" />
               <div>
                 <div className="text-xs text-ink-muted">Uptime</div>
@@ -487,10 +494,10 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                   {formatUptime(uptime)}
                 </div>
               </div>
-            </div>
+            </Stack>
 
             {lastConfigReload && (
-              <div className="flex items-center gap-2">
+              <Stack direction="row" align="center" gap="sm">
                 <RefreshCw className="w-4 h-4 text-ink-muted" />
                 <div>
                   <div className="text-xs text-ink-muted">Last Config Reload</div>
@@ -498,7 +505,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                     {lastConfigReload.toLocaleTimeString()}
                   </div>
                 </div>
-              </div>
+              </Stack>
             )}
           </div>
 
@@ -525,18 +532,20 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleReload}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
+                'flex justify-center px-3 py-2 text-xs font-medium transition-colors',
                 'bg-ac-blue/10 text-ac-blue border border-ac-blue/30',
                 'hover:bg-ac-blue/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
               title="Reload configuration without restart (Ctrl+R)"
             >
-              {executingCommand === 'reload' ? (
-                <Spinner size={16} color="#0057B7" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              <span className={clsx(compact && 'hidden sm:inline')}>Reload</span>
+              <Stack direction="row" align="center" gap="sm">
+                {executingCommand === 'reload' ? (
+                  <Spinner size={16} color="#0057B7" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span className={clsx(compact && 'hidden sm:inline')}>Reload</span>
+              </Stack>
             </button>
 
             {/* Drain / Resume Toggle */}
@@ -545,36 +554,40 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                 onClick={handleResume}
                 disabled={isExecuting}
                 className={clsx(
-                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
+                  'flex justify-center px-3 py-2 text-xs font-medium transition-colors',
                   'bg-status-success/10 text-status-success border border-status-success/30',
                   'hover:bg-status-success/20 disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
                 title="Resume accepting connections"
               >
-                {executingCommand === 'resume' ? (
-                  <Spinner size={16} color="#00B140" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-                <span className={clsx(compact && 'hidden sm:inline')}>Resume</span>
+                <Stack direction="row" align="center" gap="sm">
+                  {executingCommand === 'resume' ? (
+                    <Spinner size={16} color="#00B140" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                  <span className={clsx(compact && 'hidden sm:inline')}>Resume</span>
+                </Stack>
               </button>
             ) : (
               <button
                 onClick={handleDrain}
                 disabled={isExecuting || state === 'shutting_down' || state === 'restarting'}
                 className={clsx(
-                  'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
+                  'flex justify-center px-3 py-2 text-xs font-medium transition-colors',
                   'bg-status-warning/10 text-status-warning border border-status-warning/30',
                   'hover:bg-status-warning/20 disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
                 title="Stop accepting new connections"
               >
-                {executingCommand === 'drain' ? (
-                  <Spinner size={16} color="#E35205" />
-                ) : (
-                  <Pause className="w-4 h-4" />
-                )}
-                <span className={clsx(compact && 'hidden sm:inline')}>Drain</span>
+                <Stack direction="row" align="center" gap="sm">
+                  {executingCommand === 'drain' ? (
+                    <Spinner size={16} color="#E35205" />
+                  ) : (
+                    <Pause className="w-4 h-4" />
+                  )}
+                  <span className={clsx(compact && 'hidden sm:inline')}>Drain</span>
+                </Stack>
               </button>
             )}
 
@@ -583,18 +596,20 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleRestartClick}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
+                'flex justify-center px-3 py-2 text-xs font-medium transition-colors',
                 'bg-ac-orange/10 text-ac-orange border border-ac-orange/30',
                 'hover:bg-ac-orange/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
               title="Graceful restart (requires confirmation)"
             >
-              {executingCommand === 'restart' ? (
-                <Spinner size={16} color="#E35205" />
-              ) : (
-                <RotateCw className="w-4 h-4" />
-              )}
-              <span className={clsx(compact && 'hidden sm:inline')}>Restart</span>
+              <Stack direction="row" align="center" gap="sm">
+                {executingCommand === 'restart' ? (
+                  <Spinner size={16} color="#E35205" />
+                ) : (
+                  <RotateCw className="w-4 h-4" />
+                )}
+                <span className={clsx(compact && 'hidden sm:inline')}>Restart</span>
+              </Stack>
             </button>
 
             {/* Shutdown */}
@@ -602,29 +617,31 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               onClick={handleShutdownClick}
               disabled={isExecuting || state === 'shutting_down'}
               className={clsx(
-                'flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium transition-colors',
+                'flex justify-center px-3 py-2 text-xs font-medium transition-colors',
                 'bg-status-error/10 text-status-error border border-status-error/30',
                 'hover:bg-status-error/20 disabled:opacity-50 disabled:cursor-not-allowed'
               )}
               title="Shutdown service (requires confirmation)"
             >
-              {executingCommand === 'shutdown' ? (
-                <Spinner size={16} color="#EF3340" />
-              ) : (
-                <Power className="w-4 h-4" />
-              )}
-              <span className={clsx(compact && 'hidden sm:inline')}>Shutdown</span>
+              <Stack direction="row" align="center" gap="sm">
+                {executingCommand === 'shutdown' ? (
+                  <Spinner size={16} color="#EF3340" />
+                ) : (
+                  <Power className="w-4 h-4" />
+                )}
+                <span className={clsx(compact && 'hidden sm:inline')}>Shutdown</span>
+              </Stack>
             </button>
           </div>
 
           {/* Connection count during drain */}
           {state === 'draining' && activeConnections > 0 && (
-            <div className="flex items-center justify-center gap-2 py-2 px-3 bg-status-warning/5 border border-status-warning/20">
+            <Stack direction="row" align="center" justify="center" gap="sm" className="py-2 px-3 bg-status-warning/5 border border-status-warning/20">
               <Spinner size={14} color="#E35205" />
               <span className="text-xs text-status-warning">
                 Draining {activeConnections} active connection{activeConnections !== 1 ? 's' : ''}...
               </span>
-            </div>
+            </Stack>
           )}
         </div>
 

@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import type { SensorSummary } from '../../types/fleet';
 import { SensorStatusBadge } from './SensorStatusBadge';
 import { Settings, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Stack } from '@/ui';
 
 interface SensorTableProps {
   sensors: SensorSummary[];
@@ -76,9 +77,10 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
                 role="columnheader"
                 aria-sort={sortField === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
               >
-                <div className="flex items-center gap-2">
-                  {col.label} <SortIcon field={col.key} />
-                </div>
+                <Stack direction="row" align="center" gap="sm">
+                  <span>{col.label}</span>
+                  <SortIcon field={col.key} />
+                </Stack>
               </th>
             ))}
             <th className="px-6 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-widest">

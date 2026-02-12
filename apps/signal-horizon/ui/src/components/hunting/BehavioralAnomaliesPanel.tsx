@@ -138,18 +138,20 @@ export function BehavioralAnomaliesPanel({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <button
             type="button"
             onClick={() => refreshAnomalies()}
             disabled={!historicalEnabled || anomaliesLoading}
-            className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh"
           >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+            <Stack direction="row" align="center" gap="sm">
+              <RefreshCw className="w-4 h-4" />
+              <span>Refresh</span>
+            </Stack>
           </button>
-        </div>
+        </Stack>
       </Stack>
 
       {!historicalEnabled && (
@@ -161,10 +163,10 @@ export function BehavioralAnomaliesPanel({
       {historicalEnabled && (
         <div className="p-4 space-y-4">
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <SlidersHorizontal className="w-4 h-4 text-ink-muted" />
               <span className="text-xs uppercase tracking-wider text-ink-muted">Threshold</span>
-            </div>
+            </Stack>
             <label className="text-sm text-ink-secondary">
               Z-Score
               <input
@@ -186,14 +188,14 @@ export function BehavioralAnomaliesPanel({
               Apply
             </button>
 
-            <div className="ml-auto flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm" className="ml-auto">
               {anomaliesLoading && <LoadingSpinner />}
               {anomaliesMeta && (
                 <div className="text-xs text-ink-muted font-mono">
                   historical={String(anomaliesMeta.historical)} count={anomaliesMeta.count}
                 </div>
               )}
-            </div>
+            </Stack>
           </div>
 
           {anomaliesError && (
@@ -224,10 +226,10 @@ export function BehavioralAnomaliesPanel({
                   {sortedAnomalies.map((a) => (
                     <tr key={a.signalType} className="border-b border-border-subtle">
                       <td className="py-2 pr-3">
-                        <span className="inline-flex items-center gap-2">
+                        <Stack direction="row" align="center" gap="sm">
                           <span className={`w-2 h-2 ${severityDot(a.severity)}`} />
                           <span className="font-mono text-xs">{a.severity}</span>
-                        </span>
+                        </Stack>
                       </td>
                       <td className="py-2 pr-3 font-mono">{a.signalType}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.currentCount}</td>
@@ -250,7 +252,7 @@ export function BehavioralAnomaliesPanel({
                 {showBaselines ? 'Hide baselines' : 'Show baselines'}
               </button>
 
-              <div className="flex items-center gap-2">
+              <Stack direction="row" align="center" gap="sm">
                 <span className="text-xs text-ink-muted">Lookback (days)</span>
                 <input
                   className="w-20 px-2 py-1 border border-border-subtle bg-surface-base text-ink-primary font-mono text-sm"
@@ -276,7 +278,7 @@ export function BehavioralAnomaliesPanel({
                     count={baselinesMeta.count}
                   </div>
                 )}
-              </div>
+              </Stack>
             </Stack>
 
             {showBaselines && baselinesError && (

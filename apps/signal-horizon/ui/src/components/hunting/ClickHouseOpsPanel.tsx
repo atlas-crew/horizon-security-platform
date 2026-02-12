@@ -120,11 +120,13 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
           type="button"
           onClick={() => void refresh()}
           disabled={!historicalEnabled || loading}
-          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title="Refresh"
         >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
+          <Stack direction="row" align="center" gap="sm">
+            <RefreshCw className="w-4 h-4" />
+            <span>Refresh</span>
+          </Stack>
         </button>
       </Stack>
 
@@ -136,14 +138,14 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
 
       {historicalEnabled && (
         <div className="p-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <Stack direction="row" align="center" gap="md" className="flex-wrap">
             {loading && <LoadingSpinner />}
             {data && (
               <div className="text-xs text-ink-muted font-mono">
                 sampledAt={data.sampledAt} enabled={String(data.clickhouse.enabled)} connected={String(data.clickhouse.connected)}
               </div>
             )}
-          </div>
+          </Stack>
 
           {error && (
             <Alert status="error" title="Load Error" style={{ padding: '12px 16px' }}>
@@ -153,10 +155,10 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
 
           {data?.clickhouse.config && (
             <div className="border border-border-subtle bg-surface-base">
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle">
+              <Stack direction="row" align="center" gap="sm" className="px-3 py-2 border-b border-border-subtle">
                 <Settings2 className="w-4 h-4 text-ink-muted" />
                 <div className="text-sm text-ink-secondary">Runtime limits</div>
-              </div>
+              </Stack>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 text-xs font-mono text-ink-secondary">
                 <div>maxOpenConnections={data.clickhouse.config.maxOpenConnections}</div>
                 <div>maxInFlightQueries={data.clickhouse.config.maxInFlightQueries}</div>

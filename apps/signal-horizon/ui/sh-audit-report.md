@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 13:16_
+_Generated: 2026-02-12 13:28_
 
 ## Summary
 
-**Total findings: 375**
+**Total findings: 366**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 375 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 366 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -41,7 +41,6 @@ Priority files to migrate first (most raw patterns):
 | 7 | `components/fleet/RemoteShell.tsx` |
 | 6 | `pages/soc/SessionsPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
-| 6 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
 | 6 | `components/fleet/WebTerminal.tsx` |
 | 5 | `pages/fleet/SensorConfigPage.tsx` |
 | 5 | `pages/fleet/OnboardingPage.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/beam/catalog/ServicesPage.tsx` |
 | 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 | 4 | `pages/SupportPage.tsx` |
+| 4 | `components/fleet/pingora/ServiceControls.tsx` |
 
 ---
 
@@ -79,15 +79,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
 | `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
 | `components/warroom/PlaybookSelector.tsx` | 20 | `<div className="flex items-center gap-2">` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 141 | `<div className="flex items-center gap-2">` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 146 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 164 | `<div className="flex items-center gap-2">` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 189 | `<div className="ml-auto flex items-center gap-2">` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 227 | `<span className="inline-flex items-center gap-2">` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 253 | `<div className="flex items-center gap-2">` |
-| `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
-| `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
 | `components/fleet/WebTerminal.tsx` | 196 | `<div className="flex items-center gap-2 text-status-success">` |
 | `components/fleet/WebTerminal.tsx` | 203 | `<div className="flex items-center gap-2 text-ink-secondary">` |
 | `components/fleet/WebTerminal.tsx` | 210 | `<div className="flex items-center gap-2 text-status-warning">` |
@@ -97,4 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/SensorStatusBadge.tsx` | 21 | `<span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medi` |
 | `components/fleet/DiagnosticsPanel.tsx` | 159 | `<div className="flex items-center gap-3">` |
 | `components/fleet/DiagnosticsPanel.tsx` | 191 | `className={`inline-flex items-center gap-2 px-3 py-1.5  text-sm font-medium bord` |
+| `components/fleet/DiagnosticsPanel.tsx` | 201 | `<div className="flex items-center gap-2">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 264 | `<div key={label} className="flex items-center gap-1.5 text-xs text-ink-muted">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 288 | `<div className="flex items-center gap-2">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 305 | `<div className="flex items-center gap-4 text-sm">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 321 | `<div className="flex items-center gap-2">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 329 | `<div className="flex items-center gap-2">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 434 | `<div className="flex items-center gap-2">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 493 | `<div className="flex items-center gap-3">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 501 | `<div className="flex items-center gap-3">` |
 

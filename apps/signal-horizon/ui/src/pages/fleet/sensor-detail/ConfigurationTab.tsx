@@ -253,10 +253,12 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           <div className="flex gap-3">
           <button
             onClick={() => navigate(`/fleet/sensors/${id}/config`)}
-            className="btn-secondary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
+            className="btn-secondary h-10 px-4 text-xs uppercase tracking-[0.2em]"
           >
-            <Settings className="w-4 h-4" />
-            Advanced JSON Editor
+            <Stack as="span" direction="row" inline align="center" gap="sm">
+              <Settings className="w-4 h-4" />
+              Advanced JSON Editor
+            </Stack>
           </button>
           {configTab === 'pingora' && (
             <button
@@ -292,21 +294,23 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             <ConfigPanelSkeleton />
           ) : pingoraError ? (
             <Stack direction="column" align="center" justify="center" gap="md" className="py-12">
-              <div className="flex items-center gap-2 text-ink-primary">
+              <Stack direction="row" align="center" gap="sm" className="text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(pingoraError as Error).message}</span>
-              </div>
+              </Stack>
               <button
                 onClick={() => refetchPingora()}
                 disabled={isPingoraFetching}
-                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
               >
-                {isPingoraFetching ? (
-                  <Spinner size={16} color="#FFFFFF" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {isPingoraFetching ? 'Retrying...' : 'Retry'}
+                <Stack as="span" direction="row" inline align="center" gap="sm">
+                  {isPingoraFetching ? (
+                    <Spinner size={16} color="#FFFFFF" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {isPingoraFetching ? 'Retrying...' : 'Retry'}
+                </Stack>
               </button>
             </Stack>
           ) : (
@@ -343,21 +347,23 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             <ConfigPanelSkeleton />
           ) : systemConfigError ? (
             <Stack direction="column" align="center" justify="center" gap="md" className="py-12">
-              <div className="flex items-center gap-2 text-ink-primary">
+              <Stack direction="row" align="center" gap="sm" className="text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(systemConfigError as Error).message}</span>
-              </div>
+              </Stack>
               <button
                 onClick={() => refetchSystemConfig()}
                 disabled={isSystemConfigFetching}
-                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
               >
-                {isSystemConfigFetching ? (
-                  <Spinner size={16} color="#FFFFFF" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
+                <Stack as="span" direction="row" inline align="center" gap="sm">
+                  {isSystemConfigFetching ? (
+                    <Spinner size={16} color="#FFFFFF" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
+                </Stack>
               </button>
             </Stack>
           ) : (
@@ -428,15 +434,15 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-xs text-ink-secondary">
+                <Stack direction="row" align="center" gap="smPlus">
+                  <Stack as="label" direction="row" align="center" gap="sm" className="text-xs text-ink-secondary">
                     <input
                       type="checkbox"
                       checked={persistKernel}
                       onChange={(event) => setPersistKernel(event.target.checked)}
                     />
                     Persist changes
-                  </label>
+                  </Stack>
                   <button
                     className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                     onClick={() => refetchKernel()}
@@ -451,7 +457,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                   >
                     Save Changes
                   </button>
-                </div>
+                </Stack>
               </div>
               {kernelError && (
                 <div className="text-sm text-ink-primary border-l-2 border-l-ac-red pl-2">Failed to load kernel config.</div>
@@ -501,21 +507,23 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             <ConfigPanelSkeleton />
           ) : historyError ? (
             <Stack direction="column" align="center" justify="center" gap="sm" className="py-8">
-              <div className="flex items-center gap-2 text-ink-primary">
+              <Stack direction="row" align="center" gap="sm" className="text-ink-primary">
                 <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(historyError as Error).message}</span>
-              </div>
+              </Stack>
               <button
                 onClick={() => refetchHistory()}
                 disabled={isHistoryFetching}
-                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
               >
-                {isHistoryFetching ? (
-                  <Spinner size={16} color="#FFFFFF" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {isHistoryFetching ? 'Retrying...' : 'Retry'}
+                <Stack as="span" direction="row" inline align="center" gap="sm">
+                  {isHistoryFetching ? (
+                    <Spinner size={16} color="#FFFFFF" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {isHistoryFetching ? 'Retrying...' : 'Retry'}
+                </Stack>
               </button>
             </Stack>
           ) : configHistoryEntries.length === 0 ? (

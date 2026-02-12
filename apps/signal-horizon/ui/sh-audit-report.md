@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 18:30_
+_Generated: 2026-02-12 18:33_
 
 ## Summary
 
-**Total findings: 178**
+**Total findings: 169**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 178 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 169 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -17,7 +17,6 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 9 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `components/fleet/LogViewer.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 1 | `pages/ApiIntelligencePage.tsx` |
 | 1 | `components/fleet/SessionSearchResults.tsx` |
 | 1 | `components/api-intelligence/ViolationsFeed.tsx` |
+| 1 | `components/api-intelligence/ApiTreemap.tsx` |
 
 ---
 

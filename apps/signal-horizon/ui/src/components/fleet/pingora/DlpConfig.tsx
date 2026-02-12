@@ -3,7 +3,7 @@ import { Eye, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 import { parseIntSafe } from '../../../utils/parseNumeric';
 import type { DlpConfig as SharedDlpConfig } from '@signal-horizon/shared/types';
-import { Alert } from '@/ui';
+import { Alert, Stack } from '@/ui';
 
 /**
  * DLP config data used by the UI form.
@@ -44,13 +44,13 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <Eye className={clsx("w-5 h-5", config.enabled ? "text-ac-magenta" : "text-ink-muted")} />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">DLP Scanner</h3>
             <p className="text-xs text-ink-secondary">Data Loss Prevention - detect sensitive data</p>
           </div>
-        </div>
+        </Stack>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -73,26 +73,30 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
 
           {/* Mode toggles */}
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.fast_mode}
-                onChange={(e) => onChange({ ...config, fast_mode: e.target.checked })}
-                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
-              />
-              <div className="flex items-center gap-1">
-                <Zap className="w-3 h-3 text-ac-orange" />
-                <span className="text-xs text-ink-secondary">Fast Mode (critical patterns only)</span>
-              </div>
+            <label className="cursor-pointer">
+              <Stack direction="row" align="center" gap="sm">
+                <input
+                  type="checkbox"
+                  checked={config.fast_mode}
+                  onChange={(e) => onChange({ ...config, fast_mode: e.target.checked })}
+                  className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                />
+                <Stack direction="row" align="center" gap="xs">
+                  <Zap className="w-3 h-3 text-ac-orange" />
+                  <span className="text-xs text-ink-secondary">Fast Mode (critical patterns only)</span>
+                </Stack>
+              </Stack>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.scan_text_only}
-                onChange={(e) => onChange({ ...config, scan_text_only: e.target.checked })}
-                className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
-              />
-              <span className="text-xs text-ink-secondary">Scan text content only</span>
+            <label className="cursor-pointer">
+              <Stack direction="row" align="center" gap="sm">
+                <input
+                  type="checkbox"
+                  checked={config.scan_text_only}
+                  onChange={(e) => onChange({ ...config, scan_text_only: e.target.checked })}
+                  className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
+                />
+                <span className="text-xs text-ink-secondary">Scan text content only</span>
+              </Stack>
             </label>
           </div>
 

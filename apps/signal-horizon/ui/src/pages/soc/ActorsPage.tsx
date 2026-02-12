@@ -141,9 +141,9 @@ export default function ActorsPage() {
       </section>
 
       <section className="card">
-        <div className="card-header flex flex-wrap items-center gap-3">
+        <Stack direction="row" align="center" gap="md" className="card-header flex-wrap">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
-          <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Stack direction="row" align="center" gap="md" className="ml-auto flex-wrap">
             <Box style={{ width: 160 }}>
               <Input
                 value={ipFilter}
@@ -170,8 +170,8 @@ export default function ActorsPage() {
                 size="sm"
               />
             </Box>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading actors...</div>}
           {error && (
@@ -260,7 +260,7 @@ function StatCard({
   accentColor: string;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-4">
+    <Stack direction="row" align="center" gap="md" className="card p-4">
       <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
         <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
       </div>
@@ -268,6 +268,6 @@ function StatCard({
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
         <p className="text-2xl font-light text-ink-primary">{value}</p>
       </div>
-    </div>
+    </Stack>
   );
 }

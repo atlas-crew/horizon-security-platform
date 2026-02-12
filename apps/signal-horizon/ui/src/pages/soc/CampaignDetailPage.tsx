@@ -200,10 +200,12 @@ export default function CampaignDetailPage() {
       <header className="space-y-2">
         <Link
           to="/campaigns"
-          className="text-sm text-link hover:text-link-hover flex items-center gap-1"
+          className="text-sm text-link hover:text-link-hover inline-block"
         >
-          <ChevronRight aria-hidden="true" className="w-4 h-4 rotate-180" />
-          Back to Campaigns
+          <Stack direction="row" align="center" gap="xs">
+            <ChevronRight aria-hidden="true" className="w-4 h-4 rotate-180" />
+            <span>Back to Campaigns</span>
+          </Stack>
         </Link>
         <SectionHeader
           title={campaign.name}
@@ -224,7 +226,7 @@ export default function CampaignDetailPage() {
             </Stack>
           }
         />
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <StatusBadge status={campaignStatusToBadge(campaign.status)} variant="subtle" size="sm">
             {campaign.status}
           </StatusBadge>
@@ -236,7 +238,7 @@ export default function CampaignDetailPage() {
               Cross-Tenant
             </StatusBadge>
           )}
-        </div>
+        </Stack>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -499,7 +501,7 @@ function StatMini({
   value: string;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-4">
+    <Stack direction="row" align="center" gap="md" className="card p-4">
       <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center text-ink-muted">
         <Icon aria-hidden="true" className="w-5 h-5" />
       </div>
@@ -507,7 +509,7 @@ function StatMini({
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
         <p className="text-lg font-medium text-ink-primary mt-1">{value}</p>
       </div>
-    </div>
+    </Stack>
   );
 }
 

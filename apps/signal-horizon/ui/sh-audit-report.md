@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 14:15_
+_Generated: 2026-02-12 14:19_
 
 ## Summary
 
-**Total findings: 319**
+**Total findings: 308**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 319 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 308 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -52,11 +52,11 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 | 4 | `pages/SupportPage.tsx` |
 | 4 | `components/fleet/pingora/EntityConfig.tsx` |
-| 4 | `components/fleet/pingora/DlpConfig.tsx` |
-| 3 | `pages/soc/CampaignDetailPage.tsx` |
-| 3 | `pages/soc/ActorsPage.tsx` |
 | 3 | `pages/soc/ActorDetailPage.tsx` |
 | 3 | `pages/fleet/DlpDashboardPage.tsx` |
+| 3 | `pages/fleet/CapacityForecastPage.tsx` |
+| 3 | `pages/CampaignDetailPage.tsx` |
+| 3 | `components/fleet/EmbeddedDashboard.tsx` |
 
 ---
 
@@ -79,11 +79,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/LogViewer.tsx` | 507 | `<div className="flex items-center gap-2">` |
 | `components/fleet/LogViewer.tsx` | 533 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
 | `components/fleet/LogViewer.tsx` | 543 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
-| `components/fleet/pingora/AdvancedConfigPanel.tsx` | 106 | `className={`w-full flex items-center gap-3 px-3 py-2.5  text-left transition-col` |
-| `components/fleet/pingora/DlpConfig.tsx` | 47 | `<div className="flex items-center gap-2">` |
-| `components/fleet/pingora/DlpConfig.tsx` | 76 | `<label className="flex items-center gap-2 cursor-pointer">` |
-| `components/fleet/pingora/DlpConfig.tsx` | 83 | `<div className="flex items-center gap-1">` |
-| `components/fleet/pingora/DlpConfig.tsx` | 88 | `<label className="flex items-center gap-2 cursor-pointer">` |
 | `components/fleet/pingora/TarpitConfig.tsx` | 54 | `<div className="flex items-center gap-2">` |
 | `components/fleet/pingora/TarpitConfig.tsx` | 197 | `<div className="flex items-center gap-1 mb-1">` |
 | `components/fleet/pingora/BlockPageConfig.tsx` | 23 | `<div className="flex items-center gap-2">` |
@@ -97,4 +92,9 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/pingora/CrawlerConfig.tsx` | 32 | `<div className="flex items-center gap-2">` |
 | `components/fleet/pingora/CrawlerConfig.tsx` | 55 | `<label className="flex items-center gap-2 cursor-pointer">` |
 | `components/fleet/pingora/CrawlerConfig.tsx` | 62 | `<div className="flex items-center gap-1">` |
+| `components/fleet/pingora/CrawlerConfig.tsx` | 67 | `<label className="flex items-center gap-2 cursor-pointer">` |
+| `components/fleet/pingora/CrawlerConfig.tsx` | 74 | `<div className="flex items-center gap-1">` |
+| `components/fleet/pingora/WafConfig.tsx` | 35 | `<div className="flex items-center gap-2">` |
+| `components/fleet/pingora/WafConfig.tsx` | 109 | `<div className="flex items-center gap-3">` |
+| `components/fleet/RemoteShell.tsx` | 283 | `<div className={`flex items-center gap-2 ${config.className}`}>` |
 

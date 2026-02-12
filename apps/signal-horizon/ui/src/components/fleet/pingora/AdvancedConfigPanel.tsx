@@ -41,7 +41,7 @@ import {
   DEFAULT_TRAVEL_MAX_SPEED_KMH,
   DEFAULT_TRAVEL_MIN_DISTANCE_KM,
 } from './configDefaults';
-import { SectionHeader } from '@/ui';
+import { SectionHeader, Stack } from '@/ui';
 
 export interface AdvancedConfigData {
   dlp: DlpConfigData;
@@ -103,17 +103,19 @@ export function AdvancedConfigPanel({ config, onChange }: AdvancedConfigPanelPro
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5  text-left transition-colors ${
+                className={`w-full px-3 py-2.5 text-left transition-colors ${
                   isActive
                     ? 'bg-ac-blue/10 text-ac-blue'
                     : 'text-ink-secondary hover:bg-surface-subtle hover:text-ink-primary'
                 }`}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{tab.label}</div>
-                  <div className="text-xs opacity-70 truncate">{tab.description}</div>
-                </div>
+                <Stack direction="row" align="center" gap="md">
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{tab.label}</div>
+                    <div className="text-xs opacity-70 truncate">{tab.description}</div>
+                  </div>
+                </Stack>
               </button>
             );
           })}

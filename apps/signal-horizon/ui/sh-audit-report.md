@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 15:52_
+_Generated: 2026-02-12 15:58_
 
 ## Summary
 
-**Total findings: 240**
+**Total findings: 237**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 240 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 237 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -52,11 +52,11 @@ Priority files to migrate first (most raw patterns):
 | 3 | `pages/CampaignDetailPage.tsx` |
 | 2 | `pages/fleet/sensor-detail/OverviewTab.tsx` |
 | 2 | `pages/fleet/FleetOverviewPage.tsx` |
-| 2 | `components/warroom/PlaybookRunner.tsx` |
 | 1 | `pages/hunting/RequestTimelinePage.tsx` |
 | 1 | `pages/fleet/sensor-detail/shared.tsx` |
 | 1 | `pages/fleet/sensor-detail/PerformanceTab.tsx` |
 | 1 | `pages/fleet/SensorDetailPage.tsx` |
+| 1 | `pages/fleet/ConfigManagerPage.tsx` |
 
 ---
 
@@ -67,9 +67,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 
 | File | Line | Match |
 |------|------|-------|
-| `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
-| `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
-| `components/warroom/PlaybookSelector.tsx` | 20 | `<div className="flex items-center gap-2">` |
 | `components/fleet/LogViewer.tsx` | 389 | `<div className="flex items-center gap-3">` |
 | `components/fleet/LogViewer.tsx` | 394 | `<div className="flex items-center gap-1.5">` |
 | `components/fleet/LogViewer.tsx` | 409 | `<div className="flex items-center gap-2">` |
@@ -97,4 +94,7 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/WarRoomPage.tsx` | 300 | `<div className="flex items-center gap-1.5 mt-2 text-[10px] font-mono text-ink-mu` |
 | `pages/soc/SessionsPage.tsx` | 178 | `<div className="card-header flex flex-wrap items-center gap-3">` |
 | `pages/soc/SessionsPage.tsx` | 180 | `<div className="ml-auto flex flex-wrap items-center gap-3">` |
+| `pages/soc/SessionsPage.tsx` | 189 | `<label className="flex items-center gap-2 text-sm text-ink-secondary">` |
+| `pages/soc/SessionsPage.tsx` | 286 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/SessionsPage.tsx` | 295 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
 

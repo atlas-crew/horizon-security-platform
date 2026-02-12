@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { CheckCircle, Circle, X, Play, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
-import type { Playbook } from './PlaybookSelector';
+import { type Playbook } from '../../data/playbooks';
 import { Spinner, Stack } from '@/ui';
 
 interface PlaybookRunnerProps {
@@ -78,9 +78,11 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
   return (
     <div className="border border-ac-blue/30 bg-ac-blue/5 p-4" role="region" aria-label="Playbook Execution Runner">
       <div className="flex items-center justify-between mb-4 border-b border-ac-blue/20 pb-3">
-        <h3 className="font-medium text-ac-blue flex items-center gap-2">
-          <Play className="w-4 h-4" aria-hidden="true" />
-          <span>Running: {playbook.name}</span>
+        <h3 className="font-medium text-ac-blue">
+          <Stack as="span" direction="row" align="center" gap="sm" inline>
+            <Play className="w-4 h-4" aria-hidden="true" />
+            <span>Running: {playbook.name}</span>
+          </Stack>
         </h3>
         <button
           onClick={onClose}
@@ -107,7 +109,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
 
           return (
             <Stack key={index} direction="column" gap="sm">
-              <div className="flex items-center gap-3">
+              <Stack direction="row" align="center" gap="smPlus">
                 <div className="flex-shrink-0">
                   {isCompleted ? (
                     <CheckCircle className="w-5 h-5 text-ac-green" aria-label="Completed" />
@@ -149,7 +151,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
                     {step.type}
                   </span>
                 </Stack>
-              </div>
+              </Stack>
 
               {isWaiting && (
                 <div 

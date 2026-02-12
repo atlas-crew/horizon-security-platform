@@ -393,12 +393,12 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               className="px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50"
             >
               {isSubmitting ? (
-                <Stack as="span" inline align="center" gap="sm">
+                <Stack as="span" direction="row" inline align="center" gap="sm">
                   <Spinner size={16} color="#FFFFFF" />
                   Uploading...
                 </Stack>
               ) : (
-                <Stack as="span" inline align="center" gap="sm">
+                <Stack as="span" direction="row" inline align="center" gap="sm">
                   <Upload className="w-4 h-4" />
                   Upload Release
                 </Stack>
@@ -448,12 +448,12 @@ function ConfirmDeleteModal({
           className="px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
         >
           {isDeleting ? (
-            <Stack as="span" inline align="center" gap="sm">
+            <Stack as="span" direction="row" inline align="center" gap="sm">
               <Spinner size={16} color="#FFFFFF" />
               Deleting...
             </Stack>
           ) : (
-            <Stack as="span" inline align="center" gap="sm">
+            <Stack as="span" direction="row" inline align="center" gap="sm">
               <Trash2 className="w-4 h-4" />
               Delete Release
             </Stack>
@@ -527,7 +527,7 @@ function ReleaseRow({
               onClick={() => onDeploy(release)}
               className="px-3 py-1.5 text-sm font-medium text-ac-blue bg-ac-blue/10 border border-ac-blue/30 hover:bg-ac-blue/20 transition-colors"
             >
-              <Stack as="span" inline align="center" gap="xsPlus">
+              <Stack as="span" direction="row" inline align="center" gap="xsPlus">
                 <Rocket className="w-3.5 h-3.5" />
                 Deploy
               </Stack>
@@ -548,7 +548,7 @@ function ReleaseRow({
                     }}
                     className="w-full px-3 py-2 text-sm text-left text-ink-secondary hover:bg-surface-subtle"
                   >
-                    <Stack as="span" inline align="center" gap="sm">
+                    <Stack as="span" direction="row" inline align="center" gap="sm">
                       <Download className="w-4 h-4" />
                       Download
                     </Stack>
@@ -560,7 +560,7 @@ function ReleaseRow({
                     }}
                     className="w-full px-3 py-2 text-sm text-left text-ink-secondary hover:bg-surface-subtle"
                   >
-                    <Stack as="span" inline align="center" gap="sm">
+                    <Stack as="span" direction="row" inline align="center" gap="sm">
                       <Hash className="w-4 h-4" />
                       Copy SHA-256
                     </Stack>
@@ -573,7 +573,7 @@ function ReleaseRow({
                     }}
                     className="w-full px-3 py-2 text-sm text-left text-status-error hover:bg-status-error/10"
                   >
-                    <Stack as="span" inline align="center" gap="sm">
+                    <Stack as="span" direction="row" inline align="center" gap="sm">
                       <Trash2 className="w-4 h-4" />
                       Delete
                     </Stack>
@@ -593,11 +593,11 @@ function ReleaseRow({
               </pre>
             </div>
             <Stack direction="row" align="center" gap="md" className="mt-3 text-xs text-ink-muted">
-              <Stack as="span" inline align="center" gap="xs">
+              <Stack as="span" direction="row" inline align="center" gap="xs">
                 <Hash className="w-3.5 h-3.5" />
                 <span className="font-mono truncate max-w-[200px]">{release.sha256}</span>
               </Stack>
-              <Stack as="span" inline align="center" gap="xs">
+              <Stack as="span" direction="row" inline align="center" gap="xs">
                 <Shield className="w-3.5 h-3.5" />
                 Verified
               </Stack>
@@ -720,7 +720,7 @@ export function ReleasesPage() {
               }}
               className="px-4 py-2 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle transition-colors"
             >
-              <Stack as="span" inline align="center" gap="sm">
+              <Stack as="span" direction="row" inline align="center" gap="sm">
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Stack>
@@ -729,7 +729,7 @@ export function ReleasesPage() {
               onClick={() => setShowUploadModal(true)}
               className="px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
             >
-              <Stack as="span" inline align="center" gap="sm">
+              <Stack as="span" direction="row" inline align="center" gap="sm">
                 <Upload className="w-4 h-4" />
                 Upload Release
               </Stack>
@@ -813,7 +813,7 @@ export function ReleasesPage() {
               onClick={() => setShowUploadModal(true)}
               className="mt-4 px-4 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors"
             >
-              <Stack as="span" inline align="center" gap="sm">
+              <Stack as="span" direction="row" inline align="center" gap="sm">
                 <Upload className="w-4 h-4" />
                 Upload Release
               </Stack>

@@ -35,6 +35,7 @@ import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
 import {
   Button,
   SectionHeader,
+  Stack,
   Spinner,
   axisDefaults,
   colors,
@@ -251,7 +252,7 @@ function TimeRangeSelector({
   ];
 
   return (
-    <div className="flex items-center gap-1 bg-surface-card p-1">
+    <Stack direction="row" align="center" gap="xs" className="bg-surface-card p-1">
       {options.map((option) => (
         <button
           key={option.value}
@@ -266,7 +267,7 @@ function TimeRangeSelector({
           {option.label}
         </button>
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -336,10 +337,10 @@ function TopThreatSourcesChart() {
       <div className="space-y-2">
         {DEMO_TOP_SOURCES.slice(0, 3).map((source) => (
           <div key={source.ip} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <span className="text-ink-secondary font-mono">{source.ip}</span>
               <span className="text-xs text-ink-muted">({source.country})</span>
-            </div>
+            </Stack>
             <span className="text-red-400">{source.threats} threats</span>
           </div>
         ))}
@@ -364,30 +365,30 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
             <ShieldAlert className={clsx('w-4 h-4', config.color)} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <h4 className="text-ink-primary font-medium">{incident.type}</h4>
               <span className={clsx('px-2 py-0.5 text-xs font-medium', config.bg, config.color)}>
                 {config.label}
               </span>
-            </div>
+            </Stack>
             <p className="text-sm text-ink-secondary mt-1">{incident.details}</p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-ink-muted">
-              <span className="flex items-center gap-1">
+            <Stack direction="row" align="center" gap="md" className="mt-2 text-xs text-ink-muted">
+              <Stack as="span" direction="row" inline align="center" gap="xs">
                 <MapPin className="w-3 h-3" />
                 {incident.sourceIp}
-              </span>
-              <span className="flex items-center gap-1">
+              </Stack>
+              <Stack as="span" direction="row" inline align="center" gap="xs">
                 <Target className="w-3 h-3" />
                 {incident.targetEndpoint}
-              </span>
-            </div>
+              </Stack>
+            </Stack>
           </div>
         </div>
         <div className="text-right">
-          <span className="text-xs text-ink-muted flex items-center gap-1">
+          <Stack as="span" direction="row" inline align="center" gap="xs" className="text-xs text-ink-muted">
             <Clock className="w-3 h-3" />
             {formatRelativeTime(incident.timestamp)}
-          </span>
+          </Stack>
           {incident.blocked && (
             <span className="mt-1 inline-block px-2 py-0.5 bg-green-500/20 text-green-400 text-xs">
               Blocked
@@ -485,8 +486,8 @@ export default function ThreatActivityPage() {
         style={PAGE_HEADER_STYLE}
         titleStyle={PAGE_HEADER_TITLE_STYLE}
         actions={
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
+          <Stack direction="row" align="center" gap="md">
+            <Stack direction="row" align="center" gap="sm" className="text-sm">
               {isConnected ? (
                 <Wifi className="w-4 h-4 text-green-400" />
               ) : (
@@ -495,17 +496,23 @@ export default function ThreatActivityPage() {
               <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
                 {isConnected ? 'Live' : 'Demo Data'}
               </span>
-            </div>
+            </Stack>
             <button
               onClick={() => refetch()}
-              className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
+              className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
               disabled={hookLoading}
             >
-              {hookLoading ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
-              Refresh
+              <Stack as="span" direction="row" inline align="center" gap="sm">
+                {hookLoading ? (
+                  <Spinner size={16} color="#7F7F7F" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Refresh
+              </Stack>
             </button>
             <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-          </div>
+          </Stack>
         }
       />
 
@@ -572,10 +579,10 @@ export default function ThreatActivityPage() {
           <div className="grid grid-cols-2 gap-3 mt-4">
             {DEMO_SEVERITY_DIST.map((item) => (
               <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <Stack direction="row" align="center" gap="sm">
                   <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
                   <span className="text-sm text-ink-secondary">{item.name}</span>
-                </div>
+                </Stack>
                 <div className="text-right">
                   <span className="text-sm text-ink-primary font-medium">{item.value}</span>
                   <span className="text-xs text-ink-muted ml-1">

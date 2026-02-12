@@ -32,6 +32,7 @@ import {
 } from 'recharts';
 import {
   SectionHeader,
+  Stack,
   Text,
   alpha,
   axisDefaults,
@@ -123,15 +124,18 @@ function StatCard({ icon: Icon, label, value, subValue, trend, color, bgColor }:
           <p className="mt-2 text-3xl font-bold text-ink-primary">{value}</p>
           {subValue && <p className="text-sm text-ink-muted mt-1">{subValue}</p>}
           {trend && (
-            <div
-              className={clsx('mt-2 flex items-center gap-1 text-sm')}
+            <Stack
+              direction="row"
+              align="center"
+              gap="xs"
+              className={clsx('mt-2 text-sm')}
               style={{ color: trend.value >= 0 ? colors.green : colors.red }}
             >
               <TrendingUp className={clsx('w-4 h-4', trend.value < 0 && 'rotate-180')} />
               <span>
                 {Math.abs(trend.value)}% {trend.label}
               </span>
-            </div>
+            </Stack>
           )}
         </div>
         <div className="p-3" style={{ backgroundColor: bgColor }}>
@@ -170,17 +174,17 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-ink-primary">Bandwidth Timeline</h3>
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="md" className="text-sm">
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ backgroundColor: COLORS.ingress }} />
             <span className="text-ink-secondary">Ingress</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ backgroundColor: COLORS.egress }} />
             <span className="text-ink-secondary">Egress</span>
-          </div>
+          </Stack>
           <span className="text-ink-muted text-xs">({granularity} intervals)</span>
-        </div>
+        </Stack>
       </div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -277,16 +281,16 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
                   </div>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary text-right">
-                  <div className="flex items-center justify-end gap-1">
+                  <Stack direction="row" align="center" justify="flex-end" gap="xs">
                     <ArrowDownLeft className="w-3 h-3" style={{ color: colors.blue }} />
                     {formatBytes(ep.bytesIn)}
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary text-right">
-                  <div className="flex items-center justify-end gap-1">
+                  <Stack direction="row" align="center" justify="flex-end" gap="xs">
                     <ArrowUpRight className="w-3 h-3" style={{ color: colors.green }} />
                     {formatBytes(ep.bytesOut)}
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-primary text-right font-medium">
                   {formatNumber(ep.requestCount)}
@@ -345,19 +349,19 @@ function BillingPanel({
 
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="bg-surface-subtle p-3">
-          <div className="flex items-center gap-2 text-ink-secondary text-sm">
+          <Stack direction="row" align="center" gap="sm" className="text-ink-secondary text-sm">
             <Download className="w-4 h-4" />
             Total Transfer
-          </div>
+          </Stack>
           <div className="text-2xl font-bold text-ink-primary mt-1">
             {formatBytes(totalTransfer)}
           </div>
         </div>
         <div className="bg-surface-subtle p-3">
-          <div className="flex items-center gap-2 text-ink-secondary text-sm">
+          <Stack direction="row" align="center" gap="sm" className="text-ink-secondary text-sm">
             <DollarSign className="w-4 h-4" />
             Estimated Cost
-          </div>
+          </Stack>
           <div className="text-2xl font-bold mt-1" style={{ color: colors.green }}>
             {formatCurrency(estimatedCost)}
           </div>
@@ -446,17 +450,17 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
       <div className="mt-4 space-y-2">
         {sensors.map((sensor, index) => (
           <div key={sensor.sensorId} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <div
                 className="w-3 h-3"
                 style={{ backgroundColor: chartColors[index % chartColors.length] }}
               />
               <span className="text-ink-secondary">{sensor.sensorName}</span>
-            </div>
-            <div className="flex items-center gap-4">
+            </Stack>
+            <Stack direction="row" align="center" gap="md">
               <span className="text-ink-muted">{formatNumber(sensor.requestCount)} req</span>
               <span className="text-ink-primary font-medium">{sensor.percentage}%</span>
-            </div>
+            </Stack>
           </div>
         ))}
       </div>
@@ -578,7 +582,7 @@ export default function BandwidthDashboardPage() {
           style={PAGE_HEADER_STYLE}
           titleStyle={PAGE_HEADER_TITLE_STYLE}
         />
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           <select
             value={timelineGranularity}
             onChange={(e) => setTimelineGranularity(e.target.value as '1m' | '5m' | '1h')}
@@ -599,7 +603,14 @@ export default function BandwidthDashboardPage() {
             <option value={360}>Last 6 hours</option>
             <option value={1440}>Last 24 hours</option>
           </select>
-          <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm"
+            role="status"
+            aria-live="polite"
+          >
             <span
               className="w-2 h-2 animate-pulse"
               aria-hidden="true"
@@ -608,8 +619,8 @@ export default function BandwidthDashboardPage() {
             <Text as="span" color={colors.green} noMargin>
               Live
             </Text>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </header>
 
       {/* Stats Grid */}

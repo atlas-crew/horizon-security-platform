@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 14:54_
+_Generated: 2026-02-12 15:02_
 
 ## Summary
 
-**Total findings: 268**
+**Total findings: 266**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 268 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 266 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -53,10 +53,10 @@ Priority files to migrate first (most raw patterns):
 | 3 | `pages/fleet/CapacityForecastPage.tsx` |
 | 3 | `pages/CampaignDetailPage.tsx` |
 | 2 | `pages/fleet/sensor-detail/OverviewTab.tsx` |
-| 2 | `pages/fleet/FleetUpdatesPage.tsx` |
 | 2 | `pages/fleet/FleetOverviewPage.tsx` |
 | 2 | `components/warroom/PlaybookRunner.tsx` |
 | 1 | `pages/hunting/RequestTimelinePage.tsx` |
+| 1 | `pages/fleet/sensor-detail/shared.tsx` |
 
 ---
 

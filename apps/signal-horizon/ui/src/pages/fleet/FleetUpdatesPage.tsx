@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
-import { Button, SectionHeader, alpha, colors } from '@/ui';
+import { Button, SectionHeader, Stack, alpha, colors } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -200,7 +200,7 @@ export function FleetUpdatesPage() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-3">
+                    <Stack direction="row" align="center" gap="smPlus">
                       <span className="text-lg font-medium text-ink-primary">
                         Version {update.version}
                       </span>
@@ -216,7 +216,7 @@ export function FleetUpdatesPage() {
                           Critical
                         </span>
                       )}
-                    </div>
+                    </Stack>
                     <div className="text-sm text-ink-muted mt-1">
                       Released {new Date(update.releaseDate).toLocaleDateString()}
                     </div>
@@ -314,10 +314,10 @@ export function FleetUpdatesPage() {
                   />
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
+                  <Stack direction="row" align="center" gap="smPlus">
                     <span className="font-medium text-ink-primary">{sensor.name}</span>
                     <span className="text-sm text-ink-muted">{sensor.region}</span>
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-6 py-4">
                   <SensorStatusBadge status={sensor.status} />

@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 13:00_
+_Generated: 2026-02-12 13:05_
 
 ## Summary
 
-**Total findings: 414**
+**Total findings: 400**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 414 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 400 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -36,7 +36,6 @@ Priority files to migrate first (most raw patterns):
 | 8 | `components/LoadingStates.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
-| 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
 | 7 | `components/fleet/ServiceControlPanel.tsx` |
 | 7 | `components/fleet/RemoteShell.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/fleet/SensorKeysPage.tsx` |
 | 4 | `pages/beam/catalog/ServicesPage.tsx` |
 | 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
+| 4 | `pages/SupportPage.tsx` |
 
 ---
 
@@ -88,13 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
-| `components/hunting/RecentRequestsPanel.tsx` | 91 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/RecentRequestsPanel.tsx` | 135 | `<div className="ml-auto flex items-center gap-2">` |
-| `components/hunting/RecentRequestsPanel.tsx` | 190 | `className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-in` |
-| `components/hunting/LowAndSlowPanel.tsx` | 99 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/LowAndSlowPanel.tsx` | 169 | `<div className="ml-auto flex items-center gap-2">` |
-| `components/hunting/FleetIntelligencePanel.tsx` | 111 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/FleetIntelligencePanel.tsx` | 182 | `<div className="ml-auto flex items-center gap-2">` |
-| `components/hunting/HuntQueryBuilder.tsx` | 230 | `<div className="flex items-center gap-2">` |
-| `components/hunting/HuntQueryBuilder.tsx` | 234 | `<div className="flex items-center gap-2">` |
+| `components/hunting/RequestTimelineGraph.tsx` | 113 | `<div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-ink` |
+| `components/hunting/RequestTimelineGraph.tsx` | 117 | `className={clsx('inline-flex items-center gap-2 border border-border-subtle bg-s` |
+| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 169 | `<div className="flex flex-wrap items-center gap-3">` |
+| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 184 | `<div className="flex items-center gap-2 bg-surface-base border border-border-sub` |
+| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 200 | `<div className="flex items-center gap-2 bg-surface-base border border-border-sub` |
+| `components/AuthCoverageMap/GapsPanel.tsx` | 44 | `<div className="flex items-center gap-2">` |
+| `components/AuthCoverageMap/GapsPanel.tsx` | 61 | `<div className="flex items-center gap-1 text-[10px] bg-danger/10 text-danger px-` |
+| `components/AuthCoverageMap/GapsPanel.tsx` | 75 | `className="group flex items-center gap-4 p-3 bg-surface-card border border-borde` |
+| `components/AuthCoverageMap/GapsPanel.tsx` | 81 | `<div className="flex items-center gap-2">` |
 

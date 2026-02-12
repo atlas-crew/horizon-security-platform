@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { SigmaImportModal } from './SigmaImportModal';
 import type { HuntQuery } from '../../hooks/useHunt';
+import { Stack } from '@/ui';
 
 interface HuntQueryBuilderProps {
   onQuery: (query: HuntQuery) => void;
@@ -227,31 +228,35 @@ export function HuntQueryBuilder({
       <div className="p-4 space-y-4">
         {/* Header with Mode Toggle */}
         <div className="flex items-center justify-between border-b border-border-subtle pb-4 mb-4">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             <Filter className="w-4 h-4 text-ink-muted" />
             <h3 className="font-medium text-ink-primary">Query Filters</h3>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <button
               onClick={() => setShowSigmaModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border-subtle bg-surface-inset text-ink-secondary hover:border-border-strong hover:text-ink-primary transition-colors"
+              className="px-3 py-1.5 text-xs font-medium border border-border-subtle bg-surface-inset text-ink-secondary hover:border-border-strong hover:text-ink-primary transition-colors"
             >
-              <FileText className="w-3 h-3" />
-              Import Sigma Rule
+              <Stack direction="row" align="center" gap="sm">
+                <FileText className="w-3 h-3" />
+                <span>Import Sigma Rule</span>
+              </Stack>
             </button>
             <button
               onClick={toggleMode}
               className={clsx(
-                "flex items-center gap-2 px-3 py-1.5 text-xs font-medium border transition-colors ",
+                "px-3 py-1.5 text-xs font-medium border transition-colors ",
                 isPowerMode 
                   ? "bg-ac-blue/10 border-ac-blue text-ac-blue" 
                   : "bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong"
               )}
             >
-              <Terminal className="w-3 h-3" />
-              {isPowerMode ? 'Visual Builder' : 'Power Mode (SQL)'}
+              <Stack direction="row" align="center" gap="sm">
+                <Terminal className="w-3 h-3" />
+                <span>{isPowerMode ? 'Visual Builder' : 'Power Mode (SQL)'}</span>
+              </Stack>
             </button>
-          </div>
+          </Stack>
         </div>
 
         {isPowerMode ? (
@@ -274,14 +279,16 @@ export function HuntQueryBuilder({
           <div className="space-y-4 animate-in fade-in duration-200">
             {/* Time Range */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-ink-secondary flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                Time Range
-                {!historicalEnabled && timePreset > 24 && (
-                  <span className="text-xs text-ac-orange">
-                    (Historical queries limited without ClickHouse)
-                  </span>
-                )}
+              <label className="text-sm font-medium text-ink-secondary">
+                <Stack direction="row" align="center" gap="sm">
+                  <Calendar className="w-4 h-4" />
+                  <span>Time Range</span>
+                  {!historicalEnabled && timePreset > 24 && (
+                    <span className="text-xs text-ac-orange">
+                      (Historical queries limited without ClickHouse)
+                    </span>
+                  )}
+                </Stack>
               </label>
 
               {!useCustomTime && (
@@ -312,7 +319,7 @@ export function HuntQueryBuilder({
               )}
 
               {useCustomTime && (
-                <div className="flex items-center gap-4">
+                <Stack direction="row" align="center" gap="md">
                   <div className="flex-1">
                     <input
                       type="datetime-local"
@@ -336,7 +343,7 @@ export function HuntQueryBuilder({
                   >
                     <X className="w-4 h-4" />
                   </button>
-                </div>
+                </Stack>
               )}
             </div>
 
@@ -370,14 +377,16 @@ export function HuntQueryBuilder({
                     key={severity.value}
                     onClick={() => toggleSeverity(severity.value)}
                     className={clsx(
-                      'flex items-center gap-2 px-3 py-1.5 text-sm border transition-colors',
+                      'px-3 py-1.5 text-sm border transition-colors',
                       selectedSeverities.includes(severity.value)
                         ? 'bg-ac-blue/10 border-ac-blue text-ac-blue'
                         : 'bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong'
                     )}
                   >
-                    <span className={clsx('w-2 h-2', severity.color)} />
-                    {severity.label}
+                    <Stack direction="row" align="center" gap="sm">
+                      <span className={clsx('w-2 h-2', severity.color)} />
+                      <span>{severity.label}</span>
+                    </Stack>
                   </button>
                 ))}
               </div>
@@ -440,17 +449,19 @@ export function HuntQueryBuilder({
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border-subtle mt-4">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             {hasFilters && !isPowerMode && (
               <button
                 onClick={clearFilters}
-                className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink-primary"
+                className="text-sm text-ink-muted hover:text-ink-primary"
               >
-                <X className="w-4 h-4" />
-                Clear filters
+                <Stack direction="row" align="center" gap="xs">
+                  <X className="w-4 h-4" />
+                  <span>Clear filters</span>
+                </Stack>
               </button>
             )}
-          </div>
+          </Stack>
           <div className="flex gap-2">
             {onSave && !isPowerMode && (
               <button

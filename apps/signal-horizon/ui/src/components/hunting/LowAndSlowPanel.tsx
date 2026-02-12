@@ -96,11 +96,13 @@ export function LowAndSlowPanel({ historicalEnabled, getLowAndSlowIps }: LowAndS
           type="button"
           onClick={() => refresh()}
           disabled={!historicalEnabled || loading}
-          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title="Refresh"
         >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
+          <Stack direction="row" align="center" gap="sm">
+            <RefreshCw className="w-4 h-4" />
+            <span>Refresh</span>
+          </Stack>
         </button>
       </Stack>
 
@@ -166,14 +168,14 @@ export function LowAndSlowPanel({ historicalEnabled, getLowAndSlowIps }: LowAndS
               Apply
             </button>
 
-            <div className="ml-auto flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm" className="ml-auto">
               {loading && <LoadingSpinner />}
               {meta && (
                 <div className="text-xs text-ink-muted font-mono">
                   historical={String(meta.historical)} count={meta.count}
                 </div>
               )}
-            </div>
+            </Stack>
           </div>
 
           {error && (

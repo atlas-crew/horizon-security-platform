@@ -280,10 +280,10 @@ export function RemoteShell({
     const config = statusConfig[status];
 
     return (
-      <div className={`flex items-center gap-2 ${config.className}`}>
+      <Stack direction="row" align="center" gap="sm" className={config.className}>
         {config.icon}
         <span className="text-sm font-medium">{config.text}</span>
-      </div>
+      </Stack>
     );
   };
 
@@ -293,18 +293,18 @@ export function RemoteShell({
     >
       {/* Header Bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           <h3 className="text-sm font-semibold text-ink-primary">Remote Shell</h3>
           <span className="text-xs text-ink-secondary truncate max-w-[200px]" title={sensorName}>
             {sensorName}
           </span>
-        </div>
+        </Stack>
 
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           {renderStatusIndicator()}
 
           {/* Connection buttons */}
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             {status === 'disconnected' || status === 'error' ? (
               <button
                 onClick={handleConnect}
@@ -320,7 +320,7 @@ export function RemoteShell({
                 Disconnect
               </button>
             ) : null}
-          </div>
+          </Stack>
 
           {/* Close button */}
           {onClose && (
@@ -333,18 +333,18 @@ export function RemoteShell({
               <X className="w-4 h-4" />
             </button>
           )}
-        </div>
+        </Stack>
       </div>
 
       {/* Timeout Warning */}
       {showTimeoutWarning && (
         <div className="px-4 py-2 bg-status-warning/10 border-b border-status-warning/20">
-          <div className="flex items-center gap-2 text-status-warning text-sm">
+          <Stack direction="row" align="center" gap="sm" className="text-status-warning text-sm">
             <Clock className="w-4 h-4" />
             <span>
               Session will timeout in {remainingTime} minute{remainingTime !== 1 ? 's' : ''}
             </span>
-          </div>
+          </Stack>
         </div>
       )}
 
@@ -352,17 +352,19 @@ export function RemoteShell({
       {error && (
         <div className="px-4 py-2 bg-status-error/10 border-b border-status-error/20">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-status-error text-sm">
+            <Stack direction="row" align="center" gap="sm" className="text-status-error text-sm">
               <AlertCircle className="w-4 h-4" />
               <span>{error}</span>
-            </div>
+            </Stack>
             {(status === 'error' || status === 'disconnected') && (
               <button
                 onClick={handleConnect}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-status-error hover:bg-status-error/10 transition-colors"
+                className="px-2 py-1 text-xs text-status-error hover:bg-status-error/10 transition-colors"
               >
-                <RefreshCw className="w-3 h-3" />
-                Retry
+                <Stack as="span" direction="row" align="center" gap="xs" inline>
+                  <RefreshCw className="w-3 h-3" />
+                  Retry
+                </Stack>
               </button>
             )}
           </div>

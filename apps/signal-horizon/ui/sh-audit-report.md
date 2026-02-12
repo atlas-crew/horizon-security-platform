@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 15:45_
+_Generated: 2026-02-12 15:52_
 
 ## Summary
 
-**Total findings: 248**
+**Total findings: 240**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 248 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 240 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -29,7 +29,6 @@ Priority files to migrate first (most raw patterns):
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 8 | `pages/beam/BeamDashboardPage.tsx` |
 | 8 | `components/fleet/RolloutManager.tsx` |
-| 8 | `components/LoadingStates.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
 | 6 | `pages/soc/SessionsPage.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 1 | `pages/hunting/RequestTimelinePage.tsx` |
 | 1 | `pages/fleet/sensor-detail/shared.tsx` |
 | 1 | `pages/fleet/sensor-detail/PerformanceTab.tsx` |
+| 1 | `pages/fleet/SensorDetailPage.tsx` |
 
 ---
 
@@ -90,11 +90,11 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/RolloutManager.tsx` | 901 | `className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-a` |
 | `components/api-intelligence/ViolationsFeed.tsx` | 41 | `<span className="text-[10px] text-ink-muted flex items-center gap-1">` |
 | `components/api-intelligence/ApiTreemap.tsx` | 139 | `<div key={service.name} className="flex items-center gap-2">` |
-| `components/LoadingStates.tsx` | 34 | `<div className="flex items-center gap-3">` |
-| `components/LoadingStates.tsx` | 115 | `<div className="flex items-center gap-3">` |
-| `components/LoadingStates.tsx` | 122 | `<div className="flex items-center gap-2">` |
-| `components/LoadingStates.tsx` | 264 | `<div className="flex items-center gap-3">` |
-| `components/LoadingStates.tsx` | 320 | `<div className="flex items-center gap-3">` |
-| `components/LoadingStates.tsx` | 327 | `<div className="flex items-center gap-4">` |
-| `components/LoadingStates.tsx` | 356 | `<div className="flex items-center gap-3">` |
+| `pages/WarRoomPage.tsx` | 118 | `<div className="flex items-center gap-3 mb-1">` |
+| `pages/WarRoomPage.tsx` | 143 | `<div className="flex items-center gap-6">` |
+| `pages/WarRoomPage.tsx` | 148 | `<div className="flex items-center gap-3">` |
+| `pages/WarRoomPage.tsx` | 286 | `<div className="flex items-center gap-3">` |
+| `pages/WarRoomPage.tsx` | 300 | `<div className="flex items-center gap-1.5 mt-2 text-[10px] font-mono text-ink-mu` |
+| `pages/soc/SessionsPage.tsx` | 178 | `<div className="card-header flex flex-wrap items-center gap-3">` |
+| `pages/soc/SessionsPage.tsx` | 180 | `<div className="ml-auto flex flex-wrap items-center gap-3">` |
 

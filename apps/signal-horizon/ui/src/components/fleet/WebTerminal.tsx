@@ -193,33 +193,33 @@ export function WebTerminal({
     switch (connectionState) {
       case 'connected':
         return (
-          <div className="flex items-center gap-2 text-status-success">
+          <Stack direction="row" align="center" gap="sm" className="text-status-success">
             <Activity className="w-4 h-4" />
             <span className="text-sm font-medium">Connected</span>
-          </div>
+          </Stack>
         );
       case 'connecting':
         return (
-          <div className="flex items-center gap-2 text-ink-secondary">
+          <Stack direction="row" align="center" gap="sm" className="text-ink-secondary">
             <Spinner size={16} color="#7F7F7F" />
             <span className="text-sm font-medium">Connecting...</span>
-          </div>
+          </Stack>
         );
       case 'disconnected':
         return (
-          <div className="flex items-center gap-2 text-status-warning">
+          <Stack direction="row" align="center" gap="sm" className="text-status-warning">
             <WifiOff className="w-4 h-4" />
             <span className="text-sm font-medium">
               {reconnectAttempt > 0 ? `Reconnecting (${reconnectAttempt}/5)...` : 'Disconnected'}
             </span>
-          </div>
+          </Stack>
         );
       case 'error':
         return (
-          <div className="flex items-center gap-2 text-status-error">
+          <Stack direction="row" align="center" gap="sm" className="text-status-error">
             <AlertCircle className="w-4 h-4" />
             <span className="text-sm font-medium">Error</span>
-          </div>
+          </Stack>
         );
     }
   };
@@ -228,22 +228,22 @@ export function WebTerminal({
     <div className="flex flex-col h-full bg-surface-card border border-border-subtle overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           <h3 className="text-sm font-medium text-ink-primary">Terminal</h3>
           <span className="text-xs text-ink-secondary">
             Session: {sessionId || 'Not connected'}
           </span>
-        </div>
+        </Stack>
         {getStatusIndicator()}
       </div>
 
       {/* Error Message */}
       {errorMessage && (
         <div className="px-4 py-2 bg-status-error/10 border-b border-status-error/20">
-          <div className="flex items-center gap-2 text-status-error text-sm">
+          <Stack direction="row" align="center" gap="sm" className="text-status-error text-sm">
             <AlertCircle className="w-4 h-4" />
             <span>{errorMessage}</span>
-          </div>
+          </Stack>
         </div>
       )}
 

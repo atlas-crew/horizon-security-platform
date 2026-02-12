@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { SensorStatus } from '../../types/fleet';
+import { Stack } from '@/ui';
 
 interface SensorStatusBadgeProps {
   status: SensorStatus;
@@ -18,9 +19,14 @@ export const SensorStatusBadge = memo(function SensorStatusBadge({
 }: SensorStatusBadgeProps) {
   const config = statusConfig[status] ?? statusConfig.offline;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border ${config.color} ${className}`}>
+    <Stack
+      direction="row"
+      align="center"
+      className={`inline-flex px-2.5 py-1 text-xs font-medium border ${config.color} ${className}`}
+      style={{ gap: '0.375rem' }}
+    >
       <span>{config.icon}</span>
       <span>{config.label}</span>
-    </span>
+    </Stack>
   );
 });

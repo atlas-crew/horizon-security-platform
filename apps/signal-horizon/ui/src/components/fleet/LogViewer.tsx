@@ -26,7 +26,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import { useLogStream } from '../../hooks/fleet/useLogStream';
-import { Box } from '@/ui';
+import { Box, Stack } from '@/ui';
 import type {
   LogEntry,
   LogFilter,
@@ -120,9 +120,12 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
   return (
     <Box style={style} className="group">
       {/* Main row */}
-      <div
+      <Stack
+        direction="row"
+        align="center"
+        gap="sm"
         className={`
-          flex items-center gap-2 px-3 h-6
+          px-3 h-6
           hover:bg-surface-subtle cursor-pointer transition-colors
           ${isExpanded ? 'bg-surface-subtle' : ''}
         `}
@@ -160,7 +163,7 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
             className={`w-4 h-4 text-ink-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
           />
         )}
-      </div>
+      </Stack>
 
       {/* Expanded details */}
       {isExpanded && (
@@ -386,12 +389,12 @@ export function LogViewer({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle bg-surface-raised">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           <h3 className="text-sm font-semibold text-ink-primary">{sensorName}</h3>
           <span className="text-xs text-ink-secondary">Logs</span>
 
           {/* Connection status */}
-          <div className="flex items-center gap-1.5">
+          <Stack direction="row" align="center" gap="xsPlus">
             {state.connected ? (
               <>
                 <Activity className="w-3.5 h-3.5 text-status-success" />
@@ -403,10 +406,10 @@ export function LogViewer({
                 <span className="text-xs text-status-warning">Disconnected</span>
               </>
             )}
-          </div>
-        </div>
+          </Stack>
+        </Stack>
 
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           {/* Entry count */}
           <span className="text-xs text-ink-muted">
             {state.entries.length.toLocaleString()} entries
@@ -427,12 +430,12 @@ export function LogViewer({
               <X className="w-4 h-4 text-ink-muted" />
             </button>
           )}
-        </div>
+        </Stack>
       </div>
 
       {/* Filter bar */}
       <div className="px-4 py-2 border-b border-border-subtle bg-surface-subtle">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           {/* Search input */}
           <div className="flex-1 relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
@@ -463,12 +466,14 @@ export function LogViewer({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`
-              flex items-center gap-1.5 px-3 py-1.5 text-sm  transition-colors
+              px-3 py-1.5 text-sm transition-colors
               ${showFilters ? 'bg-accent-primary text-white' : 'bg-surface-base border border-border-subtle hover:bg-surface-card'}
             `}
           >
-            <Filter className="w-4 h-4" />
-            Sources
+            <Stack as="span" direction="row" inline align="center" gap="xsPlus">
+              <Filter className="w-4 h-4" />
+              Sources
+            </Stack>
           </button>
 
           {/* Clear filters */}
@@ -478,15 +483,24 @@ export function LogViewer({
           >
             Clear
           </button>
-        </div>
+        </Stack>
 
         {/* Source checkboxes (expandable) */}
         {showFilters && (
-          <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border-subtle">
+          <Stack
+            direction="row"
+            align="center"
+            gap="md"
+            className="mt-2 pt-2 border-t border-border-subtle"
+          >
             {ALL_LOG_SOURCES.map((source) => (
-              <label
+              <Stack
+                as="label"
+                direction="row"
+                align="center"
+                gap="xsPlus"
                 key={source}
-                className="flex items-center gap-1.5 cursor-pointer select-none"
+                className="cursor-pointer select-none"
               >
                 <input
                   type="checkbox"
@@ -496,58 +510,62 @@ export function LogViewer({
                 />
                 <SourceIcon source={source} className="text-ink-secondary" />
                 <span className="text-sm text-ink-primary">{LOG_SOURCE_LABELS[source]}</span>
-              </label>
+              </Stack>
             ))}
-          </div>
+          </Stack>
         )}
       </div>
 
       {/* Control bar */}
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border-subtle bg-surface-base">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           {/* Play/Pause */}
           <button
             onClick={togglePause}
             className={`
-              flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium  transition-colors
+              px-2.5 py-1 text-xs font-medium transition-colors
               ${state.paused ? 'bg-status-warning/10 text-status-warning' : 'bg-surface-subtle hover:bg-surface-card text-ink-secondary'}
             `}
             title={state.paused ? 'Resume' : 'Pause'}
           >
             {state.paused ? (
-              <>
+              <Stack as="span" direction="row" inline align="center" gap="xsPlus">
                 <Play className="w-3.5 h-3.5" />
                 Paused
-              </>
+              </Stack>
             ) : (
-              <>
+              <Stack as="span" direction="row" inline align="center" gap="xsPlus">
                 <Pause className="w-3.5 h-3.5" />
                 Live
-              </>
+              </Stack>
             )}
           </button>
 
           {/* Clear */}
           <button
             onClick={clear}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
+            className="px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
             title="Clear logs"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            Clear
+            <Stack as="span" direction="row" inline align="center" gap="xsPlus">
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear
+            </Stack>
           </button>
 
           {/* Export */}
           <button
             onClick={exportLogs}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
+            className="px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
             title="Export as JSON"
             disabled={state.entries.length === 0}
           >
-            <Download className="w-3.5 h-3.5" />
-            Export
+            <Stack as="span" direction="row" inline align="center" gap="xsPlus">
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </Stack>
           </button>
-        </div>
+        </Stack>
 
         {/* Auto-scroll indicator */}
         <button
@@ -556,13 +574,15 @@ export function LogViewer({
             listRef.current?.scrollToItem(0);
           }}
           className={`
-            flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium  transition-colors
+            px-2.5 py-1 text-xs font-medium transition-colors
             ${autoScroll ? 'text-status-success' : 'text-ink-muted hover:text-ink-primary bg-surface-subtle'}
           `}
           title={autoScroll ? 'Auto-scroll enabled' : 'Click to scroll to latest'}
         >
-          <ArrowDown className={`w-3.5 h-3.5 ${autoScroll ? 'animate-bounce' : ''}`} />
-          {autoScroll ? 'Following' : 'Scroll to latest'}
+          <Stack as="span" direction="row" inline align="center" gap="xsPlus">
+            <ArrowDown className={`w-3.5 h-3.5 ${autoScroll ? 'animate-bounce' : ''}`} />
+            {autoScroll ? 'Following' : 'Scroll to latest'}
+          </Stack>
         </button>
       </div>
 

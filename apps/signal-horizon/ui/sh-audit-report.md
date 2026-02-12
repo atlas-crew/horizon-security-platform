@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 18:33_
+_Generated: 2026-02-12 18:43_
 
 ## Summary
 
-**Total findings: 169**
+**Total findings: 160**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 169 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 160 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -19,7 +19,6 @@ Priority files to migrate first (most raw patterns):
 |------|------|
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
-| 9 | `components/fleet/LogViewer.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 8 | `pages/beam/BeamDashboardPage.tsx` |
@@ -67,15 +66,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 
 | File | Line | Match |
 |------|------|-------|
-| `components/fleet/LogViewer.tsx` | 389 | `<div className="flex items-center gap-3">` |
-| `components/fleet/LogViewer.tsx` | 394 | `<div className="flex items-center gap-1.5">` |
-| `components/fleet/LogViewer.tsx` | 409 | `<div className="flex items-center gap-2">` |
-| `components/fleet/LogViewer.tsx` | 435 | `<div className="flex items-center gap-3">` |
-| `components/fleet/LogViewer.tsx` | 485 | `<div className="flex items-center gap-4 mt-2 pt-2 border-t border-border-subtle"` |
-| `components/fleet/LogViewer.tsx` | 489 | `className="flex items-center gap-1.5 cursor-pointer select-none"` |
-| `components/fleet/LogViewer.tsx` | 507 | `<div className="flex items-center gap-2">` |
-| `components/fleet/LogViewer.tsx` | 533 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
-| `components/fleet/LogViewer.tsx` | 543 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
 | `components/fleet/SessionSearchResults.tsx` | 314 | `<div className="flex items-center justify-end gap-2">` |
 | `components/fleet/RolloutManager.tsx` | 264 | `<div className="flex items-center gap-2">` |
 | `components/fleet/RolloutManager.tsx` | 542 | `<div className="flex items-center gap-3">` |
@@ -97,4 +87,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/soc/SessionsPage.tsx` | 189 | `<label className="flex items-center gap-2 text-sm text-ink-secondary">` |
 | `pages/soc/SessionsPage.tsx` | 286 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
 | `pages/soc/SessionsPage.tsx` | 295 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/SessionsPage.tsx` | 321 | `<div className="card p-4 flex items-center gap-4">` |
+| `pages/soc/CampaignsPage.tsx` | 168 | `<div className="card-header flex flex-wrap items-center gap-3">` |
+| `pages/soc/CampaignsPage.tsx` | 280 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/CampaignsPage.tsx` | 288 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/CampaignsPage.tsx` | 312 | `<div className="card p-4 flex items-center gap-4">` |
+| `pages/soc/ActorDetailPage.tsx` | 183 | `<div className="flex items-center gap-3">` |
+| `pages/soc/ActorDetailPage.tsx` | 287 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/ActorDetailPage.tsx` | 296 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
+| `pages/soc/LiveMapPage.tsx` | 17 | `<span className="inline-flex items-center gap-1">` |
 

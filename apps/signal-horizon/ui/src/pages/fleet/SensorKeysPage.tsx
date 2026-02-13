@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Modal, SectionHeader } from '@/ui';
+import { Modal, SectionHeader, colors } from '@/ui';
 
 interface SensorKey {
   id: string;
@@ -59,7 +59,7 @@ const PAGE_HEADER_STYLE = { marginBottom: 0 };
 const PAGE_HEADER_TITLE_STYLE = {
   fontSize: '20px',
   lineHeight: '28px',
-  color: '#FFFFFF',
+  color: colors.white,
 };
 
 export function SensorKeysPage(): React.ReactElement {

@@ -23,7 +23,7 @@ import {
   updatePingoraConfig,
   runPingoraAction,
 } from './shared';
-import { Spinner, Stack, Tabs } from '@/ui';
+import { Spinner, Stack, Tabs, colors } from '@/ui';
 
 interface ConfigurationTabProps {
   sensor: any;
@@ -305,7 +305,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
               >
                 <Stack as="span" direction="row" inline align="center" gap="sm">
                   {isPingoraFetching ? (
-                    <Spinner size={16} color="#FFFFFF" />
+                    <Spinner size={16} color={colors.white} />
                   ) : (
                     <RefreshCw className="w-4 h-4" />
                   )}
@@ -358,7 +358,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
               >
                 <Stack as="span" direction="row" inline align="center" gap="sm">
                   {isSystemConfigFetching ? (
-                    <Spinner size={16} color="#FFFFFF" />
+                    <Spinner size={16} color={colors.white} />
                   ) : (
                     <RefreshCw className="w-4 h-4" />
                   )}
@@ -518,7 +518,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
               >
                 <Stack as="span" direction="row" inline align="center" gap="sm">
                   {isHistoryFetching ? (
-                    <Spinner size={16} color="#FFFFFF" />
+                    <Spinner size={16} color={colors.white} />
                   ) : (
                     <RefreshCw className="w-4 h-4" />
                   )}

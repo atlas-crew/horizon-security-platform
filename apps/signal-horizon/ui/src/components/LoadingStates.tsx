@@ -429,7 +429,7 @@ export function ConnectionBanner({
     >
       {isReconnecting && !hasExhaustedAttempts ? (
         <>
-          <UiSpinner size={12} color="#F0A202" />
+          <UiSpinner size={12} color={colors.orange} />
           <span>
             Reconnecting to server...
             {reconnectAttempt != null && maxReconnectAttempts != null && (

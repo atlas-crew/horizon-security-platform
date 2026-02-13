@@ -405,7 +405,7 @@ function ActionButton({
       style={{
         background: tone,
         border: `1px solid ${alpha(tone, 0.6)}`,
-        color: '#FFFFFF',
+        color: colors.white,
       }}
     >
       {label}

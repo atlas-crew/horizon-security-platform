@@ -132,7 +132,7 @@ export default function WarRoomPage() {
                   lineHeight: '28px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.01em',
-                  color: '#FFFFFF',
+                  color: colors.white,
                 }}
               />
             </Stack>

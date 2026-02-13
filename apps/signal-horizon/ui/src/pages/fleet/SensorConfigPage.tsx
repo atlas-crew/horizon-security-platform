@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, SectionHeader, Spinner, Stack } from '@/ui';
+import { Breadcrumb, SectionHeader, Spinner, Stack, colors } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -197,7 +197,11 @@ export function SensorConfigPage() {
         className="px-4 py-2 text-sm bg-accent-primary text-white hover:bg-accent-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
       >
         <Stack as="span" inline direction="row" align="center" gap="sm">
-          {isFetching ? <Spinner size={16} color="#FFFFFF" /> : <RefreshCw className="w-4 h-4" />}
+          {isFetching ? (
+            <Spinner size={16} color={colors.white} />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
           {isFetching ? 'Retrying...' : 'Retry'}
         </Stack>
       </button>

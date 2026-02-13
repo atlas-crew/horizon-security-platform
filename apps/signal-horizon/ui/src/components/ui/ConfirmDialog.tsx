@@ -27,7 +27,7 @@ export function ConfirmDialog({
   const confirmStyle =
     variant === 'danger'
       ? { background: colors.red, color: colors.white }
-      : { background: colors.orange, color: colors.navy };
+      : { background: colors.orange, color: colors.black };
 
   return (
     <Modal open={open} onClose={onCancel} size="480px">

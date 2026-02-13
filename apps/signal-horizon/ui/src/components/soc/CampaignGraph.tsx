@@ -36,12 +36,12 @@ const colors = {
   actor: { bg: '#C24900', border: '#E8974D' },       // Atlas Crew Orange (contrast-safe)
   ip: { bg: uiColors.blue, border: '#70BAF7' },       // Atlas Crew Blue
   sensor: { bg: '#008731', border: '#5CB87A' },       // Atlas Crew Green (contrast-safe)
-  token: { bg: '#440099', border: '#9B6BD6' },        // Atlas Crew Purple
+  token: { bg: uiColors.purple, border: '#9B6BD6' },  // Atlas Crew Purple
   asn: { bg: uiColors.skyBlue, border: uiColors.tint.skyLight }, // Atlas Crew Sky Blue
   edge: {
     attributed: '#BF3A30',  // Atlas Crew Red
     linked: '#C24900',      // Atlas Crew Orange
-    uses: '#440099',        // Atlas Crew Purple
+    uses: uiColors.purple,   // Atlas Crew Purple
     attacked: '#BF3A30',    // Atlas Crew Red
     default: '#2A4A8E',     // Navy-lighter
   },

@@ -4,7 +4,7 @@
  */
 
 import { clsx } from 'clsx';
-import { Spinner as UiSpinner, Stack } from '@/ui';
+import { colors, Spinner as UiSpinner, Stack } from '@/ui';
 
 /**
  * Skeleton loading placeholder
@@ -175,7 +175,7 @@ export function LoadingSpinner({
     >
       <UiSpinner
         size={size === 'sm' ? 16 : size === 'md' ? 32 : 48}
-        color="#0057B7"
+        color={colors.blue}
         style={size === 'lg' ? { borderWidth: '3px' } : undefined}
       />
       <span className="text-ink-secondary text-sm" aria-hidden="true">{message}</span>

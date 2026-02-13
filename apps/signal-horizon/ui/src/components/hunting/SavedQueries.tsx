@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Clock, Play, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SavedQuery } from '../../hooks/useHunt';
-import { SectionHeader, Spinner, Stack } from '@/ui';
+import { colors, SectionHeader, Spinner, Stack } from '@/ui';
 
 interface SavedQueriesProps {
   queries: SavedQuery[];
@@ -140,7 +140,7 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
                   title="Run query"
                 >
                   {runningId === query.id ? (
-                    <Spinner size={16} color="#0057B7" />
+                    <Spinner size={16} color={colors.blue} />
                   ) : (
                     <Play className="w-4 h-4" />
                   )}

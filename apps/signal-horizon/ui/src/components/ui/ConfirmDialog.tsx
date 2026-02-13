@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { Button, Modal } from '@/ui';
+import { Button, colors, Modal } from '@/ui';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -26,8 +26,8 @@ export function ConfirmDialog({
 
   const confirmStyle =
     variant === 'danger'
-      ? { background: '#EF3340', color: '#FFFFFF' }
-      : { background: '#F59E0B', color: '#111827' };
+      ? { background: colors.red, color: colors.white }
+      : { background: colors.orange, color: colors.navy };
 
   return (
     <Modal open={open} onClose={onCancel} size="480px">

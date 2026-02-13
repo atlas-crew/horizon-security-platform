@@ -283,28 +283,23 @@ impl TuiApp {
                     // Finding #3: Simple integrity check (checksum)
                     let hash = hex::encode(Sha256::digest(&json));
                     
-                    // Parse outside of lock
-                    match Synapse::parse_rules(&json) {
-                        Ok(rules) => {
-                            let count = rules.len();
+                    // Precompute everything (expensive regex compilation) outside of lock
+                    let synapse_read = self.synapse.read();
+                    match synapse_read.precompute_rules(&json) {
+                        Ok(compiled) => {
+                            drop(synapse_read);
+                            let count = compiled.rules.len();
                             let mut synapse = self.synapse.write();
-                            match synapse.reload_rules(rules) {
-                                Ok(_) => {
-                                    drop(synapse);
-                                    self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
-                                    reloaded = true;
-                                    break;
-                                }
-                                Err(e) => {
-                                    drop(synapse);
-                                    self.set_message(&format!("Failed to reload rules: {}", e));
-                                    reloaded = true;
-                                    break;
-                                }
-                            }
+                            // Fast swap inside lock
+                            synapse.reload_from_compiled(compiled);
+                            drop(synapse);
+                            self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
+                            reloaded = true;
+                            break;
                         }
                         Err(e) => {
-                            self.set_message(&format!("Failed to parse rules from {}: {}", path, e));
+                            drop(synapse_read);
+                            self.set_message(&format!("Failed to compile rules from {}: {}", path, e));
                             reloaded = true;
                             break;
                         }
@@ -1057,7 +1052,7 @@ impl TuiApp {
         let area = centered_rect(80, 70, f.size());
         f.render_widget(Clear, area);
 
-        let actors = self.metrics.top_risky_actors(10);
+        let actors = &self.snapshot.top_risky_actors;
         let selected_idx = self.actor_table_state.selected().unwrap_or(0);
         
         if let Some(actor) = actors.get(selected_idx) {
@@ -1072,7 +1067,7 @@ impl TuiApp {
                 ]),
                 Line::from(vec![
                     Span::styled(" IPs:          ", Style::default().fg(Color::Cyan)),
-                    Span::raw(actor.ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>().join(", ")),
+                    Span::raw(actor.ips.iter().map(|ip: &std::net::IpAddr| ip.to_string()).collect::<Vec<_>>().join(", ")),
                 ]),
                 Line::from(vec![
                     Span::styled(" Fingerprints: ", Style::default().fg(Color::Cyan)),
@@ -1151,7 +1146,7 @@ pub fn start_tui(
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run
-    let mut app = TuiApp::new(metrics, entities, block_log, synapse);
+    let mut app = TuiApp::new(provider, entities, block_log, synapse);
     let res = app.run(&mut terminal);
 
     // Restore terminal

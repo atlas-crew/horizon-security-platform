@@ -92,9 +92,8 @@ pub use template_intern::{
     cache_stats as template_cache_stats, intern_template, normalize_and_intern,
 };
 
-use parking_lot::RwLock;
+use dashmap::DashMap;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::config::ProfilerConfig;
 
@@ -104,9 +103,9 @@ pub struct Profiler {
     /// Configuration
     config: ProfilerConfig,
     /// Endpoint profiles (template -> profile)
-    profiles: Arc<RwLock<HashMap<String, EndpointProfile>>>,
+    profiles: DashMap<String, EndpointProfile>,
     /// Learned schemas (template -> schema definition)
-    schemas: Arc<RwLock<HashMap<String, ParameterSchema>>>,
+    schemas: DashMap<String, ParameterSchema>,
 }
 
 /// Learned parameter schema for an endpoint.
@@ -144,12 +143,16 @@ impl ParameterSchema {
             .unwrap_or(0);
 
         // Extract expected content types (seen in >10% of requests)
-        let expected_content_types: Vec<String> = profile
-            .content_types
-            .iter()
-            .filter(|(_, &count)| count as f64 / profile.sample_count as f64 > 0.1)
-            .map(|(ct, _)| ct.clone())
-            .collect();
+        let expected_content_types: Vec<String> = if profile.sample_count > 0 {
+            profile
+                .content_types
+                .iter()
+                .filter(|(_, &count)| count as f64 / profile.sample_count as f64 > 0.1)
+                .map(|(ct, _)| ct.clone())
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         // Separate required (>80% frequency) vs optional params
         let mut required_params = Vec::new();
@@ -186,8 +189,8 @@ impl Profiler {
     pub fn new(config: ProfilerConfig) -> Self {
         Self {
             config,
-            profiles: Arc::new(RwLock::new(HashMap::new())),
-            schemas: Arc::new(RwLock::new(HashMap::new())),
+            profiles: DashMap::new(),
+            schemas: DashMap::new(),
         }
     }
 
@@ -202,10 +205,9 @@ impl Profiler {
             return None;
         }
 
-        let mut profiles = self.profiles.write();
-
-        // Check capacity limit
-        if !profiles.contains_key(template) && profiles.len() >= self.config.max_profiles {
+        // Note: max_profiles is enforced approximately under concurrent access (soft limit).
+        // Bounded overrun is proportional to the number of concurrent callers.
+        if !self.profiles.contains_key(template) && self.profiles.len() >= self.config.max_profiles {
             return None; // At capacity, don't create new profile
         }
 
@@ -215,7 +217,7 @@ impl Profiler {
             .unwrap_or(0);
 
         Some(
-            profiles
+            self.profiles
                 .entry(template.to_string())
                 .or_insert_with(|| EndpointProfile::new(template.to_string(), now_ms))
                 .clone(),
@@ -242,9 +244,7 @@ impl Profiler {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        let mut profiles = self.profiles.write();
-
-        if let Some(profile) = profiles.get_mut(template) {
+        if let Some(mut profile) = self.profiles.get_mut(template) {
             // Check if profile is frozen (anti-poisoning measure)
             if self.config.freeze_after_samples > 0
                 && profile.sample_count >= self.config.freeze_after_samples
@@ -252,10 +252,13 @@ impl Profiler {
                 return; // Profile frozen, reject updates
             }
             profile.update(payload_size, params, content_type, now_ms);
-        } else if profiles.len() < self.config.max_profiles {
-            let mut profile = EndpointProfile::new(template.to_string(), now_ms);
-            profile.update(payload_size, params, content_type, now_ms);
-            profiles.insert(template.to_string(), profile);
+        } else {
+            // Note: max_profiles is enforced approximately under concurrent access (soft limit).
+            if self.profiles.len() < self.config.max_profiles {
+                let mut profile = EndpointProfile::new(template.to_string(), now_ms);
+                profile.update(payload_size, params, content_type, now_ms);
+                self.profiles.insert(template.to_string(), profile);
+            }
         }
     }
 
@@ -278,9 +281,7 @@ impl Profiler {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        let mut profiles = self.profiles.write();
-
-        if let Some(profile) = profiles.get_mut(template) {
+        if let Some(mut profile) = self.profiles.get_mut(template) {
             // Check if profile is frozen (anti-poisoning measure)
             if self.config.freeze_after_samples > 0
                 && profile.sample_count >= self.config.freeze_after_samples
@@ -293,19 +294,17 @@ impl Profiler {
 
     /// Get all profiles.
     pub fn get_profiles(&self) -> Vec<EndpointProfile> {
-        let profiles = self.profiles.read();
-        profiles.values().cloned().collect()
+        self.profiles.iter().map(|e| e.value().clone()).collect()
     }
 
     /// Get a specific profile by template.
     pub fn get_profile(&self, template: &str) -> Option<EndpointProfile> {
-        let profiles = self.profiles.read();
-        profiles.get(template).cloned()
+        self.profiles.get(template).map(|p| p.value().clone())
     }
 
     /// Get the number of profiles.
     pub fn profile_count(&self) -> usize {
-        self.profiles.read().len()
+        self.profiles.len()
     }
 
     /// Learn schema from a profile if it has enough samples.
@@ -314,18 +313,12 @@ impl Profiler {
             return;
         }
 
-        let profiles = self.profiles.read();
-        if let Some(profile) = profiles.get(template) {
+        if let Some(profile) = self.profiles.get(template) {
             if profile.is_mature(self.config.min_samples_for_validation) {
-                drop(profiles); // Release read lock before taking write lock
-
-                let mut schemas = self.schemas.write();
-                if schemas.len() < self.config.max_schemas {
-                    let profiles = self.profiles.read();
-                    if let Some(profile) = profiles.get(template) {
-                        let schema = ParameterSchema::from_profile(profile, 0.8);
-                        schemas.insert(template.to_string(), schema);
-                    }
+                // Note: max_schemas is enforced approximately under concurrent access (soft limit).
+                if self.schemas.len() < self.config.max_schemas {
+                    let schema = ParameterSchema::from_profile(&profile, 0.8);
+                    self.schemas.insert(template.to_string(), schema);
                 }
             }
         }
@@ -333,29 +326,27 @@ impl Profiler {
 
     /// Get all learned schemas.
     pub fn get_schemas(&self) -> Vec<ParameterSchema> {
-        let schemas = self.schemas.read();
-        schemas.values().cloned().collect()
+        self.schemas.iter().map(|e| e.value().clone()).collect()
     }
 
     /// Get a specific schema by template.
     pub fn get_schema(&self, template: &str) -> Option<ParameterSchema> {
-        let schemas = self.schemas.read();
-        schemas.get(template).cloned()
+        self.schemas.get(template).map(|s| s.value().clone())
     }
 
     /// Get the number of schemas.
     pub fn schema_count(&self) -> usize {
-        self.schemas.read().len()
+        self.schemas.len()
     }
 
     /// Reset all profiles (for testing).
     pub fn reset_profiles(&self) {
-        self.profiles.write().clear();
+        self.profiles.clear();
     }
 
     /// Reset all schemas (for testing).
     pub fn reset_schemas(&self) {
-        self.schemas.write().clear();
+        self.schemas.clear();
     }
 
     /// Analyze a request against the learned profile.
@@ -372,11 +363,12 @@ impl Profiler {
             return AnomalyResult::none();
         }
 
-        let profiles = self.profiles.read();
-        let profile = match profiles.get(template) {
-            Some(p) if p.is_mature(self.config.min_samples_for_validation) => p,
+        let profile_ref = self.profiles.get(template);
+        let profile = match profile_ref {
+            Some(p) if p.value().is_mature(self.config.min_samples_for_validation) => p,
             _ => return AnomalyResult::none(), // No mature profile yet
         };
+        let profile = profile.value();
 
         let mut result = AnomalyResult::new();
 
@@ -495,11 +487,12 @@ impl Profiler {
             return AnomalyResult::none();
         }
 
-        let profiles = self.profiles.read();
-        let profile = match profiles.get(template) {
-            Some(p) if p.is_mature(self.config.min_samples_for_validation) => p,
+        let profile_ref = self.profiles.get(template);
+        let profile = match profile_ref {
+            Some(p) if p.value().is_mature(self.config.min_samples_for_validation) => p,
             _ => return AnomalyResult::none(),
         };
+        let profile = profile.value();
 
         let mut result = AnomalyResult::new();
 
@@ -560,10 +553,9 @@ impl Profiler {
         if self.config.freeze_after_samples == 0 {
             return false; // Freezing disabled
         }
-        let profiles = self.profiles.read();
-        profiles
+        self.profiles
             .get(template)
-            .map(|p| p.sample_count >= self.config.freeze_after_samples)
+            .map(|p| p.value().sample_count >= self.config.freeze_after_samples)
             .unwrap_or(false)
     }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PlaybookRunner } from '../PlaybookRunner';
-import type { Playbook } from '../PlaybookSelector';
+import type { Playbook } from '../../../data/playbooks';
 
 describe('PlaybookRunner', () => {
   const playbook: Playbook = {

@@ -693,4 +693,53 @@ mod tests {
         profile.update_response(100, 200, Some("application/extra"), 2000);
         assert_eq!(profile.response_content_types.len(), MAX_CONTENT_TYPES);
     }
+
+    #[test]
+    fn test_param_eviction_under_load() {
+        let mut profile = EndpointProfile::new("/api/test".to_string(), 1000);
+        
+        // Add many parameters with different frequencies
+        // p0..p49 will have 10 hits each
+        // p50..p99 will have 1 hit each
+        for i in 0..MAX_PARAMS {
+            let name = format!("p{}", i);
+            for _ in 0..10 {
+                profile.update(100, &[(&name, "val")], None, 1000);
+            }
+        }
+        for i in MAX_PARAMS..(MAX_PARAMS * 2) {
+            let name = format!("p{}", i);
+            profile.update(100, &[(&name, "val")], None, 1000);
+        }
+        
+        assert!(profile.expected_params.len() <= MAX_PARAMS);
+        // Frequent ones should be preserved
+        assert!(profile.expected_params.contains_key("p0"));
+        assert!(profile.expected_params.contains_key("p49"));
+    }
+
+    #[test]
+    fn test_baseline_rate_zero_lifetime() {
+        let mut profile = EndpointProfile::new("/api/test".to_string(), 1000);
+        profile.update(100, &[], None, 1000);
+        
+        // now_ms == first_seen_ms
+        let rate = profile.baseline_rate(1000);
+        // lifetime_ms = 1 (max(1)), lifetime_minutes = 1/60000
+        // rate = 1 / (1/60000) = 60000 req/min
+        assert!(rate > 0.0);
+        assert!(rate.is_finite());
+    }
+
+    #[test]
+    fn test_param_stats_no_type_counts_but_count_positive() {
+        let mut stats = ParamStats::new();
+        // Update with 0 limit
+        stats.update_with_limit("val", 0);
+        
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.type_counts.len(), 0);
+        // length_dist should still be updated
+        assert_eq!(stats.length_dist.count(), 1);
+    }
 }

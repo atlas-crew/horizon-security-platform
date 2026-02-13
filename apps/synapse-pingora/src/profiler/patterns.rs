@@ -82,7 +82,7 @@ static PHONE_PATTERN: Lazy<Regex> = Lazy::new(|| {
 /// Credit card pattern (basic format, 13-19 digits with optional separators)
 /// Note: This is for pattern detection only, not validation
 static CREDIT_CARD_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{1,4}$")
+    Regex::new(r"^[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{1,7}$")
         .expect("Credit card regex compilation failed")
 });
 
@@ -376,5 +376,18 @@ mod tests {
             PatternType::CreditCard
         ));
         assert!(matches_pattern("4111111111111111", PatternType::CreditCard));
+        assert!(matches_pattern("4111 1111 1111 1111", PatternType::CreditCard));
+        
+        // Short/Long variants
+        assert!(matches_pattern("1234567890123", PatternType::CreditCard)); // 13 digits
+        assert!(matches_pattern("1234567890123456789", PatternType::CreditCard)); // 19 digits
+        
+        // detect_pattern end-to-end
+        assert_eq!(detect_pattern("4111-2222-3333-4444"), Some(PatternType::CreditCard));
+        assert_eq!(detect_pattern("4111222233334444"), Some(PatternType::CreditCard));
+        
+        // Negative cases
+        assert_ne!(detect_pattern("12345"), Some(PatternType::CreditCard)); // Too short
+        assert_ne!(detect_pattern("1234-5678-9012-3456-7890"), Some(PatternType::CreditCard)); // Too long
     }
 }

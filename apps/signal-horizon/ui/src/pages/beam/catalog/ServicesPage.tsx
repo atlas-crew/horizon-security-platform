@@ -17,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 // import { useBeamEndpoints } from '../../../stores/beamStore';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader } from '@/ui';
+import { SectionHeader, Stack } from '@/ui';
 
 // Demo data - services with endpoints
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
@@ -324,7 +324,7 @@ function ServiceCard({
         onClick={onToggle}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           <div className="p-2 bg-surface-subtle">
             <Server className="w-5 h-5 text-horizon-400" />
           </div>
@@ -332,8 +332,8 @@ function ServiceCard({
             <h3 className="text-ink-primary font-medium">{service.name}</h3>
             <p className="text-sm text-ink-secondary">{service.description}</p>
           </div>
-        </div>
-        <div className="flex items-center gap-6">
+        </Stack>
+        <Stack direction="row" align="center" gap="lg">
           <div className="text-right">
             <p className="text-sm text-ink-secondary">Endpoints</p>
             <p className="text-ink-primary font-medium">{service.endpoints}</p>
@@ -363,16 +363,16 @@ function ServiceCard({
               {service.errorRate.toFixed(1)}%
             </p>
           </div>
-          <div className={clsx('flex items-center gap-1', status.color)}>
+          <Stack direction="row" align="center" gap="xs" className={status.color}>
             <StatusIcon className="w-4 h-4" />
             <span className="text-sm">{status.label}</span>
-          </div>
+          </Stack>
           {isExpanded ? (
             <ChevronDown className="w-5 h-5 text-ink-secondary" />
           ) : (
             <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
-        </div>
+        </Stack>
       </button>
 
       {/* Expanded Endpoints List */}
@@ -395,7 +395,7 @@ function ServiceCard({
                   className="border-t border-border-subtle/50 hover:bg-surface-subtle transition-colors"
                 >
                   <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
+                    <Stack direction="row" align="center" gap="smPlus">
                       <span
                         className={clsx(
                           'px-2 py-0.5 text-xs font-medium',
@@ -405,7 +405,7 @@ function ServiceCard({
                         {endpoint.method}
                       </span>
                       <code className="text-blue-400 text-sm">{endpoint.path}</code>
-                    </div>
+                    </Stack>
                   </td>
                   <td className="px-5 py-3 text-right text-ink-secondary">
                     {endpoint.requestCount.toLocaleString()}

@@ -672,7 +672,7 @@ impl SchemaLearner {
     /// Validate data against a schema map.
     fn validate_against_schema(
         &self,
-        schema_map: &HashMap<String, FieldSchema>,
+        root_schema_map: &HashMap<String, FieldSchema>,
         data: &serde_json::Value,
         prefix: &str,
         result: &mut ValidationResult,
@@ -697,7 +697,7 @@ impl SchemaLearner {
                 format!("{}.{}", prefix, key)
             };
 
-            let field_schema = match schema_map.get(&field_name) {
+            let field_schema = match root_schema_map.get(&field_name) {
                 Some(s) => s,
                 None => {
                     result.add(SchemaViolation::unexpected_field(&field_name));
@@ -729,37 +729,33 @@ impl SchemaLearner {
                 }
             }
 
-            // Recurse into nested objects
+            // Recurse into nested objects using the root map and dotted prefix
             if val.is_object() {
-                if let Some(nested_schema) = &field_schema.object_schema {
-                    self.validate_against_schema(
-                        nested_schema,
-                        val,
-                        &field_name,
-                        result,
-                        sample_count,
-                        depth + 1,
-                    );
-                }
+                self.validate_against_schema(
+                    root_schema_map,
+                    val,
+                    &field_name,
+                    result,
+                    sample_count,
+                    depth + 1,
+                );
             }
         }
 
         // Check for missing required fields (seen in >90% of samples)
         let threshold = (sample_count as f64 * self.config.required_field_threshold) as u32;
-        for (field_name, field_schema) in schema_map {
-            // Only check top-level fields from this prefix
-            let expected_prefix = if prefix.is_empty() {
+        for (field_name, field_schema) in root_schema_map {
+            // Only check fields that are immediate children of this prefix
+            let is_direct_child = if prefix.is_empty() {
                 !field_name.contains('.')
+            } else if field_name.starts_with(prefix) && field_name.len() > prefix.len() + 1 {
+                let suffix = &field_name[prefix.len() + 1..];
+                !suffix.contains('.')
             } else {
-                field_name.starts_with(prefix)
-                    && field_name[prefix.len()..]
-                        .chars()
-                        .filter(|&c| c == '.')
-                        .count()
-                        == 1
+                false
             };
 
-            if expected_prefix && field_schema.seen_count >= threshold {
+            if is_direct_child && field_schema.seen_count >= threshold {
                 let key = field_name.rsplit('.').next().unwrap_or(field_name);
                 if !obj.contains_key(key) {
                     result.add(SchemaViolation::missing_field(field_name));
@@ -1325,5 +1321,70 @@ mod tests {
             .violations
             .iter()
             .any(|v| v.violation_type == ViolationType::NumberTooSmall));
+    }
+
+    #[test]
+    fn test_validate_deeply_nested_json_does_not_stack_overflow() {
+        let learner = SchemaLearner::with_config(SchemaLearnerConfig {
+            max_nesting_depth: 10,
+            min_samples_for_validation: 0, // Always validate
+            ..Default::default()
+        });
+
+        // Build deeply nested JSON (depth 100)
+        let mut body = json!({"leaf": true});
+        for i in 0..100 {
+            body = json!({ format!("nest_{}", i): body });
+        }
+
+        // Training - should not crash
+        learner.learn_from_request("/api/nested", &body);
+
+        // Validation - should not crash
+        let result = learner.validate_request("/api/nested", &body);
+        
+        // Deep parts should be ignored due to max_nesting_depth
+        assert!(result.is_valid());
+    }
+
+    #[test]
+    fn test_learn_array_root_body_is_silently_skipped() {
+        let learner = SchemaLearner::new();
+        let body = json!([{"id": 1}, {"id": 2}]);
+
+        learner.learn_from_request("/api/arrays", &body);
+
+        // Should not have created a schema
+        assert_eq!(learner.len(), 0);
+    }
+
+    #[test]
+    fn test_learn_from_response_does_not_increment_sample_count() {
+        let learner = SchemaLearner::new();
+        
+        // Response learning should not increment sample_count
+        learner.learn_from_response("/api/test", &json!({"ok": true}));
+        
+        let schema = learner.get_schema("/api/test").unwrap();
+        assert_eq!(schema.sample_count, 0);
+        assert!(schema.response_schema.contains_key("ok"));
+
+        // Request learning SHOULD increment it
+        learner.learn_from_request("/api/test", &json!({"id": 1}));
+        let schema = learner.get_schema("/api/test").unwrap();
+        assert_eq!(schema.sample_count, 1);
+    }
+
+    #[test]
+    fn test_learn_from_pair_both_none() {
+        let learner = SchemaLearner::new();
+        
+        // Should increment sample count even if bodies are None
+        learner.learn_from_pair("/api/empty", None, None);
+        
+        let schema = learner.get_schema("/api/empty").unwrap();
+        assert_eq!(schema.sample_count, 1);
+        assert!(schema.request_schema.is_empty());
+        assert!(schema.response_schema.is_empty());
     }
 }

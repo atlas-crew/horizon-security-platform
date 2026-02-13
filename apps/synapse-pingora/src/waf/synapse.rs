@@ -70,6 +70,16 @@ impl Synapse {
         self.engine.load_rules(json)
     }
 
+    /// Precompute all rule structures including regex compilation.
+    pub fn precompute_rules(&self, json: &[u8]) -> Result<crate::waf::engine::CompiledRules, WafError> {
+        self.engine.precompute_rules(json)
+    }
+
+    /// Fast swap of rule state using precomputed data.
+    pub fn reload_from_compiled(&mut self, compiled: crate::waf::engine::CompiledRules) {
+        self.engine.reload_from_compiled(compiled);
+    }
+
     /// Parse rules from JSON bytes without modifying state.
     pub fn parse_rules(json: &[u8]) -> Result<Vec<crate::waf::WafRule>, WafError> {
         Engine::parse_rules(json)

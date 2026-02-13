@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 19:33_
+_Generated: 2026-02-12 19:36_
 
 ## Summary
 
-**Total findings: 39**
+**Total findings: 31**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 39 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 31 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -18,8 +18,6 @@ Priority files to migrate first (most raw patterns):
 | Hits | File |
 |------|------|
 | 4 | `pages/fleet/SensorKeysPage.tsx` |
-| 4 | `pages/beam/catalog/ServicesPage.tsx` |
-| 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 | 4 | `pages/SupportPage.tsx` |
 | 3 | `pages/fleet/DlpDashboardPage.tsx` |
 | 3 | `pages/fleet/CapacityForecastPage.tsx` |
@@ -56,14 +54,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/SupportPage.tsx` | 1003 | `<div className="flex items-center gap-2 text-[10px] font-bold text-ink-muted upp` |
 | `pages/SupportPage.tsx` | 1010 | `<div className="flex items-center gap-4 mb-10 pb-6 border-b border-border-subtle` |
 | `pages/IntelPage.tsx` | 139 | `<div className="flex items-center gap-3">` |
-| `pages/beam/catalog/ServicesPage.tsx` | 327 | `<div className="flex items-center gap-4">` |
-| `pages/beam/catalog/ServicesPage.tsx` | 336 | `<div className="flex items-center gap-6">` |
-| `pages/beam/catalog/ServicesPage.tsx` | 366 | `<div className={clsx('flex items-center gap-1', status.color)}>` |
-| `pages/beam/catalog/ServicesPage.tsx` | 398 | `<div className="flex items-center gap-3">` |
-| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 176 | `<div className="flex items-center gap-4 text-sm">` |
-| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 177 | `<div className="flex items-center gap-2">` |
-| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 181 | `<div className="flex items-center gap-2">` |
-| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 352 | `<div className="flex items-center gap-3">` |
 | `pages/CampaignDetailPage.tsx` | 114 | `className="text-sm text-link hover:text-link-hover flex items-center gap-1"` |
 | `pages/CampaignDetailPage.tsx` | 140 | `<div className="flex items-center gap-2">` |
 | `pages/CampaignDetailPage.tsx` | 379 | `<div className="card p-4 flex items-center gap-3">` |
@@ -76,4 +66,12 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/fleet/DlpDashboardPage.tsx` | 268 | `<h3 className="text-lg font-medium text-ink-primary mb-6 flex items-center gap-2` |
 | `pages/fleet/CapacityForecastPage.tsx` | 219 | `<div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border bord` |
 | `pages/fleet/CapacityForecastPage.tsx` | 375 | `<div className="mt-3 flex items-center gap-2 text-xs">` |
+| `pages/fleet/CapacityForecastPage.tsx` | 377 | `<span className={clsx('flex items-center gap-1 font-medium', trendColor)}>` |
+| `pages/fleet/SensorKeysPage.tsx` | 231 | `className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blu` |
+| `pages/fleet/SensorKeysPage.tsx` | 399 | `className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focu` |
+| `pages/fleet/SensorKeysPage.tsx` | 505 | `className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focu` |
+| `pages/fleet/SensorKeysPage.tsx` | 565 | `<label key={perm.id} className="flex items-center gap-2 cursor-pointer">` |
+| `pages/fleet/ConfigManagerPage.tsx` | 868 | `<div className="flex items-center gap-3">` |
+| `pages/fleet/FleetOverviewPage.tsx` | 321 | `<div className="flex items-center gap-4">` |
+| `pages/fleet/FleetOverviewPage.tsx` | 388 | `<div className="flex items-center gap-3">` |
 

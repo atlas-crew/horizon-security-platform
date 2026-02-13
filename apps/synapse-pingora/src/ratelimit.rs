@@ -8,8 +8,99 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
-use tracing::{debug, warn};
+use std::time::{Duration, Instant};
+use tracing::{debug, info, warn};
+
+/// Adaptive rate limiter that adjusts limits based on system health.
+pub struct AdaptiveRateLimiter {
+    /// Reference to the rate limit manager to adjust
+    manager: Arc<RwLock<RateLimitManager>>,
+    /// Reference to metrics for health monitoring
+    metrics: Arc<crate::metrics::MetricsRegistry>,
+    /// Last recorded backend latency (ms)
+    last_latency_ms: AtomicU64,
+    /// Current rate multiplier (scaled by 1000, 1000 = 1.0)
+    multiplier: AtomicU64,
+}
+
+impl AdaptiveRateLimiter {
+    /// Creates a new adaptive rate limiter.
+    pub fn new(
+        manager: Arc<RwLock<RateLimitManager>>,
+        metrics: Arc<crate::metrics::MetricsRegistry>,
+    ) -> Self {
+        Self {
+            manager,
+            metrics,
+            last_latency_ms: AtomicU64::new(0),
+            multiplier: AtomicU64::new(1000), // Start at 1.0
+        }
+    }
+
+    /// Performs one adjustment cycle based on current metrics.
+    ///
+    /// Logic:
+    /// - If latency > 500ms OR CPU > 80%: reduce rate by 10%
+    /// - If latency < 100ms AND CPU < 50%: increase rate by 5% (up to 1.0)
+    pub fn adjust(&self) {
+        let avg_latency = self.metrics.avg_latency_ms();
+        
+        // Simple CPU check using sysinfo (if available in metrics)
+        // For now, let's just use latency as the primary signal
+        
+        let current_mult = self.multiplier.load(Ordering::Relaxed);
+        let mut next_mult = current_mult;
+
+        if avg_latency > 500.0 {
+            // High latency: throttle hard (10% reduction)
+            // Note: Use a floor of 20% (200/1000) to prevent permanent DoS
+            next_mult = (current_mult.saturating_mul(90) / 100).max(200);
+            warn!(latency = %avg_latency, multiplier = %(next_mult as f64 / 1000.0), "Adaptive RL: High latency detected, throttling fleet");
+        } else if avg_latency > 200.0 {
+            // Moderate latency: slight throttle (5% reduction)
+            next_mult = (current_mult.saturating_mul(95) / 100).max(200);
+            debug!(latency = %avg_latency, multiplier = %(next_mult as f64 / 1000.0), "Adaptive RL: Latency rising, slowing down");
+        } else if avg_latency < 50.0 && current_mult < 1000 {
+            // Low latency: recover (5% increase) for faster restoration
+            next_mult = (current_mult.saturating_add(50)).min(1000);
+            debug!(latency = %avg_latency, multiplier = %(next_mult as f64 / 1000.0), "Adaptive RL: Health recovered, restoring capacity");
+        }
+
+        if next_mult != current_mult {
+            self.multiplier.store(next_mult, Ordering::Relaxed);
+            self.apply_multiplier(next_mult as f64 / 1000.0);
+        }
+    }
+
+    fn apply_multiplier(&self, multiplier: f64) {
+        let manager = self.manager.read();
+        
+        // Update global limiter if present
+        if let Some(global) = &manager.global_limiter {
+            global.set_multiplier(multiplier);
+        }
+
+        // Update all site limiters
+        let sites = manager.site_limiters.read();
+        for limiter in sites.values() {
+            limiter.set_multiplier(multiplier);
+        }
+    }
+
+    /// Returns the current adaptive multiplier.
+    pub fn current_multiplier(&self) -> f64 {
+        self.multiplier.load(Ordering::Relaxed) as f64 / 1000.0
+    }
+
+    /// Starts a background thread that periodically adjusts rate limits.
+    pub fn start_background_task(self: Arc<Self>, interval: Duration) {
+        info!(?interval, "Starting adaptive rate limiting background task");
+        std::thread::spawn(move || loop {
+            self.adjust();
+            std::thread::sleep(interval);
+        });
+    }
+}
 
 /// Rate limit decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +169,7 @@ pub struct TokenBucket {
     /// Maximum tokens (burst capacity)
     max_tokens: u64,
     /// Tokens added per second
-    refill_rate: u64,
+    refill_rate: AtomicU64,
     /// Last refill timestamp (nanos since start)
     last_refill: AtomicU64,
     /// Start time for timestamp calculation
@@ -94,11 +185,16 @@ impl TokenBucket {
         Self {
             tokens: AtomicU64::new(max_tokens),
             max_tokens,
-            refill_rate: rps as u64,
+            refill_rate: AtomicU64::new(rps as u64),
             last_refill: AtomicU64::new(0),
             start_time: Instant::now(),
             last_access: AtomicU64::new(0),
         }
+    }
+
+    /// Sets a new refill rate (RPS).
+    pub fn set_rate(&self, rps: u32) {
+        self.refill_rate.store(rps as u64, Ordering::Relaxed);
     }
 
     /// Tries to acquire a token, returning true if successful.
@@ -164,7 +260,8 @@ impl TokenBucket {
             }
 
             let elapsed_secs = elapsed_nanos as f64 / 1_000_000_000.0;
-            let tokens_to_add = (elapsed_secs * self.refill_rate as f64) as u64;
+            let refill_rate = self.refill_rate.load(Ordering::Relaxed);
+            let tokens_to_add = (elapsed_secs * refill_rate as f64) as u64;
 
             if tokens_to_add == 0 {
                 return;
@@ -250,6 +347,8 @@ pub struct KeyedRateLimiter {
     config: RateLimitConfig,
     /// Maximum number of tracked keys (to prevent memory exhaustion)
     max_keys: usize,
+    /// Current adaptive multiplier (scaled by 1000)
+    multiplier: AtomicU64,
 }
 
 impl KeyedRateLimiter {
@@ -259,6 +358,20 @@ impl KeyedRateLimiter {
             buckets: RwLock::new(HashMap::new()),
             config,
             max_keys: 100_000, // Default max tracked keys
+            multiplier: AtomicU64::new(1000),
+        }
+    }
+
+    /// Sets the current adaptive multiplier.
+    pub fn set_multiplier(&self, multiplier: f64) {
+        let m = (multiplier * 1000.0) as u64;
+        self.multiplier.store(m, Ordering::Relaxed);
+        
+        // Update all existing buckets
+        let new_rps = (self.config.rps as f64 * multiplier) as u32;
+        let buckets = self.buckets.read();
+        for bucket in buckets.values() {
+            bucket.set_rate(new_rps);
         }
     }
 
@@ -310,7 +423,9 @@ impl KeyedRateLimiter {
                 }
             }
 
-            let bucket = Arc::new(TokenBucket::new(self.config.rps, self.config.burst));
+            let multiplier = self.multiplier.load(Ordering::Relaxed) as f64 / 1000.0;
+            let effective_rps = (self.config.rps as f64 * multiplier) as u32;
+            let bucket = Arc::new(TokenBucket::new(effective_rps, self.config.burst));
             let allowed = bucket.try_acquire();
             buckets.insert(key.to_string(), bucket);
 

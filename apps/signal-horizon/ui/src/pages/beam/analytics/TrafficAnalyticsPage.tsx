@@ -26,6 +26,7 @@ import { LatencyHistogram } from '../../../components/beam/analytics/LatencyHist
 import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChart';
 import {
   SectionHeader,
+  Stack,
   alpha,
   axisDefaults,
   colors,
@@ -141,17 +142,17 @@ function StatCard({
           <p className="text-sm text-ink-secondary">{label}</p>
           <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
           {trend && (
-            <div
-              className={clsx(
-                'mt-2 flex items-center gap-1 text-sm',
-                isPositive ? 'text-green-400' : 'text-red-400',
-              )}
+            <Stack
+              direction="row"
+              align="center"
+              gap="xs"
+              className={clsx('mt-2 text-sm', isPositive ? 'text-green-400' : 'text-red-400')}
             >
               <TrendIcon className="w-4 h-4" />
               <span>
                 {Math.abs(trend.value)}% {trend.label}
               </span>
-            </div>
+            </Stack>
           )}
         </div>
         <div className="p-3 bg-surface-subtle/50">
@@ -173,16 +174,16 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
             Allowed + Blocked requests per hour (total implied)
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="md" className="text-sm">
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ backgroundColor: CHART_COLORS.allowed }} />
             <span className="text-ink-secondary">Allowed</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ backgroundColor: CHART_COLORS.blocked }} />
             <span className="text-ink-secondary">Blocked</span>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
@@ -346,16 +347,16 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
               return (
                 <tr
                   key={item.endpoint}
-                  className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
-                >
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
-                      <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
-                        {item.endpoint}
-                      </code>
-                    </div>
-                  </td>
+                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
+              >
+                <td className="px-5 py-3">
+                  <Stack direction="row" align="center" gap="smPlus">
+                    <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
+                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
+                      {item.endpoint}
+                    </code>
+                  </Stack>
+                </td>
                   <td className="px-5 py-3 text-right text-ink-primary font-medium">
                     {item.requests.toLocaleString()}
                   </td>

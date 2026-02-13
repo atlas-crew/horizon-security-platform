@@ -38,10 +38,20 @@ describe('Hunt Routes', () => {
   let app: Express;
   let huntService: HuntService;
 
+  let mockGetSavedQuery = vi.fn();
+  let mockDeleteSavedQuery = vi.fn();
+  let mockSaveQuery = vi.fn();
+  let mockQueryTimeline = vi.fn();
+
   beforeEach(() => {
+    mockGetSavedQuery = vi.fn();
+    mockDeleteSavedQuery = vi.fn();
+    mockSaveQuery = vi.fn();
+    mockQueryTimeline = vi.fn();
+
     huntService = {
       isHistoricalEnabled: vi.fn().mockReturnValue(true),
-      queryTimeline: vi.fn(),
+      queryTimeline: mockQueryTimeline,
       getCampaignTimeline: vi.fn(),
       getRequestTimeline: vi.fn(),
       getRecentRequests: vi.fn(),
@@ -50,16 +60,17 @@ describe('Hunt Routes', () => {
       getLowAndSlowIps: vi.fn(),
       getFleetFingerprintIntelligence: vi.fn(),
       getSavedQueries: vi.fn(),
-      saveQuery: vi.fn(),
-      getSavedQuery: vi.fn(),
-      deleteSavedQuery: vi.fn(),
+      saveQuery: mockSaveQuery,
+      getSavedQuery: mockGetSavedQuery,
+      deleteSavedQuery: mockDeleteSavedQuery,
       getTenantBaselines: vi.fn(),
       getAnomalies: vi.fn(),
     } as unknown as HuntService;
 
     app = express();
     app.use(express.json());
-    app.use(injectAuth('tenant-1'));
+    // Provide necessary scopes for all hunt operations in this test suite
+    app.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write', 'hunt:execute', 'rules:write']));
     app.use('/api/v1/hunt', createHuntRoutes({} as PrismaClient, mockLogger, huntService));
   });
 
@@ -517,4 +528,78 @@ describe('Hunt Routes', () => {
       expect(huntService.queryTimeline).not.toHaveBeenCalled();
     });
   });
+
+  describe('Saved Query Tenant Isolation', () => {
+    const mockQuery = {
+      id: 'query-123',
+      name: 'My Tenant Query',
+      query: {
+        tenantId: 'tenant-1',
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+      },
+      createdBy: 'user-1',
+      createdAt: new Date().toISOString(),
+    };
+
+    it('GET /saved-queries/:id returns query for owner', async () => {
+      mockGetSavedQuery.mockResolvedValue(mockQuery);
+      const response = await request(app).get('/api/v1/hunt/saved-queries/query-123').expect(200);
+      expect(response.body.data.id).toBe('query-123');
+    });
+
+    it('GET /saved-queries/:id returns 404 for other tenant', async () => {
+      mockGetSavedQuery.mockResolvedValue({
+        ...mockQuery,
+        query: { ...mockQuery.query, tenantId: 'tenant-2' },
+      });
+      await request(app).get('/api/v1/hunt/saved-queries/query-123').expect(404);
+    });
+
+    it('GET /saved-queries/:id allows fleet admin', async () => {
+      const adminApp = express();
+      adminApp.use(express.json());
+      // Fleet admin needs both fleet:admin and hunt:read
+      adminApp.use(injectAuth('admin', ['fleet:admin', 'hunt:read']));
+      adminApp.use('/api/v1/hunt', createHuntRoutes({} as any, mockLogger, huntService));
+
+      mockGetSavedQuery.mockResolvedValue({
+        ...mockQuery,
+        query: { ...mockQuery.query, tenantId: 'tenant-2' },
+      });
+      const response = await request(adminApp).get('/api/v1/hunt/saved-queries/query-123').expect(200);
+      expect(response.body.data.query.tenantId).toBe('tenant-2');
+    });
+
+    it('DELETE /saved-queries/:id deletes for owner', async () => {
+      mockGetSavedQuery.mockResolvedValue(mockQuery);
+      mockDeleteSavedQuery.mockResolvedValue(true);
+      await request(app).delete('/api/v1/hunt/saved-queries/query-123').expect(200);
+      expect(mockDeleteSavedQuery).toHaveBeenCalledWith('query-123');
+    });
+
+    it('DELETE /saved-queries/:id returns 404 for other tenant', async () => {
+      mockGetSavedQuery.mockResolvedValue({
+        ...mockQuery,
+        query: { ...mockQuery.query, tenantId: 'tenant-2' },
+      });
+      await request(app).delete('/api/v1/hunt/saved-queries/query-123').expect(404);
+      expect(mockDeleteSavedQuery).not.toHaveBeenCalled();
+    });
+  });
+
+  // Helper to inject auth context
+  function injectAuth(tenantId: string, scopes: string[] = ['hunt:read']) {
+    return (req: Request, _res: Response, next: NextFunction) => {
+      req.auth = {
+        tenantId,
+        authId: 'mock-auth-id',
+        apiKeyId: 'mock-auth-id',
+        scopes,
+        isFleetAdmin: scopes.includes('fleet:admin'),
+        userId: 'user-1',
+      };
+      next();
+    };
+  }
 });

@@ -190,7 +190,7 @@ dlp:
   custom_keywords:
     - "project-codename"
   redaction:
-    credit_card: "mask"
+    credit_card: "partial"
     ssn: "hash"
     api_key: "full"
   hash_salt: "random-32-byte-string"
@@ -209,9 +209,10 @@ dlp:
 | `hash_salt` | string | required for hash | Salt for hash-based redaction (min 32 bytes) |
 
 **Redaction modes:**
-- `mask` - Replace with asterisks (e.g., `****-****-****-1234`)
+- `partial` - Show partial characters (e.g., `****-1234`) — default
 - `hash` - Replace with SHA-256 hash (requires `hash_salt`)
-- `full` - Remove entirely
+- `full` - Mask all characters (e.g., `**********`)
+- `none` - No redaction (debug only)
 
 **Detected data types:** `credit_card`, `ssn`, `email`, `phone`, `api_key`, `password`, `iban`, `ip_address`, `aws_key`, `private_key`, `jwt`, `medical_record`, `custom`
 
@@ -546,10 +547,10 @@ waf:
   rule_overrides:
     "sqli-001": "log"                   # Log instead of block
     "xss-002": "block"                  # Explicitly block
-    "scanner-001": "pass"               # Allow through
+    "scanner-001": "allow"              # Allow through
 ```
 
-**Rule actions:** `block`, `log`, `pass`
+**Rule actions:** `block`, `log`, `allow`, `challenge`
 
 ### Access Control
 
@@ -672,29 +673,27 @@ sites:
 
 ## Environment Variables
 
-Some fields can be set via environment variables for secrets management:
+> **Note:** Environment variable overrides are not yet implemented. All values must be set in the config file. The table below documents the planned mapping for a future release.
 
-| Config Path | Environment Variable |
-|-------------|---------------------|
+| Config Path | Planned Environment Variable |
+|-------------|------------------------------|
 | `server.admin_api_key` | `SYNAPSE_ADMIN_API_KEY` |
 | `telemetry.api_key` | `SYNAPSE_TELEMETRY_API_KEY` |
 | `horizon.api_key` | `SYNAPSE_HORIZON_API_KEY` |
 | `dlp.hash_salt` | `SYNAPSE_DLP_HASH_SALT` |
 
-Environment variables take precedence over config file values.
-
 ---
 
 ## Tunnel Preflight Requirements
 
-When enabling the Signal Horizon tunnel, ensure these values are provided (via config file or deployment-time env injection):
+When enabling the Signal Horizon tunnel, ensure these config fields are set:
 
-- `SYNAPSE_SERVER_URL`: must start with `ws://` or `wss://`
-- `SYNAPSE_ADMIN_KEY`: minimum 32 characters
-- `SENSOR_ID`: non-empty
-- `heartbeat_interval_ms`: 1000-600000 ms
-- `reconnect_delay_ms`: 100-300000 ms
-- `SYNAPSE_CA_BUNDLE` (optional): path to PEM bundle for tunnel TLS verification
+- `tunnel.server_url`: must start with `ws://` or `wss://`
+- `server.admin_api_key`: minimum 32 characters
+- `horizon.sensor_id`: non-empty
+- `tunnel.heartbeat_interval_ms`: 1000-600000 ms
+- `tunnel.reconnect_delay_ms`: 100-300000 ms
+- `tunnel.ca_bundle` (optional): path to PEM bundle for tunnel TLS verification
 
 ---
 

@@ -1122,8 +1122,8 @@ export class HuntService {
     return saved;
   }
 
-  async getSavedQueries(createdBy?: string): Promise<SavedQuery[]> {
-    return this.savedQueries.list(createdBy);
+  async getSavedQueries(createdBy?: string, tenantId?: string): Promise<SavedQuery[]> {
+    return this.savedQueries.list(createdBy, tenantId);
   }
 
   async getSavedQuery(id: string): Promise<SavedQuery | null> {

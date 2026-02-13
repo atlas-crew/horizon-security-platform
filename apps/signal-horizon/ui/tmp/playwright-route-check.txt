@@ -1,0 +1,40 @@
+=== / ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-55-695Z.log)
+
+=== /fleet ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-56-187Z.log)
+
+=== /fleet/onboarding ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-56-666Z.log)
+
+=== /fleet/keys ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-57-184Z.log)
+
+=== /beam/catalog ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-57-671Z.log)
+
+=== /beam/threats ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-58-247Z.log)
+
+=== /auth-coverage ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-58-784Z.log)
+
+=== /warroom ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-59-256Z.log)
+
+=== /settings/admin ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-46-59-708Z.log)
+
+=== /campaigns ===
+### Result
+- [Console](.playwright-cli/console-2026-02-13T05-47-00-178Z.log)
+

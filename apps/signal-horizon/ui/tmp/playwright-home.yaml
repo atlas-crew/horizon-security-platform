@@ -1,0 +1,254 @@
+- generic [ref=e3]:
+  - link "Skip to main content" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - link "0 ACTIVE" [ref=e9] [cursor=pointer]:
+          - /url: /campaigns
+          - generic [ref=e10]:
+            - img [ref=e12]
+            - generic [ref=e16]: 0 ACTIVE
+        - link "0 CRITICAL" [ref=e17] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e18]:
+            - img [ref=e20]
+            - generic [ref=e22]: 0 CRITICAL
+        - link "0 ALERTS" [ref=e23] [cursor=pointer]:
+          - /url: /search
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - generic [ref=e28]: 0 ALERTS
+        - link "0 ONLINE" [ref=e29] [cursor=pointer]:
+          - /url: /fleet
+          - generic [ref=e30]:
+            - img [ref=e32]
+            - generic [ref=e35]: 0 ONLINE
+        - link "CONNECTING" [ref=e36] [cursor=pointer]:
+          - /url: /fleet/connectivity
+          - generic [ref=e37]:
+            - img [ref=e38]
+            - generic [ref=e42]: CONNECTING
+      - generic [ref=e43]:
+        - button "Search ⌘K" [ref=e44] [cursor=pointer]:
+          - generic [ref=e45]:
+            - img [ref=e46]
+            - generic [ref=e49]: Search
+            - generic [ref=e50]: ⌘K
+        - button "Demo Mode" [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]:
+            - img [ref=e55]
+            - generic [ref=e57]: Demo Mode
+        - button "Last 7 days" [ref=e59] [cursor=pointer]:
+          - generic [ref=e60]:
+            - text: Last 7 days
+            - img [ref=e61]
+        - button "Toggle theme" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+  - generic [ref=e66]:
+    - complementary [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - img "Signal Horizon" [ref=e71]
+          - generic [ref=e73]: Signal Horizon
+        - paragraph [ref=e75]: See Further. Act Faster.
+      - navigation "Main navigation" [ref=e76]:
+        - generic [ref=e77]:
+          - button "Threat Intelligence" [expanded] [ref=e78] [cursor=pointer]:
+            - generic [ref=e81]: Threat Intelligence
+            - img [ref=e82]
+          - generic [ref=e86]:
+            - link "Threat Overview" [ref=e87] [cursor=pointer]:
+              - /url: /
+              - img [ref=e88]
+              - generic [ref=e93]: Threat Overview
+            - link "Live Threat Map" [ref=e94] [cursor=pointer]:
+              - /url: /live-map
+              - img [ref=e95]
+              - generic [ref=e98]: Live Threat Map
+            - link "Campaigns" [ref=e99] [cursor=pointer]:
+              - /url: /campaigns
+              - img [ref=e100]
+              - generic [ref=e104]: Campaigns
+            - link "Actors" [ref=e105] [cursor=pointer]:
+              - /url: /actors
+              - img [ref=e106]
+              - generic [ref=e109]: Actors
+            - link "Sessions" [ref=e110] [cursor=pointer]:
+              - /url: /sessions
+              - img [ref=e111]
+              - generic [ref=e113]: Sessions
+            - link "Global Search" [ref=e114] [cursor=pointer]:
+              - /url: /search
+              - img [ref=e115]
+              - generic [ref=e118]: Global Search
+            - link "Threat Hunting" [ref=e119] [cursor=pointer]:
+              - /url: /hunting
+              - img [ref=e120]
+              - generic [ref=e123]: Threat Hunting
+            - link "Global Intel" [ref=e124] [cursor=pointer]:
+              - /url: /intel
+              - img [ref=e125]
+              - generic [ref=e127]: Global Intel
+            - link "API Intelligence" [ref=e128] [cursor=pointer]:
+              - /url: /api-intelligence
+              - img [ref=e129]
+              - generic [ref=e133]: API Intelligence
+            - link "Auth Coverage" [ref=e134] [cursor=pointer]:
+              - /url: /auth-coverage
+              - img [ref=e135]
+              - generic [ref=e137]: Auth Coverage
+            - link "War Room" [ref=e138] [cursor=pointer]:
+              - /url: /warroom
+              - img [ref=e139]
+              - generic [ref=e144]: War Room
+        - generic [ref=e145]:
+          - button "Sensor Console" [expanded] [ref=e146] [cursor=pointer]:
+            - generic [ref=e149]: Sensor Console
+            - img [ref=e150]
+          - generic [ref=e154]:
+            - link "Dashboard" [ref=e155] [cursor=pointer]:
+              - /url: /beam
+              - img [ref=e156]
+              - generic [ref=e161]: Dashboard
+            - link "Analytics" [ref=e162] [cursor=pointer]:
+              - /url: /beam/analytics
+              - img [ref=e163]
+              - generic [ref=e165]: Analytics
+            - link "API Catalog" [ref=e166] [cursor=pointer]:
+              - /url: /beam/catalog
+              - img [ref=e167]
+              - generic [ref=e171]: API Catalog
+            - link "Threats" [ref=e172] [cursor=pointer]:
+              - /url: /beam/threats
+              - img [ref=e173]
+              - generic [ref=e177]: Threats
+        - generic [ref=e178]:
+          - button "Fleet Operations" [expanded] [ref=e179] [cursor=pointer]:
+            - generic [ref=e182]: Fleet Operations
+            - img [ref=e183]
+          - generic [ref=e187]:
+            - link "Fleet Overview" [ref=e188] [cursor=pointer]:
+              - /url: /fleet
+              - img [ref=e189]
+              - generic [ref=e192]: Fleet Overview
+            - link "Fleet Configuration" [ref=e193] [cursor=pointer]:
+              - /url: /fleet/config
+              - img [ref=e194]
+              - generic [ref=e197]: Fleet Configuration
+            - link "DLP Dashboard" [ref=e198] [cursor=pointer]:
+              - /url: /fleet/dlp
+              - img [ref=e199]
+              - generic [ref=e201]: DLP Dashboard
+            - link "Capacity Forecast" [ref=e202] [cursor=pointer]:
+              - /url: /fleet/forecast
+              - img [ref=e203]
+              - generic [ref=e205]: Capacity Forecast
+            - link "Fleet Health" [ref=e206] [cursor=pointer]:
+              - /url: /fleet/health
+              - img [ref=e207]
+              - generic [ref=e209]: Fleet Health
+            - link "Fleet Updates" [ref=e210] [cursor=pointer]:
+              - /url: /fleet/updates
+              - img [ref=e211]
+              - generic [ref=e215]: Fleet Updates
+            - link "Rule Distribution" [ref=e216] [cursor=pointer]:
+              - /url: /fleet/rules
+              - img [ref=e217]
+              - generic [ref=e219]: Rule Distribution
+            - link "Connectivity" [ref=e220] [cursor=pointer]:
+              - /url: /fleet/connectivity
+              - img [ref=e221]
+              - generic [ref=e225]: Connectivity
+            - link "API Keys" [ref=e226] [cursor=pointer]:
+              - /url: /fleet/keys
+              - img [ref=e227]
+              - generic [ref=e231]: API Keys
+            - link "Onboarding" [ref=e232] [cursor=pointer]:
+              - /url: /fleet/onboarding
+              - img [ref=e233]
+              - generic [ref=e236]: Onboarding
+        - generic [ref=e237]:
+          - paragraph [ref=e238]: Settings
+          - link "Admin Settings" [ref=e240] [cursor=pointer]:
+            - /url: /settings/admin
+            - img [ref=e241]
+            - generic [ref=e244]: Admin Settings
+        - generic [ref=e245]:
+          - paragraph [ref=e246]: Support
+          - link "Support & Docs" [ref=e248] [cursor=pointer]:
+            - /url: /support
+            - img [ref=e249]
+            - generic [ref=e252]: Support & Docs
+      - generic [ref=e253]:
+        - generic [ref=e254]:
+          - img [ref=e255]
+          - generic [ref=e262]: Connecting...
+        - generic [ref=e263]: 0 sensors online
+        - button "Collapse sidebar" [ref=e264] [cursor=pointer]:
+          - generic [ref=e265]:
+            - img [ref=e266]
+            - generic [ref=e269]: Collapse
+            - generic [ref=e270]: ⌘B
+    - main [ref=e271]:
+      - status [ref=e272]:
+        - generic [ref=e274]: Reconnecting to server...
+      - main "Loading threat overview" [ref=e276]:
+        - generic [ref=e279]:
+          - generic [ref=e280]: Signal Horizon · Last 7d
+          - heading "Threat Overview" [level=3] [ref=e282]
+          - generic [ref=e283]: Loading fleet intelligence...
+        - status "Loading statistics" [ref=e284]:
+          - generic "Loading card" [ref=e285]
+          - generic "Loading card" [ref=e291]
+          - generic "Loading card" [ref=e297]
+          - generic "Loading card" [ref=e303]
+        - generic [ref=e309]:
+          - generic "Loading campaigns" [ref=e311]
+          - generic "Loading alerts" [ref=e361]
+        - generic "Loading table data" [ref=e390]:
+          - table [ref=e394]:
+            - rowgroup [ref=e395]:
+              - row [ref=e396]:
+                - columnheader [ref=e397]
+                - columnheader [ref=e399]
+                - columnheader [ref=e401]
+                - columnheader [ref=e403]
+                - columnheader [ref=e405]
+                - columnheader [ref=e407]
+            - rowgroup [ref=e409]:
+              - row [ref=e410]:
+                - cell [ref=e411]
+                - cell [ref=e413]
+                - cell [ref=e415]
+                - cell [ref=e417]
+                - cell [ref=e419]
+                - cell [ref=e421]
+              - row [ref=e423]:
+                - cell [ref=e424]
+                - cell [ref=e426]
+                - cell [ref=e428]
+                - cell [ref=e430]
+                - cell [ref=e432]
+                - cell [ref=e434]
+              - row [ref=e436]:
+                - cell [ref=e437]
+                - cell [ref=e439]
+                - cell [ref=e441]
+                - cell [ref=e443]
+                - cell [ref=e445]
+                - cell [ref=e447]
+              - row [ref=e449]:
+                - cell [ref=e450]
+                - cell [ref=e452]
+                - cell [ref=e454]
+                - cell [ref=e456]
+                - cell [ref=e458]
+                - cell [ref=e460]
+              - row [ref=e462]:
+                - cell [ref=e463]
+                - cell [ref=e465]
+                - cell [ref=e467]
+                - cell [ref=e469]
+                - cell [ref=e471]
+                - cell [ref=e473]

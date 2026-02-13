@@ -1,15 +1,15 @@
 # Prometheus Metrics (Synapse Pingora Sensor)
 
-Source of truth: `apps/synapse-pingora/src/metrics.rs` (`MetricsRegistry::render_prometheus()`).
+Source of truth: `src/metrics.rs` (`MetricsRegistry::render_prometheus()`).
 
 Endpoint:
-- Admin API: `GET /metrics` (Prometheus exposition) (`apps/synapse-pingora/src/api.rs`).
+- Admin API: `GET /metrics` (Prometheus exposition) (`src/api.rs`).
 
 Conventions:
 - Prefix: `synapse_`
 - Units: `*_us` microseconds, `*_ms` milliseconds
 - Histograms: `*_bucket{le="..."}`, `*_sum`, `*_count`
-- Label cardinality guards: most `{endpoint=...}` / `{type=...}` maps capped by `MAX_METRICS_MAP_SIZE` (1000) (`apps/synapse-pingora/src/metrics.rs`).
+- Label cardinality guards: most `{endpoint=...}` / `{type=...}` maps capped by `MAX_METRICS_MAP_SIZE` (1000) (`src/metrics.rs`).
 
 ## Exported Metrics (Current)
 
@@ -17,7 +17,7 @@ HTTP / request lifecycle
 - `synapse_requests_total` (counter) Total requests.
 - `synapse_requests_by_status{status="2xx|3xx|4xx|5xx"}` (counter) Request totals by status class.
 - `synapse_requests_blocked` (counter) Requests treated as blocked/denied.
-  - Currently incremented for WAF blocks, rate limits, and challenge failures; no reason breakdown. (`apps/synapse-pingora/src/main.rs`)
+  - Currently incremented for WAF blocks, rate limits, and challenge failures; no reason breakdown. (`src/main.rs`)
 - `synapse_active_requests` (gauge) In-flight requests (RAII guard).
 - `synapse_request_duration_us` (histogram) Request duration in microseconds.
 
@@ -62,7 +62,7 @@ Signal dispatch (sensor -> hub / horizon facade)
 
 Tunnel
 - Tunnel metrics are exported and separately documented:
-  - `apps/synapse-pingora/docs/observability/TUNNEL_METRICS.md`
+  - `docs/observability/TUNNEL_METRICS.md`
 
 Service
 - `synapse_uptime_seconds` (gauge) Process uptime in seconds.
@@ -75,7 +75,7 @@ These are present in `/metrics` output but never incremented/updated by runtime 
 - Shadow metrics: `synapse_shadow_*`
   - `MetricsRegistry::record_shadow_*()` exists but is never called.
 - DLP metrics: `synapse_dlp_*`
-  - `DlpScanner` runs in the proxy, but does not currently call `metrics_registry.dlp_metrics().record_*()`.
+  - `DlpScanner` runs in the proxy but does not currently call `metrics_registry.dlp_metrics().record_*()` methods.
 - Profiling metrics (most of them):
   - `synapse_profiles_total`, `synapse_schemas_total`, `synapse_profile_updates_total`,
     `synapse_schema_violations_total`, `synapse_anomalies_detected_total`, `synapse_avg_anomaly_score`

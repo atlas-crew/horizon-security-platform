@@ -57,6 +57,11 @@ impl PercentilesTracker {
     /// Update with a new sample.
     #[inline]
     pub fn update(&mut self, value: f64) {
+        // SECURITY: Ignore non-finite values to prevent marker corruption (WAF-P0-2)
+        if !value.is_finite() {
+            return;
+        }
+
         // Initialization phase: collect first 5 samples
         if self.init_count < 5 {
             self.init_buffer[self.init_count as usize] = value;
@@ -209,6 +214,11 @@ impl Distribution {
     /// O(1) time and space.
     #[inline]
     pub fn update(&mut self, value: f64) {
+        // SECURITY: Ignore non-finite values to prevent statistical poisoning (WAF-P0-1)
+        if !value.is_finite() {
+            return;
+        }
+
         self.count += 1;
         let delta = value - self.mean;
         self.mean += delta / self.count as f64;
@@ -445,5 +455,32 @@ mod tests {
 
         // p50 should still be around 50 (median is robust to outliers)
         assert!((p50 - 50.0).abs() < 10.0);
+    }
+
+    #[test]
+    fn test_distribution_nan_stability() {
+        let mut d = Distribution::new();
+        d.update(10.0);
+        d.update(f64::NAN);
+        d.update(f64::INFINITY);
+        d.update(20.0);
+
+        assert_eq!(d.count(), 2);
+        assert!((d.mean() - 15.0).abs() < 0.01);
+        assert!(d.stddev().is_finite());
+    }
+
+    #[test]
+    fn test_percentiles_nan_stability() {
+        let mut pt = PercentilesTracker::new();
+        for _ in 0..10 {
+            pt.update(10.0);
+            pt.update(f64::NAN);
+        }
+        
+        let (p50, p95, p99) = pt.get();
+        assert!(p50.is_finite());
+        assert!(p95.is_finite());
+        assert!(p99.is_finite());
     }
 }

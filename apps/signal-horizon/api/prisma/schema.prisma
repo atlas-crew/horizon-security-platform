@@ -48,6 +48,7 @@ model Tenant {
   registrationTokens RegistrationToken[]
   consents          TenantConsent[]
   idempotencyRequests IdempotencyRequest[]
+  savedHunts        SavedHunt[]
 
   // Intel relations
   sensorIntelActors    SensorIntelActor[]
@@ -791,6 +792,28 @@ model WarRoomCampaign {
 
   @@unique([warRoomId, campaignId])
   @@map("war_room_campaigns")
+}
+
+// =============================================================================
+// Saved Hunts
+// =============================================================================
+
+model SavedHunt {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  name        String
+  description String?
+  query       Json
+  createdBy   String // userId
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([createdBy])
+  @@map("saved_hunts")
 }
 
 // =============================================================================

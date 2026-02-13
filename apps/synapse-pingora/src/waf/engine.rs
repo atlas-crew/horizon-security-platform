@@ -368,6 +368,15 @@ static JSON_PROTO_POLLUTION: Lazy<Regex> = Lazy::new(|| {
         .expect("json proto pollution regex")
 });
 
+/// Compiled rules and indices for fast swapping (labs-tui optimization).
+pub struct CompiledRules {
+    pub rules: Vec<WafRule>,
+    pub rule_id_to_index: HashMap<u32, usize>,
+    pub rule_index: RuleIndex,
+    pub regex_cache: HashMap<String, Regex>,
+    pub word_regex_cache: HashMap<String, Regex>,
+}
+
 /// Main WAF rule engine.
 pub struct Engine {
     rules: Vec<WafRule>,
@@ -416,15 +425,85 @@ impl Engine {
 
     /// Load rules from JSON bytes.
     pub fn load_rules(&mut self, json: &[u8]) -> Result<usize, WafError> {
-        let rules = Self::parse_rules(json)?;
-        let count = rules.len();
-        self.reload_rules(rules)?;
+        let compiled = self.precompute_rules(json)?;
+        let count = compiled.rules.len();
+        self.reload_from_compiled(compiled);
         Ok(count)
     }
 
-    /// Parse rules from JSON bytes without modifying engine state.
+    /// Precompute all rule structures including regex compilation.
     ///
-    /// This allows expensive parsing to happen outside of global locks.
+    /// This is an expensive operation that should happen outside of global locks.
+    pub fn precompute_rules(&self, json: &[u8]) -> Result<CompiledRules, WafError> {
+        let rules: Vec<WafRule> =
+            serde_json::from_slice(json).map_err(|e| WafError::ParseError(e.to_string()))?;
+
+        let rule_id_to_index = rules
+            .iter()
+            .enumerate()
+            .map(|(idx, rule)| (rule.id, idx))
+            .collect();
+        
+        let rule_index = build_rule_index(&rules);
+        
+        let mut regex_cache = HashMap::new();
+        let mut word_regex_cache = HashMap::new();
+
+        // Pre-compile regex patterns
+        let mut patterns = Vec::<String>::new();
+        let mut words = Vec::<String>::new();
+        for rule in &rules {
+            for cond in &rule.matches {
+                collect_regex_patterns(cond, &mut patterns);
+                collect_word_values(cond, &mut words);
+            }
+        }
+
+        patterns.sort();
+        patterns.dedup();
+        for pattern in patterns {
+            let compiled = RegexBuilder::new(&pattern)
+                .multi_line(true)
+                .size_limit(REGEX_SIZE_LIMIT)
+                .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
+                .build()
+                .map_err(|e| WafError::RegexError(format!("'{pattern}': {e}")))?;
+            regex_cache.insert(pattern, compiled);
+        }
+
+        words.sort();
+        words.dedup();
+        for word in words {
+            let pattern = format!(r"(?i)\b{}\b", regex::escape(&word));
+            let compiled = RegexBuilder::new(&pattern)
+                .multi_line(true)
+                .size_limit(REGEX_SIZE_LIMIT)
+                .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
+                .build()
+                .map_err(|e| WafError::RegexError(format!("word '{word}': {e}")))?;
+            word_regex_cache.insert(word, compiled);
+        }
+
+        Ok(CompiledRules {
+            rules,
+            rule_id_to_index,
+            rule_index,
+            regex_cache,
+            word_regex_cache,
+        })
+    }
+
+    /// Fast swap of rule state using precomputed data.
+    pub fn reload_from_compiled(&mut self, compiled: CompiledRules) {
+        self.rules = compiled.rules;
+        self.rule_id_to_index = compiled.rule_id_to_index;
+        self.rule_index = compiled.rule_index;
+        self.regex_cache = compiled.regex_cache;
+        self.word_regex_cache = compiled.word_regex_cache;
+        self.candidate_cache.write().clear();
+    }
+
+    /// Parse rules from JSON bytes without modifying engine state.
     pub fn parse_rules(json: &[u8]) -> Result<Vec<WafRule>, WafError> {
         serde_json::from_slice(json).map_err(|e| WafError::ParseError(e.to_string()))
     }
@@ -479,6 +558,11 @@ impl Engine {
         }
 
         Ok(())
+    }
+
+    /// Get the number of loaded rules.
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
     }
 
     /// Analyze a request and return a verdict.

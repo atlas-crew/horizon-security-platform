@@ -1,16 +1,108 @@
 import type { Logger } from 'pino';
+import { PrismaClient, Prisma, type SavedHunt } from '@prisma/client';
 import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, applyTtlJitter, type RedisKv } from '../../storage/redis/index.js';
-import type { SavedQuery } from './index.js';
+import type { SavedQuery, HuntQuery } from './index.js';
 
 /**
  * Store interface for saved hunt queries.
- * Allows swapping between in-memory and Redis-backed implementations.
+ * Allows swapping between in-memory, Redis, and Prisma-backed implementations.
  */
 export interface SavedQueryStore {
   get(id: string): Promise<SavedQuery | null>;
   set(query: SavedQuery): Promise<void>;
   delete(id: string): Promise<boolean>;
-  list(createdBy?: string): Promise<SavedQuery[]>;
+  list(createdBy?: string, tenantId?: string): Promise<SavedQuery[]>;
+}
+
+/**
+ * Prisma-backed implementation of SavedQueryStore for persistent, shared storage. (labs-hunt)
+ */
+export class PrismaSavedQueryStore implements SavedQueryStore {
+  private prisma: PrismaClient;
+
+  constructor(prisma: PrismaClient) {
+    this.prisma = prisma;
+  }
+
+  async get(id: string): Promise<SavedQuery | null> {
+    const saved = await this.prisma.savedHunt.findUnique({
+      where: { id },
+    });
+
+    if (!saved) return null;
+
+    return this.mapToSavedQuery(saved);
+  }
+
+  async set(query: SavedQuery): Promise<void> {
+    const data: Prisma.SavedHuntUpsertArgs['create'] = {
+      id: query.id,
+      name: query.name,
+      description: query.description || null,
+      query: query.query as unknown as Prisma.InputJsonValue,
+      createdBy: query.createdBy,
+      lastRunAt: query.lastRunAt || null,
+      tenantId: query.query.tenantId || null,
+    };
+
+    await this.prisma.savedHunt.upsert({
+      where: { id: query.id },
+      update: data,
+      create: data,
+    });
+  }
+
+  async delete(id: string): Promise<boolean> {
+    try {
+      await this.prisma.savedHunt.delete({
+        where: { id },
+      });
+      return true;
+    } catch (error) {
+      // P2025: Record to delete does not exist.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async list(createdBy?: string, tenantId?: string): Promise<SavedQuery[]> {
+    const where: Prisma.SavedHuntWhereInput = {};
+    if (createdBy) where.createdBy = createdBy;
+    if (tenantId) where.tenantId = tenantId;
+
+    const hunts = await this.prisma.savedHunt.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return hunts.map((h) => this.mapToSavedQuery(h));
+  }
+
+  private mapToSavedQuery(saved: SavedHunt): SavedQuery {
+    const rawQuery = saved.query as any;
+    
+    // Treat the database column as the source of truth for tenantId
+    // to ensure consistency between filtering and results.
+    const query: HuntQuery = {
+      ...rawQuery,
+      tenantId: saved.tenantId || undefined,
+      // Defensive date parsing: fallback to recent defaults if missing
+      startTime: rawQuery.startTime ? new Date(rawQuery.startTime) : new Date(Date.now() - 24 * 3600_000),
+      endTime: rawQuery.endTime ? new Date(rawQuery.endTime) : new Date(),
+    };
+
+    return {
+      id: saved.id,
+      name: saved.name,
+      description: saved.description || undefined,
+      query,
+      createdBy: saved.createdBy,
+      createdAt: saved.createdAt,
+      lastRunAt: saved.lastRunAt || undefined,
+    };
+  }
 }
 
 /**
@@ -31,9 +123,11 @@ export class InMemorySavedQueryStore implements SavedQueryStore {
     return this.queries.delete(id);
   }
 
-  async list(createdBy?: string): Promise<SavedQuery[]> {
-    const all = Array.from(this.queries.values());
-    return createdBy ? all.filter((q) => q.createdBy === createdBy) : all;
+  async list(createdBy?: string, tenantId?: string): Promise<SavedQuery[]> {
+    let all = Array.from(this.queries.values());
+    if (createdBy) all = all.filter((q) => q.createdBy === createdBy);
+    if (tenantId) all = all.filter((q) => q.query.tenantId === tenantId);
+    return all;
   }
 }
 
@@ -176,7 +270,7 @@ export class RedisSavedQueryStore implements SavedQueryStore {
     return deleted;
   }
 
-  async list(createdBy?: string): Promise<SavedQuery[]> {
+  async list(createdBy?: string, tenantId?: string): Promise<SavedQuery[]> {
     const indexRaw = await this.kv.get(this.indexKeyName);
     if (!indexRaw) return [];
 
@@ -193,7 +287,9 @@ export class RedisSavedQueryStore implements SavedQueryStore {
       const raw = values[i];
       if (raw) {
         const query = reconstituteDates(jsonDecode<any>(raw, { maxBytes: 1024 * 1024 }));
-        if (!createdBy || query.createdBy === createdBy) {
+        const matchCreator = !createdBy || query.createdBy === createdBy;
+        const matchTenant = !tenantId || query.query.tenantId === tenantId;
+        if (matchCreator && matchTenant) {
           results.push(query);
         }
         stillPresent.push(index[i]);
@@ -259,12 +355,12 @@ export class ResilientSavedQueryStore implements SavedQueryStore {
     }
   }
 
-  async list(createdBy?: string): Promise<SavedQuery[]> {
+  async list(createdBy?: string, tenantId?: string): Promise<SavedQuery[]> {
     try {
-      return await this.primary.list(createdBy);
+      return await this.primary.list(createdBy, tenantId);
     } catch (error) {
       this.warn('list', error);
-      return this.fallback.list(createdBy);
+      return this.fallback.list(createdBy, tenantId);
     }
   }
 }

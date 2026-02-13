@@ -1232,6 +1232,8 @@ pub struct SynapseProxy {
     progression_manager: Arc<ProgressionManager>,
     /// Phase 11: Auth coverage aggregator for endpoint telemetry
     auth_coverage: Arc<AuthCoverageAggregator>,
+    /// Adaptive rate limiting for autonomous health management (TASK-075)
+    adaptive_rate_limiter: Option<Arc<synapse_pingora::ratelimit::AdaptiveRateLimiter>>,
 }
 
 impl SynapseProxy {
@@ -1239,6 +1241,12 @@ impl SynapseProxy {
     pub fn start_background_tasks(&self) {
         self.tarpit_manager.clone().start_background_tasks();
         self.progression_manager.clone().start_background_tasks();
+
+        // Start adaptive rate limiting if configured
+        if let Some(ref adaptive_rl) = self.adaptive_rate_limiter {
+            adaptive_rl.clone().start_background_task(Duration::from_secs(5));
+        }
+
         info!("SynapseProxy internal background tasks started");
     }
 
@@ -1347,6 +1355,7 @@ impl SynapseProxy {
             signal_manager,
             progression_manager,
             auth_coverage,
+            adaptive_rate_limiter: None, // Adaptive RL requires multi-site manager
         }
     }
 
@@ -1414,6 +1423,7 @@ impl SynapseProxy {
             signal_manager,
             progression_manager,
             auth_coverage,
+            adaptive_rate_limiter: None,
         }
     }
 
@@ -1474,6 +1484,11 @@ impl SynapseProxy {
 
         let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
 
+        let adaptive_rate_limiter = Arc::new(synapse_pingora::ratelimit::AdaptiveRateLimiter::new(
+            Arc::clone(&rate_limit_manager),
+            Arc::clone(&metrics_registry),
+        ));
+
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
@@ -1504,6 +1519,7 @@ impl SynapseProxy {
             signal_manager,
             progression_manager,
             auth_coverage,
+            adaptive_rate_limiter: Some(adaptive_rate_limiter),
         }
     }
 

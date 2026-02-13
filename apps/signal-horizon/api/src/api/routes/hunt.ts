@@ -694,7 +694,8 @@ export function createHuntRoutes(
   router.get('/saved-queries', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const createdBy = req.query.createdBy as string | undefined;
-      const queries = await huntService.getSavedQueries(createdBy);
+      const tenantId = req.auth?.isFleetAdmin ? undefined : req.auth?.tenantId;
+      const queries = await huntService.getSavedQueries(createdBy, tenantId);
 
       res.json({
         success: true,
@@ -731,8 +732,23 @@ export function createHuntRoutes(
       }
 
       const { name, description, query } = parsed.data;
-      const createdBy = (req as Request & { userId?: string }).userId ?? 'anonymous';
 
+      // SECURITY: Ensure auth context is valid
+      if (!req.auth?.userId) {
+        res.status(401).json({ error: 'User ID required' });
+        return;
+      }
+
+      // SECURITY: Ensure saved query is scoped to the user's tenant (unless fleet admin)
+      if (!req.auth.isFleetAdmin) {
+        if (!req.auth.tenantId) {
+          res.status(403).json({ error: 'Tenant context required' });
+          return;
+        }
+        query.tenantId = req.auth.tenantId;
+      }
+
+      const createdBy = req.auth.userId;
       const saved = await huntService.saveQuery(name, query, createdBy, description);
 
       res.status(201).json({
@@ -760,6 +776,18 @@ export function createHuntRoutes(
       const query = await huntService.getSavedQuery(id);
 
       if (!query) {
+        res.status(404).json({
+          error: 'Saved query not found',
+        });
+        return;
+      }
+
+      // SECURITY: Enforce tenant isolation (unless fleet admin)
+      // Allow if user is fleet admin OR tenant matches OR query is unscoped and owner matches
+      const isOwner = query.createdBy === (req as any).userId;
+      const tenantMatches = query.query.tenantId === req.auth?.tenantId;
+      
+      if (!req.auth?.isFleetAdmin && !tenantMatches && !isOwner) {
         res.status(404).json({
           error: 'Saved query not found',
         });
@@ -844,6 +872,20 @@ export function createHuntRoutes(
   router.delete('/saved-queries/:id', authorize(prisma, { scopes: 'hunt:write', role: 'operator' }), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+
+      // SECURITY: Verify ownership before deletion (unless fleet admin)
+      if (!req.auth?.isFleetAdmin) {
+        const query = await huntService.getSavedQuery(id);
+        const tenantMatches = query?.query.tenantId === req.auth?.tenantId;
+        
+        if (!query || !tenantMatches) {
+          res.status(404).json({
+            error: 'Saved query not found',
+          });
+          return;
+        }
+      }
+
       const deleted = await huntService.deleteSavedQuery(id);
 
       if (!deleted) {

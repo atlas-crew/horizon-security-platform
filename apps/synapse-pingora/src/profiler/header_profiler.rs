@@ -122,14 +122,16 @@ impl HeaderProfiler {
             .entry(endpoint.to_string())
             .or_insert_with(|| HeaderBaseline::new(endpoint.to_string()));
 
-        // Track which headers are present in this request
-        let present_headers: HashSet<&str> = headers.iter().map(|(k, _)| k.as_str()).collect();
+        // Track which headers are present in this request (normalized to lowercase)
+        let present_headers: HashSet<String> = headers.iter().map(|(k, _)| k.to_lowercase()).collect();
 
         // Update header value statistics
         for (header_name, header_value) in headers {
+            let header_name = header_name.to_lowercase();
+
             // Limit headers per endpoint (memory protection)
             if baseline.header_value_stats.len() >= MAX_HEADERS_PER_ENDPOINT
-                && !baseline.header_value_stats.contains_key(header_name)
+                && !baseline.header_value_stats.contains_key(&header_name)
             {
                 continue;
             }
@@ -182,12 +184,12 @@ impl HeaderProfiler {
 
         let mut result = HeaderAnomalyResult::new();
 
-        // Create set of headers present in this request
-        let present_headers: HashSet<&str> = headers.iter().map(|(k, _)| k.as_str()).collect();
+        // Create set of headers present in this request (normalized to lowercase)
+        let present_headers: HashSet<String> = headers.iter().map(|(k, _)| k.to_lowercase()).collect();
 
         // 1. Check for missing required headers
         for required_header in &baseline.required_headers {
-            if !present_headers.contains(required_header.as_str()) {
+            if !present_headers.contains(required_header) {
                 result.add(HeaderAnomaly::MissingRequired {
                     header: required_header.clone(),
                 });
@@ -196,7 +198,8 @@ impl HeaderProfiler {
 
         // 2. Check for unexpected headers
         for (header_name, _) in headers {
-            if !baseline.is_known(header_name) {
+            let header_name = header_name.to_lowercase();
+            if !baseline.is_known(&header_name) {
                 result.add(HeaderAnomaly::UnexpectedHeader {
                     header: header_name.clone(),
                 });
@@ -205,7 +208,8 @@ impl HeaderProfiler {
 
         // 3. Check for value anomalies (entropy, length)
         for (header_name, header_value) in headers {
-            if let Some(stats) = baseline.get_stats(header_name) {
+            let header_name = header_name.to_lowercase();
+            if let Some(stats) = baseline.get_stats(&header_name) {
                 if stats.is_mature(self.min_samples / 2) {
                     // Check length anomaly
                     let length = header_value.len();
@@ -295,7 +299,7 @@ impl HeaderProfiler {
     fn recalculate_header_categories(
         &self,
         baseline: &mut HeaderBaseline,
-        current_headers: &HashSet<&str>,
+        current_headers: &HashSet<String>,
     ) {
         let sample_count = baseline.sample_count;
 
@@ -314,7 +318,7 @@ impl HeaderProfiler {
         }
 
         // Handle headers in current request that might not be tracked yet
-        for &header in current_headers {
+        for header in current_headers {
             if !new_required.contains(header) && !new_optional.contains(header) {
                 new_optional.insert(header.to_string());
             }
@@ -448,8 +452,8 @@ mod tests {
         let baseline = profiler.get_baseline("/api/test").unwrap();
         assert_eq!(baseline.sample_count, 10);
 
-        // Check that Content-Type stats are accumulated
-        let ct_stats = baseline.get_stats("Content-Type").unwrap();
+        // Check that Content-Type stats are accumulated (name is normalized)
+        let ct_stats = baseline.get_stats("content-type").unwrap();
         assert_eq!(ct_stats.total_samples, 10);
     }
 
@@ -502,7 +506,7 @@ mod tests {
 
         assert!(result.has_anomalies());
         let missing = result.anomalies.iter().find(
-            |a| matches!(a, HeaderAnomaly::MissingRequired { header } if header == "Authorization"),
+            |a| matches!(a, HeaderAnomaly::MissingRequired { header } if header == "authorization"),
         );
         assert!(missing.is_some());
     }
@@ -526,7 +530,7 @@ mod tests {
 
         assert!(result.has_anomalies());
         let unexpected = result.anomalies.iter().find(|a| {
-            matches!(a, HeaderAnomaly::UnexpectedHeader { header } if header == "X-Evil-Header")
+            matches!(a, HeaderAnomaly::UnexpectedHeader { header } if header == "x-evil-header")
         });
         assert!(unexpected.is_some());
     }
@@ -548,7 +552,7 @@ mod tests {
 
         assert!(result.has_anomalies());
         let length_anomaly = result.anomalies.iter().find(|a| {
-            matches!(a, HeaderAnomaly::LengthAnomaly { header, .. } if header == "Authorization")
+            matches!(a, HeaderAnomaly::LengthAnomaly { header, .. } if header == "authorization")
         });
         assert!(length_anomaly.is_some());
     }
@@ -572,7 +576,7 @@ mod tests {
         // The test demonstrates the mechanism; actual triggering depends on data distribution
         if result.has_anomalies() {
             let has_entropy_anomaly = result.anomalies.iter().any(|a| {
-                matches!(a, HeaderAnomaly::EntropyAnomaly { header, .. } if header == "X-Token")
+                matches!(a, HeaderAnomaly::EntropyAnomaly { header, .. } if header == "x-token")
             });
             if has_entropy_anomaly {
                 // Good - detected as expected
@@ -769,5 +773,44 @@ mod tests {
         // Both should see the updates (shared Arc)
         let baseline = profiler1.get_baseline("/api/shared").unwrap();
         assert_eq!(baseline.sample_count, 2);
+    }
+
+    #[test]
+    fn test_header_ordering_is_ignored() {
+        let profiler = HeaderProfiler::with_config(100, 10);
+
+        // Train with one order
+        for _ in 0..20 {
+            profiler.learn("/api/order", &make_headers(&[
+                ("A", "1"), ("B", "2"), ("C", "3")
+            ]));
+        }
+
+        // Analyze with different order
+        let result = profiler.analyze("/api/order", &make_headers(&[
+            ("C", "3"), ("A", "1"), ("B", "2")
+        ]));
+
+        assert!(!result.has_anomalies());
+    }
+
+    #[test]
+    fn test_header_case_sensitivity() {
+        let profiler = HeaderProfiler::with_config(100, 10);
+
+        // Train with Title-Case
+        for _ in 0..20 {
+            profiler.learn("/api/case", &make_headers(&[
+                ("X-Custom", "value")
+            ]));
+        }
+
+        // Analyze with lower-case
+        let result = profiler.analyze("/api/case", &make_headers(&[
+            ("x-custom", "value")
+        ]));
+
+        // If this fails, it means we're sensitive to case (which is bad for HTTP headers)
+        assert!(!result.has_anomalies(), "Header analysis should be case-insensitive");
     }
 }

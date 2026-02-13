@@ -349,19 +349,20 @@ impl HeaderBaseline {
     /// Get value stats for a header, if available.
     #[inline]
     pub fn get_stats(&self, header: &str) -> Option<&ValueStats> {
-        self.header_value_stats.get(header)
+        self.header_value_stats.get(&header.to_lowercase())
     }
 
     /// Check if a header is considered required (>95% frequency).
     #[inline]
     pub fn is_required(&self, header: &str) -> bool {
-        self.required_headers.contains(header)
+        self.required_headers.contains(&header.to_lowercase())
     }
 
     /// Check if a header has been seen before (required or optional).
     #[inline]
     pub fn is_known(&self, header: &str) -> bool {
-        self.required_headers.contains(header) || self.optional_headers.contains(header)
+        let h = header.to_lowercase();
+        self.required_headers.contains(&h) || self.optional_headers.contains(&h)
     }
 
     /// Get the frequency of a header (0.0 to 1.0).
@@ -371,7 +372,7 @@ impl HeaderBaseline {
         }
 
         self.header_value_stats
-            .get(header)
+            .get(&header.to_lowercase())
             .map(|stats| stats.total_samples as f64 / self.sample_count as f64)
             .unwrap_or(0.0)
     }

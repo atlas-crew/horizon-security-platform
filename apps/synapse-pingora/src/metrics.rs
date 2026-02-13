@@ -138,8 +138,8 @@ impl TuiDataProvider for MetricsRegistry {
             progression_stats: self.progression_stats(),
             shadow_stats: self.shadow_stats(),
             recent_geo_anomalies: self.recent_geo_anomalies(10),
-            top_entities: self.entity_manager.as_ref().map(|m| m.list_top_risk(10)).unwrap_or_default(),
-            recent_blocks: self.block_log.as_ref().map(|l| l.recent(10)).unwrap_or_default(),
+            top_entities: self.entity_manager.read().as_ref().map(|m| m.list_top_risk(10)).unwrap_or_default(),
+            recent_blocks: self.block_log.read().as_ref().map(|l| l.recent(10)).unwrap_or_default(),
         };
 
         // Update cache

@@ -229,23 +229,28 @@ Sample output:
 All tests passed!
 ```
 
-## Graceful Reload
+## Configuration Hot-Reload
 
-Pingora supports zero-downtime graceful reload:
+Synapse supports zero-downtime configuration updates via the admin API:
 
 ```bash
-# Graceful restart (old workers finish current requests)
-pkill -SIGQUIT synapse-pingora && ./target/release/synapse-pingora -u
-
-# The -u flag tells Pingora to take over from the previous instance
+# Reload configuration (~240 μs atomic swap, no dropped requests)
+curl -X POST http://localhost:6191/reload -H "X-Admin-Key: $ADMIN_KEY"
 ```
 
 How it works:
-1. `SIGQUIT` tells Pingora to stop accepting new connections
-2. Existing requests are allowed to complete
-3. New instance starts with `-u` (upgrade) flag
-4. Socket is passed from old to new process
-5. Old process exits when all requests are done
+1. New config is parsed and validated
+2. Routing table and WAF rules are rebuilt
+3. Atomic `RwLock` swap replaces the live config
+4. In-flight requests continue unaffected
+
+## Graceful Shutdown
+
+The process handles `SIGQUIT`, `SIGTERM`, and `SIGINT` for graceful shutdown:
+
+1. Signal received — stop accepting new connections
+2. In-flight requests are allowed to complete (draining)
+3. Process exits when all connections are closed
 
 ## Building
 
@@ -474,4 +479,3 @@ Copyright AtlasCrew, LLC
 
 - [Pingora GitHub](https://github.com/cloudflare/pingora)
 - [Pingora Documentation](https://docs.rs/pingora)
-- [libsynapse](../risk-server/libsynapse/) - Full Synapse engine

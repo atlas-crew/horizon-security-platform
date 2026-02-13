@@ -100,6 +100,7 @@ import {
 } from './services/broadcaster/blocklist-store.js';
 import {
   InMemorySavedQueryStore,
+  PrismaSavedQueryStore,
   RedisSavedQueryStore,
   ResilientSavedQueryStore,
 } from './services/hunt/saved-query-store.js';
@@ -693,14 +694,12 @@ async function start() {
     logger.warn({ error }, 'Shared Redis services unavailable; falling back to in-memory state stores');
   }
 
-  // Initialize Hunt service AFTER Redis (labs-2rf9.2: savedQueryStore needs sharedRedis)
-  const savedQueryStore = sharedRedis
-    ? new ResilientSavedQueryStore(
-        logger,
-        new RedisSavedQueryStore(sharedRedis.kv),
-        new InMemorySavedQueryStore()
-      )
-    : undefined;
+  // Initialize Hunt service with persistent PostgreSQL storage and in-memory fallback (TASK-072)
+  const savedQueryStore = new ResilientSavedQueryStore(
+    logger,
+    new PrismaSavedQueryStore(prisma),
+    new InMemorySavedQueryStore()
+  );
   huntService = new HuntService(prisma, logger, clickhouse ?? undefined, savedQueryStore);
 
   // Simple permission cache (10s TTL)

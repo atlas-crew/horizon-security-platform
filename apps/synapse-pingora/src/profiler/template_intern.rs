@@ -21,7 +21,10 @@ use once_cell::sync::Lazy;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Maximum number of cached templates before eviction
+#[cfg(not(test))]
 const MAX_CACHE_ENTRIES: usize = 10_000;
+#[cfg(test)]
+const MAX_CACHE_ENTRIES: usize = 10;
 
 /// Initial capacity for the cache
 const INITIAL_CAPACITY: usize = 1_000;
@@ -236,29 +239,27 @@ mod tests {
 
     #[test]
     fn test_cache_eviction() {
-        // Note: This test verifies that adding entries works and cache doesn't grow unbounded.
-        // Due to parallel test execution, we can't assert exact sizes, but we verify
-        // the cache remains bounded below MAX_CACHE_ENTRIES (10,000).
+        // SECURITY: Verify that cache doesn't grow unbounded (WAF-P0-3)
+        clear_cache();
 
-        let size_before = cache_stats().3;
-
-        // Add a batch of unique entries
-        for i in 0..100 {
-            intern_template(&format!("/api/eviction_test_endpoint_{}", i));
+        // Fill cache to its limit (100 in test mode)
+        for i in 0..MAX_CACHE_ENTRIES {
+            intern_template(&format!("/api/eviction_test_{}", i));
         }
 
-        let (_, _, _, size_after) = cache_stats();
+        let (_, _, evictions_before, size) = cache_stats();
+        assert_eq!(size, MAX_CACHE_ENTRIES);
+        assert_eq!(evictions_before, 0);
 
-        // Verify entries were added (size increased)
-        assert!(
-            size_after >= size_before,
-            "Cache size should not decrease after adding entries"
-        );
+        // Add one more entry to trigger eviction
+        intern_template("/api/eviction_trigger");
 
-        // Verify cache is bounded (won't exceed MAX_CACHE_ENTRIES)
-        assert!(
-            size_after <= 10_000,
-            "Cache should remain bounded at MAX_CACHE_ENTRIES"
-        );
+        let (_, _, evictions_after, size_after) = cache_stats();
+        
+        // Size should still be MAX_CACHE_ENTRIES
+        assert_eq!(size_after, MAX_CACHE_ENTRIES);
+        
+        // Eviction counter should have incremented
+        assert!(evictions_after > evictions_before, "Eviction should have occurred");
     }
 }

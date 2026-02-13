@@ -273,4 +273,108 @@ mod tests {
             .iter()
             .any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
     }
+
+    #[test]
+    fn test_analyze_request_redacts_pii_in_signals() {
+        let mut config = default_config();
+        config.redact_pii = true;
+        let profiler = Profiler::new(config);
+        let template = "/api/pii";
+
+        // Train with normal values
+        for i in 0..20 {
+            // Introduce variance so stddev > 0
+            let val = if i % 2 == 0 { "normal" } else { "standard" };
+            profiler.update_profile(template, 100, &[("user", val)], None);
+        }
+
+        // Test with anomalous value containing PII
+        let result = profiler.analyze_request(template, 100, &[("user", "very-long-email-address-that-is-clearly-anomalous@example.com")], None);
+
+        // Signal detail should be redacted
+        let signal = result.signals.iter().find(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly || s.signal_type == AnomalySignalType::UnexpectedParam).unwrap();
+        assert!(signal.detail.contains("ve***om") || signal.detail.contains("****"));
+        assert!(!signal.detail.contains("@example.com"));
+    }
+
+    #[test]
+    fn test_frozen_baseline_prevents_response_updates() {
+        let config = ProfilerConfig {
+            enabled: true,
+            freeze_after_samples: 5,
+            ..Default::default()
+        };
+        let profiler = Profiler::new(config);
+        let template = "/api/resp-frozen";
+
+        // Add 5 samples to freeze
+        for _i in 0..5 {
+            profiler.update_profile(template, 100, &[], None);
+            profiler.update_response_profile(template, 200, 200, None);
+        }
+
+        assert!(profiler.is_profile_frozen(template));
+        let profile_before = profiler.get_profile(template).unwrap();
+
+        // Attempt update after freeze
+        profiler.update_response_profile(template, 10000, 500, None);
+
+        let profile_after = profiler.get_profile(template).unwrap();
+        assert_eq!(profile_before.response_size.mean(), profile_after.response_size.mean());
+    }
+
+    #[test]
+    fn test_get_or_create_profile_returns_none_at_capacity() {
+        let config = ProfilerConfig {
+            max_profiles: 2,
+            ..Default::default()
+        };
+        let profiler = Profiler::new(config);
+
+        profiler.get_or_create_profile("/a");
+        profiler.get_or_create_profile("/b");
+        
+        // Third unique profile should be rejected
+        let result = profiler.get_or_create_profile("/c");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_analyze_response_size_anomaly_detected() {
+        let profiler = Profiler::new(default_config());
+        let template = "/api/resp-size";
+
+        // Train with request samples to reach maturity (sample_count >= 10)
+        for _ in 0..15 {
+            profiler.update_profile(template, 100, &[], None);
+        }
+
+        // Train with small responses and some variance
+        for i in 0..20 {
+            let size = if i % 2 == 0 { 100 } else { 110 };
+            profiler.update_response_profile(template, size, 200, None);
+        }
+
+        // Test with massive response
+        let result = profiler.analyze_response(template, 10000, 200, None);
+
+        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
+    }
+
+    #[test]
+    fn test_analyze_request_payload_size_low_detected() {
+        let profiler = Profiler::new(default_config());
+        let template = "/api/small-payload";
+
+        // Train with large payloads and some variance
+        for i in 0..20 {
+            let size = if i % 2 == 0 { 1000 } else { 1100 };
+            profiler.update_profile(template, size, &[], None);
+        }
+
+        // Test with very small payload
+        let result = profiler.analyze_request(template, 10, &[], None);
+
+        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::PayloadSizeLow));
+    }
 }

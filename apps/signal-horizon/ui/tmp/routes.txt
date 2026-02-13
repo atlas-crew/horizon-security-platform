@@ -1,0 +1,10 @@
+/
+/fleet
+/fleet/onboarding
+/fleet/keys
+/beam/catalog
+/beam/threats
+/auth-coverage
+/warroom
+/settings/admin
+/campaigns

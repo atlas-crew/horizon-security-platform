@@ -42,7 +42,7 @@ Run `bd list --priority=0` through `bd list --priority=2` to see all issues.
 | SEC-002 | Authentication bypass | `admin_server.rs` | Added JWT validation | 2026-02-01 |
 | SESS-P0-1 | Weak session ID (CRC32) | `session/mod.rs` | Replaced with Blake3 + getrandom | 2026-02-01 |
 | CRYPT-001 | MD5 for content hashing | `fingerprint/integrity.rs` | Replaced with Blake3 | 2026-02-01 |
-| CRYPT-002 | Hardcoded HMAC secret | `config/mod.rs` | Removed default, require explicit config | 2026-02-01 |
+| CRYPT-002 | Hardcoded HMAC secret | `config.rs` | Removed default, require explicit config | 2026-02-01 |
 | LOG-001 | API key exposure in logs | `horizon/client.rs` | Redacted sensitive fields | 2026-02-01 |
 | SSRF-001 | IPv6-mapped IPv4 bypass | `access.rs` | Added IPv4-mapped detection | 2026-02-01 |
 
@@ -139,7 +139,7 @@ Run `bd list --priority=0` through `bd list --priority=2` to see all issues.
 |----|---------|----------|--------|
 | WS1-001 | SQL injection in ClickHouse | `hunt/clickhouse.ts:47-95` | **OUTSTANDING** |
 | WS2-001 | Missing admin API auth | synapse-pingora admin | Fixed |
-| WS3-001 | Plaintext API keys | `prisma/schema.prisma` | **OUTSTANDING** |
+| WS3-001 | Plaintext API keys | signal-horizon `prisma/schema.prisma` | **OUTSTANDING** |
 | WS2-002 | WebSocket session validation | WebSocket handlers | **OUTSTANDING** |
 | WS3-002 | Plaintext PingoraConfig | Database schema | **OUTSTANDING** |
 | WS2-006 | Tenant isolation bypass | Hunt queries | **OUTSTANDING** |

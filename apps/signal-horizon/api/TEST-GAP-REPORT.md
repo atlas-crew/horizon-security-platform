@@ -150,4 +150,216 @@ These modules have adequate coverage:
 - `api-intelligence/index.ts`, `sigma-hunt/index.ts`, `aggregator/index.ts`, `impossible-travel.ts` (tests exist but source not fully inventoried)
 - `synapse-direct.ts`, `synapse-proxy.ts`, `user-auth.ts`, `sensor-bridge.ts`, `metrics.ts`, `sensorConfigService.ts`
 
-These should be audited in a follow-up pass.
+**Follow-up audit completed 2026-02-10** — see Addendum below.
+
+---
+
+# Addendum: Services Deep-Dive (2026-02-10)
+
+Follow-up audit of the 10 service modules flagged above. This addendum covers the full public contract for each module.
+
+**Source files audited:**
+- `api/src/services/api-intelligence/index.ts`
+- `api/src/services/sigma-hunt/index.ts`
+- `api/src/services/aggregator/index.ts`
+- `api/src/services/impossible-travel.ts`
+- `api/src/services/synapse-direct.ts`
+- `api/src/services/synapse-proxy.ts`
+- `api/src/services/user-auth.ts`
+- `api/src/services/sensor-bridge.ts`
+- `api/src/services/metrics.ts`
+- `api/src/services/sensorConfigService.ts`
+
+**Test files audited:**
+- `api/src/services/api-intelligence/__tests__/api-intelligence.test.ts`
+- `api/src/services/sigma-hunt/__tests__/sigma-hunt.test.ts`
+- `api/src/services/aggregator/aggregator.test.ts`
+- `api/src/services/aggregator/privacy.test.ts`
+- `api/src/services/impossible-travel.test.ts`
+- `api/src/services/impossible-travel-store.test.ts`
+- `api/src/services/synapse-proxy.test.ts`
+- `api/src/services/__tests__/user-auth.test.ts`
+- `api/src/services/sensor-bridge.test.ts`
+- `api/src/services/__tests__/synapse-direct-trace-headers.test.ts`
+- `api/src/__tests__/tenant-isolation.test.ts`
+
+## Addendum Summary
+
+Two distinct quality tiers emerged. **Well-tested** (api-intelligence, sigma-hunt, synapse-proxy) have deep contract and boundary coverage. **Undertested** (user-auth, sensor-bridge, metrics, sensorConfigService, synapse-direct) have security-critical paths with zero or near-zero coverage. The aggregator sits between — good queue/dedup coverage but missing idempotency and observability verification.
+
+| Module | Behaviors | Covered | Shallow | Missing | Coverage |
+|--------|-----------|---------|---------|---------|----------|
+| api-intelligence | 38 | 30 | 5 | 3 | 79% |
+| sigma-hunt | 48 | 44 | 2 | 2 | 92% |
+| aggregator | 28 | 16 | 7 | 5 | 57% |
+| impossible-travel | 16 | 9 | 4 | 3 | 56% |
+| synapse-direct | 21 | 7 | 4 | 10 | 33% |
+| synapse-proxy | 46 | 37 | 3 | 6 | 80% |
+| user-auth | 17 | 3 | 2 | 12 | 18% |
+| sensor-bridge | 14 | 3 | 2 | 9 | 21% |
+| metrics | 10 | 0 | 0 | 10 | 0% |
+| sensorConfigService | 13 | 0 | 1 | 12 | 8% |
+| **TOTAL** | **251** | **149** | **30** | **72** | **59%** |
+
+---
+
+## Addendum P0 — Security / Correctness Critical
+
+| # | Module | Behavior | State | Why P0 | Suggested Test |
+|---|--------|----------|-------|--------|----------------|
+| A1 | user-auth | `refreshSession()` — parses composite token (id:secret), validates expiry, checks revocation, verifies secret | Missing | Auth token refresh is the primary session continuity mechanism; untested means expired/revoked/forged tokens could pass. Ref: audit-workflow §P0 "Involves authentication" | Test valid refresh, expired token, revoked token, secret mismatch, malformed composite format |
+| A2 | user-auth | `logout()` — blacklists JTI and revokes all refresh tokens for session | Missing | If blacklisting fails silently, logged-out sessions remain valid. Ref: audit-workflow §P0 "Involves authentication" | Test that JTI appears in blacklist after logout, refresh tokens marked revoked |
+| A3 | user-auth | `switchTenant()` — validates user is member of target tenant before issuing new token | Missing | Broken tenant switching = cross-tenant access. Ref: audit-workflow §P0 "Involves authorization" | Test switch to valid tenant succeeds, switch to non-member tenant rejects |
+| A4 | user-auth | `createSession()` — embeds epoch in JWT for bulk revocation support | Missing | If epoch isn't embedded, password-change revocation breaks silently. Ref: audit-workflow §P0 "correctness where wrong answer silently is worse than crash" | Test JWT payload contains epoch field matching user's current epoch |
+| A5 | sensorConfigService | `getConfig()`/`updateConfig()` — verifies sensor belongs to requesting tenant | Missing | Tenant isolation on sensor configs. No test = no proof configs can't leak cross-tenant. Ref: audit-workflow §P0 "Involves access control" | Test getConfig with wrong tenantId returns null; updateConfig with wrong tenantId rejects |
+| A6 | sensorConfigService | `updateConfig()` encrypts sensitive fields; `getConfig()` decrypts them | Missing | Crypto logic for secrets-at-rest. Untested encryption could store plaintext or fail to decrypt. Ref: audit-workflow §P0 "Involves cryptographic operations" | Test roundtrip: update with sensitive field → getConfig returns decrypted value; verify raw DB value is not plaintext |
+| A7 | sensorConfigService | `updateConfig()` — validates config via SensorConfigSchema before storage | Missing | Invalid config pushed to sensors could brick them. Ref: audit-workflow §P0 "Parses untrusted input" | Test invalid config shape rejected with descriptive error |
+| A8 | aggregator | Idempotency key generation and cross-instance dedup via `checkAndAdd()` | Missing | Without idempotency verification, duplicate signals inflate threat scores and trigger false alerts. Ref: audit-workflow §P0 "correctness requirements" | Test: store signal → store same signal again → second returns already-seen; verify key stability |
+| A9 | user-auth | `login()` timing-safe comparison with dummy hash on missing user | Shallow | User enumeration via timing side-channel. Test verifies error message but doesn't verify `safeCompare` called on unknown user. Ref: testing-standards §Anti-Pattern 2 "Happy Path Only" | Verify `safeCompare` called even when user lookup returns null |
+| Atlas Crew | sensor-bridge | `handleMessage()` auth-failed — closes connection on authentication failure | Missing | If auth failure doesn't close the connection, unauthenticated sensors stay connected. Ref: audit-workflow §P0 "Involves authentication" | Test: send auth-failed message → verify WebSocket closed, no heartbeat started |
+| A11 | user-auth | `refreshSession()` — rejects token when user is no longer member of tenant | Missing | Stale refresh token grants access to tenant user was removed from. Ref: audit-workflow §P0 "Involves authorization" | Test: refresh token for user removed from tenant → rejects with membership error |
+
+---
+
+## Addendum P1 — Reliability / Edge Cases
+
+| # | Module | Behavior | State | Why P1 | Suggested Test |
+|---|--------|----------|-------|--------|----------------|
+| A12 | sensor-bridge | `stop()` — cancels heartbeat and reconnect timers | Missing | Timer leak = resource leak + ghost heartbeats. Ref: audit-workflow §P1 "cleanup on shutdown" | Test: start → stop → verify no more heartbeat messages |
+| A13 | sensor-bridge | `sendHeartbeat()` — calculates requests-per-minute delta | Missing | Wrong RPS in heartbeat = incorrect fleet dashboard data. Ref: audit-workflow §P1 "operational visibility" | Test: set known metrics → verify heartbeat RPS math |
+| A14 | sensor-bridge | `scheduleReconnect()` — reconnection after disconnect | Missing | Silent reconnect failure = permanent sensor offline. Ref: audit-workflow §P1 "Handles a failure mode" | Test: disconnect → verify reconnect attempted after delay |
+| A15 | impossible-travel | `ResilientUserHistoryStore` — falls back to in-memory on Redis failure | Missing | Redis dies + fallback broken = all impossible-travel detection stops. Ref: audit-workflow §P1 "fallible dependency failure case" | Test: mock Redis to throw → verify in-memory fallback works |
+| A16 | synapse-direct | `fetchPrometheusMetrics()` — handles malformed/empty Prometheus output | Missing | Bad scrape data cascades as null metrics through dashboard. Ref: audit-workflow §P1 "Handles a failure mode" | Test: empty string, partial format, garbage → graceful null/default |
+| A17 | synapse-direct | `getSensorStatus()` with uptime=0 — zero-division guard | Shallow | Division by zero → NaN propagates to dashboard. Ref: testing-standards "Boundary Tests - Zero" | Test: uptime=0 → RPS is 0, not NaN/Infinity |
+| A18 | synapse-direct | `getSensorStatus()` returns null if health endpoint fails | Missing | Should degrade gracefully, not throw. Ref: audit-workflow §P1 "Handles a failure mode" | Test: mock fetch to reject → verify null returned |
+| A19 | synapse-proxy | Cache expiry cleanup interval (60-second background timer) | Missing | Without cleanup, stale cache entries accumulate unbounded. Ref: audit-workflow §P1 "resource limits" | Test: insert entries → advance clock past TTL + cleanup → verify removed |
+| A20 | synapse-proxy | Stale request garbage collection (60-second threshold) | Missing | Leaked pending requests = memory leak + concurrency slot exhaustion. Ref: audit-workflow §P1 "resource limits" | Test: create pending request → advance 61s → verify rejected with TIMEOUT |
+| A21 | aggregator | Backpressure warning at 80% queue capacity | Missing | Without warning, operators have no lead time before drops. Ref: audit-workflow §P1 "operational visibility" | Test: fill to 80% → verify logger.warn called |
+| A22 | aggregator | `retryQueue` behavior during concurrent flushing | Shallow | Signals during flush could be lost. Ref: audit-workflow §P1 "concurrency" | Test: trigger flush → queue signal during → verify retryQueue receives it |
+| A23 | aggregator | ClickHouse async write path verification | Shallow | Silent write failures. Ref: audit-workflow §P1 "fallible dependency" | Test: verify insertSignalEvents called with correct shape |
+| A24 | aggregator | `storeSignal()` → ImpossibleTravelService for geo signals | Shallow | Integration path never exercised. Ref: audit-workflow §P1 "module boundary" | Test: signal with geo metadata → verify processLogin called |
+| A25 | impossible-travel | Logins with `timeDiffHours <= 0` or `> 24` — boundary rejection | Shallow | Off-by-one at boundary undetected. Ref: testing-standards "Boundary Tests" | Test: reverse timestamps → no alert; 25h gap → no alert |
+| A26 | impossible-travel | RedisUserHistoryStore trimming at maxHistoryPerUser | Shallow | Unbounded history = Redis memory pressure. Ref: audit-workflow §P1 "resource limits" | Test: append 11 with max=10 → verify 10 stored |
+| A27 | impossible-travel | RedisUserHistoryStore TTL application | Shallow | Missing TTL = permanent keys. Ref: audit-workflow §P1 "resource limits" | Test: verify kv.set includes ttlSeconds parameter |
+| A28 | sigma-hunt | `lookbackMinutes` clamping (5–1440) | Shallow | lookback=0 → no data; lookback=100000 → OOM. Ref: testing-standards "Boundary Tests" | Test: 1 → clamped to 5; 2000 → clamped to 1440 |
+| A29 | sigma-hunt | `maxRowsPerRule` clamping (10–5000) | Shallow | Same clamping gap. Ref: testing-standards "Boundary Tests" | Test: 5 → clamped to 10; 10000 → clamped to 5000 |
+| A30 | metrics | All 10+ Prometheus metrics — counters, gauges, histograms | Missing | Zero test coverage. Label drift breaks dashboards silently. Ref: audit-workflow §P1 "operational visibility" | Smoke test: exercise methods → verify metric names and labels in registry |
+| A31 | sensor-bridge | `isConnected()` — true only when OPEN and authenticated | Missing | Callers may send to disconnected sensor. Ref: audit-workflow §P1 "state transitions" | Test: before auth → false; after auth → true; after close → false |
+| A32 | sensor-bridge | `buildHeartbeat()` — health status from metrics | Missing | Wrong health = fleet dashboard shows wrong state. Ref: audit-workflow §P1 "operational visibility" | Test: inject known metrics → verify health field |
+| A33 | sensorConfigService | `updateConfig()` increments version number | Missing | Without version, config race conditions undetected. Ref: audit-workflow §P1 "state transitions" | Test: update twice → version incremented each time |
+| A34 | sensorConfigService | `updateConfig()` sends config via FleetCommander | Missing | Fleet push fails silently → stale config. Ref: audit-workflow §P1 "module boundary" | Test: update → verify FleetCommander.sendCommand called |
+| A35 | sensorConfigService | `updateConfig()` logs audit trail | Missing | Missing audit = compliance gap. Ref: audit-workflow §P1 "operational visibility" | Test: update → verify auditService.log called |
+
+---
+
+## Addendum P2 — Completeness / Confidence
+
+| # | Module | Behavior | State | Why P2 | Suggested Test |
+|---|--------|----------|-------|--------|----------------|
+| A36 | api-intelligence | Buffer overflow trim at maxBufferedItems (5000) | Missing | Defensive cap; queue_full is primary guard | Enqueue 5001 → verify trim, oldest dropped |
+| A37 | api-intelligence | Batch flush threshold (signalBatchSize=200) boundaries | Shallow | Threshold precision not verified | 199 → no flush; 200th → flush |
+| A38 | api-intelligence | `getTopViolatingEndpoints()` Prisma.sql parameterized query (SH-002) | Shallow | Primary path mocked; fallback tested | Verify Prisma.sql tag used, not string concat |
+| A39 | aggregator | Metrics recording (signalsIngestedTotal, signalsDroppedTotal) | Shallow | Values never asserted | Spy on metrics → verify increments with labels |
+| A40 | aggregator | Dedup by template key for TEMPLATE_DISCOVERY signals | Missing | Only sourceIp dedup tested | Two same-template signals → merged |
+| A41 | synapse-direct | `getTopEndpoints()` returns [] (hardcoded stub) | Missing | Document stub with test | Call → returns [] |
+| A42 | synapse-direct | `getBandwidthAnalytics()` size estimation | Missing | Display math with estimates | Known count → verify byte math |
+| A43 | synapse-direct | `getThreatSummary()` severity distribution | Shallow | Math.floor percentages should sum correctly | 100 blocked → 10+30+40+20 |
+| A44 | synapse-direct | `buildResponseTimeDistribution()` edge cases | Missing | Complex histogram math untested | Zero/missing/single bucket → graceful output |
+| A45 | synapse-direct | Singleton init/get adapter | Missing | Module init pattern | init → get returns instance; get before init → throws |
+| A46 | synapse-proxy | `SynapseProxyError.toJSON()` suggestion mapping | Shallow | Code tested, suggestions not | Each error code → verify suggestion string |
+| A47 | synapse-proxy | `getProfile()` URL encoding edge cases | Shallow | Happy path only | Special chars, unicode → correct encoding |
+| A48 | user-auth | `login()` logs metadata (ip, ua) on failure | Missing | Audit trail | Failed login → logger called with ip, ua |
+| A49 | user-auth | `verifyPassword()` malformed hash (no colon) | Missing | Returns false but should be explicit | "nocolon" hash → false without throw |
+| A50 | user-auth | `login()` rejects user with no tenant memberships | Missing | Code throws but untested | Empty memberships → descriptive error |
+| A51 | sensor-bridge | `handleMessage()` ping/pong | Missing | Protocol correctness | Send ping → pong response sent |
+| A52 | sensor-bridge | `fetchPingoraMetrics()` timeout | Missing | 5s timeout untested | Mock hang → verify timeout |
+| A53 | sensorConfigService | `getConfig()` legacy plaintext config | Missing | Backward compat | Unencrypted config → returned without error |
+
+---
+
+## Addendum Shallow Test Details
+
+### user-auth: login() timing-safe comparison (A9)
+**Current test:** Tests login with unknown user, verifies "Invalid credentials" error returned.
+**Problem:** Doesn't verify `safeCompare` is called with a dummy hash when user is missing. Naive short-circuit on user-not-found would pass but leak existence via timing.
+**Recommended fix:** Mock `safeCompare`, verify called even when user lookup returns null.
+
+### synapse-direct: fetch<T>() null on error (A17, A18)
+**Current test:** Trace header tests exercise getSensorStatus success path only.
+**Problem:** A regression that throws instead of returning null would crash callers.
+**Recommended fix:** Mock fetch to reject → verify null returned.
+
+### synapse-direct: RPS with zero uptime (A17)
+**Current test:** Only positive uptime tested.
+**Problem:** `totalRequests / uptimeSeconds` with uptimeSeconds=0 → Infinity.
+**Recommended fix:** Mock health endpoint with `{ uptime: 0, total_requests: 100 }` → verify RPS=0.
+
+### aggregator: retryQueue concurrent flushing (A22)
+**Current test:** Queue acceptance and batch flush tested independently.
+**Problem:** No test simulates signal arrival while `isFlushing=true`.
+**Recommended fix:** Mock storeSignal slow, queue during flush → verify retryQueue receives it.
+
+### aggregator: ClickHouse write (A23)
+**Current test:** ClickHouse mocked but `insertSignalEvents` call not verified.
+**Problem:** Async write could silently stop; tests wouldn't catch it.
+**Recommended fix:** Verify insertSignalEvents called with expected shape.
+
+### aggregator: ImpossibleTravel integration (A24)
+**Current test:** No signal with geo metadata created.
+**Problem:** Integration call to `impossibleTravel.processLogin()` is dead code in tests.
+**Recommended fix:** Signal with `metadata: { latitude: 40.7, longitude: -74.0 }` → verify call.
+
+### impossible-travel: timeDiffHours boundaries (A25)
+**Current test:** Normal 1h and 8h scenarios.
+**Problem:** <=0 and >24 guards from code comments never hit.
+**Recommended fix:** Reverse timestamps (negative diff) and 24h01m apart.
+
+### impossible-travel: Redis trimming (A26)
+**Current test:** Doesn't exceed maxHistoryPerUser.
+**Problem:** Splice logic untested.
+**Recommended fix:** max=3, append 4 → verify only 3 retained.
+
+### impossible-travel: Redis TTL (A27)
+**Current test:** TTL parameter not verified.
+**Problem:** Missing TTL → permanent keys → memory growth.
+**Recommended fix:** Mock kv.set → verify ttlSeconds present.
+
+### sigma-hunt: lookbackMinutes clamping (A28)
+**Current test:** Uses default 60.
+**Problem:** `Math.max(5, Math.min(1440, v))` never boundary-tested.
+**Recommended fix:** lookbackMinutes=1 → clamp to 5; 2000 → clamp to 1440.
+
+### sigma-hunt: maxRowsPerRule clamping (A29)
+**Current test:** Uses default 500.
+**Problem:** Same clamping gap.
+**Recommended fix:** 5 → 10; 10000 → 5000.
+
+---
+
+## Addendum Well-Tested (No Action Needed)
+
+### sigma-hunt
+Most thoroughly tested module (92%). SQL injection prevention has 20+ attack vectors: forbidden keywords, table functions, comment injection, unbalanced quotes, control characters, backtick/double-quote abuse. CRUD, tenant isolation, lead dedup, idempotent ack all well-covered.
+
+### synapse-proxy
+Comprehensive 900+ line suite (80%). SSRF protection (private IPs, metadata endpoint, credentials, port range), path traversal, tenant isolation, concurrency limits, timeout, retry logic, caching, graceful shutdown. Gaps limited to background cleanup timers.
+
+### api-intelligence
+Strong ingestion pipeline coverage (79%). Event emission, endpoint CRUD, tenant isolation, pagination, schema violations, fleet inventory, edge cases (unicode, long paths, special chars, null metadata). Gaps limited to internal buffer management.
+
+### tenant-isolation (cross-cutting)
+Dedicated test verifies fleet commands, signal types, rule distribution, and API intelligence queries all enforce tenantId boundaries.
+
+---
+
+## Addendum Notes
+
+1. **Priority concentration:** 8 of 11 P0 gaps are in `user-auth.ts` and `sensorConfigService.ts`. These two files handle authentication, session management, and sensor config encryption — the most security-critical paths in the hub.
+
+2. **metrics.ts full zero:** Entire Prometheus metrics service has no tests. A single smoke-test suite covering metric names and label sets would close this efficiently.
+
+3. **sensor-bridge.ts integration concern:** Most gaps involve WebSocket lifecycle and timer management. Consider integration tests with a mock WebSocket server rather than unit-testing timer internals.
+
+4. **Test infrastructure suggestion:** Several modules (aggregator, impossible-travel, sensor-bridge) would benefit from a shared `vi.useFakeTimers()` utility for time-dependent behavior (batch timers, TTL, reconnect delays, heartbeat intervals).
+
+5. **Idempotency (aggregator, A8):** Architecturally important for multi-instance deployments. Test both "new signal" and "duplicate signal" paths, ideally with the real Redis-backed nonce store.

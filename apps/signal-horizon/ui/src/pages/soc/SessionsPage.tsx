@@ -175,9 +175,9 @@ export default function SessionsPage() {
       </section>
 
       <section className="card">
-        <div className="card-header flex flex-wrap items-center gap-3">
+        <Stack className="card-header" direction="row" align="center" gap="smPlus" wrap>
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
-          <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Stack className="ml-auto" direction="row" align="center" gap="smPlus" wrap>
             <Box style={{ width: 180 }}>
               <Input
                 value={actorFilter}
@@ -186,7 +186,7 @@ export default function SessionsPage() {
                 size="sm"
               />
             </Box>
-            <label className="flex items-center gap-2 text-sm text-ink-secondary">
+            <Stack as="label" direction="row" align="center" gap="sm" className="text-sm text-ink-secondary">
               <input
                 type="checkbox"
                 checked={suspiciousOnly}
@@ -195,9 +195,9 @@ export default function SessionsPage() {
                 style={{ accentColor: colors.blue }}
               />
               Suspicious only
-            </label>
-          </div>
-        </div>
+            </Stack>
+          </Stack>
+        </Stack>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading sessions...</div>}
           {error && (
@@ -283,18 +283,28 @@ export default function SessionsPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Clock className="w-4 h-4" /> Session Aging
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             {stats?.expiredSessions ?? 0} expired sessions tracked. Focus on suspicious sessions
             first.
           </div>
         </div>
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Shield className="w-4 h-4" /> Enforcement
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             {stats?.totalInvalidated
               ? `${stats.totalInvalidated} sessions invalidated recently.`
@@ -318,7 +328,7 @@ function StatCard({
   accentColor: string;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-4">
+    <Stack className="card p-4" direction="row" align="center" gap="md">
       <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
         <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
       </div>
@@ -326,6 +336,6 @@ function StatCard({
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
         <p className="text-2xl font-light text-ink-primary">{value}</p>
       </div>
-    </div>
+    </Stack>
   );
 }

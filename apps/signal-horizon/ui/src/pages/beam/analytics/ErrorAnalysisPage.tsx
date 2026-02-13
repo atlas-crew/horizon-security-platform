@@ -23,6 +23,7 @@ import {
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import {
   SectionHeader,
+  Stack,
   axisDefaults,
   colors,
   gridDefaultsSoft,
@@ -154,11 +155,11 @@ function StatCard({
             {subvalue && <span className="text-sm text-ink-secondary">{subvalue}</span>}
           </div>
           {trend && (
-            <div
-              className={clsx(
-                'mt-2 flex items-center gap-1 text-sm',
-                trend.isGood ? 'text-green-400' : 'text-red-400',
-              )}
+            <Stack
+              direction="row"
+              align="center"
+              gap="xs"
+              className={clsx('mt-2 text-sm', trend.isGood ? 'text-green-400' : 'text-red-400')}
             >
               {trend.isGood ? (
                 <TrendingDown className="w-4 h-4" />
@@ -166,7 +167,7 @@ function StatCard({
                 <TrendingUp className="w-4 h-4" />
               )}
               <span>{Math.abs(trend.value)}% vs previous</span>
-            </div>
+            </Stack>
           )}
         </div>
         <div className={clsx('p-3', colorClasses[color])}>
@@ -186,20 +187,20 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
           <h3 className="text-lg font-semibold text-ink-primary">Error Rate Over Time</h3>
           <p className="text-sm text-ink-secondary mt-1">4xx, 5xx, and blocked requests</p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="md" className="text-sm">
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-sky-500" />
             <span className="text-ink-secondary">4xx</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-red-500" />
             <span className="text-ink-secondary">5xx</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-purple-500" />
             <span className="text-ink-secondary">Blocked</span>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
@@ -289,10 +290,10 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
       <div className="space-y-2 mt-4">
         {data.map((item) => (
           <div key={item.name} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
               <span className="text-sm text-ink-secondary">{item.name}</span>
-            </div>
+            </Stack>
             <span className="text-sm font-medium text-ink-primary">
               {item.value.toLocaleString()}
             </span>
@@ -363,12 +364,12 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
                 className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3">
-                  <div className="flex items-center gap-3">
+                  <Stack direction="row" align="center" gap="smPlus">
                     <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
                     <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
                       {item.endpoint}
                     </code>
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-right text-ink-secondary">
                   {item.total.toLocaleString()}

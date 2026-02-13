@@ -1,6 +1,6 @@
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import type { InventoryService } from '../../hooks/useApiIntelligence';
-import { chartColors, colors, fontFamily } from '@/ui';
+import { colors, fontFamily } from '@/ui';
 
 const DEMO_TREEMAP_DATA = [
   {
@@ -40,12 +40,12 @@ const DEMO_TREEMAP_DATA = [
 
 // Atlas Crew Brand chart series colors (priority order per chart standards)
 const COLORS = [
-  chartColors[0],
-  chartColors[1],
-  chartColors[2],
-  chartColors[3],
-  chartColors[5],
-  chartColors[6],
+  colors.blue,
+  colors.skyBlue,
+  colors.green,
+  colors.orange,
+  colors.magenta,
+  colors.cloudBlue,
 ];
 
 // Simple rect-only content

@@ -9,7 +9,8 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useContextualCommands } from '../hooks/useContextualCommands';
 import { useToast } from '../components/ui/Toast';
 import { Clock, Send, UserPlus, Shield } from 'lucide-react';
-import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
+import { PlaybookSelector } from '../components/warroom/PlaybookSelector';
+import type { Playbook } from '../data/playbooks';
 import { PlaybookRunner } from '../components/warroom/PlaybookRunner';
 import { Button, Input, SectionHeader, Stack, alpha, colors } from '@/ui';
 
@@ -114,7 +115,7 @@ export default function WarRoomPage() {
 
         <div className="relative z-10 flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <Stack direction="row" align="center" gap="smPlus" className="mb-1">
               <SectionHeader
                 title={id ? `WAR ROOM: ${id}` : 'SIGNAL HORIZON: TACTICAL HUB'}
                 icon={(
@@ -134,17 +135,17 @@ export default function WarRoomPage() {
                   color: '#FFFFFF',
                 }}
               />
-            </div>
+            </Stack>
             <p className="text-sm text-white/60 mt-1 max-w-2xl font-medium tracking-wide">
               Operation Dark Phoenix · Collective Response Active · Priority One Incident
             </p>
           </div>
-          <div className="flex items-center gap-6">
+          <Stack direction="row" align="center" gap="lg">
             <div className="text-right">
               <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">
                 Participants
               </p>
-              <div className="flex items-center gap-3">
+              <Stack direction="row" align="center" gap="smPlus">
                 <div className="flex -space-x-2">
                   {[1, 2, 3].map((i) => (
                     <div
@@ -157,9 +158,9 @@ export default function WarRoomPage() {
                   ))}
                 </div>
                 <span className="text-xs font-mono text-white/80 font-bold">03_ONLINE</span>
-              </div>
+              </Stack>
             </div>
-          </div>
+          </Stack>
         </div>
       </div>
 
@@ -282,7 +283,7 @@ function ActivityItem({ activity }: { activity: Activity }) {
         {isBot ? 'HB' : isSystem ? 'SY' : activity.actor.substring(0, 2).toUpperCase()}
       </div>
       <div className="flex-1">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           <span
             className="text-sm font-bold tracking-tight"
             style={{ color: isBot ? colors.blue : undefined }}
@@ -292,18 +293,23 @@ function ActivityItem({ activity }: { activity: Activity }) {
           <span className="text-[10px] px-1.5 py-0.5 bg-surface-subtle border border-border-subtle text-ink-muted font-bold uppercase tracking-tighter">
             {activity.action.replaceAll('_', ' ')}
           </span>
-        </div>
+        </Stack>
         <p className="text-sm text-ink-primary font-medium mt-1 leading-relaxed">
           {activity.description}
         </p>
-        <div className="flex items-center gap-1.5 mt-2 text-[10px] font-mono text-ink-muted uppercase tracking-widest">
+        <Stack
+          direction="row"
+          align="center"
+          gap="xsPlus"
+          className="mt-2 text-[10px] font-mono text-ink-muted uppercase tracking-widest"
+        >
           <Clock className="w-3 h-3" />
           {activity.timestamp.toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
           })}
-        </div>
+        </Stack>
       </div>
     </div>
   );

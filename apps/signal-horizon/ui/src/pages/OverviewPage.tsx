@@ -322,7 +322,7 @@ export default function OverviewPage() {
         >
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
           <div className="card-header flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-3">
+            <Stack direction="row" align="center" gap="smPlus">
               <SectionHeader
                 titleId="attack-map-heading"
                 title="Live Attack Map"
@@ -337,13 +337,20 @@ export default function OverviewPage() {
                 }}
               />
               {error && (
-                <span className="text-xs text-ac-orange flex items-center gap-1">
+                <Stack
+                  as="span"
+                  inline
+                  direction="row"
+                  align="center"
+                  gap="xs"
+                  className="text-xs text-ac-orange"
+                >
                   <AlertTriangle className="w-3 h-3" />
                   Using cached data
-                </span>
+                </Stack>
               )}
-            </div>
-            <div className="flex items-center gap-2">
+            </Stack>
+            <Stack direction="row" align="center" gap="sm">
               {mapFilters.map((filter) => (
                 <Button
                   key={filter}
@@ -357,7 +364,7 @@ export default function OverviewPage() {
                   {filter}
                 </Button>
               ))}
-            </div>
+            </Stack>
           </div>
           <div className="card-body relative z-10">
             <AttackMap points={filteredMapPoints} routes={filteredMapRoutes} />
@@ -391,7 +398,7 @@ export default function OverviewPage() {
               letterSpacing: '0.01em',
             }}
           />
-          <div className="flex items-center gap-4">
+          <Stack direction="row" align="center" gap="md">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">
               {campaigns.filter((c) => c.status === 'ACTIVE').length} ACTIVE
             </span>
@@ -402,7 +409,7 @@ export default function OverviewPage() {
             >
               View All Campaigns &gt;
             </Button>
-          </div>
+          </Stack>
         </div>
         <div className="card-body p-0">
           <ErrorBoundary fallback={<CampaignListSkeleton />}>
@@ -422,12 +429,18 @@ export default function OverviewPage() {
         >
           <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-3" style={{ color: colors.skyBlue }}>
+            <Stack
+              direction="row"
+              align="center"
+              gap="sm"
+              className="mb-3"
+              style={{ color: colors.skyBlue }}
+            >
               <Shield className="w-4 h-4" />
               <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
                 Strategic Insight
               </span>
-            </div>
+            </Stack>
             <h3
               className="text-xl font-light mb-4 tracking-tight"
               style={{ color: colors.gray.light }}

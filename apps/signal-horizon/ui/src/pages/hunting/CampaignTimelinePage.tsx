@@ -9,7 +9,7 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type CampaignTimelineEvent } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
-import { Alert, Button, CARD_HEADER_TITLE_STYLE, Input, SectionHeader, Spinner, Stack } from '@/ui';
+import { Alert, Button, CARD_HEADER_TITLE_STYLE, colors, Input, SectionHeader, Spinner, Stack } from '@/ui';
 
 function formatConfidenceOrNa(confidence: unknown): string {
   if (typeof confidence !== 'number') return 'n/a';
@@ -142,7 +142,7 @@ export default function CampaignTimelinePage() {
               title="Refresh"
               icon={
                 isLoading ? (
-                  <Spinner size={16} color="#0057B7" />
+                  <Spinner size={16} color={colors.blue} />
                 ) : (
                   <RefreshCw aria-hidden="true" className="w-4 h-4" />
                 )

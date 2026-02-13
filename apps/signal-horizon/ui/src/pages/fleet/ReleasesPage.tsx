@@ -25,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { Modal, SectionHeader, Spinner, Stack } from '@/ui';
+import { colors, Modal, SectionHeader, Spinner, Stack } from '@/ui';
 
 // ============================================================================
 // Types
@@ -367,7 +367,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               />
               {isCalculatingSha && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Spinner size={16} color="#7F7F7F" />
+                  <Spinner size={16} color={colors.gray.mid} />
                 </div>
               )}
             </div>
@@ -394,7 +394,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
             >
               {isSubmitting ? (
                 <Stack as="span" direction="row" inline align="center" gap="sm">
-                  <Spinner size={16} color="#FFFFFF" />
+                  <Spinner size={16} color={colors.white} />
                   Uploading...
                 </Stack>
               ) : (
@@ -449,7 +449,7 @@ function ConfirmDeleteModal({
         >
           {isDeleting ? (
             <Stack as="span" direction="row" inline align="center" gap="sm">
-              <Spinner size={16} color="#FFFFFF" />
+              <Spinner size={16} color={colors.white} />
               Deleting...
             </Stack>
           ) : (
@@ -801,7 +801,7 @@ export function ReleasesPage() {
 
         {isLoadingReleases ? (
           <div className="p-12 text-center">
-            <Spinner size={32} color="#7F7F7F" style={{ margin: '0 auto' }} />
+            <Spinner size={32} color={colors.gray.mid} style={{ margin: '0 auto' }} />
             <p className="mt-4 text-sm text-ink-muted">Loading releases...</p>
           </div>
         ) : safeReleases.length === 0 ? (

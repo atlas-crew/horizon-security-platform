@@ -13,6 +13,7 @@ import {
   Alert,
   Button,
   CARD_HEADER_TITLE_STYLE,
+  colors,
   Input,
   SectionHeader,
   Spinner,
@@ -180,7 +181,7 @@ export default function RequestTimelinePage() {
               title="Refresh"
               icon={
                 isLoading ? (
-                  <Spinner size={16} color="#0057B7" />
+                  <Spinner size={16} color={colors.blue} />
                 ) : (
                   <RefreshCw aria-hidden="true" className="w-4 h-4" />
                 )

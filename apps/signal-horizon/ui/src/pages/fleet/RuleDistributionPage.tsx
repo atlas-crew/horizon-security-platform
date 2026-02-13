@@ -284,7 +284,7 @@ function RuleCard({
                 size="sm"
                 icon={
                   isUpdating ? (
-                    <Spinner size={14} color="#FFFFFF" />
+                    <Spinner size={14} color={colors.white} />
                   ) : rule.enabled ? (
                     <Pause aria-hidden="true" className="w-3.5 h-3.5" />
                   ) : (
@@ -459,7 +459,7 @@ export function RuleDistributionPage() {
                 onClick={() => refetch()}
                 icon={
                   rulesLoading ? (
-                    <Spinner size={16} color="#0057B7" />
+                    <Spinner size={16} color={colors.blue} />
                   ) : (
                     <RefreshCw aria-hidden="true" className="w-4 h-4" />
                   )
@@ -474,7 +474,7 @@ export function RuleDistributionPage() {
                 disabled={deployMutation.isPending}
                 icon={
                   deployMutation.isPending ? (
-                    <Spinner size={16} color="#FFFFFF" />
+                    <Spinner size={16} color={colors.white} />
                   ) : (
                     <Zap aria-hidden="true" className="w-4 h-4" />
                   )

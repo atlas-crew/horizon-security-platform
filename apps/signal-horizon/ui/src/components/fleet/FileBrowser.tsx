@@ -35,7 +35,7 @@ import {
   type FileInfo,
   type DownloadProgress,
 } from '../../hooks/fleet/useFileTransfer';
-import { Modal, Spinner, Stack } from '@/ui';
+import { colors, Modal, Spinner, Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -332,7 +332,7 @@ const FileRow = memo(function FileRow({
               title="Download file"
             >
               {isDownloading ? (
-                <Spinner size={16} color="#0057B7" />
+                <Spinner size={16} color={colors.blue} />
               ) : (
                 <Download className="w-4 h-4" />
               )}
@@ -497,7 +497,7 @@ const ChecksumModal = memo(function ChecksumModal({
 
         {isLoading && (
           <div className="flex items-center justify-center py-4">
-            <Spinner size={24} color="#7F7F7F" />
+            <Spinner size={24} color={colors.gray.mid} />
           </div>
         )}
 
@@ -775,7 +775,7 @@ export const FileBrowser = memo(function FileBrowser({
               className="p-1.5 hover:bg-surface-subtle text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-50"
               title="Refresh (Ctrl+R)"
             >
-              {isLoadingFiles ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
+              {isLoadingFiles ? <Spinner size={16} color={colors.gray.mid} /> : <RefreshCw className="w-4 h-4" />}
             </button>
 
             {/* Close */}
@@ -835,7 +835,7 @@ export const FileBrowser = memo(function FileBrowser({
         <div className="flex-1 overflow-auto">
           {isLoadingFiles ? (
             <div className="flex flex-col items-center justify-center h-full text-ink-muted">
-              <Spinner size={32} color="#7F7F7F" style={{ marginBottom: '12px' }} />
+              <Spinner size={32} color={colors.gray.mid} style={{ marginBottom: '12px' }} />
               <p className="text-sm">Loading directory...</p>
             </div>
           ) : filesError ? (

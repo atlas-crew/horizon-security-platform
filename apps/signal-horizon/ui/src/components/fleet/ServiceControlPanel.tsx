@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useServiceControl, type ServiceState, type ControlCommand, type ControlResult } from '../../hooks/fleet/useServiceControl';
-import { Modal, Spinner, Stack } from '@/ui';
+import { colors, Modal, Spinner, Stack } from '@/ui';
 
 export interface ServiceControlPanelProps {
   /** Target sensor ID */
@@ -47,7 +47,7 @@ const stateConfig: Record<ServiceState, { label: string; icon: React.ReactNode; 
   },
   restarting: {
     label: 'Restarting',
-    icon: <Spinner size={14} color="#0057B7" />,
+    icon: <Spinner size={14} color={colors.blue} />,
     className: 'text-ac-blue bg-ac-blue/10 border-ac-blue/30',
   },
   shutting_down: {
@@ -203,7 +203,7 @@ const ConfirmationDialog = memo(function ConfirmationDialog({
             )}
           >
             <Stack direction="row" align="center" gap="sm">
-              {isExecuting && <Spinner size={14} color="#FFFFFF" />}
+              {isExecuting && <Spinner size={14} color={colors.white} />}
               <span>{confirmText}</span>
             </Stack>
           </button>
@@ -426,7 +426,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
     return (
       <div className={clsx('bg-surface-card border border-border-subtle', className)}>
         <div className="flex items-center justify-center p-6">
-          <Spinner size={24} color="#7F7F7F" />
+          <Spinner size={24} color={colors.gray.mid} />
         </div>
       </div>
     );
@@ -449,7 +449,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             className="p-1.5 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors disabled:opacity-50"
             title="Refresh status"
           >
-            {isExecuting ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
+            {isExecuting ? <Spinner size={16} color={colors.gray.mid} /> : <RefreshCw className="w-4 h-4" />}
           </button>
         </div>
 
@@ -540,7 +540,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             >
               <Stack direction="row" align="center" gap="sm">
                 {executingCommand === 'reload' ? (
-                  <Spinner size={16} color="#0057B7" />
+                  <Spinner size={16} color={colors.blue} />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
@@ -562,7 +562,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               >
                 <Stack direction="row" align="center" gap="sm">
                   {executingCommand === 'resume' ? (
-                    <Spinner size={16} color="#00B140" />
+                    <Spinner size={16} color={colors.green} />
                   ) : (
                     <Play className="w-4 h-4" />
                   )}
@@ -582,7 +582,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
               >
                 <Stack direction="row" align="center" gap="sm">
                   {executingCommand === 'drain' ? (
-                    <Spinner size={16} color="#E35205" />
+                    <Spinner size={16} color={colors.orange} />
                   ) : (
                     <Pause className="w-4 h-4" />
                   )}
@@ -604,7 +604,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             >
               <Stack direction="row" align="center" gap="sm">
                 {executingCommand === 'restart' ? (
-                  <Spinner size={16} color="#E35205" />
+                  <Spinner size={16} color={colors.orange} />
                 ) : (
                   <RotateCw className="w-4 h-4" />
                 )}
@@ -625,7 +625,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
             >
               <Stack direction="row" align="center" gap="sm">
                 {executingCommand === 'shutdown' ? (
-                  <Spinner size={16} color="#EF3340" />
+                  <Spinner size={16} color={colors.red} />
                 ) : (
                   <Power className="w-4 h-4" />
                 )}
@@ -637,7 +637,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
           {/* Connection count during drain */}
           {state === 'draining' && activeConnections > 0 && (
             <Stack direction="row" align="center" justify="center" gap="sm" className="py-2 px-3 bg-status-warning/5 border border-status-warning/20">
-              <Spinner size={14} color="#E35205" />
+              <Spinner size={14} color={colors.orange} />
               <span className="text-xs text-status-warning">
                 Draining {activeConnections} active connection{activeConnections !== 1 ? 's' : ''}...
               </span>

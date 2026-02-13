@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, Modal, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader, Stack } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -225,10 +225,12 @@ export function OnboardingPage(): React.ReactElement {
         actions={
           <button
             onClick={() => setIsModalOpen(true)}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary"
           >
-            <Plus className="w-4 h-4" />
-            New Token
+            <Stack as="span" inline direction="row" align="center" gap="sm">
+              <Plus className="w-4 h-4" />
+              New Token
+            </Stack>
           </button>
         }
       />
@@ -416,12 +418,12 @@ export function OnboardingPage(): React.ReactElement {
                 {pendingSensors.map((sensor) => (
                   <tr key={sensor.id} className="hover:bg-surface-subtle/50">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <Stack direction="row" align="center" gap="sm">
                         <Server className="w-4 h-4 text-ink-muted" />
                         <span className="text-sm font-medium text-ink-primary">
                           {sensor.hostname}
                         </span>
-                      </div>
+                      </Stack>
                     </td>
                     <td className="px-4 py-3 text-sm text-ink-secondary">
                       {sensor.os || 'Unknown'} {sensor.architecture && `(${sensor.architecture})`}
@@ -554,14 +556,14 @@ export function OnboardingPage(): React.ReactElement {
           size="640px"
           title="Token Created"
         >
-          <div className="flex items-center gap-3 mb-4">
+          <Stack direction="row" align="center" gap="smPlus" className="mb-4">
             <div className="w-10 h-10 bg-ac-green/10 flex items-center justify-center">
               <Check className="w-5 h-5 text-ac-green" />
             </div>
             <p className="text-sm text-ink-secondary">Copy this token now. It won't be shown again.</p>
-          </div>
+          </Stack>
           <div className="bg-surface-subtle border border-border-subtle p-4 mb-4">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <code className="flex-1 text-sm font-mono text-ink-primary break-all">
                 {generatedToken}
               </code>
@@ -573,7 +575,7 @@ export function OnboardingPage(): React.ReactElement {
                 style={{ height: '32px', padding: 0 }}
                 title="Copy token"
               />
-            </div>
+            </Stack>
           </div>
           <div className="bg-ac-orange/10 border border-ac-orange/20 p-3 mb-4">
             <div className="flex items-start gap-2">
@@ -600,12 +602,12 @@ export function OnboardingPage(): React.ReactElement {
       {/* Revoke Confirmation Modal */}
       {tokenToRevoke && (
         <Modal open onClose={() => setTokenToRevoke(null)} size="520px" title="Revoke Token">
-          <div className="flex items-center gap-3 mb-4">
+          <Stack direction="row" align="center" gap="smPlus" className="mb-4">
             <div className="w-10 h-10 bg-ac-red/10 flex items-center justify-center">
               <Trash2 className="w-5 h-5 text-ac-red" />
             </div>
             <p className="text-sm text-ink-secondary">This action cannot be undone.</p>
-          </div>
+          </Stack>
           <p className="text-sm text-ink-secondary mb-4">
             Sensors that haven't registered yet will no longer be able to use this token. Already
             registered sensors will not be affected.

@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 19:25_
+_Generated: 2026-02-12 19:28_
 
 ## Summary
 
-**Total findings: 64**
+**Total findings: 54**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 64 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 54 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -17,8 +17,6 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 5 | `pages/fleet/OnboardingPage.tsx` |
-| 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
 | 4 | `pages/soc/SessionDetailPage.tsx` |
 | 4 | `pages/soc/LiveMapPage.tsx` |
 | 4 | `pages/soc/CampaignsPage.tsx` |
@@ -81,5 +79,5 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/beam/catalog/ServicesPage.tsx` | 336 | `<div className="flex items-center gap-6">` |
 | `pages/beam/catalog/ServicesPage.tsx` | 366 | `<div className={clsx('flex items-center gap-1', status.color)}>` |
 | `pages/beam/catalog/ServicesPage.tsx` | 398 | `<div className="flex items-center gap-3">` |
-| `pages/beam/analytics/ResponseTimesPage.tsx` | 179 | `<div className="flex items-center gap-4 text-sm">` |
+| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 176 | `<div className="flex items-center gap-4 text-sm">` |
 

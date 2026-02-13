@@ -22,6 +22,7 @@ import {
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import {
   SectionHeader,
+  Stack,
   axisDefaults,
   colors,
   gridDefaultsSoft,
@@ -144,11 +145,11 @@ function StatCard({
             {unit && <span className="text-sm text-ink-secondary">{unit}</span>}
           </div>
           {trend && (
-            <div
-              className={clsx(
-                'mt-2 flex items-center gap-1 text-sm',
-                trend.isGood ? 'text-green-400' : 'text-red-400',
-              )}
+            <Stack
+              direction="row"
+              align="center"
+              gap="xs"
+              className={clsx('mt-2 text-sm', trend.isGood ? 'text-green-400' : 'text-red-400')}
             >
               {trend.isGood ? (
                 <TrendingDown className="w-4 h-4" />
@@ -156,7 +157,7 @@ function StatCard({
                 <TrendingUp className="w-4 h-4" />
               )}
               <span>{Math.abs(trend.value)}% vs previous</span>
-            </div>
+            </Stack>
           )}
         </div>
         <div className={clsx('p-3', colorClasses[color])}>
@@ -176,20 +177,20 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
           <h3 className="text-lg font-semibold text-ink-primary">Response Time Percentiles</h3>
           <p className="text-sm text-ink-secondary mt-1">P50, P95, P99 latency over time</p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="md" className="text-sm">
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-green-500" />
             <span className="text-ink-secondary">P50</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-sky-500" />
             <span className="text-ink-secondary">P95</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3 bg-red-500" />
             <span className="text-ink-secondary">P99</span>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
@@ -293,12 +294,12 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
                 className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3">
-                  <div className="flex items-center gap-3">
+                  <Stack direction="row" align="center" gap="smPlus">
                     <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
                     <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
                       {item.endpoint}
                     </code>
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-right">
                   <span className="text-green-400 font-medium">{item.p50}ms</span>

@@ -101,4 +101,6 @@ Comprehensive documentation can be found in the [docs/](./docs/) directory:
 
 ## License
 
-(C) 2025 Atlas Crew. All rights reserved.
+Licensed under the GNU Affero General Public License v3.0 only.
+Copyright Atlas Crew.
+See [LICENSE](../../LICENSE).

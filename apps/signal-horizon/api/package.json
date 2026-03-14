@@ -2,6 +2,7 @@
   "name": "@atlascrew/signal-horizon-api",
   "version": "0.1.0",
   "description": "Signal Horizon Hub API - Fleet intelligence for collective defense",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

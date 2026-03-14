@@ -2,6 +2,7 @@
   "name": "atlascrew-monorepo",
   "private": true,
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.18.2",
   "scripts": {
     "build": "pnpm exec nx run-many --target=build --all",

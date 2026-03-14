@@ -2,6 +2,7 @@
   "name": "@atlascrew/signal-horizon-ui",
   "version": "0.1.0",
   "description": "Signal Horizon Dashboard - Fleet intelligence visualization",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",

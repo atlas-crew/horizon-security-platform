@@ -2,6 +2,7 @@
   "name": "synapse-pingora",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "bench:payloads": "node ../load-testing/scripts/bench-generate-payloads.mjs",

@@ -33,7 +33,7 @@
     "entity-management",
     "rule-evaluation"
   ],
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": "Atlas Crew",
   "repository": {
     "type": "git",

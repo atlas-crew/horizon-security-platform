@@ -473,7 +473,9 @@ synapse-pingora/
 
 ## License
 
-Copyright AtlasCrew, LLC
+Licensed under the GNU Affero General Public License v3.0 only.
+Copyright AtlasCrew, LLC.
+See [LICENSE](../../LICENSE).
 
 ## See Also
 

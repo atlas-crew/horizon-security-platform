@@ -12,7 +12,16 @@ import { Clock, Send, UserPlus, Shield } from 'lucide-react';
 import { PlaybookSelector } from '../components/warroom/PlaybookSelector';
 import type { Playbook } from '../data/playbooks';
 import { PlaybookRunner } from '../components/warroom/PlaybookRunner';
-import { Button, Input, SectionHeader, Stack, alpha, colors } from '@/ui';
+import { 
+  Button, 
+  Input, 
+  SectionHeader, 
+  Stack, 
+  alpha, 
+  colors,
+  Box,
+  Text,
+} from '@/ui';
 
 interface Activity {
   id: string;
@@ -58,7 +67,6 @@ const mockActivities: Activity[] = [
   },
 ];
 
-// ======================== Main Component ========================
 export default function WarRoomPage() {
   useDocumentTitle('War Room');
   const { id } = useParams();
@@ -96,99 +104,119 @@ export default function WarRoomPage() {
   };
 
   const handlePlaybookComplete = () => {
-    // In a real app, this would add an activity log
     console.log('Playbook completed');
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <Box flex direction="column" style={{ height: '100%' }}>
       {/* Header - Tactical War Room style */}
-      <div
-        className="p-5 border-b relative overflow-hidden surface-hero-gradient"
-        style={{ borderColor: alpha(colors.red, 0.5), background: colors.navy }}
+      <Box
+        p="lg"
+        border="bottom"
+        style={{ 
+          borderColor: alpha(colors.red, 0.5), 
+          background: 'var(--bg)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
       >
         {/* Warning glow/scanline effect */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none scanlines"
-          style={{ background: alpha(colors.red, 0.05) }}
+        <Box
+          style={{ 
+            position: 'absolute',
+            inset: 0,
+            opacity: 0.1,
+            pointerEvents: 'none',
+            background: `radial-gradient(circle at 50% -20%, var(--ac-red) 0%, transparent 70%)`
+          }}
         />
 
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <Stack direction="row" align="center" gap="smPlus" className="mb-1">
+        <Stack direction="row" align="center" justify="space-between" style={{ position: 'relative', zIndex: 1 }}>
+          <Box>
+            <Stack direction="row" align="center" gap="md">
               <SectionHeader
-                title={id ? `WAR ROOM: ${id}` : 'SIGNAL HORIZON: TACTICAL HUB'}
+                eyebrow="Signal Horizon"
+                title={id ? `War Room: ${id}` : 'Tactical Hub'}
                 icon={(
-                  <div
+                  <Box
                     className="w-2.5 h-2.5 animate-pulse"
-                    style={{ background: colors.red, boxShadow: `0 0 10px ${alpha(colors.red, 0.8)}` }}
+                    style={{ background: 'var(--ac-red)', boxShadow: `0 0 10px var(--ac-red)` }}
                   />
                 )}
-                size="h4"
-                mb="xs"
+                size="h2"
                 style={{ marginBottom: 0 }}
                 titleStyle={{
                   fontSize: '20px',
                   lineHeight: '28px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.01em',
-                  color: colors.white,
+                  color: 'var(--text)',
                 }}
               />
             </Stack>
-            <p className="text-sm text-white/60 mt-1 max-w-2xl font-medium tracking-wide">
+            <Text variant="body" color="secondary" style={{ marginTop: '4px', letterSpacing: '0.05em' }}>
               Operation Dark Phoenix · Collective Response Active · Priority One Incident
-            </p>
-          </div>
-          <Stack direction="row" align="center" gap="lg">
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">
-                Participants
-              </p>
-              <Stack direction="row" align="center" gap="smPlus">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="w-8 h-8 rounded-none border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/80 shadow-lg"
-                      style={{ background: colors.navy }}
-                    >
-                      U{i}
-                    </div>
-                  ))}
-                </div>
-                <span className="text-xs font-mono text-white/80 font-bold">03_ONLINE</span>
+            </Text>
+          </Box>
+          <Box style={{ textAlign: 'right' }}>
+            <Text variant="label" color="secondary" style={{ fontSize: '10px', opacity: 0.5 }}>
+              PARTICIPANTS
+            </Text>
+            <Stack direction="row" align="center" gap="md" style={{ marginTop: '4px' }}>
+              <Stack direction="row" gap="none">
+                {[1, 2, 3].map((i) => (
+                  <Box
+                    key={i}
+                    style={{ 
+                      width: 32, 
+                      height: 32, 
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--surface)',
+                      marginLeft: i > 1 ? -8 : 0
+                    }}
+                  >
+                    <Text variant="caption" weight="bold">U{i}</Text>
+                  </Box>
+                ))}
               </Stack>
-            </div>
-          </Stack>
-        </div>
-      </div>
+              <Text variant="code" weight="bold">03_ONLINE</Text>
+            </Stack>
+          </Box>
+        </Stack>
+      </Box>
 
-      <div className="flex-1 flex overflow-hidden">
+      <Box flex style={{ flex: 1, overflow: 'hidden' }}>
         {/* Activity Feed */}
-        <div className="flex-1 flex flex-col bg-surface-base">
-          <div className="grid grid-cols-3 gap-4 p-4 border-b border-border-subtle bg-surface-subtle/30">
-            <MetricTile label="ATTACK FREQUENCY" value="847" tone="red" isAlert />
-            <MetricTile label="MITIGATION RATE" value="94%" tone="green" />
-            <MetricTile label="NEW INDICATORS" value="03" tone="orange" isWarning />
-          </div>
-          <div
-            className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin"
+        <Box flex direction="column" style={{ flex: 1, background: 'var(--bg)' }}>
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface">
+            <div className="grid grid-cols-3 gap-4">
+              <MetricTile label="ATTACK FREQUENCY" value="847" tone="red" isAlert />
+              <MetricTile label="MITIGATION RATE" value="94%" tone="green" />
+              <MetricTile label="NEW INDICATORS" value="03" tone="orange" isWarning />
+            </div>
+          </Box>
+          
+          <Box
+            p="xl"
+            style={{ flex: 1, overflowY: 'auto' }}
             role="log"
             aria-live="polite"
             aria-relevant="additions"
             aria-atomic="false"
             aria-label="Activity feed"
           >
-            {mockActivities.map((activity) => (
-              <ActivityItem key={activity.id} activity={activity} />
-            ))}
-          </div>
+            <Stack gap="xl">
+              {mockActivities.map((activity) => (
+                <ActivityItem key={activity.id} activity={activity} />
+              ))}
+            </Stack>
+          </Box>
 
           {/* Message Input */}
-          <div className="p-4 border-t border-border-subtle bg-surface-subtle/50">
-            <div className="flex gap-2">
-              <div className="relative flex-1 group">
+          <Box p="lg" border="top" borderColor="subtle" bg="surface">
+            <Stack direction="row" gap="md">
+              <Box style={{ flex: 1, position: 'relative' }}>
                 <Input
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
@@ -197,137 +225,147 @@ export default function WarRoomPage() {
                   aria-label="War room message"
                   size="md"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-ink-muted opacity-50 group-focus-within:opacity-100">
-                  CTRL+ENTER TO SEND
-                </div>
-              </div>
+                <Box
+                  style={{ 
+                    position: 'absolute', 
+                    right: 12, 
+                    top: '50%', 
+                    transform: 'translateY(-50%)',
+                    opacity: 0.4,
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <Text variant="caption" weight="bold">CTRL+ENTER</Text>
+                </Box>
+              </Box>
               <Button
                 size="md"
                 onClick={handleSendMessage}
-                icon={<Send aria-hidden="true" className="w-3.5 h-3.5" />}
+                icon={<Send size={14} aria-hidden="true" />}
                 style={{ textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '10px' }}
               >
                 Transmit
               </Button>
-            </div>
-          </div>
-        </div>
+            </Stack>
+          </Box>
+        </Box>
 
         {/* Sidebar */}
-        <div className="w-80 border-l border-border-subtle p-4 space-y-6 bg-surface-subtle overflow-y-auto">
-          {/* Playbooks */}
-          <div>
-            {activePlaybook ? (
-              <PlaybookRunner
-                playbook={activePlaybook}
-                onClose={() => setActivePlaybook(null)}
-                onComplete={handlePlaybookComplete}
-              />
-            ) : (
-              <PlaybookSelector onSelect={setActivePlaybook} />
-            )}
-          </div>
+        <Box 
+          style={{ width: 320 }} 
+          border="left" 
+          borderColor="subtle" 
+          p="lg" 
+          bg="surface"
+        >
+          <Stack gap="xl">
+            {/* Playbooks */}
+            <Box>
+              {activePlaybook ? (
+                <PlaybookRunner
+                  playbook={activePlaybook}
+                  onClose={() => setActivePlaybook(null)}
+                  onComplete={handlePlaybookComplete}
+                />
+              ) : (
+                <PlaybookSelector onSelect={setActivePlaybook} />
+              )}
+            </Box>
 
-          {/* Live Metrics */}
-          <div>
-            <h3 className="text-sm font-semibold text-ink-muted mb-3">Live Metrics</h3>
-            <div className="space-y-3">
-              <MetricItem label="Attack Rate" value="1,234" unit="req/min" />
-              <MetricItem label="Blocked" value="892" unit="requests" />
-              <MetricItem label="Affected IPs" value="47" unit="unique" />
-            </div>
-          </div>
+            {/* Live Metrics */}
+            <Box>
+              <Text variant="label" color="secondary" style={{ marginBottom: '16px' }}>Live Metrics</Text>
+              <Stack gap="sm">
+                <MetricItem label="Attack Rate" value="1,234" unit="req/min" />
+                <MetricItem label="Blocked" value="892" unit="requests" />
+                <MetricItem label="Affected IPs" value="47" unit="unique" />
+              </Stack>
+            </Box>
 
-          {/* Customer Status */}
-          <div>
-            <h3 className="text-sm font-semibold text-ink-muted mb-3">Customer Status</h3>
-            <div className="space-y-2">
-              <CustomerStatus name="Acme Corp" status="protected" />
-              <CustomerStatus name="Globex Industries" status="protected" />
-              <CustomerStatus name="Initech LLC" status="monitoring" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            {/* Customer Status */}
+            <Box>
+              <Text variant="label" color="secondary" style={{ marginBottom: '16px' }}>Customer Status</Text>
+              <Stack gap="sm">
+                <CustomerStatus name="Acme Corp" status="protected" />
+                <CustomerStatus name="Globex Industries" status="protected" />
+                <CustomerStatus name="Initech LLC" status="monitoring" />
+              </Stack>
+            </Box>
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
 function ActivityItem({ activity }: { activity: Activity }) {
   const isBot = activity.actorType === 'bot';
   const isSystem = activity.actorType === 'system';
-  const badgeStyle = isBot
-    ? {
-        borderColor: alpha(colors.blue, 0.3),
-        background: alpha(colors.blue, 0.1),
-        color: colors.blue,
-      }
-    : isSystem
-      ? {
-          borderColor: alpha(colors.gray.mid, 0.3),
-          background: alpha(colors.gray.mid, 0.1),
-          color: colors.gray.mid,
-        }
-      : {
-          borderColor: alpha(colors.navy, 0.2),
-          background: alpha(colors.navy, 0.05),
-          color: colors.navy,
-        };
+  
+  const accentColor = isBot ? 'var(--ac-blue)' : isSystem ? 'var(--text-muted)' : 'var(--text)';
+  const dimColor = isBot ? 'var(--ac-blue-dim)' : isSystem ? 'var(--text-dim)' : 'var(--bg-surface-subtle)';
 
   return (
-    <div className="flex gap-4 group">
-      <div
-        className="w-10 h-10 flex items-center justify-center text-[10px] font-bold flex-shrink-0 border transition-colors"
-        style={badgeStyle}
+    <Stack direction="row" gap="lg" align="start">
+      <Box
+        style={{
+          width: 40,
+          height: 40,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: `1px solid ${accentColor}`,
+          background: dimColor,
+          flexShrink: 0,
+        }}
       >
-        {isBot ? 'HB' : isSystem ? 'SY' : activity.actor.substring(0, 2).toUpperCase()}
-      </div>
-      <div className="flex-1">
-        <Stack direction="row" align="center" gap="smPlus">
-          <span
-            className="text-sm font-bold tracking-tight"
-            style={{ color: isBot ? colors.blue : undefined }}
-          >
+        <Text variant="caption" weight="bold" style={{ color: accentColor }}>
+          {isBot ? 'HB' : isSystem ? 'SY' : activity.actor.substring(0, 2).toUpperCase()}
+        </Text>
+      </Box>
+      <Box style={{ flex: 1 }}>
+        <Stack direction="row" align="center" gap="md">
+          <Text variant="body" weight="bold" style={{ color: isBot ? 'var(--ac-blue)' : 'inherit' }}>
             {activity.actor}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 bg-surface-subtle border border-border-subtle text-ink-muted font-bold uppercase tracking-tighter">
-            {activity.action.replaceAll('_', ' ')}
-          </span>
+          </Text>
+          <Box
+            px="xsPlus"
+            py="none"
+            bg="surface-inset"
+            border="subtle"
+          >
+            <Text variant="tag" color="secondary" style={{ fontSize: '9px' }}>
+              {activity.action.replaceAll('_', ' ')}
+            </Text>
+          </Box>
         </Stack>
-        <p className="text-sm text-ink-primary font-medium mt-1 leading-relaxed">
+        <Text variant="body" style={{ marginTop: '4px', lineHeight: '1.6' }}>
           {activity.description}
-        </p>
-        <Stack
-          direction="row"
-          align="center"
-          gap="xsPlus"
-          className="mt-2 text-[10px] font-mono text-ink-muted uppercase tracking-widest"
-        >
-          <Clock className="w-3 h-3" />
-          {activity.timestamp.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })}
+        </Text>
+        <Stack direction="row" align="center" gap="sm" style={{ marginTop: '8px' }}>
+          <Clock size={12} className="text-ink-muted" />
+          <Text variant="caption" color="secondary" weight="bold">
+            {activity.timestamp.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
+          </Text>
         </Stack>
-      </div>
-    </div>
+      </Box>
+    </Stack>
   );
 }
 
 function MetricItem({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="flex items-center justify-between p-3 border border-border-subtle bg-surface-base shadow-inner">
-      <span className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest">
-        {label}
-      </span>
-      <div className="text-right">
-        <span className="text-sm font-mono font-bold text-ink-primary">{value}</span>
-        <span className="text-[9px] font-bold text-ink-muted uppercase ml-1.5 tracking-tighter">
-          {unit}
-        </span>
-      </div>
-    </div>
+    <Box p="md" border="subtle" bg="bg" flex direction="row" align="center" justify="space-between">
+      <Text variant="label" color="secondary" style={{ fontSize: '9px' }}>{label}</Text>
+      <Box style={{ textAlign: 'right' }}>
+        <Text variant="body" weight="bold" inline>{value}</Text>
+        <Text variant="caption" color="secondary" weight="bold" style={{ marginLeft: '6px' }}>{unit}</Text>
+      </Box>
+    </Box>
   );
 }
 
@@ -344,39 +382,30 @@ function MetricTile({
   isAlert?: boolean;
   isWarning?: boolean;
 }) {
-  const toneColor = tone === 'red' ? colors.red : tone === 'green' ? colors.green : colors.orange;
-  const tileStyle = isAlert
-    ? {
-        borderColor: alpha(colors.red, 0.5),
-        boxShadow: `0 0 15px ${alpha(colors.red, 0.15)}`,
-        background: alpha(colors.red, 0.02),
-      }
-    : isWarning
-      ? {
-          borderColor: alpha(colors.orange, 0.5),
-          boxShadow: `0 0 15px ${alpha(colors.orange, 0.1)}`,
-          background: alpha(colors.orange, 0.02),
-        }
-      : undefined;
-
+  const accentColor = `var(--ac-${tone})`;
+  
   return (
-    <div className="card p-5 transition-all duration-300 border-border-subtle" style={tileStyle}>
-      <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-ink-muted mb-2">
-        {label}
-      </div>
-      <Stack direction="row" align="flex-end" justify="space-between" gap="md">
-        <span
-          className="text-3xl font-light"
-          style={{ color: isAlert ? colors.red : isWarning ? colors.orange : undefined }}
-        >
+    <Box 
+      bg="card" 
+      p="lg" 
+      border="all" 
+      style={{ 
+        borderColor: isAlert || isWarning ? accentColor : 'var(--border-subtle)',
+        boxShadow: isAlert || isWarning ? `0 0 15px color-mix(in srgb, ${accentColor}, transparent 80%)` : 'none',
+        background: isAlert || isWarning ? `color-mix(in srgb, ${accentColor}, transparent 98%)` : 'var(--bg-card)'
+      }}
+    >
+      <Text variant="label" color="secondary" style={{ marginBottom: '8px' }}>{label}</Text>
+      <Stack direction="row" align="baseline" justify="space-between" gap="md">
+        <Text variant="display" weight="light" noMargin style={{ color: isAlert || isWarning ? accentColor : 'inherit', fontSize: '28px' }}>
           {value}
-        </span>
-        <div
-          className={`h-1 flex-1 mb-2 ${isAlert || isWarning ? 'animate-pulse' : ''}`}
-          style={{ background: toneColor }}
+        </Text>
+        <Box
+          className={isAlert || isWarning ? 'animate-pulse' : ''}
+          style={{ height: 4, flex: 1, marginBottom: 6, background: accentColor }}
         />
       </Stack>
-    </div>
+    </Box>
   );
 }
 
@@ -387,34 +416,32 @@ function CustomerStatus({
   name: string;
   status: 'protected' | 'monitoring' | 'at-risk';
 }) {
-  const statusStyle =
-    status === 'protected'
-      ? {
-          background: alpha(colors.green, 0.1),
-          color: colors.green,
-          borderColor: alpha(colors.green, 0.3),
-        }
-      : status === 'monitoring'
-        ? {
-            background: alpha(colors.orange, 0.1),
-            color: colors.orange,
-            borderColor: alpha(colors.orange, 0.3),
-          }
-        : {
-            background: alpha(colors.red, 0.1),
-            color: colors.red,
-            borderColor: alpha(colors.red, 0.3),
-          };
+  const color = status === 'protected' ? 'var(--ac-green)' : status === 'monitoring' ? 'var(--ac-orange)' : 'var(--ac-red)';
 
   return (
-    <div className="flex items-center justify-between p-3 border border-border-subtle bg-surface-base hover:bg-surface-subtle transition-colors">
-      <span className="text-xs font-medium text-ink-primary">{name}</span>
-      <span
-        className="text-[9px] px-2 py-0.5 border font-bold uppercase tracking-widest"
-        style={statusStyle}
+    <Box 
+      p="md" 
+      border="subtle" 
+      bg="bg" 
+      className="hover:bg-surface-subtle transition-colors"
+      flex 
+      direction="row" 
+      align="center" 
+      justify="space-between"
+    >
+      <Text variant="small" weight="medium">{name}</Text>
+      <Box
+        px="sm"
+        py="none"
+        style={{
+          border: '1px solid',
+          background: `color-mix(in srgb, ${color}, transparent 90%)`,
+          color: color,
+          borderColor: `color-mix(in srgb, ${color}, transparent 70%)`,
+        }}
       >
-        {status}
-      </span>
-    </div>
+        <Text variant="tag" style={{ fontSize: '9px' }}>{status}</Text>
+      </Box>
+    </Box>
   );
 }

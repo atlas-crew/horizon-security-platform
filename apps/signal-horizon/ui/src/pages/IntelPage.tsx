@@ -14,9 +14,12 @@ import {
   alpha,
   axisDefaults,
   colors,
+  spacing,
   gridDefaults,
   lineDefaults,
   tooltipDefaults,
+  Box,
+  Stack,
 } from '@/ui';
 import {
   BarChart3,
@@ -39,7 +42,6 @@ import {
   BarChart,
   Bar,
 } from 'recharts';
-import type { CSSProperties, ReactNode } from 'react';
 
 const timeRanges = ['1h', '6h', '24h', '7d', '30d'];
 
@@ -98,29 +100,12 @@ const mockIOCs = [
   { type: 'IP', value: '45.134.26.0/24', firstSeen: '12h ago', hits: 2567, status: 'BLOCKED' },
 ];
 
-const CARD_HEADER_STYLE: CSSProperties = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE: CSSProperties = { fontSize: '24px', lineHeight: '32px' };
-
-function CardHeader({
-  title,
-  icon,
-  actions,
-}: {
-  title: string;
-  icon?: ReactNode;
-  actions?: ReactNode;
-}) {
-  return (
-    <SectionHeader
-      title={title}
-      icon={icon}
-      actions={actions}
-      size="h4"
-      style={CARD_HEADER_STYLE}
-      titleStyle={CARD_HEADER_TITLE_STYLE}
-    />
-  );
-}
+const TH_STYLE: React.CSSProperties = { 
+  textAlign: 'left', 
+  padding: '12px 16px', 
+  background: 'var(--surface-inset)', 
+  borderBottom: '1px solid var(--border-accent)' 
+};
 
 export default function IntelPage() {
   useDocumentTitle('Intel');
@@ -128,292 +113,322 @@ export default function IntelPage() {
   const setTimeRange = useHorizonStore((s) => s.setTimeRange);
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <SectionHeader
-        title="Global Intelligence"
-        description="Fleet-wide attack trends and IOC export"
-        size="h1"
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
-        actions={
-          <div className="flex items-center gap-3">
-            <Tabs
-              variant="pills"
-              size="sm"
-              active={timeRange}
-              onChange={(key) => setTimeRange(key)}
-              tabs={timeRanges.map((range) => ({ key: range, label: range }))}
-            />
-            <Button
-              variant="outlined"
-              size="md"
-              icon={<Download className="w-4 h-4" aria-hidden="true" />}
-            >
-              Export Report
-            </Button>
-          </div>
-        }
-      />
-
-      {/* Attack Volume Trend */}
-      <div className="card">
-        <div className="card-header">
-          <CardHeader
-            title="Attack Volume Trend"
-            icon={<BarChart3 className="w-4 h-4 text-ink-muted" />}
-            actions={<span className="text-xs text-ink-muted">Last {timeRange}</span>}
-          />
-        </div>
-        <div className="card-body h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={volumeData}>
-              <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
-              <XAxis dataKey="day" {...axisDefaults.x} axisLine={false} />
-              <YAxis {...axisDefaults.y} />
-              <Tooltip {...tooltipDefaults} />
-              <Line
-                {...lineDefaults}
-                dataKey="attacks"
-                stroke={colors.magenta}
-                strokeWidth={2.5}
-                name="Attacks"
+    <Box p="xl">
+      <Stack gap="xl">
+        {/* Header */}
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Global Intelligence"
+          description="Fleet-wide attack trends and IOC export"
+          actions={
+            <Stack direction="row" align="center" gap="md">
+              <Tabs
+                variant="pills"
+                size="sm"
+                active={timeRange}
+                onChange={(key) => setTimeRange(key as any)}
+                tabs={timeRanges.map((range) => ({ key: range, label: range }))}
               />
-              <Line
-                {...lineDefaults}
-                dataKey="blocked"
-                stroke={colors.green}
-                strokeWidth={2.5}
-                name="Blocked"
-              />
-              <Line
-                {...lineDefaults}
-                dataKey="campaigns"
-                stroke={colors.skyBlue}
-                strokeWidth={2.5}
-                name="Campaigns"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Trending Threats */}
-        <div className="card">
-          <div className="card-header">
-            <CardHeader
-              title="Trending Threats"
-            />
-          </div>
-          <div className="card-body space-y-3">
-            {trendingThreats.map((threat) => (
-              <div key={threat.type} className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-ink-primary">{threat.type}</div>
-                  <div className="text-xs text-ink-muted">
-                    {threat.volume.toLocaleString()} events
-                  </div>
-                </div>
-                <span
-                  className="text-sm font-medium"
-                  style={{ color: threat.change > 0 ? colors.red : colors.green }}
-                >
-                  {threat.change > 0 ? '+' : ''}
-                  {threat.change}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* New Fingerprints */}
-        <div className="card">
-          <div className="card-header">
-            <CardHeader
-              title="New Fingerprints (24h)"
-              icon={<Fingerprint className="w-4 h-4 text-ink-muted" />}
-            />
-          </div>
-          <div className="card-body space-y-3">
-            {newFingerprints.map((fp) => (
-              <div key={fp.label} className="flex items-center justify-between text-sm">
-                <span className="text-ink-secondary">{fp.label}</span>
-                <Text as="span" color={colors.red} noMargin>
-                  {fp.hits.toLocaleString()} hits
-                </Text>
-              </div>
-            ))}
-            <div>
-              <Button variant="ghost" size="sm">
-                Investigate All →
+              <Button
+                variant="outlined"
+                size="md"
+                icon={<Download className="w-4 h-4" aria-hidden="true" />}
+              >
+                Export Report
               </Button>
-            </div>
-          </div>
-        </div>
+            </Stack>
+          }
+        />
 
-        {/* Quick Stats */}
-        <div className="card">
-          <div className="card-header">
-            <CardHeader
-              title="Intel Summary"
-              icon={<Calendar className="w-4 h-4 text-ink-muted" />}
+        {/* Attack Volume Trend */}
+        <Box bg="card" border="top" borderColor="var(--ac-blue)">
+          <Box p="lg" border="bottom" borderColor="subtle" bg="surface-inset">
+            <SectionHeader
+              title="Attack Volume Trend"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              icon={<BarChart3 className="w-4 h-4 text-ink-muted" />}
+              actions={<Text variant="caption" color="secondary">Last {timeRange}</Text>}
             />
-          </div>
-          <div className="card-body space-y-4">
-            <SummaryRow label="Total Threats" value="156,234" delta="+12%" positive={false} />
-            <SummaryRow label="Blocked Attacks" value="89,456" delta="+28%" positive />
-            <SummaryRow label="Active Campaigns" value="23" delta="-5%" positive={false} />
-            <SummaryRow label="Fleet IOCs" value="4,567" delta="+8%" positive />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Attack Origins */}
-        <div className="card">
-          <div className="card-header">
-            <CardHeader
-              title="Top Attack Origins"
-              icon={<MapPinned className="w-4 h-4 text-ink-muted" />}
-            />
-          </div>
-          <div className="card-body h-48">
+          </Box>
+          <Box p="lg" style={{ height: 256 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topOrigins} layout="vertical">
-                <defs>
-                  <linearGradient id="barGradientMagenta" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.8} />
-                    <stop offset="100%" stopColor={colors.magenta} stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" {...axisDefaults.x} hide />
-                <YAxis dataKey="label" type="category" {...axisDefaults.y} width={90} />
-                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
-                <Bar
-                  dataKey="value"
-                  fill="url(#barGradientMagenta)"
-                  radius={[0, 0, 0, 0]}
-                  barSize={14}
+              <LineChart data={volumeData}>
+                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
+                <XAxis dataKey="day" {...axisDefaults.x} axisLine={false} />
+                <YAxis {...axisDefaults.y} />
+                <Tooltip {...tooltipDefaults} />
+                <Line
+                  {...lineDefaults}
+                  dataKey="attacks"
+                  stroke={colors.magenta}
+                  strokeWidth={2.5}
+                  name="Attacks"
                 />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Most Targeted Endpoints */}
-        <div className="card">
-          <div className="card-header">
-            <CardHeader
-              title="Most Targeted Endpoints"
-              icon={<TrendingUp className="w-4 h-4 text-ink-muted" />}
-            />
-          </div>
-          <div className="card-body h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={targetedEndpoints} layout="vertical">
-                <defs>
-                  <linearGradient id="barGradientBlue" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor={colors.blue} stopOpacity={0.8} />
-                    <stop offset="100%" stopColor={colors.skyBlue} stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" {...axisDefaults.x} hide />
-                <YAxis dataKey="label" type="category" {...axisDefaults.y} width={120} />
-                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
-                <Bar
-                  dataKey="value"
-                  fill="url(#barGradientBlue)"
-                  radius={[0, 0, 0, 0]}
-                  barSize={14}
+                <Line
+                  {...lineDefaults}
+                  dataKey="blocked"
+                  stroke={colors.green}
+                  strokeWidth={2.5}
+                  name="Blocked"
                 />
-              </BarChart>
+                <Line
+                  {...lineDefaults}
+                  dataKey="campaigns"
+                  stroke={colors.skyBlue}
+                  strokeWidth={2.5}
+                  name="Campaigns"
+                />
+              </LineChart>
             </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
 
-      {/* IOC Table */}
-      <div className="card">
-        <div className="card-header">
-          <CardHeader
-            title="Recent IOCs (Indicators of Compromise)"
-            actions={
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<FileJson className="w-4 h-4" aria-hidden="true" />}
-                >
-                  JSON
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<FileText className="w-4 h-4" aria-hidden="true" />}
-                >
-                  CSV
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  icon={<Download className="w-4 h-4" aria-hidden="true" />}
-                >
-                  Export
-                </Button>
-              </div>
-            }
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <caption className="sr-only">
-              Indicators of compromise with hit counts and status
-            </caption>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Value</th>
-                <th>First Seen</th>
-                <th>Hits</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockIOCs.map((ioc) => (
-                <tr key={ioc.value}>
-                  <td className="text-ink-secondary">{ioc.type}</td>
-                  <td className="font-mono text-sm text-ink-primary">{ioc.value}</td>
-                  <td className="text-ink-muted">{ioc.firstSeen}</td>
-                  <td className="text-ink-secondary">{ioc.hits.toLocaleString()}</td>
-                  <td>
-                    <span
-                      className="px-2 py-0.5 text-xs border"
-                      style={
-                        ioc.status === 'BLOCKED'
-                          ? {
-                              background: alpha(colors.red, 0.15),
-                              color: colors.red,
-                              borderColor: alpha(colors.red, 0.4),
-                            }
-                          : {
-                              background: alpha(colors.orange, 0.1),
-                              color: colors.orange,
-                              borderColor: alpha(colors.orange, 0.3),
-                            }
-                      }
+        {/* Restore responsive grid behavior */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Trending Threats */}
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="Trending Threats"
+                size="h4"
+                titleStyle={CARD_HEADER_TITLE_STYLE}
+              />
+            </Box>
+            <Box p="lg">
+              <Stack gap="md">
+                {trendingThreats.map((threat) => (
+                  <Stack key={threat.type} direction="row" align="center" justify="space-between">
+                    <Box>
+                      <Text variant="body" weight="medium">{threat.type}</Text>
+                      <Text variant="caption" color="secondary">
+                        {threat.volume.toLocaleString()} events
+                      </Text>
+                    </Box>
+                    <Text
+                      variant="small"
+                      weight="medium"
+                      style={{ color: threat.change > 0 ? colors.red : colors.green }}
                     >
-                      {ioc.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      {threat.change > 0 ? '+' : ''}
+                      {threat.change}%
+                    </Text>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+          </Box>
+
+          {/* New Fingerprints */}
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="New Fingerprints (24h)"
+                size="h4"
+                titleStyle={CARD_HEADER_TITLE_STYLE}
+                icon={<Fingerprint className="w-4 h-4 text-ink-muted" />}
+              />
+            </Box>
+            <Box p="lg">
+              <Stack gap="md">
+                {newFingerprints.map((fp) => (
+                  <Stack key={fp.label} direction="row" align="center" justify="space-between">
+                    <Text variant="body" color="secondary">{fp.label}</Text>
+                    <Text variant="body" weight="medium" style={{ color: 'var(--ac-red)' }}>
+                      {fp.hits.toLocaleString()} hits
+                    </Text>
+                  </Stack>
+                ))}
+                <Box style={{ marginTop: spacing.md }}>
+                  <Button variant="ghost" size="sm" fullWidth>
+                    Investigate All →
+                  </Button>
+                </Box>
+              </Stack>
+            </Box>
+          </Box>
+
+          {/* Quick Stats */}
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="Intel Summary"
+                size="h4"
+                titleStyle={CARD_HEADER_TITLE_STYLE}
+                icon={<Calendar className="w-4 h-4 text-ink-muted" />}
+              />
+            </Box>
+            <Box p="lg">
+              <Stack gap="lg">
+                <SummaryRow label="Total Threats" value="156,234" delta="+12%" positive={false} />
+                <SummaryRow label="Blocked Attacks" value="89,456" delta="+28%" positive />
+                <SummaryRow label="Active Campaigns" value="23" delta="-5%" positive={false} />
+                <SummaryRow label="Fleet IOCs" value="4,567" delta="+8%" positive />
+              </Stack>
+            </Box>
+          </Box>
         </div>
-      </div>
-    </div>
+
+        {/* Restore responsive grid behavior */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Attack Origins */}
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="Top Attack Origins"
+                size="h4"
+                titleStyle={CARD_HEADER_TITLE_STYLE}
+                icon={<MapPinned className="w-4 h-4 text-ink-muted" />}
+              />
+            </Box>
+            <Box p="lg" style={{ height: 192 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topOrigins} layout="vertical">
+                  <defs>
+                    <linearGradient id="barGradientMagenta" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.8} />
+                      <stop offset="100%" stopColor={colors.magenta} stopOpacity={1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
+                  <XAxis type="number" {...axisDefaults.x} hide />
+                  <YAxis dataKey="label" type="category" {...axisDefaults.y} width={90} />
+                  <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
+                  <Bar
+                    dataKey="value"
+                    fill="url(#barGradientMagenta)"
+                    radius={[0, 0, 0, 0]}
+                    barSize={14}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
+
+          {/* Most Targeted Endpoints */}
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="Most Targeted Endpoints"
+                size="h4"
+                titleStyle={CARD_HEADER_TITLE_STYLE}
+                icon={<TrendingUp className="w-4 h-4 text-ink-muted" />}
+              />
+            </Box>
+            <Box p="lg" style={{ height: 192 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={targetedEndpoints} layout="vertical">
+                  <defs>
+                    <linearGradient id="barGradientBlue" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor={colors.blue} stopOpacity={0.8} />
+                      <stop offset="100%" stopColor={colors.skyBlue} stopOpacity={1} />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
+                  <XAxis type="number" {...axisDefaults.x} hide />
+                  <YAxis dataKey="label" type="category" {...axisDefaults.y} width={120} />
+                  <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
+                  <Bar
+                    dataKey="value"
+                    fill="url(#barGradientBlue)"
+                    radius={[0, 0, 0, 0]}
+                    barSize={14}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
+        </div>
+
+        {/* IOC Table */}
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <SectionHeader
+              title="Recent IOCs"
+              description="Indicators of Compromise"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Stack direction="row" gap="sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<FileJson className="w-4 h-4" aria-hidden="true" />}
+                  >
+                    JSON
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<FileText className="w-4 h-4" aria-hidden="true" />}
+                  >
+                    CSV
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<Download className="w-4 h-4" aria-hidden="true" />}
+                  >
+                    Export
+                  </Button>
+                </Stack>
+              }
+            />
+          </Box>
+          <Box style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <caption className="sr-only">
+                Indicators of compromise with hit counts and status
+              </caption>
+              <thead>
+                <tr>
+                  <th style={TH_STYLE}><Text variant="label" color="secondary" noMargin>Type</Text></th>
+                  <th style={TH_STYLE}><Text variant="label" color="secondary" noMargin>Value</Text></th>
+                  <th style={TH_STYLE}><Text variant="label" color="secondary" noMargin>First Seen</Text></th>
+                  <th style={TH_STYLE}><Text variant="label" color="secondary" noMargin>Hits</Text></th>
+                  <th style={TH_STYLE}><Text variant="label" color="secondary" noMargin>Status</Text></th>
+                </tr>
+              </thead>
+              <tbody>
+                {mockIOCs.map((ioc) => (
+                  <tr key={ioc.value} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>{ioc.type}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="code" noMargin>{ioc.value}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="small" color="secondary" noMargin>{ioc.firstSeen}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" weight="medium" noMargin>{ioc.hits.toLocaleString()}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Box
+                        px="sm"
+                        py="xs"
+                        style={{
+                          width: 'fit-content',
+                          border: '1px solid',
+                          background: ioc.status === 'BLOCKED' ? 'var(--ac-red-dim)' : 'var(--ac-orange-dim)',
+                          color: ioc.status === 'BLOCKED' ? 'var(--ac-red)' : 'var(--ac-orange)',
+                          /* Use alpha helper for consistent borders */
+                          borderColor: ioc.status === 'BLOCKED' ? alpha(colors.red, 0.3) : alpha(colors.orange, 0.3),
+                        }}
+                      >
+                        <Text variant="tag" noMargin>{ioc.status}</Text>
+                      </Box>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -429,14 +444,18 @@ function SummaryRow({
   positive: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <div className="text-sm text-ink-secondary">{label}</div>
-        <div className="text-2xl font-light text-ink-primary">{value}</div>
-      </div>
-      <span className="text-sm font-medium" style={{ color: positive ? colors.green : colors.red }}>
+    <Stack direction="row" align="center" justify="space-between">
+      <Box>
+        <Text variant="small" color="secondary" noMargin>{label}</Text>
+        <Text variant="h2" weight="light" noMargin>{value}</Text>
+      </Box>
+      <Text
+        variant="small"
+        weight="medium"
+        style={{ color: positive ? colors.green : colors.red }}
+      >
         {delta}
-      </span>
-    </div>
+      </Text>
+    </Stack>
   );
 }

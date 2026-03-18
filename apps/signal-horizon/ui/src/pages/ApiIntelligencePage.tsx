@@ -7,9 +7,12 @@ import {
   CARD_HEADER_TITLE_STYLE,
   Input,
   SectionHeader,
+  Stack,
+  Text,
   alpha,
   axisDefaults,
   colors,
+  spacing,
   gridDefaults,
   tooltipDefaults,
 } from '@/ui';
@@ -121,29 +124,31 @@ export default function ApiIntelligencePage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6">
-        <SectionHeader
-          title="API Intelligence"
-          description="Discover endpoints and monitor schema compliance"
-        />
-        <StatsGridSkeleton />
-        <TableSkeleton rows={5} />
-      </div>
+      <Box p="xl">
+        <Stack gap="xl">
+          <SectionHeader
+            title="API Intelligence"
+            description="Discover endpoints and monitor schema compliance"
+          />
+          <StatsGridSkeleton />
+          <TableSkeleton rows={5} />
+        </Stack>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6">
+      <Box p="xl">
         <Alert status="error" title="Failed to load API Intelligence">
           {error.message}
         </Alert>
-        <div className="mt-4 flex justify-center">
+        <Box style={{ marginTop: spacing.lg }} flex justify="center">
           <Button onClick={() => refetch()} aria-label="Retry loading API intelligence data">
             Retry
           </Button>
-        </div>
-      </div>
+        </Box>
+      </Box>
     );
   }
 
@@ -152,220 +157,224 @@ export default function ApiIntelligencePage() {
   }`;
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <SectionHeader
-        title="API Intelligence"
-        description={headerDescription}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outlined"
-              size="sm"
-              aria-label="Filter endpoints"
-              icon={<Filter className="w-4 h-4" aria-hidden="true" />}
-            >
-              Filter
-            </Button>
-            <Box style={{ width: 320 }}>
-              <Input
-                placeholder="Search endpoints..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search endpoints"
+    <Box p="xl">
+      <Stack gap="xl">
+        {/* Header */}
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="API Intelligence"
+          description={headerDescription}
+          actions={
+            <Stack direction="row" align="center" gap="sm">
+              <Button
+                variant="outlined"
                 size="sm"
-                icon={<Search className="w-4 h-4" aria-hidden="true" />}
+                aria-label="Filter endpoints"
+                icon={<Filter className="w-4 h-4" aria-hidden="true" />}
+              >
+                Filter
+              </Button>
+              <Box style={{ width: 320 }}>
+                <Input
+                  placeholder="Search endpoints..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search endpoints"
+                  size="sm"
+                  icon={<Search className="w-4 h-4" aria-hidden="true" />}
+                />
+              </Box>
+            </Stack>
+          }
+        />
+
+        {/* Restore responsive grid breakpoints using Tailwind utilities */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            label="Total Endpoints"
+            value={stats?.totalEndpoints ?? 0}
+            sublabel={`+${stats?.newThisWeek ?? 0} new this week`}
+            icon={FileCode}
+            tone="text-ac-blue"
+          />
+          <StatsCard
+            label="Schema Violations (24h)"
+            value={stats?.schemaViolations24h ?? 0}
+            sublabel={`${stats?.schemaViolations7d ?? 0} in 7 days`}
+            icon={ShieldAlert}
+            tone="text-ac-orange"
+          />
+          <StatsCard
+            label="Coverage"
+            value={`${stats?.coveragePercent ?? 0}%`}
+            sublabel="Endpoints with schema"
+            icon={CheckCircle}
+            tone="text-ac-green"
+          />
+          <StatsCard
+            label="Discovery Rate"
+            value={`+${stats?.newToday ?? 0}`}
+            sublabel="New endpoints today"
+            icon={BarChart3}
+            tone="text-ac-purple"
+          />
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ApiTreemap services={inventory?.services} />
+
+          <Box bg="card" border="top" borderColor="var(--ac-blue)" style={{ height: 400 }}>
+            <Box p="lg" border="bottom" borderColor="subtle">
+              <SectionHeader
+                title="Discovery Trend (7 Days)"
+                size="h4"
+                style={{ marginBottom: 0 }}
+                titleStyle={CARD_HEADER_TITLE_STYLE}
               />
             </Box>
-          </div>
-        }
-      />
+            <Box p="lg" style={{ flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats?.discoveryTrend ?? []}>
+                  <defs>
+                    <linearGradient id="colorDiscovery" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={colors.blue} stopOpacity={0.5} />
+                      <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
+                  <XAxis dataKey="date" {...axisDefaults.x} axisLine={false} />
+                  <YAxis {...axisDefaults.y} />
+                  <Tooltip {...tooltipDefaults} />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke={colors.blue}
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#colorDiscovery)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
+        </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          label="Total Endpoints"
-          value={stats?.totalEndpoints ?? 0}
-          sublabel={`+${stats?.newThisWeek ?? 0} new this week`}
-          icon={FileCode}
-          tone="text-ac-blue"
-        />
-        <StatsCard
-          label="Schema Violations (24h)"
-          value={stats?.schemaViolations24h ?? 0}
-          sublabel={`${stats?.schemaViolations7d ?? 0} in 7 days`}
-          icon={ShieldAlert}
-          tone="text-ac-orange"
-        />
-        <StatsCard
-          label="Coverage"
-          value={`${stats?.coveragePercent ?? 0}%`}
-          sublabel="Endpoints with schema"
-          icon={CheckCircle}
-          tone="text-ac-green"
-        />
-        <StatsCard
-          label="Discovery Rate"
-          value={`+${stats?.newToday ?? 0}`}
-          sublabel="New endpoints today"
-          icon={BarChart3}
-          tone="text-ac-purple"
-        />
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ApiTreemap services={inventory?.services} />
-
-        <div className="card h-[400px]">
-          <div className="card-header">
+        {/* Drift Analysis & Violations */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Stack gap="md">
             <SectionHeader
-              title="Discovery Trend (7 Days)"
+              title="Recent Schema Drift"
               size="h4"
               style={{ marginBottom: 0 }}
               titleStyle={CARD_HEADER_TITLE_STYLE}
             />
-          </div>
-          <div className="card-body h-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats?.discoveryTrend ?? []}>
-                <defs>
-                  <linearGradient id="colorDiscovery" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.5} />
-                    <stop offset="50%" stopColor={colors.blue} stopOpacity={0.25} />
-                    <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
-                <XAxis dataKey="date" {...axisDefaults.x} axisLine={false} />
-                <YAxis {...axisDefaults.y} />
-                <Tooltip {...tooltipDefaults} />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke={colors.skyBlue}
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#colorDiscovery)"
+            {schemaDriftGroups.length > 0 ? (
+              schemaDriftGroups.map((group) => (
+                <SchemaDriftDiff
+                  key={`${group.method}:${group.endpoint}`}
+                  endpoint={group.endpoint}
+                  method={group.method}
+                  detectedAt={group.detectedAt}
+                  changes={group.changes}
                 />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+              ))
+            ) : (
+              <Box bg="card" border="subtle" p="lg">
+                <Text variant="small" color="secondary">
+                  No schema drift events detected yet.
+                </Text>
+              </Box>
+            )}
+          </Stack>
 
-      {/* Drift Analysis & Violations */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <SectionHeader
-            title="Recent Schema Drift"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-          />
-          {schemaDriftGroups.length > 0 ? (
-            schemaDriftGroups.map((group) => (
-              <SchemaDriftDiff
-                key={`${group.method}:${group.endpoint}`}
-                endpoint={group.endpoint}
-                method={group.method}
-                detectedAt={group.detectedAt}
-                changes={group.changes}
+          <Box bg="card" border="top" borderColor="var(--ac-orange)">
+            <Box p="lg" border="bottom" borderColor="subtle">
+              <SectionHeader
+                title="Top Violating Endpoints"
+                size="h4"
+                style={{ marginBottom: 0 }}
+                titleStyle={CARD_HEADER_TITLE_STYLE}
               />
-            ))
-          ) : (
-            <div className="card border border-border-subtle p-6 text-sm text-ink-muted">
-              No schema drift events detected yet.
-            </div>
-          )}
+            </Box>
+            <Box p="lg" style={{ height: 384 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={stats?.topViolatingEndpoints ?? []}
+                  layout="vertical"
+                  margin={{ left: 40 }}
+                >
+                  <defs>
+                    <linearGradient id="violationGradient" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.9} />
+                      <stop offset="100%" stopColor={colors.amber} stopOpacity={1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
+                  <XAxis type="number" {...axisDefaults.x} hide />
+                  <YAxis
+                    dataKey="endpoint"
+                    type="category"
+                    {...axisDefaults.y}
+                    width={150}
+                    tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
+                  />
+                  <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
+                  <Bar
+                    dataKey="violationCount"
+                    fill="url(#violationGradient)"
+                    radius={[0, 0, 0, 0]}
+                    barSize={18}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Box>
         </div>
 
-        <div className="card h-full">
-          <div className="card-header">
-            <SectionHeader
-              title="Top Violating Endpoints"
-              size="h4"
-              style={{ marginBottom: 0 }}
-              titleStyle={CARD_HEADER_TITLE_STYLE}
+        {/* Endpoints Table and Violations Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Box style={{ gridColumn: 'span 2 / span 2' }}>
+            <EndpointsTable
+              endpoints={filteredEndpoints}
+              totalCount={totalEndpoints}
+              emptyMessage={searchQuery ? 'No endpoints match your search' : undefined}
             />
-          </div>
-          <div className="card-body h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={stats?.topViolatingEndpoints ?? []}
-                layout="vertical"
-                margin={{ left: 40 }}
-              >
-                <defs>
-                  <linearGradient id="violationGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.9} />
-                    <stop offset="100%" stopColor={colors.orange} stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" {...axisDefaults.x} hide />
-                <YAxis
-                  dataKey="endpoint"
-                  type="category"
-                  {...axisDefaults.y}
-                  width={150}
-                  tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
-                />
-                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
-                <Bar
-                  dataKey="violationCount"
-                  fill="url(#violationGradient)"
-                  radius={[0, 0, 0, 0]}
-                  barSize={18}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            {/* Pagination Controls */}
+            {totalEndpoints > pagination.limit && (
+              <Box p="md" border="top" bg="surface" flex direction="row" align="center" justify="space-between">
+                <Text variant="small" color="secondary">
+                  Showing {pagination.offset + 1}-
+                  {Math.min(pagination.offset + pagination.limit, totalEndpoints)} of {totalEndpoints}
+                </Text>
+                <Stack direction="row" gap="sm">
+                  <Button
+                    variant="outlined"
+                    size="sm"
+                    onClick={() =>
+                      setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))
+                    }
+                    disabled={pagination.offset === 0}
+                    aria-label="Go to previous page"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="sm"
+                    onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
+                    disabled={!hasMore}
+                    aria-label="Go to next page"
+                  >
+                    Next
+                  </Button>
+                </Stack>
+              </Box>
+            )}
+          </Box>
+          <ViolationsFeed signals={signals} />
         </div>
-      </div>
-
-      {/* Endpoints Table and Violations Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <EndpointsTable
-            endpoints={filteredEndpoints}
-            totalCount={totalEndpoints}
-            emptyMessage={searchQuery ? 'No endpoints match your search' : undefined}
-          />
-          {/* Pagination Controls */}
-          {totalEndpoints > pagination.limit && (
-            <div className="flex justify-between items-center p-4 border-t border-border-subtle bg-surface-base">
-              <span className="text-sm text-ink-muted">
-                Showing {pagination.offset + 1}-
-                {Math.min(pagination.offset + pagination.limit, totalEndpoints)} of {totalEndpoints}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))
-                  }
-                  disabled={pagination.offset === 0}
-                  aria-label="Go to previous page"
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-                  disabled={!hasMore}
-                  aria-label="Go to next page"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-        <ViolationsFeed signals={signals} />
-      </div>
-    </div>
+      </Stack>
+    </Box>
   );
 }

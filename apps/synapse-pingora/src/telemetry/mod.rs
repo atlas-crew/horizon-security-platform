@@ -245,7 +245,7 @@ impl TelemetryBuffer {
         let mut events = self.events.lock().await;
         if events.len() >= self.max_size {
             let dropped = self.dropped.fetch_add(1, Ordering::SeqCst);
-            if dropped % 100 == 0 {
+            if dropped.is_multiple_of(100) {
                 warn!(
                     event_type = ?event.event.event_type(),
                     total_dropped = dropped + 1,

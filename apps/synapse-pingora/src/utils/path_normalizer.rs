@@ -44,13 +44,11 @@ pub fn normalize_path(path: &str) -> String {
             continue;
         }
 
-        if UUID_REGEX.is_match(part) {
-            normalized_parts.push("{id}".to_string());
-        } else if OBJECTID_REGEX.is_match(part) {
-            normalized_parts.push("{id}".to_string());
-        } else if NUMERIC_ID_REGEX.is_match(part) {
-            normalized_parts.push("{id}".to_string());
-        } else if BASE64_ID_REGEX.is_match(part) {
+        if UUID_REGEX.is_match(part)
+            || OBJECTID_REGEX.is_match(part)
+            || NUMERIC_ID_REGEX.is_match(part)
+            || BASE64_ID_REGEX.is_match(part)
+        {
             normalized_parts.push("{id}".to_string());
         } else {
             normalized_parts.push(part.to_string());

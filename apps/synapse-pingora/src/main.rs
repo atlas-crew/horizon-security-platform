@@ -47,6 +47,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig};
 use sysinfo::{Disks, System};
+use std::str::FromStr;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
@@ -454,12 +455,13 @@ fn create_default_cookie_config() -> CookieConfig {
 
 /// Progression config tuned to align with 30/60/90 risk thresholds.
 fn create_progression_config() -> ProgressionConfig {
-    let mut config = ProgressionConfig::default();
-    config.risk_threshold_cookie = 0.30;
-    config.risk_threshold_js = 0.60;
-    config.risk_threshold_captcha = 0.90;
-    config.risk_threshold_block = 0.95;
-    config
+    ProgressionConfig {
+        risk_threshold_cookie: 0.30,
+        risk_threshold_js: 0.60,
+        risk_threshold_captcha: 0.90,
+        risk_threshold_block: 0.95,
+        ..Default::default()
+    }
 }
 
 fn build_trap_matcher() -> Option<Arc<TrapMatcher>> {
@@ -1039,7 +1041,7 @@ pub struct RequestContext {
     /// Request correlation ID (X-Request-ID)
     request_id: String,
     /// Active request guard for tracking concurrency
-    active_request_guard: ActiveRequestGuard,
+    _active_request_guard: ActiveRequestGuard,
     /// Detection result from request_filter
     detection: Option<DetectionResult>,
     /// Backend index for round-robin
@@ -1171,6 +1173,29 @@ fn cleanup_per_ip_limits() {
     }
 }
 
+/// Set of managers and clients used by the SynapseProxy.
+pub struct ProxyDependencies {
+    pub health_checker: Arc<HealthChecker>,
+    pub metrics_registry: Arc<MetricsRegistry>,
+    pub telemetry_client: Arc<TelemetryClient>,
+    pub tls_manager: Arc<TlsManager>,
+    pub dlp_scanner: Arc<DlpScanner>,
+    pub entity_manager: Arc<EntityManager>,
+    pub block_log: Arc<BlockLog>,
+    pub actor_manager: Arc<ActorManager>,
+    pub session_manager: Arc<SessionManager>,
+    pub shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
+    pub crawler_detector: Arc<CrawlerDetector>,
+    pub horizon_manager: Option<Arc<HorizonManager>>,
+    pub trends_manager: Arc<TrendsManager>,
+    pub signal_manager: Arc<SignalManager>,
+    pub progression_manager: Arc<ProgressionManager>,
+    pub tarpit_config: TarpitConfig,
+    pub trusted_proxies: Vec<CidrRange>,
+    pub rps_limit: usize,
+    pub per_ip_rps_limit: usize,
+}
+
 /// The Synapse WAF Proxy
 #[allow(dead_code)]
 pub struct SynapseProxy {
@@ -1259,101 +1284,85 @@ impl SynapseProxy {
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
 
-        Self::with_health(
-            backends,
-            rps_limit,
-            default_per_ip_rps(), // Default per-IP limit
-            Arc::new(HealthChecker::default()),
-            Arc::new(MetricsRegistry::new()),
-            Arc::new(TelemetryClient::new(TelemetryConfig {
-                enabled: false,
-                ..TelemetryConfig::default()
-            })),
-            Vec::new(),
-            tls_manager,
-            TarpitConfig::default(),
-            Arc::new(DlpScanner::new(DlpConfig::default())),
-            Arc::new(EntityManager::new(EntityConfig::default())),
-            Arc::new(BlockLog::default()),
-            Arc::new(ActorManager::new(ActorConfig::default())),
-            Arc::new(SessionManager::new(SessionConfig::default())),
-            None,
-            crawler_detector,
-            None, // No horizon_manager for simple constructor
-            trends_manager,
-            signal_manager,
-        )
-    }
-
-    pub fn with_health(
-        backends: Vec<(String, u16)>,
-        rps_limit: usize,
-        per_ip_rps_limit: usize,
-        health_checker: Arc<HealthChecker>,
-        metrics_registry: Arc<MetricsRegistry>,
-        telemetry_client: Arc<TelemetryClient>,
-        trusted_proxies: Vec<CidrRange>,
-        tls_manager: Arc<TlsManager>,
-        tarpit_config: TarpitConfig,
-        dlp_scanner: Arc<DlpScanner>,
-        entity_manager: Arc<EntityManager>,
-        block_log: Arc<BlockLog>,
-        actor_manager: Arc<ActorManager>,
-        session_manager: Arc<SessionManager>,
-        shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
-        crawler_detector: Arc<CrawlerDetector>,
-        horizon_manager: Option<Arc<HorizonManager>>,
-        trends_manager: Arc<TrendsManager>,
-        signal_manager: Arc<SignalManager>,
-    ) -> Self {
-        // Create tarpit manager first (needed by progression manager)
-        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
-
-        // Create interrogator managers for progressive challenge system
         let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
         let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
         let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
+        let tarpit_manager = Arc::new(TarpitManager::new(TarpitConfig::default()));
 
-        // Create progression manager orchestrating all challenge types
         let progression_manager = Arc::new(ProgressionManager::new(
             cookie_manager,
             js_manager,
             captcha_manager,
-            tarpit_manager.clone(),
+            tarpit_manager,
             create_progression_config(),
         ));
 
-        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
+        let deps = ProxyDependencies {
+            health_checker: Arc::new(HealthChecker::default()),
+            metrics_registry: Arc::new(MetricsRegistry::new()),
+            telemetry_client: Arc::new(TelemetryClient::new(TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            })),
+            tls_manager,
+            dlp_scanner: Arc::new(DlpScanner::new(DlpConfig::default())),
+            entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
+            block_log: Arc::new(BlockLog::default()),
+            actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
+            session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
+            shadow_mirror_manager: None,
+            crawler_detector,
+            horizon_manager: None,
+            trends_manager,
+            signal_manager,
+            progression_manager,
+            tarpit_config: TarpitConfig::default(),
+            trusted_proxies: Vec::new(),
+            rps_limit,
+            per_ip_rps_limit: default_per_ip_rps(),
+        };
+
+        Self::with_health(backends, deps)
+    }
+
+    pub fn with_health(
+        backends: Vec<(String, u16)>,
+        deps: ProxyDependencies,
+    ) -> Self {
+        // Create tarpit manager first (needed by progression manager)
+        let tarpit_manager = Arc::new(TarpitManager::new(deps.tarpit_config.clone()));
+
+        let auth_coverage = Self::build_auth_coverage(Arc::clone(&deps.telemetry_client));
 
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
-            rps_limit,
-            per_ip_rps_limit,
-            entity_manager,
+            rps_limit: deps.rps_limit,
+            per_ip_rps_limit: deps.per_ip_rps_limit,
+            entity_manager: deps.entity_manager,
             tarpit_manager,
-            dlp_scanner,
-            health_checker,
-            metrics_registry,
-            telemetry_client,
-            tls_manager,
-            trusted_proxies,
+            dlp_scanner: deps.dlp_scanner,
+            health_checker: deps.health_checker,
+            metrics_registry: deps.metrics_registry,
             vhost_matcher: None,
             config_manager: None,
             site_waf_manager: None,
             rate_limit_manager: None,
             access_list_manager: None,
+            telemetry_client: deps.telemetry_client,
+            tls_manager: deps.tls_manager,
             trap_matcher: build_trap_matcher(),
-            block_log,
-            actor_manager,
-            session_manager,
-            shadow_mirror_manager,
-            crawler_detector,
-            horizon_manager,
+            trusted_proxies: deps.trusted_proxies,
+            block_log: deps.block_log,
+            actor_manager: deps.actor_manager,
+            session_manager: deps.session_manager,
+            shadow_mirror_manager: deps.shadow_mirror_manager,
+            crawler_detector: deps.crawler_detector,
+            horizon_manager: deps.horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
-            trends_manager,
-            signal_manager,
-            progression_manager,
+            trends_manager: deps.trends_manager,
+            signal_manager: deps.signal_manager,
+            progression_manager: deps.progression_manager,
             auth_coverage,
             adaptive_rate_limiter: None, // Adaptive RL requires multi-site manager
         }
@@ -1376,7 +1385,7 @@ impl SynapseProxy {
         }));
 
         // Create tarpit manager first (needed by progression manager)
-        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
+        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config.clone()));
 
         // Create interrogator managers
         let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
@@ -1391,40 +1400,29 @@ impl SynapseProxy {
             create_progression_config(),
         ));
 
-        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
-
-        Self {
-            backends,
-            backend_counter: AtomicUsize::new(0),
-            rps_limit,
-            per_ip_rps_limit: default_per_ip_rps(),
-            entity_manager: Arc::new(EntityManager::new(entity_config)),
-            tarpit_manager,
-            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
+        let deps = ProxyDependencies {
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
             telemetry_client,
             tls_manager,
-            trusted_proxies: Vec::new(),
-            vhost_matcher: None,
-            config_manager: None,
-            site_waf_manager: None,
-            rate_limit_manager: None,
-            access_list_manager: None,
-            trap_matcher: build_trap_matcher(),
+            dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
+            entity_manager: Arc::new(EntityManager::new(entity_config)),
             block_log: Arc::new(BlockLog::default()),
             actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
             shadow_mirror_manager: None,
             crawler_detector,
             horizon_manager: None,
-            payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
             trends_manager,
             signal_manager,
             progression_manager,
-            auth_coverage,
-            adaptive_rate_limiter: None,
-        }
+            tarpit_config,
+            trusted_proxies: Vec::new(),
+            rps_limit,
+            per_ip_rps_limit: default_per_ip_rps(),
+        };
+
+        Self::with_health(backends, deps)
     }
 
     fn build_auth_coverage(telemetry_client: Arc<TelemetryClient>) -> Arc<AuthCoverageAggregator> {
@@ -1442,82 +1440,52 @@ impl SynapseProxy {
     /// Create a SynapseProxy with multi-site configuration support
     pub fn with_multisite(
         default_backends: Vec<(String, u16)>,
-        rps_limit: usize,
-        per_ip_rps_limit: usize,
-        health_checker: Arc<HealthChecker>,
-        metrics_registry: Arc<MetricsRegistry>,
         vhost_matcher: Arc<RwLock<VhostMatcher>>,
         config_manager: Arc<ConfigManager>,
         site_waf_manager: Arc<RwLock<SiteWafManager>>,
         rate_limit_manager: Arc<RwLock<RateLimitManager>>,
         access_list_manager: Arc<RwLock<AccessListManager>>,
-        telemetry_client: Arc<TelemetryClient>,
-        trusted_proxies: Vec<CidrRange>,
-        tls_manager: Arc<TlsManager>,
-        tarpit_config: TarpitConfig,
-        dlp_scanner: Arc<DlpScanner>,
-        entity_manager: Arc<EntityManager>,
-        block_log: Arc<BlockLog>,
-        actor_manager: Arc<ActorManager>,
-        session_manager: Arc<SessionManager>,
-        shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
-        crawler_detector: Arc<CrawlerDetector>,
-        horizon_manager: Option<Arc<HorizonManager>>,
-        trends_manager: Arc<TrendsManager>,
-        signal_manager: Arc<SignalManager>,
+        deps: ProxyDependencies,
     ) -> Self {
         // Create tarpit manager first (needed by progression manager)
-        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
+        let tarpit_manager = Arc::new(TarpitManager::new(deps.tarpit_config.clone()));
 
-        // Create interrogator managers
-        let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
-        let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
-        let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
-
-        let progression_manager = Arc::new(ProgressionManager::new(
-            cookie_manager,
-            js_manager,
-            captcha_manager,
-            tarpit_manager.clone(),
-            create_progression_config(),
-        ));
-
-        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
+        let auth_coverage = Self::build_auth_coverage(Arc::clone(&deps.telemetry_client));
 
         let adaptive_rate_limiter = Arc::new(synapse_pingora::ratelimit::AdaptiveRateLimiter::new(
             Arc::clone(&rate_limit_manager),
-            Arc::clone(&metrics_registry),
+            Arc::clone(&deps.metrics_registry),
         ));
 
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
-            rps_limit,
-            per_ip_rps_limit,
-            entity_manager,
+            rps_limit: deps.rps_limit,
+            per_ip_rps_limit: deps.per_ip_rps_limit,
+            entity_manager: deps.entity_manager,
             tarpit_manager,
-            dlp_scanner,
-            health_checker,
-            metrics_registry,
-            telemetry_client,
-            tls_manager,
-            trusted_proxies,
+            dlp_scanner: deps.dlp_scanner,
+            health_checker: deps.health_checker,
+            metrics_registry: deps.metrics_registry,
+            telemetry_client: deps.telemetry_client,
+            tls_manager: deps.tls_manager,
+            trusted_proxies: deps.trusted_proxies,
             vhost_matcher: Some(vhost_matcher),
             config_manager: Some(config_manager),
             site_waf_manager: Some(site_waf_manager),
             rate_limit_manager: Some(rate_limit_manager),
             access_list_manager: Some(access_list_manager),
             trap_matcher: build_trap_matcher(),
-            block_log,
-            actor_manager,
-            session_manager,
-            shadow_mirror_manager,
-            crawler_detector,
-            horizon_manager,
+            block_log: deps.block_log,
+            actor_manager: deps.actor_manager,
+            session_manager: deps.session_manager,
+            shadow_mirror_manager: deps.shadow_mirror_manager,
+            crawler_detector: deps.crawler_detector,
+            horizon_manager: deps.horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
-            trends_manager,
-            signal_manager,
-            progression_manager,
+            trends_manager: deps.trends_manager,
+            signal_manager: deps.signal_manager,
+            progression_manager: deps.progression_manager,
             auth_coverage,
             adaptive_rate_limiter: Some(adaptive_rate_limiter),
         }
@@ -1862,7 +1830,7 @@ impl ProxyHttp for SynapseProxy {
         RequestContext {
             request_start: Instant::now(),
             request_id: Self::generate_request_id(),
-            active_request_guard: self.metrics_registry.begin_request(),
+            _active_request_guard: self.metrics_registry.begin_request(),
             detection: None,
             backend_idx: 0,
             matched_site: None,
@@ -2518,7 +2486,7 @@ impl ProxyHttp for SynapseProxy {
         // Verify user-agent against known crawler signatures and DNS
         if self.crawler_detector.is_enabled() {
             if let Some(user_agent) = headers.iter().find_map(|(name, value)| {
-                if name == &USER_AGENT {
+                if name == USER_AGENT {
                     value.to_str().ok()
                 } else {
                     None
@@ -2871,7 +2839,7 @@ impl ProxyHttp for SynapseProxy {
         // Extract session token from Cookie or Authorization header
         let session_token = headers
             .iter()
-            .find(|(name, _)| name == &COOKIE)
+            .find(|(name, _)| name == COOKIE)
             .and_then(|(_, value)| value.to_str().ok())
             .and_then(|cookie_value| {
                 // Extract session cookie (common patterns: session, sessionid, JSESSIONID, etc.)
@@ -2886,7 +2854,7 @@ impl ProxyHttp for SynapseProxy {
                             || lower.starts_with("phpsessid=")
                             || lower.starts_with("sid=")
                     })
-                    .map(|cookie| cookie.splitn(2, '=').nth(1).unwrap_or("").to_string())
+                    .map(|cookie| cookie.split_once('=').map(|x| x.1).unwrap_or("").to_string())
             });
 
         if let Some(token) = session_token {
@@ -2956,15 +2924,15 @@ impl ProxyHttp for SynapseProxy {
         {
             let user_agent = headers
                 .iter()
-                .find(|(name, _)| name == &USER_AGENT)
+                .find(|(name, _)| name == USER_AGENT)
                 .and_then(|(_, value)| value.to_str().ok());
             let authorization = headers
                 .iter()
-                .find(|(name, _)| name == &AUTHORIZATION)
+                .find(|(name, _)| name == AUTHORIZATION)
                 .and_then(|(_, value)| value.to_str().ok());
             let session_id = headers
                 .iter()
-                .find(|(name, _)| name == &COOKIE)
+                .find(|(name, _)| name == COOKIE)
                 .and_then(|(_, value)| value.to_str().ok())
                 .and_then(|cookie_value| {
                     cookie_value
@@ -3834,7 +3802,7 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
-        if let (Some(ref method), Some(ref path)) =
+        if let (Some(method), Some(path)) =
             (ctx.request_method.as_ref(), ctx.request_path.as_ref())
         {
             record_auth_coverage(
@@ -4348,16 +4316,19 @@ fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)>
     None
 }
 
-/// Creates all runtime managers from a multi-site configuration.
-fn create_multisite_managers(
-    config_file: &MultisiteConfigFile,
-    sites: &[SiteConfig],
-) -> (
+/// Set of runtime managers shared across proxy instances.
+type RuntimeManagers = (
     Arc<RwLock<VhostMatcher>>,
     Arc<RwLock<SiteWafManager>>,
     Arc<RwLock<RateLimitManager>>,
     Arc<RwLock<AccessListManager>>,
-) {
+);
+
+/// Creates all runtime managers from a multi-site configuration.
+fn create_multisite_managers(
+    config_file: &MultisiteConfigFile,
+    sites: &[SiteConfig],
+) -> RuntimeManagers {
     // Create VhostMatcher from sites
     let vhost_matcher = VhostMatcher::new(sites.to_vec()).unwrap_or_else(|e| {
         warn!("Failed to create VhostMatcher: {}, using empty matcher", e);
@@ -4430,9 +4401,7 @@ fn create_multisite_managers(
 /// Creates a shadow mirror manager if any site has shadow mirroring configured.
 fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirrorManager>> {
     let mut configs = sites.iter().filter_map(|site| site.shadow_mirror.clone());
-    let Some(config) = configs.next() else {
-        return None;
-    };
+    let config = configs.next()?;
 
     if configs.next().is_some() {
         warn!("Multiple shadow_mirror configs found; using the first configured site");
@@ -4502,7 +4471,7 @@ fn run_config_check(file: &str, json_output: bool) {
 
     let is_multisite = yaml_value
         .as_mapping()
-        .map(|mapping| mapping.contains_key(&serde_yaml::Value::String("sites".to_string())))
+        .map(|mapping| mapping.contains_key(serde_yaml::Value::String("sites".to_string())))
         .unwrap_or(false);
 
     // Try to load and validate config (multi-site or legacy)
@@ -5358,7 +5327,7 @@ fn main() {
 
     // Register data accessors for admin server profiling endpoints
     // These callbacks allow the admin_server handlers to access real profile/schema data
-    register_profiles_getter(|| DetectionEngine::get_profiles());
+    register_profiles_getter(DetectionEngine::get_profiles);
     register_schemas_getter(|| SCHEMA_LEARNER.get_all_schemas());
 
     // Register integration configuration callbacks
@@ -5445,6 +5414,21 @@ fn main() {
     };
     server.bootstrap();
 
+    // Create interrogator managers for progressive challenge system
+    let cookie_manager = Arc::new(CookieManager::new_fallback(create_default_cookie_config()));
+    let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
+    let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
+    let tarpit_manager_for_progression = Arc::new(TarpitManager::new(config.tarpit.clone()));
+
+    // Create progression manager orchestrating all challenge types
+    let progression_manager = Arc::new(ProgressionManager::new(
+        cookie_manager,
+        js_manager,
+        captcha_manager,
+        tarpit_manager_for_progression,
+        create_progression_config(),
+    ));
+
     // Create proxy service - use multi-site if available, otherwise legacy
     // Note: telemetry_client is configured from telemetry.endpoint (risk_server_url is deprecated)
     let proxy = if let Some((ref config_file, ref sites)) = multisite_config {
@@ -5473,53 +5457,63 @@ fn main() {
 
         let shadow_mirror_manager = create_shadow_mirror_manager(sites);
 
+        let deps = ProxyDependencies {
+            health_checker: Arc::clone(&health_checker),
+            metrics_registry: Arc::clone(&metrics_registry),
+            telemetry_client: Arc::clone(&telemetry_client),
+            tls_manager: Arc::clone(&tls_manager),
+            dlp_scanner: Arc::clone(&shared_dlp_scanner),
+            entity_manager: Arc::clone(&shared_entity_manager),
+            block_log: Arc::clone(&shared_block_log),
+            actor_manager: Arc::clone(&shared_actor_manager),
+            session_manager: Arc::clone(&shared_session_manager),
+            shadow_mirror_manager,
+            crawler_detector: Arc::clone(&shared_crawler_detector),
+            horizon_manager: None, // HorizonManager not yet initialized in main
+            trends_manager: Arc::clone(&shared_trends_manager),
+            signal_manager: Arc::clone(&shared_signal_manager),
+            progression_manager: Arc::clone(&progression_manager),
+            tarpit_config: config.tarpit.clone(),
+            trusted_proxies: trusted_proxies.clone(),
+            rps_limit: config.rate_limit.rps,
+            per_ip_rps_limit: config.rate_limit.per_ip_rps,
+        };
+
         SynapseProxy::with_multisite(
             legacy_backends.clone(),
-            config.rate_limit.rps,
-            config.rate_limit.per_ip_rps,
-            Arc::clone(&health_checker),
-            Arc::clone(&metrics_registry),
             vhost_matcher,
             config_manager_for_proxy,
             site_waf_mgr,
             rate_limit_mgr,
             access_list_mgr,
-            Arc::clone(&telemetry_client),
-            trusted_proxies.clone(),
-            Arc::clone(&tls_manager),
-            config.tarpit.clone(),
-            Arc::clone(&shared_dlp_scanner),
-            Arc::clone(&shared_entity_manager),
-            Arc::clone(&shared_block_log),
-            Arc::clone(&shared_actor_manager),
-            Arc::clone(&shared_session_manager),
-            shadow_mirror_manager,
-            Arc::clone(&shared_crawler_detector),
-            None, // HorizonManager not yet initialized in main
-            Arc::clone(&shared_trends_manager),
-            Arc::clone(&shared_signal_manager),
+            deps,
         )
     } else {
+        let deps = ProxyDependencies {
+            health_checker: Arc::clone(&health_checker),
+            metrics_registry: Arc::clone(&metrics_registry),
+            telemetry_client: Arc::clone(&telemetry_client),
+            tls_manager: Arc::clone(&tls_manager),
+            dlp_scanner: Arc::clone(&shared_dlp_scanner),
+            entity_manager: Arc::clone(&shared_entity_manager),
+            block_log: Arc::clone(&shared_block_log),
+            actor_manager: Arc::clone(&shared_actor_manager),
+            session_manager: Arc::clone(&shared_session_manager),
+            shadow_mirror_manager: None,
+            crawler_detector: Arc::clone(&shared_crawler_detector),
+            horizon_manager: None, // HorizonManager not yet initialized in main
+            trends_manager: Arc::clone(&shared_trends_manager),
+            signal_manager: Arc::clone(&shared_signal_manager),
+            progression_manager: Arc::clone(&progression_manager),
+            tarpit_config: config.tarpit.clone(),
+            trusted_proxies: trusted_proxies.clone(),
+            rps_limit: config.rate_limit.rps,
+            per_ip_rps_limit: config.rate_limit.per_ip_rps,
+        };
+
         SynapseProxy::with_health(
             legacy_backends,
-            config.rate_limit.rps,
-            config.rate_limit.per_ip_rps,
-            Arc::clone(&health_checker),
-            Arc::clone(&metrics_registry),
-            Arc::clone(&telemetry_client),
-            trusted_proxies,
-            Arc::clone(&tls_manager),
-            config.tarpit.clone(),
-            Arc::clone(&shared_dlp_scanner),
-            Arc::clone(&shared_entity_manager),
-            Arc::clone(&shared_block_log),
-            Arc::clone(&shared_actor_manager),
-            Arc::clone(&shared_session_manager),
-            None,
-            Arc::clone(&shared_crawler_detector),
-            None, // HorizonManager not yet initialized in main
-            Arc::clone(&shared_trends_manager),
-            Arc::clone(&shared_signal_manager),
+            deps,
         )
     };
 

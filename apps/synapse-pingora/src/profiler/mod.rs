@@ -207,7 +207,8 @@ impl Profiler {
 
         // Note: max_profiles is enforced approximately under concurrent access (soft limit).
         // Bounded overrun is proportional to the number of concurrent callers.
-        if !self.profiles.contains_key(template) && self.profiles.len() >= self.config.max_profiles {
+        if !self.profiles.contains_key(template) && self.profiles.len() >= self.config.max_profiles
+        {
             return None; // At capacity, don't create new profile
         }
 
@@ -440,15 +441,14 @@ impl Profiler {
                 if stats.count > 0 {
                     let numeric_ratio =
                         *stats.type_counts.get("numeric").unwrap_or(&0) as f64 / stats.count as f64;
-                    if numeric_ratio > self.config.type_ratio_threshold {
-                        if value.parse::<f64>().is_err() {
+                    if numeric_ratio > self.config.type_ratio_threshold
+                        && value.parse::<f64>().is_err() {
                             result.add(
                                 AnomalySignalType::ParamValueAnomaly,
                                 5,
                                 format!("Parameter {} expected numeric, got string", param),
                             );
                         }
-                    }
                 }
             }
         }

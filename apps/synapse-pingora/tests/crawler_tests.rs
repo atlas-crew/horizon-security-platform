@@ -7,8 +7,8 @@
 //! 4. Bad bot severity levels
 
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::Arc;
 use synapse_pingora::crawler::{
     BadBotSeverity, CrawlerConfig, CrawlerDetector, DnsFailurePolicy, VerificationMethod,
 };
@@ -48,21 +48,13 @@ impl MockDnsResolver {
     }
 
     /// Configure a reverse DNS result
-    async fn set_reverse_result(
-        &self,
-        ip: IpAddr,
-        hostname: Option<String>,
-    ) {
+    async fn set_reverse_result(&self, ip: IpAddr, hostname: Option<String>) {
         let mut results = self.reverse_results.lock().await;
         results.insert(ip.to_string(), hostname);
     }
 
     /// Configure a forward DNS result
-    async fn set_forward_result(
-        &self,
-        hostname: String,
-        ips: Vec<IpAddr>,
-    ) {
+    async fn set_forward_result(&self, hostname: String, ips: Vec<IpAddr>) {
         let mut results = self.forward_results.lock().await;
         results.insert(hostname, ips);
     }
@@ -100,10 +92,7 @@ impl MockDnsResolver {
     }
 
     /// Simulate forward DNS lookup
-    async fn forward_lookup_mock(
-        &self,
-        hostname: &str,
-    ) -> Result<Vec<IpAddr>, String> {
+    async fn forward_lookup_mock(&self, hostname: &str) -> Result<Vec<IpAddr>, String> {
         self.forward_lookups.fetch_add(1, Ordering::SeqCst);
 
         // Check if this hostname should fail
@@ -204,10 +193,7 @@ async fn test_dns_verification_reverse_forward_roundtrip() {
 
     // Test reverse lookup
     let reverse_result = mock_resolver.reverse_lookup_mock(legitimate_ip).await;
-    assert!(
-        reverse_result.is_ok(),
-        "Reverse lookup should succeed"
-    );
+    assert!(reverse_result.is_ok(), "Reverse lookup should succeed");
     assert_eq!(
         reverse_result.unwrap(),
         Some(hostname.clone()),
@@ -220,13 +206,8 @@ async fn test_dns_verification_reverse_forward_roundtrip() {
     );
 
     // Test forward lookup
-    let forward_result = mock_resolver
-        .forward_lookup_mock(&hostname.clone())
-        .await;
-    assert!(
-        forward_result.is_ok(),
-        "Forward lookup should succeed"
-    );
+    let forward_result = mock_resolver.forward_lookup_mock(&hostname.clone()).await;
+    assert!(forward_result.is_ok(), "Forward lookup should succeed");
     assert!(
         forward_result.unwrap().contains(&legitimate_ip),
         "Forward lookup should return original IP"
@@ -304,7 +285,10 @@ async fn test_dns_cache_ttl_behavior() {
     let _third_result = detector.verify(googlebot_ua, googlebot_ip).await;
     let stats_after_third = detector.stats();
 
-    println!("Stats after third verify (post-TTL): {:?}", stats_after_third);
+    println!(
+        "Stats after third verify (post-TTL): {:?}",
+        stats_after_third
+    );
 
     // The cache miss count should increase on the next request
     // (TTL expiration will cause the next lookup to be a cache miss)
@@ -351,10 +335,7 @@ async fn test_bad_bot_blocking_dns_failure_policy_block() {
 
     // Stats should reflect bad bot detection
     let stats = detector.stats();
-    assert!(
-        stats.bad_bots > 0,
-        "Stats should track bad bot detection"
-    );
+    assert!(stats.bad_bots > 0, "Stats should track bad bot detection");
 
     println!("Bad bot detection result: {:?}", result);
     println!("Detector stats: {:?}", stats);
@@ -410,7 +391,8 @@ async fn test_dns_failure_policy_apply_risk_penalty() {
     // - Result should not necessarily be suspicious (may allow through)
     // - But should have a DNS failure penalty applied
     assert!(
-        result.dns_failure_penalty > 0 || result.suspicion_reasons.iter().any(|r| r.contains("DNS")),
+        result.dns_failure_penalty > 0
+            || result.suspicion_reasons.iter().any(|r| r.contains("DNS")),
         "Should apply risk penalty or include DNS-related suspicion reason"
     );
 
@@ -570,10 +552,22 @@ async fn test_legitimate_crawler_no_bad_bot_match() {
         .expect("Failed to create detector");
 
     let legitimate_crawlers = vec![
-        ("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Googlebot"),
-        ("Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", "Bingbot"),
-        ("Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)", "Baiduspider"),
-        ("Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)", "YandexBot"),
+        (
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Googlebot",
+        ),
+        (
+            "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+            "Bingbot",
+        ),
+        (
+            "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
+            "Baiduspider",
+        ),
+        (
+            "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+            "YandexBot",
+        ),
     ];
 
     for (ua, expected_name) in legitimate_crawlers {
@@ -597,8 +591,10 @@ async fn test_legitimate_crawler_no_bad_bot_match() {
             expected_name
         );
 
-        println!("Legitimate crawler {}: verified={}, suspicious={}",
-                 expected_name, result.verified, result.suspicious);
+        println!(
+            "Legitimate crawler {}: verified={}, suspicious={}",
+            expected_name, result.verified, result.suspicious
+        );
     }
 }
 
@@ -626,19 +622,34 @@ async fn test_cache_hits_and_misses() {
     // First request - should be a cache miss
     detector.verify(ua, ip).await;
     let stats_after_first = detector.stats();
-    assert_eq!(stats_after_first.cache_misses, 1, "First request should be cache miss");
+    assert_eq!(
+        stats_after_first.cache_misses, 1,
+        "First request should be cache miss"
+    );
 
     // Second request - should be a cache hit
     detector.verify(ua, ip).await;
     let stats_after_second = detector.stats();
-    assert_eq!(stats_after_second.cache_hits, 1, "Second request should be cache hit");
-    assert_eq!(stats_after_second.cache_misses, 1, "Cache miss count should not increase");
+    assert_eq!(
+        stats_after_second.cache_hits, 1,
+        "Second request should be cache hit"
+    );
+    assert_eq!(
+        stats_after_second.cache_misses, 1,
+        "Cache miss count should not increase"
+    );
 
     // Third request - should be another cache hit
     detector.verify(ua, ip).await;
     let stats_after_third = detector.stats();
-    assert_eq!(stats_after_third.cache_hits, 2, "Third request should be cache hit");
-    assert_eq!(stats_after_third.cache_misses, 1, "Cache miss count should remain unchanged");
+    assert_eq!(
+        stats_after_third.cache_hits, 2,
+        "Third request should be cache hit"
+    );
+    assert_eq!(
+        stats_after_third.cache_misses, 1,
+        "Cache miss count should remain unchanged"
+    );
 
     println!("Cache statistics: {:?}", stats_after_third);
 }
@@ -662,13 +673,13 @@ async fn test_oversized_user_agent_rejection() {
 
     let result = detector.verify(&oversized_ua, client_ip).await;
 
-    assert!(
-        result.input_rejected,
-        "Oversized UA should be rejected"
-    );
+    assert!(result.input_rejected, "Oversized UA should be rejected");
     assert!(result.suspicious, "Oversized UA should be suspicious");
     assert!(
-        result.suspicion_reasons.iter().any(|r| r.contains("exceeds maximum")),
+        result
+            .suspicion_reasons
+            .iter()
+            .any(|r| r.contains("exceeds maximum")),
         "Should include rejection reason"
     );
 
@@ -697,10 +708,22 @@ async fn test_crawler_stats_distribution() {
     // Generate multiple requests from different crawlers
     // Use same IP for each to bypass caching
     let test_cases = vec![
-        ("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Googlebot"),
-        ("Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", "Bingbot"),
-        ("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Googlebot"),
-        ("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Googlebot"),
+        (
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Googlebot",
+        ),
+        (
+            "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+            "Bingbot",
+        ),
+        (
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Googlebot",
+        ),
+        (
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Googlebot",
+        ),
     ];
 
     for (idx, (ua, _name)) in test_cases.iter().enumerate() {
@@ -732,12 +755,7 @@ async fn test_bad_bot_stats_distribution() {
         .expect("Failed to create detector");
 
     // Generate multiple bad bot detections
-    let test_cases = vec![
-        "sqlmap/1.0",
-        "sqlmap/1.0",
-        "nikto/2.0",
-        "sqlmap/1.0",
-    ];
+    let test_cases = vec!["sqlmap/1.0", "sqlmap/1.0", "nikto/2.0", "sqlmap/1.0"];
 
     for (idx, ua) in test_cases.iter().enumerate() {
         // Use different IPs to avoid cache hits (cache key includes IP)
@@ -802,10 +820,7 @@ async fn test_disabled_detector() {
         .await
         .expect("Failed to create detector");
 
-    assert!(
-        !detector.is_enabled(),
-        "Detector should be disabled"
-    );
+    assert!(!detector.is_enabled(), "Detector should be disabled");
 
     let ua = "sqlmap/1.0";
     let ip = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1));
@@ -816,7 +831,10 @@ async fn test_disabled_detector() {
 
     // The detector still checks for bad bots regardless of enabled flag,
     // but we can verify it's disabled by checking the flag
-    assert!(!detector.is_enabled(), "Detector should be marked as disabled");
+    assert!(
+        !detector.is_enabled(),
+        "Detector should be marked as disabled"
+    );
 
     println!("Disabled detector result: {:?}", result);
 }

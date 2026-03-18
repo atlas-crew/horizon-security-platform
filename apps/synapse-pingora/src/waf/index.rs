@@ -909,10 +909,7 @@ mod tests {
         // Rule 1 (POST only)
         assert_eq!(index.rules[1].method_mask, Some(METHOD_POST));
         // Rule 2 (GET | POST)
-        assert_eq!(
-            index.rules[2].method_mask,
-            Some(METHOD_GET | METHOD_POST)
-        );
+        assert_eq!(index.rules[2].method_mask, Some(METHOD_GET | METHOD_POST));
     }
 
     #[test]

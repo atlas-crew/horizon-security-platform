@@ -14,10 +14,12 @@ use std::collections::{HashSet, VecDeque};
 /// Severity levels for credential stuffing events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum StuffingSeverity {
     /// Low severity - informational
     Low = 0,
     /// Medium severity - worth monitoring
+    #[default]
     Medium = 1,
     /// High severity - likely attack
     High = 2,
@@ -47,11 +49,6 @@ impl StuffingSeverity {
     }
 }
 
-impl Default for StuffingSeverity {
-    fn default() -> Self {
-        StuffingSeverity::Medium
-    }
-}
 
 /// Verdict from credential stuffing analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]

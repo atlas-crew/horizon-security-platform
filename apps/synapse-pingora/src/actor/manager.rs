@@ -337,6 +337,9 @@ pub struct ActorStatsSnapshot {
 
 /// Manages actor state with LRU eviction.
 ///
+/// Cached JA4 cluster data: (timestamp, [(fingerprint, actor_ids, max_risk)])
+type FingerprintClusterCache = Option<(Instant, Vec<(String, Vec<String>, f64)>)>;
+
 /// Thread-safe implementation using DashMap for lock-free concurrent access.
 #[derive(Debug)]
 pub struct ActorManager {
@@ -362,7 +365,7 @@ pub struct ActorManager {
     touch_counter: AtomicU32,
 
     /// JA4 cluster cache for TUI performance (labs-tui optimization).
-    fingerprint_groups_cache: PLRwLock<Option<(Instant, Vec<(String, Vec<String>, f64)>)>>,
+    fingerprint_groups_cache: PLRwLock<FingerprintClusterCache>,
 }
 
 impl ActorManager {
@@ -611,7 +614,7 @@ impl ActorManager {
             .collect();
 
         // Sort by last_seen (most recent first)
-        actors.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+        actors.sort_by_key(|a| std::cmp::Reverse(a.last_seen));
 
         // Apply pagination
         actors.into_iter().skip(offset).take(limit).collect()
@@ -670,7 +673,9 @@ impl ActorManager {
         for entry in self.actors.iter() {
             let actor = entry.value();
             for fp in &actor.fingerprints {
-                let group = groups.entry(fp.clone()).or_insert_with(|| (Vec::new(), 0.0));
+                let group = groups
+                    .entry(fp.clone())
+                    .or_insert_with(|| (Vec::new(), 0.0));
                 group.0.push(actor.actor_id.clone());
                 group.1 = group.1.max(actor.risk_score);
             }
@@ -682,8 +687,8 @@ impl ActorManager {
             .collect();
 
         // Sort by number of actors in group (descending)
-        sorted_groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
-        
+        sorted_groups.sort_by_key(|a| std::cmp::Reverse(a.1.len()));
+
         // Update cache
         {
             let mut cache = self.fingerprint_groups_cache.write();
@@ -840,7 +845,7 @@ impl ActorManager {
     /// Uses lazy eviction: only check every 100th operation.
     fn maybe_evict(&self) {
         let count = self.touch_counter.fetch_add(1, Ordering::Relaxed);
-        if count % 100 != 0 {
+        if !count.is_multiple_of(100) {
             return;
         }
 

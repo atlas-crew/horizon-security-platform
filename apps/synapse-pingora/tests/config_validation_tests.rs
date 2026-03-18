@@ -6,23 +6,23 @@
 //! 3. WAF regex timeout bounds validation (0ms error, 1ms+ pass, 10s+ error)
 //! 4. File size validation (10MB OK, 11MB rejected)
 
+use parking_lot::RwLock;
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tempfile::NamedTempFile;
 
 // Import test utilities and types
+use synapse_pingora::access::AccessListManager;
 use synapse_pingora::config::{
     ConfigError, ConfigFile, ConfigLoader, GlobalConfig, RateLimitConfig,
 };
 use synapse_pingora::config_manager::{
     AccessListRequest, ConfigManager, CreateSiteRequest, RateLimitRequest, SiteWafRequest,
 };
-use synapse_pingora::vhost::VhostMatcher;
-use synapse_pingora::site_waf::SiteWafManager;
 use synapse_pingora::ratelimit::RateLimitManager;
-use synapse_pingora::access::AccessListManager;
+use synapse_pingora::site_waf::SiteWafManager;
+use synapse_pingora::vhost::VhostMatcher;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test Helpers
@@ -74,7 +74,10 @@ fn test_site_creation_atomicity_all_managers_updated() {
     // Create site with all components (using public IPs/domains to avoid SSRF protection)
     let req = CreateSiteRequest {
         hostname: "api.example.com".to_string(),
-        upstreams: vec!["example.com:8080".to_string(), "api.example.com:8080".to_string()],
+        upstreams: vec![
+            "example.com:8080".to_string(),
+            "api.example.com:8080".to_string(),
+        ],
         waf: Some(SiteWafRequest {
             enabled: true,
             threshold: Some(0.75),
@@ -94,7 +97,10 @@ fn test_site_creation_atomicity_all_managers_updated() {
 
     // Verify all state was updated
     assert!(result.applied, "Site creation should be marked as applied");
-    assert!(result.rebuild_required, "VhostMatcher rebuild should be required");
+    assert!(
+        result.rebuild_required,
+        "VhostMatcher rebuild should be required"
+    );
 
     // Verify sites list was updated
     let sites = mgr.list_sites();
@@ -117,7 +123,11 @@ fn test_site_creation_all_or_nothing() {
     // First, create a valid site
     let req1 = create_minimal_site_request("first.example.com");
     let result = mgr.create_site(req1);
-    assert!(result.is_ok(), "First site creation should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "First site creation should succeed: {:?}",
+        result.err()
+    );
 
     let initial_count = mgr.list_sites().len();
     assert_eq!(initial_count, 1);
@@ -540,7 +550,10 @@ sites:
     let file = create_temp_config(yaml);
     let result = ConfigLoader::load(file.path()).unwrap();
 
-    assert_eq!(result.server.waf_regex_timeout_ms, 100, "Default should be 100ms");
+    assert_eq!(
+        result.server.waf_regex_timeout_ms, 100,
+        "Default should be 100ms"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,8 +647,7 @@ fn test_config_file_size_validation_before_parsing() {
     let mut file = NamedTempFile::new().unwrap();
 
     // Write invalid YAML that would fail parsing
-    file.write_all(b"invalid: [yaml: {that: would}}\n")
-        .unwrap();
+    file.write_all(b"invalid: [yaml: {that: would}}\n").unwrap();
 
     // Fill to 11MB
     let size_needed = (11 * 1024 * 1024) - 30;
@@ -671,7 +683,11 @@ fn test_validation_before_state_mutation() {
     // Create a valid site first
     let req1 = create_minimal_site_request("valid.example.com");
     let result = mgr.create_site(req1);
-    assert!(result.is_ok(), "Valid site creation should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Valid site creation should succeed: {:?}",
+        result.err()
+    );
 
     let initial_sites = mgr.list_sites();
     assert_eq!(initial_sites.len(), 1);
@@ -753,7 +769,11 @@ sites:
     let file = create_temp_config(yaml);
     let result = ConfigLoader::load(file.path());
 
-    assert!(result.is_ok(), "Valid complex config should load: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Valid complex config should load: {:?}",
+        result.err()
+    );
 
     let config = result.unwrap();
     assert_eq!(config.server.workers, 4);

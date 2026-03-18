@@ -175,7 +175,7 @@ impl CorrelationEngine {
         for signal in signals {
             value_entities
                 .entry(signal.value.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(signal.entity_id.clone());
         }
 
@@ -285,7 +285,7 @@ impl CorrelationEngine {
                 let prefix = fp.value[..8].to_string();
                 prefix_groups
                     .entry(prefix)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(fp);
             }
         }

@@ -223,19 +223,22 @@ struct CompiledBadBotPattern {
 }
 
 /// Main crawler detection engine.
-#[derive(Debug)]
+/// Cached bot distribution data: (timestamp, [(name, count)])
+type BotDistributionCache = Option<(Instant, Vec<(String, u64)>)>;
+
+/// Bot and crawler detector.
 pub struct CrawlerDetector {
     config: CrawlerConfig,
-    cache: VerificationCache,
     dns: Option<DnsResolver>,
     stats: CrawlerStats,
+    cache: VerificationCache,
     crawler_patterns: Vec<CompiledCrawlerPattern>,
     bad_bot_patterns: Vec<CompiledBadBotPattern>,
 
     /// Cache for crawler distribution (labs-tui optimization)
-    crawler_dist_cache: RwLock<Option<(Instant, Vec<(String, u64)>)>>,
+    crawler_dist_cache: RwLock<BotDistributionCache>,
     /// Cache for bad bot distribution (labs-tui optimization)
-    bad_bot_dist_cache: RwLock<Option<(Instant, Vec<(String, u64)>)>>,
+    bad_bot_dist_cache: RwLock<BotDistributionCache>,
 }
 
 impl CrawlerDetector {
@@ -418,9 +421,7 @@ impl CrawlerDetector {
 
     /// Record bad bot stat with bounded map size
     fn record_bad_bot_stat(&self, name: &str) {
-        if self.stats.by_bad_bot.len() < self.config.max_stats_entries {
-            *self.stats.by_bad_bot.entry(name.to_string()).or_insert(0) += 1;
-        } else if self.stats.by_bad_bot.contains_key(name) {
+        if self.stats.by_bad_bot.len() < self.config.max_stats_entries || self.stats.by_bad_bot.contains_key(name) {
             *self.stats.by_bad_bot.entry(name.to_string()).or_insert(0) += 1;
         }
     }
@@ -637,7 +638,12 @@ impl CrawlerDetector {
             }
         }
 
-        let mut dist: Vec<_> = self.stats.by_crawler_name.iter().map(|entry| (entry.key().clone(), *entry.value())).collect();
+        let mut dist: Vec<_> = self
+            .stats
+            .by_crawler_name
+            .iter()
+            .map(|entry| (entry.key().clone(), *entry.value()))
+            .collect();
         dist.sort_by(|a, b| b.1.cmp(&a.1));
 
         {
@@ -662,7 +668,12 @@ impl CrawlerDetector {
             }
         }
 
-        let mut dist: Vec<_> = self.stats.by_bad_bot.iter().map(|entry| (entry.key().clone(), *entry.value())).collect();
+        let mut dist: Vec<_> = self
+            .stats
+            .by_bad_bot
+            .iter()
+            .map(|entry| (entry.key().clone(), *entry.value()))
+            .collect();
         dist.sort_by(|a, b| b.1.cmp(&a.1));
 
         {

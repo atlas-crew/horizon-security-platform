@@ -150,7 +150,7 @@ impl Detector for NetworkProximityDetector {
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!(
                     "network-{}",
-                    subnet.replace('/', "-").replace('.', "-")
+                    subnet.replace(['/', '.'], "-")
                 )),
                 status: None,
                 confidence: Some(confidence),

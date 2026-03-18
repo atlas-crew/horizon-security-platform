@@ -176,18 +176,15 @@ pub enum AnomalySignalType {
 
 /// Modes for behavioral anomaly blocking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum BlockingMode {
     /// Only log anomalies, never block.
+    #[default]
     Learning,
     /// Block requests that exceed the anomaly threshold.
     Enforcement,
 }
 
-impl Default for BlockingMode {
-    fn default() -> Self {
-        BlockingMode::Learning
-    }
-}
 
 /// Risk calculation configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

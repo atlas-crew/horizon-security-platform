@@ -8,18 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
-use tokio_tungstenite::{
-    accept_async,
-    tungstenite::Message,
-};
+use tokio_tungstenite::{accept_async, tungstenite::Message};
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
 use synapse_pingora::metrics::MetricsRegistry;
-use synapse_pingora::tunnel::{
-    ConnectionState, TunnelChannel, TunnelClient, TunnelConfig,
-};
+use synapse_pingora::tunnel::{ConnectionState, TunnelChannel, TunnelClient, TunnelConfig};
 
 const TEST_API_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -134,7 +129,11 @@ fn build_client(config: TunnelConfig) -> TunnelClient {
     TunnelClient::new(config, Arc::new(MetricsRegistry::new()))
 }
 
-async fn wait_for_state(client: &TunnelClient, expected: ConnectionState, timeout: Duration) -> bool {
+async fn wait_for_state(
+    client: &TunnelClient,
+    expected: ConnectionState,
+    timeout: Duration,
+) -> bool {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         if client.state() == expected {
@@ -306,7 +305,10 @@ async fn circuit_breaker_recovery_sequence() {
     assert!(wait_for_state(&client, ConnectionState::Connected, Duration::from_secs(2)).await);
 
     let stats = client.stats();
-    assert_eq!(stats.circuit_breaker_state, 0, "Circuit breaker should be closed (0) after recovery");
+    assert_eq!(
+        stats.circuit_breaker_state, 0,
+        "Circuit breaker should be closed (0) after recovery"
+    );
 
     client.stop().await;
     server.shutdown().await;
@@ -712,7 +714,12 @@ async fn heartbeat_detects_no_pong_response() {
     tokio::time::sleep(Duration::from_secs(8)).await;
 
     assert!(
-        wait_for_state(&client, ConnectionState::Reconnecting, Duration::from_secs(2)).await
+        wait_for_state(
+            &client,
+            ConnectionState::Reconnecting,
+            Duration::from_secs(2)
+        )
+        .await
             || wait_for_state(&client, ConnectionState::Error, Duration::from_secs(2)).await,
         "Expected client to reconnect or error after heartbeat timeouts"
     );
@@ -765,8 +772,14 @@ async fn heartbeat_interval_configurable() {
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     let stats = client.stats();
-    assert_eq!(stats.messages_received, 0, "Should not receive any messages in this test");
-    assert_eq!(stats.heartbeat_timeouts, 0, "Should have no heartbeat timeouts when responding to pings");
+    assert_eq!(
+        stats.messages_received, 0,
+        "Should not receive any messages in this test"
+    );
+    assert_eq!(
+        stats.heartbeat_timeouts, 0,
+        "Should have no heartbeat timeouts when responding to pings"
+    );
 
     client.stop().await;
     server.shutdown().await;

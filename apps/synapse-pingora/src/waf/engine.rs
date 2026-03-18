@@ -443,9 +443,9 @@ impl Engine {
             .enumerate()
             .map(|(idx, rule)| (rule.id, idx))
             .collect();
-        
+
         let rule_index = build_rule_index(&rules);
-        
+
         let mut regex_cache = HashMap::new();
         let mut word_regex_cache = HashMap::new();
 
@@ -1073,11 +1073,10 @@ impl Engine {
         };
         let name = condition.name.as_deref().unwrap_or("*");
         for entry in &ctx.arg_entries {
-            if name == "*" || entry.key == name {
-                if self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id, depth + 1) {
+            if (name == "*" || entry.key == name)
+                && self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id, depth + 1) {
                     return true;
                 }
-            }
         }
         false
     }

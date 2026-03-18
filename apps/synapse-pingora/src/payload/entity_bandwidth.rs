@@ -111,7 +111,7 @@ impl EntityBandwidth {
 
     /// Rotate to a new bucket.
     fn rotate_bucket(&mut self) {
-        let old_bucket = std::mem::replace(&mut self.current_bucket, BandwidthBucket::new());
+        let old_bucket = std::mem::take(&mut self.current_bucket);
         self.buckets.push_back(old_bucket);
         self.last_rotation = Instant::now();
 

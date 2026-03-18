@@ -277,7 +277,7 @@ impl SignalManager {
             .into_iter()
             .map(|(signal_type, count)| TopSignalType { signal_type, count })
             .collect();
-        top_signal_types.sort_by(|a, b| b.count.cmp(&a.count));
+        top_signal_types.sort_by_key(|s| std::cmp::Reverse(s.count));
         top_signal_types.truncate(10);
 
         SignalSummary {

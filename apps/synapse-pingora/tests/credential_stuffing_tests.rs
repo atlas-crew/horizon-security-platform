@@ -28,14 +28,14 @@ fn now_ms() -> u64 {
 /// Create a test config with realistic 60s window and 5 failure threshold.
 fn test_config() -> StuffingConfig {
     StuffingConfig {
-        failure_window_ms: 60_000,          // 60 second window
-        failure_threshold_suspicious: 3,     // 3 failures = suspicious
-        failure_threshold_high: 5,           // 5 failures = high risk
-        failure_threshold_block: 10,         // 10 failures = block
-        distributed_min_ips: 3,              // 3 IPs = distributed attack
+        failure_window_ms: 60_000,       // 60 second window
+        failure_threshold_suspicious: 3, // 3 failures = suspicious
+        failure_threshold_high: 5,       // 5 failures = high risk
+        failure_threshold_block: 10,     // 10 failures = block
+        distributed_min_ips: 3,          // 3 IPs = distributed attack
         distributed_window_ms: 60_000,
         takeover_window_ms: 60_000,
-        takeover_min_failures: 3,            // 3 failures before success = takeover
+        takeover_min_failures: 3, // 3 failures before success = takeover
         low_slow_min_hours: 2,
         low_slow_min_per_hour: 1,
         cleanup_interval_ms: 60_000,
@@ -141,10 +141,7 @@ fn test_invalid_regex_patterns_dont_panic() {
 #[test]
 fn test_custom_auth_patterns() {
     let config = StuffingConfig {
-        auth_path_patterns: vec![
-            r"(?i)/api/login".to_string(),
-            r"(?i)/auth/.*".to_string(),
-        ],
+        auth_path_patterns: vec![r"(?i)/api/login".to_string(), r"(?i)/auth/.*".to_string()],
         ..Default::default()
     };
 
@@ -265,7 +262,9 @@ fn test_sliding_window_cleanup_on_expiration() {
     assert!(!verdict.is_allow());
 
     // Verify metrics show 5 failures
-    let metrics = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
     assert_eq!(metrics.failures, 5);
 
     // Simulate time passage - attempt far in the future (beyond window)
@@ -275,7 +274,9 @@ fn test_sliding_window_cleanup_on_expiration() {
     let verdict = detector.record_attempt(&attempt);
 
     // The detector should have reset the window for this far-future attempt
-    let metrics_after = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics_after = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
 
     // Sliding window should be reset (failures = 0)
     assert_eq!(
@@ -284,7 +285,10 @@ fn test_sliding_window_cleanup_on_expiration() {
     );
 
     // The verdict should be allow since window was reset
-    assert!(verdict.is_allow(), "Verdict should be allow after window reset");
+    assert!(
+        verdict.is_allow(),
+        "Verdict should be allow after window reset"
+    );
 }
 
 #[test]
@@ -356,7 +360,9 @@ fn test_get_entity_metrics() {
     }
 
     // Get metrics
-    let metrics = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
     assert_eq!(metrics.entity_id, "1.2.3.4");
     assert_eq!(metrics.endpoint, "/api/login");
     assert_eq!(metrics.failures, 5);
@@ -380,7 +386,8 @@ fn test_distributed_attack_detection_three_ips() {
     }
 
     // Fourth IP with same fingerprint should trigger distributed attack
-    let attempt = AuthAttempt::new("4.4.4.4", "/api/login", now + 100).with_fingerprint("malware-bot-v1");
+    let attempt =
+        AuthAttempt::new("4.4.4.4", "/api/login", now + 100).with_fingerprint("malware-bot-v1");
     let verdict = detector.record_attempt(&attempt);
 
     // Should be suspicious due to distributed attack
@@ -447,7 +454,10 @@ fn test_distributed_attack_below_threshold() {
     // Still below 3 IPs - should be allowed
     let distributed_attacks = detector.get_distributed_attacks();
     if distributed_attacks.iter().all(|a| a.entity_count() < 3) {
-        assert!(verdict.is_allow(), "Should be allowed when below distributed attack threshold");
+        assert!(
+            verdict.is_allow(),
+            "Should be allowed when below distributed attack threshold"
+        );
     }
 }
 
@@ -880,16 +890,26 @@ fn test_multiple_endpoints_independent_tracking() {
     let endpoints = vec!["/api/login", "/api/authenticate", "/oauth/token"];
     for endpoint in endpoints {
         for i in 0..5 {
-            let result =
-                AuthResult::new("1.2.3.4", endpoint.to_string(), false, now + i as u64 * 1000);
+            let result = AuthResult::new(
+                "1.2.3.4",
+                endpoint.to_string(),
+                false,
+                now + i as u64 * 1000,
+            );
             detector.record_result(&result);
         }
     }
 
     // All endpoints should have independent metrics
-    let metrics1 = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
-    let metrics2 = detector.get_entity_metrics("1.2.3.4", "/api/authenticate").unwrap();
-    let metrics3 = detector.get_entity_metrics("1.2.3.4", "/oauth/token").unwrap();
+    let metrics1 = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
+    let metrics2 = detector
+        .get_entity_metrics("1.2.3.4", "/api/authenticate")
+        .unwrap();
+    let metrics3 = detector
+        .get_entity_metrics("1.2.3.4", "/oauth/token")
+        .unwrap();
 
     assert_eq!(metrics1.failures, 5);
     assert_eq!(metrics2.failures, 5);
@@ -907,7 +927,9 @@ fn test_failure_count_accuracy() {
         detector.record_result(&result);
     }
 
-    let metrics = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
     assert_eq!(metrics.failures, 5);
     assert_eq!(metrics.total_failures, 5);
 }
@@ -923,13 +945,17 @@ fn test_success_resets_sliding_window() {
         detector.record_result(&result);
     }
 
-    let metrics_before = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics_before = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
     assert_eq!(metrics_before.failures, 4);
 
     // Successful login should reset window
     let result = AuthResult::new("1.2.3.4", "/api/login", true, now + 5000);
     let _alert = detector.record_result(&result);
 
-    let metrics_after = detector.get_entity_metrics("1.2.3.4", "/api/login").unwrap();
+    let metrics_after = detector
+        .get_entity_metrics("1.2.3.4", "/api/login")
+        .unwrap();
     assert_eq!(metrics_after.failures, 0);
 }

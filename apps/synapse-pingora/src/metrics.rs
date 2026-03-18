@@ -3,21 +3,21 @@
 //! Provides a `/metrics` endpoint compatible with Prometheus scraping,
 //! exposing request counts, latencies, WAF statistics, and backend health.
 
-use crate::tunnel::TunnelChannel;
 use crate::actor::{ActorManager, ActorState};
-use crate::crawler::{CrawlerDetector, CrawlerStatsSnapshot};
-use crate::tarpit::{TarpitManager, TarpitStats};
+use crate::crawler::CrawlerDetector;
 use crate::interrogator::{ProgressionManager, ProgressionStatsSnapshot};
 use crate::shadow::{ShadowMirrorManager, ShadowMirrorStats};
-use crate::trends::{TrendsManager, Anomaly};
+use crate::tarpit::{TarpitManager, TarpitStats};
+use crate::trends::{Anomaly, TrendsManager};
+use crate::tunnel::TunnelChannel;
 use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::entity::{EntitySnapshot, EntityManager};
 use crate::block_log::{BlockEvent, BlockLog};
+use crate::entity::{EntityManager, EntitySnapshot};
 
 /// Snapshot of metrics for TUI display (labs-tui optimization).
 #[derive(Clone, Default)]
@@ -48,7 +48,7 @@ pub struct MetricsSnapshot {
 pub trait TuiDataProvider: Send + Sync {
     /// Get a fresh snapshot of the system state.
     fn get_snapshot(&self) -> MetricsSnapshot;
-    
+
     /// Reset global statistics.
     fn reset_all(&self);
 }
@@ -138,8 +138,18 @@ impl TuiDataProvider for MetricsRegistry {
             progression_stats: self.progression_stats(),
             shadow_stats: self.shadow_stats(),
             recent_geo_anomalies: self.recent_geo_anomalies(10),
-            top_entities: self.entity_manager.read().as_ref().map(|m| m.list_top_risk(10)).unwrap_or_default(),
-            recent_blocks: self.block_log.read().as_ref().map(|l| l.recent(10)).unwrap_or_default(),
+            top_entities: self
+                .entity_manager
+                .read()
+                .as_ref()
+                .map(|m| m.list_top_risk(10))
+                .unwrap_or_default(),
+            recent_blocks: self
+                .block_log
+                .read()
+                .as_ref()
+                .map(|l| l.recent(10))
+                .unwrap_or_default(),
         };
 
         // Update cache
@@ -869,11 +879,7 @@ impl LatencyHistogram {
         if pct.is_nan() {
             pct = 0.0;
         }
-        if pct < 0.0 {
-            pct = 0.0;
-        } else if pct > 1.0 {
-            pct = 1.0;
-        }
+        let pct = pct.clamp(0.0, 1.0);
 
         let target = ((count as f64) * pct).ceil().max(1.0) as u64;
         let mut cumulative = 0u64;
@@ -993,7 +999,7 @@ impl WindowedCounter {
         self.maybe_rotate();
         let current = self.current_index.load(Ordering::Relaxed) as usize;
         let mut history = Vec::with_capacity(self.window_secs);
-        
+
         // Buckets are a ring buffer. Start from current+1 (oldest) to current (newest).
         for i in 1..=self.window_secs {
             let idx = (current + i) % self.window_secs;
@@ -1249,7 +1255,7 @@ impl MetricsRegistry {
     pub fn top_rules(&self, limit: usize) -> Vec<(String, u64)> {
         let matches = self.waf_metrics.rule_matches.read();
         let mut rules: Vec<_> = matches.iter().map(|(k, v)| (k.clone(), *v)).collect();
-        rules.sort_by(|a, b| b.1.cmp(&a.1));
+        rules.sort_by_key(|s| std::cmp::Reverse(s.1));
         rules.truncate(limit);
         rules
     }
@@ -1257,33 +1263,44 @@ impl MetricsRegistry {
     /// Returns the current status of all backends.
     pub fn backend_status(&self) -> Vec<(String, BackendMetrics)> {
         let backends = self.backend_metrics.read();
-        backends.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        backends
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 
     /// Returns top legitimate crawler hits.
     pub fn top_crawlers(&self, limit: usize) -> Vec<(String, u64)> {
-        self.crawler_detector.read().as_ref()
+        self.crawler_detector
+            .read()
+            .as_ref()
             .map(|d| d.get_crawler_distribution(limit))
             .unwrap_or_default()
     }
 
     /// Returns top bad bot hits.
     pub fn top_bad_bots(&self, limit: usize) -> Vec<(String, u64)> {
-        self.crawler_detector.read().as_ref()
+        self.crawler_detector
+            .read()
+            .as_ref()
             .map(|d| d.get_bad_bot_distribution(limit))
             .unwrap_or_default()
     }
 
     /// Returns top risky actors (by score).
     pub fn top_risky_actors(&self, limit: usize) -> Vec<crate::actor::ActorState> {
-        self.actor_manager.read().as_ref()
+        self.actor_manager
+            .read()
+            .as_ref()
             .map(|m| m.list_by_min_risk(1.0, limit, 0))
             .unwrap_or_default()
     }
 
     /// Returns top JA4 clusters.
     pub fn top_ja4_clusters(&self, limit: usize) -> Vec<(String, Vec<String>, f64)> {
-        self.actor_manager.read().as_ref()
+        self.actor_manager
+            .read()
+            .as_ref()
             .map(|m| m.get_fingerprint_groups(limit))
             .unwrap_or_default()
     }
@@ -1292,7 +1309,7 @@ impl MetricsRegistry {
     pub fn top_dlp_hits(&self, limit: usize) -> Vec<(String, u64)> {
         let matches = self.dlp_metrics.matches_by_type.read();
         let mut dist: Vec<_> = matches.iter().map(|(k, v)| (k.clone(), *v)).collect();
-        dist.sort_by(|a, b| b.1.cmp(&a.1));
+        dist.sort_by_key(|s| std::cmp::Reverse(s.1));
         dist.truncate(limit);
         dist
     }
@@ -1304,22 +1321,32 @@ impl MetricsRegistry {
 
     /// Returns challenge progression statistics.
     pub fn progression_stats(&self) -> Option<crate::interrogator::ProgressionStatsSnapshot> {
-        self.progression_manager.read().as_ref().map(|m| m.stats().snapshot())
+        self.progression_manager
+            .read()
+            .as_ref()
+            .map(|m| m.stats().snapshot())
     }
 
     /// Returns shadow mirroring statistics.
     pub fn shadow_stats(&self) -> Option<crate::shadow::ShadowMirrorStats> {
-        self.shadow_mirror_manager.read().as_ref().map(|m| m.stats())
+        self.shadow_mirror_manager
+            .read()
+            .as_ref()
+            .map(|m| m.stats())
     }
 
     /// Returns geo-anomaly (impossible travel) alerts.
     pub fn recent_geo_anomalies(&self, limit: usize) -> Vec<crate::trends::Anomaly> {
-        self.trends_manager.read().as_ref()
-            .map(|m| m.get_anomalies(crate::trends::AnomalyQueryOptions {
-                anomaly_type: Some(crate::trends::AnomalyType::ImpossibleTravel),
-                limit: Some(limit),
-                ..Default::default()
-            }))
+        self.trends_manager
+            .read()
+            .as_ref()
+            .map(|m| {
+                m.get_anomalies(crate::trends::AnomalyQueryOptions {
+                    anomaly_type: Some(crate::trends::AnomalyType::ImpossibleTravel),
+                    limit: Some(limit),
+                    ..Default::default()
+                })
+            })
             .unwrap_or_default()
     }
 

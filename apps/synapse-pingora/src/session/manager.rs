@@ -603,7 +603,7 @@ impl SessionManager {
         offset: usize,
     ) -> Vec<SessionState> {
         let mut sessions = self.get_actor_sessions(actor_id);
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|s| std::cmp::Reverse(s.last_activity));
         sessions.into_iter().skip(offset).take(limit).collect()
     }
 
@@ -678,7 +678,7 @@ impl SessionManager {
             .collect();
 
         // Sort by last_activity (most recent first)
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|s| std::cmp::Reverse(s.last_activity));
 
         // Apply pagination
         sessions.into_iter().skip(offset).take(limit).collect()
@@ -705,7 +705,7 @@ impl SessionManager {
         offset: usize,
     ) -> Vec<SessionState> {
         let mut sessions = self.list_suspicious_sessions();
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|s| std::cmp::Reverse(s.last_activity));
         sessions.into_iter().skip(offset).take(limit).collect()
     }
 
@@ -886,7 +886,7 @@ impl SessionManager {
     /// Uses lazy eviction: only check every 100th operation.
     fn maybe_evict(&self) {
         let count = self.touch_counter.fetch_add(1, Ordering::Relaxed);
-        if count % 100 != 0 {
+        if !count.is_multiple_of(100) {
             return;
         }
 

@@ -132,7 +132,7 @@ impl WafSnapshot {
             && self.campaigns.is_empty()
             && self.actors.is_empty()
             && self.profiles.is_empty()
-            && self.credential_stuffing.as_ref().map_or(true, |s| {
+            && self.credential_stuffing.as_ref().is_none_or(|s| {
                 s.entity_metrics.is_empty()
                     && s.distributed_attacks.is_empty()
                     && s.takeover_alerts.is_empty()

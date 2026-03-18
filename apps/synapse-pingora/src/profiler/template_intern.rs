@@ -255,11 +255,14 @@ mod tests {
         intern_template("/api/eviction_trigger");
 
         let (_, _, evictions_after, size_after) = cache_stats();
-        
+
         // Size should still be MAX_CACHE_ENTRIES
         assert_eq!(size_after, MAX_CACHE_ENTRIES);
-        
+
         // Eviction counter should have incremented
-        assert!(evictions_after > evictions_before, "Eviction should have occurred");
+        assert!(
+            evictions_after > evictions_before,
+            "Eviction should have occurred"
+        );
     }
 }

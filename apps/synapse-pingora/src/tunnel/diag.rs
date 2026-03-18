@@ -100,7 +100,7 @@ impl TunnelDiagService {
             .raw
             .get("requestId")
             .and_then(|v| v.as_str())
-            .or_else(|| envelope.session_id.as_deref())
+            .or(envelope.session_id.as_deref())
             .unwrap_or("unknown");
 
         let session_id = envelope

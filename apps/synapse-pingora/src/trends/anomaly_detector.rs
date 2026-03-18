@@ -315,7 +315,7 @@ impl AnomalyDetector {
             if signal.category == SignalCategory::AuthToken {
                 token_ips
                     .entry(signal.value.clone())
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(signal.entity_id.clone());
             }
         }
@@ -354,7 +354,7 @@ impl AnomalyDetector {
             if signal.signal_type == SignalType::Ja4 {
                 ja4_ips
                     .entry(signal.value.clone())
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(signal.entity_id.clone());
             }
         }
@@ -403,7 +403,7 @@ impl AnomalyDetector {
             ) {
                 entity_values
                     .entry((signal.entity_id.clone(), signal.signal_type))
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(signal.value.clone());
             }
         }

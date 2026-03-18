@@ -11,14 +11,14 @@
 #![cfg(test)]
 
 use std::net::IpAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use synapse_pingora::correlation::detectors::AttackPayload;
 use synapse_pingora::correlation::{
-    Campaign, CampaignManager, CampaignStatus, CorrelationReason, CorrelationType, ManagerConfig,
-    FingerprintIndex,
+    Campaign, CampaignManager, CampaignStatus, CorrelationReason, CorrelationType,
+    FingerprintIndex, ManagerConfig,
 };
 
 // ============================================================================
@@ -223,7 +223,10 @@ async fn test_campaign_state_transitions() {
 
     // Verify campaign starts in Detected or Active state
     assert!(
-        matches!(campaign.status, CampaignStatus::Detected | CampaignStatus::Active),
+        matches!(
+            campaign.status,
+            CampaignStatus::Detected | CampaignStatus::Active
+        ),
         "Campaign should start in Detected or Active state, got: {:?}",
         campaign.status
     );
@@ -278,8 +281,14 @@ async fn test_campaign_confidence_increases_with_signals() {
     let second_campaign = campaigns_after_second.first();
 
     // Verify campaigns exist
-    assert!(first_campaign.is_some(), "Should have campaign after first signal");
-    assert!(second_campaign.is_some(), "Should have campaign after second signal");
+    assert!(
+        first_campaign.is_some(),
+        "Should have campaign after first signal"
+    );
+    assert!(
+        second_campaign.is_some(),
+        "Should have campaign after second signal"
+    );
 
     // Log for debugging
     if let Some(first) = first_campaign {
@@ -374,7 +383,10 @@ async fn test_campaign_merging_same_fingerprint_detection() {
     let campaigns = manager.get_campaigns();
 
     // Should have detected the group
-    assert!(!campaigns.is_empty(), "Should detect group with shared fingerprint");
+    assert!(
+        !campaigns.is_empty(),
+        "Should detect group with shared fingerprint"
+    );
 
     // Should have campaign with all IPs
     let full_group = campaigns.iter().find(|c| c.actor_count >= ips.len());
@@ -450,11 +462,7 @@ async fn test_concurrent_stress_100_plus_tasks() {
         handles.push(tokio::spawn(async move {
             for _ in 0..5 {
                 let result = manager.run_detection_cycle().await;
-                assert!(
-                    result.is_ok(),
-                    "Detection cycle {} failed",
-                    cycle_id
-                );
+                assert!(result.is_ok(), "Detection cycle {} failed", cycle_id);
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }));
@@ -891,10 +899,7 @@ fn test_fingerprint_index_stats() {
         final_stats.ja4_fingerprints > 0,
         "Should track JA4 fingerprints"
     );
-    assert!(
-        final_stats.total_ips > 0,
-        "Should track registered IPs"
-    );
+    assert!(final_stats.total_ips > 0, "Should track registered IPs");
 }
 
 /// Verifies performance doesn't degrade with large datasets
@@ -921,8 +926,10 @@ fn test_fingerprint_index_no_degradation_at_scale() {
     let _large_group = index.get_ips_by_ja4("scale_test_fp_50");
     let lookup_large_time = lookup_large_start.elapsed();
 
-    println!("Scale={}: small group lookup: {:?}, large group lookup: {:?}",
-             SCALE, lookup_small_time, lookup_large_time);
+    println!(
+        "Scale={}: small group lookup: {:?}, large group lookup: {:?}",
+        SCALE, lookup_small_time, lookup_large_time
+    );
 
     // Both should still be O(1) - times should be comparable
     // Allow 10x variance due to system noise, but shouldn't be drastically different

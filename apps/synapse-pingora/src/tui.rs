@@ -1,30 +1,33 @@
 //! Terminal User Interface for Synapse-Pingora monitoring.
 //! Built with ratatui for high-performance terminal visualization.
 
+use chrono;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use hex;
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Gauge, List, ListItem, Paragraph, Row, Table, TableState, Sparkline, Clear, Tabs},
+    widgets::{
+        Block, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Sparkline, Table,
+        TableState, Tabs,
+    },
     Frame, Terminal,
 };
+use sha2::{Digest, Sha256};
 use std::io;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::System;
-use sha2::{Digest, Sha256};
-use chrono;
-use hex;
 
 use crate::block_log::BlockLog;
 use crate::entity::EntityManager;
-use crate::metrics::{MetricsRegistry, TuiDataProvider, MetricsSnapshot};
+use crate::metrics::{MetricsSnapshot, TuiDataProvider};
 use crate::waf::Synapse;
 
 /// Action that requires operator confirmation
@@ -140,7 +143,10 @@ impl TuiApp {
                 if let Event::Key(key) = event::read()? {
                     if self.show_help {
                         match key.code {
-                            KeyCode::Char('h') | KeyCode::Char('?') | KeyCode::Esc | KeyCode::Enter => {
+                            KeyCode::Char('h')
+                            | KeyCode::Char('?')
+                            | KeyCode::Esc
+                            | KeyCode::Enter => {
                                 self.show_help = false;
                             }
                             _ => {}
@@ -169,7 +175,9 @@ impl TuiApp {
                             KeyCode::Char('q') => self.should_quit = true,
                             KeyCode::Char('r') => self.provider.reset_all(),
                             KeyCode::Char('p') | KeyCode::Char(' ') => self.paused = !self.paused,
-                            KeyCode::Char('?') | KeyCode::Char('h') => self.show_help = !self.show_help,
+                            KeyCode::Char('?') | KeyCode::Char('h') => {
+                                self.show_help = !self.show_help
+                            }
                             KeyCode::Char('1') => self.active_tab = 0,
                             KeyCode::Char('2') => self.active_tab = 1,
                             KeyCode::Char('3') => self.active_tab = 2,
@@ -202,7 +210,7 @@ impl TuiApp {
                     self.system.refresh_memory();
                     self.last_system_refresh = Instant::now();
                 }
-                
+
                 // Clear old messages
                 if let Some(msg_time) = self.message_time {
                     if msg_time.elapsed() >= Duration::from_secs(3) {
@@ -210,7 +218,7 @@ impl TuiApp {
                         self.message_time = None;
                     }
                 }
-                
+
                 last_tick = Instant::now();
             }
         }
@@ -223,17 +231,22 @@ impl TuiApp {
     }
 
     fn action_unblock(&mut self) {
-        if self.active_tab != 0 { return; }
+        if self.active_tab != 0 {
+            return;
+        }
         let selected = self.entity_table_state.selected().unwrap_or(0);
         let top_entities = self.entities.list_top_risk(10);
         if let Some(entity) = top_entities.get(selected) {
-            self.confirmation_action = Some(ConfirmationAction::UnblockIP(entity.entity_id.clone()));
+            self.confirmation_action =
+                Some(ConfirmationAction::UnblockIP(entity.entity_id.clone()));
             self.show_confirmation = true;
         }
     }
 
     fn action_block(&mut self) {
-        if self.active_tab != 0 { return; }
+        if self.active_tab != 0 {
+            return;
+        }
         let selected = self.entity_table_state.selected().unwrap_or(0);
         let top_entities = self.entities.list_top_risk(10);
         if let Some(entity) = top_entities.get(selected) {
@@ -251,7 +264,10 @@ impl TuiApp {
         let action = self.confirmation_action.take();
         match action {
             Some(ConfirmationAction::BlockIP(ip)) => {
-                let reason = format!("Manual TUI block at {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+                let reason = format!(
+                    "Manual TUI block at {}",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+                );
                 self.entities.manual_block(&ip, &reason);
                 self.set_message(&format!("Blocked IP: {}", ip));
             }
@@ -282,7 +298,7 @@ impl TuiApp {
                     // Finding #4: Read and parse BEFORE taking the write lock to minimize blocking
                     // Finding #3: Simple integrity check (checksum)
                     let hash = hex::encode(Sha256::digest(&json));
-                    
+
                     // Precompute everything (expensive regex compilation) outside of lock
                     let synapse_read = self.synapse.read();
                     match synapse_read.precompute_rules(&json) {
@@ -293,13 +309,20 @@ impl TuiApp {
                             // Fast swap inside lock
                             synapse.reload_from_compiled(compiled);
                             drop(synapse);
-                            self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
+                            self.set_message(&format!(
+                                "Reloaded {} rules (Hash: {}...)",
+                                count,
+                                &hash[..8]
+                            ));
                             reloaded = true;
                             break;
                         }
                         Err(e) => {
                             drop(synapse_read);
-                            self.set_message(&format!("Failed to compile rules from {}: {}", path, e));
+                            self.set_message(&format!(
+                                "Failed to compile rules from {}: {}",
+                                path, e
+                            ));
                             reloaded = true;
                             break;
                         }
@@ -325,27 +348,51 @@ impl TuiApp {
         match self.active_tab {
             0 => {
                 let len = self.entities.list_top_risk(10).len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.entity_table_state.selected() {
-                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
+                    Some(i) => {
+                        if i >= len.saturating_sub(1) {
+                            0
+                        } else {
+                            i + 1
+                        }
+                    }
                     None => 0,
                 };
                 self.entity_table_state.select(Some(i));
             }
             1 => {
                 let len = self.snapshot.top_rules.len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.rule_table_state.selected() {
-                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
+                    Some(i) => {
+                        if i >= len.saturating_sub(1) {
+                            0
+                        } else {
+                            i + 1
+                        }
+                    }
                     None => 0,
                 };
                 self.rule_table_state.select(Some(i));
             }
             2 => {
                 let len = self.snapshot.top_risky_actors.len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.actor_table_state.selected() {
-                    Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
+                    Some(i) => {
+                        if i >= len.saturating_sub(1) {
+                            0
+                        } else {
+                            i + 1
+                        }
+                    }
                     None => 0,
                 };
                 self.actor_table_state.select(Some(i));
@@ -358,27 +405,51 @@ impl TuiApp {
         match self.active_tab {
             0 => {
                 let len = self.entities.list_top_risk(10).len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.entity_table_state.selected() {
-                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
+                    Some(i) => {
+                        if i == 0 {
+                            len.saturating_sub(1)
+                        } else {
+                            i - 1
+                        }
+                    }
                     None => 0,
                 };
                 self.entity_table_state.select(Some(i));
             }
             1 => {
                 let len = self.snapshot.top_rules.len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.rule_table_state.selected() {
-                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
+                    Some(i) => {
+                        if i == 0 {
+                            len.saturating_sub(1)
+                        } else {
+                            i - 1
+                        }
+                    }
                     None => 0,
                 };
                 self.rule_table_state.select(Some(i));
             }
             2 => {
                 let len = self.snapshot.top_risky_actors.len();
-                if len == 0 { return; }
+                if len == 0 {
+                    return;
+                }
                 let i = match self.actor_table_state.selected() {
-                    Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
+                    Some(i) => {
+                        if i == 0 {
+                            len.saturating_sub(1)
+                        } else {
+                            i - 1
+                        }
+                    }
                     None => 0,
                 };
                 self.actor_table_state.select(Some(i));
@@ -406,7 +477,7 @@ impl TuiApp {
 
         self.render_header(f, chunks[0]);
         self.render_tabs(f, chunks[1]);
-        
+
         match self.active_tab {
             0 => self.render_monitor_tab(f, chunks[2]),
             1 => self.render_waf_tab(f, chunks[2]),
@@ -414,7 +485,7 @@ impl TuiApp {
             3 => self.render_threat_ops_tab(f, chunks[2]),
             _ => {}
         }
-        
+
         self.render_footer(f, chunks[3]);
 
         if self.show_help {
@@ -438,38 +509,40 @@ impl TuiApp {
         let uptime = self.snapshot.uptime_secs;
         let total_requests = self.snapshot.total_requests;
         let blocked = self.snapshot.total_blocked;
-        
+
         let block_rate = if total_requests > 0 {
             (blocked as f64 / total_requests as f64) * 100.0
         } else {
             0.0
         };
 
-        let status_mode = if self.paused {
-            " {PAUSED} "
-        } else {
-            ""
-        };
+        let status_mode = if self.paused { " {PAUSED} " } else { "" };
 
         let header_text = format!(
             " Synapse-Pingora v0.1.0 | Uptime: {}s | Requests: {} | Blocked: {} ({:.1}%){} ",
             uptime, total_requests, blocked, block_rate, status_mode
         );
 
-        let mut header_spans = vec![
-            Span::styled(header_text, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ];
+        let mut header_spans = vec![Span::styled(
+            header_text,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )];
 
         if let Some(ref msg) = self.last_action_message {
             header_spans.push(Span::styled(
                 format!(" [ {} ] ", msg),
-                Style::default().bg(Color::Yellow).fg(Color::Black).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .bg(Color::Yellow)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD),
             ));
         }
 
         let header = Paragraph::new(Line::from(header_spans))
             .block(Block::default().borders(Borders::ALL).title(" Status "));
-        
+
         f.render_widget(header, area);
     }
 
@@ -512,27 +585,25 @@ impl TuiApp {
 
         // Top WAF Rules
         let top_rules = &self.snapshot.top_rules;
-        let header = Row::new(vec![
-            Cell::from("Rule ID"),
-            Cell::from("Hits"),
-        ])
-        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta));
+        let header = Row::new(vec![Cell::from("Rule ID"), Cell::from("Hits")]).style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Magenta),
+        );
 
-        let rows = top_rules.iter().map(|(id, hits)| {
-            Row::new(vec![
-                Cell::from(id.clone()),
-                Cell::from(hits.to_string()),
-            ])
-        });
+        let rows = top_rules
+            .iter()
+            .map(|(id, hits)| Row::new(vec![Cell::from(id.clone()), Cell::from(hits.to_string())]));
 
-        let rule_table = Table::new(
-            rows,
-            [Constraint::Min(20), Constraint::Length(10)],
-        )
-        .header(header)
-        .highlight_style(Style::default().bg(Color::DarkGray))
-        .block(Block::default().borders(Borders::ALL).title(" Top Triggered WAF Rules "));
-        
+        let rule_table = Table::new(rows, [Constraint::Min(20), Constraint::Length(10)])
+            .header(header)
+            .highlight_style(Style::default().bg(Color::DarkGray))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Top Triggered WAF Rules "),
+            );
+
         f.render_stateful_widget(rule_table, chunks[0], &mut self.rule_table_state);
 
         // Upstream Status
@@ -543,13 +614,21 @@ impl TuiApp {
             Cell::from("Reqs"),
             Cell::from("Latency"),
         ])
-        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow));
+        .style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Yellow),
+        );
 
         let b_rows = backends.iter().map(|(host, m)| {
             let status = if m.healthy { "HEALTHY" } else { "ERROR" };
             let status_color = if m.healthy { Color::Green } else { Color::Red };
-            let avg_ms = if m.requests > 0 { m.response_time_us as f64 / m.requests as f64 / 1000.0 } else { 0.0 };
-            
+            let avg_ms = if m.requests > 0 {
+                m.response_time_us as f64 / m.requests as f64 / 1000.0
+            } else {
+                0.0
+            };
+
             Row::new(vec![
                 Cell::from(host.clone()),
                 Cell::from(status).style(Style::default().fg(status_color)),
@@ -568,7 +647,11 @@ impl TuiApp {
             ],
         )
         .header(b_header)
-        .block(Block::default().borders(Borders::ALL).title(" Upstream Backend Health "));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Upstream Backend Health "),
+        );
         f.render_widget(backend_table, chunks[1]);
     }
 
@@ -580,41 +663,62 @@ impl TuiApp {
 
         let left_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
-                Constraint::Percentage(34),
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Percentage(33),
+                    Constraint::Percentage(33),
+                    Constraint::Percentage(34),
+                ]
+                .as_ref(),
+            )
             .split(chunks[0]);
 
         // Legitimate Crawlers
         let crawlers = &self.snapshot.top_crawlers;
-        let c_items: Vec<ListItem> = crawlers.iter().map(|(name, hits)| {
-            ListItem::new(format!("{:<15} : {} hits", name, hits))
-                .style(Style::default().fg(Color::Green))
-        }).collect();
-        let c_list = List::new(c_items)
-            .block(Block::default().borders(Borders::ALL).title(" Legitimate Crawlers "));
+        let c_items: Vec<ListItem> = crawlers
+            .iter()
+            .map(|(name, hits)| {
+                ListItem::new(format!("{:<15} : {} hits", name, hits))
+                    .style(Style::default().fg(Color::Green))
+            })
+            .collect();
+        let c_list = List::new(c_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Legitimate Crawlers "),
+        );
         f.render_widget(c_list, left_chunks[0]);
 
         // Bad Bots
         let bad_bots = &self.snapshot.top_bad_bots;
-        let b_items: Vec<ListItem> = bad_bots.iter().map(|(name, hits)| {
-            ListItem::new(format!("{:<15} : {} hits", name, hits))
-                .style(Style::default().fg(Color::Red))
-        }).collect();
-        let b_list = List::new(b_items)
-            .block(Block::default().borders(Borders::ALL).title(" Malicious Bots / Scrapers "));
+        let b_items: Vec<ListItem> = bad_bots
+            .iter()
+            .map(|(name, hits)| {
+                ListItem::new(format!("{:<15} : {} hits", name, hits))
+                    .style(Style::default().fg(Color::Red))
+            })
+            .collect();
+        let b_list = List::new(b_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Malicious Bots / Scrapers "),
+        );
         f.render_widget(b_list, left_chunks[1]);
 
         // DLP Hits
         let dlp_hits = &self.snapshot.top_dlp_hits;
-        let d_items: Vec<ListItem> = dlp_hits.iter().map(|(name, hits)| {
-            ListItem::new(format!("{:<15} : {} matches", name, hits))
-                .style(Style::default().fg(Color::Magenta))
-        }).collect();
-        let d_list = List::new(d_items)
-            .block(Block::default().borders(Borders::ALL).title(" DLP Security Scan "));
+        let d_items: Vec<ListItem> = dlp_hits
+            .iter()
+            .map(|(name, hits)| {
+                ListItem::new(format!("{:<15} : {} matches", name, hits))
+                    .style(Style::default().fg(Color::Magenta))
+            })
+            .collect();
+        let d_list = List::new(d_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" DLP Security Scan "),
+        );
         f.render_widget(d_list, left_chunks[2]);
 
         let right_chunks = Layout::default()
@@ -629,7 +733,11 @@ impl TuiApp {
             Cell::from("Nodes"),
             Cell::from("Max Risk"),
         ])
-        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan));
+        .style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan),
+        );
 
         let rows = clusters.iter().map(|(fp, nodes, max_risk)| {
             Row::new(vec![
@@ -648,7 +756,11 @@ impl TuiApp {
             ],
         )
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title(" JA4 Fingerprint Clusters "));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" JA4 Fingerprint Clusters "),
+        );
         f.render_widget(table, right_chunks[0]);
 
         // Top Risky Actors (Fingerprint correlated)
@@ -678,8 +790,12 @@ impl TuiApp {
         )
         .header(a_header)
         .highlight_style(Style::default().bg(Color::DarkGray))
-        .block(Block::default().borders(Borders::ALL).title(" Top Correlated Actors "));
-        
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Top Correlated Actors "),
+        );
+
         f.render_stateful_widget(actor_table, right_chunks[1], &mut self.actor_table_state);
     }
 
@@ -702,8 +818,11 @@ impl TuiApp {
                 ListItem::new(format!("Total Hits:     {}", tarpit.total_hits)),
                 ListItem::new(format!("Total Delay:    {}ms", tarpit.total_delay_ms)),
             ];
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title(" Tarpit Mitigation (Level 4) "));
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Tarpit Mitigation (Level 4) "),
+            );
             f.render_widget(list, left_chunks[0]);
         } else {
             let paragraph = Paragraph::new("\n  Tarpit Manager not initialized.\n  Check configuration to enable Level 4 mitigation.")
@@ -716,11 +835,17 @@ impl TuiApp {
             let items = vec![
                 ListItem::new(format!("Actors Tracked: {}", prog.actors_tracked)),
                 ListItem::new(format!("Issued:         {}", prog.challenges_issued)),
-                ListItem::new(format!("Success/Fail:   {} / {}", prog.successes, prog.failures)),
+                ListItem::new(format!(
+                    "Success/Fail:   {} / {}",
+                    prog.successes, prog.failures
+                )),
                 ListItem::new(format!("Escalations:    {}", prog.escalations)),
             ];
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title(" Interrogator Challenges (Level 1-3) "));
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Interrogator Challenges (Level 1-3) "),
+            );
             f.render_widget(list, left_chunks[1]);
         } else {
             let paragraph = Paragraph::new("\n  Interrogator System not initialized.\n  Check configuration to enable Level 1-3 challenges.")
@@ -736,13 +861,23 @@ impl TuiApp {
         // Shadow Mirroring
         if let Some(ref shadow) = self.snapshot.shadow_stats {
             let items = vec![
-                ListItem::new(format!("Mirror Mode:   {}", if shadow.enabled { "ACTIVE" } else { "OFF" })),
+                ListItem::new(format!(
+                    "Mirror Mode:   {}",
+                    if shadow.enabled { "ACTIVE" } else { "OFF" }
+                )),
                 ListItem::new(format!("Success:       {}", shadow.delivery_successes)),
                 ListItem::new(format!("Failures:      {}", shadow.delivery_failures)),
-                ListItem::new(format!("Queue Load:    {}/{}", shadow.max_concurrent - shadow.queue_available, shadow.max_concurrent)),
+                ListItem::new(format!(
+                    "Queue Load:    {}/{}",
+                    shadow.max_concurrent - shadow.queue_available,
+                    shadow.max_concurrent
+                )),
             ];
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title(" Honeypot Shadow Mirroring "));
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Honeypot Shadow Mirroring "),
+            );
             f.render_widget(list, right_chunks[0]);
         } else {
             let paragraph = Paragraph::new("\n  Shadow Mirroring not initialized.\n  Check configuration to enable honeypot mirroring.")
@@ -752,43 +887,61 @@ impl TuiApp {
 
         // Geo Anomalies
         let geo_anomalies = &self.snapshot.recent_geo_anomalies;
-        let items: Vec<ListItem> = geo_anomalies.iter().map(|a| {
-            ListItem::new(format!("[{:?}] {}", a.severity, a.description))
-                .style(Style::default().fg(match a.severity {
-                    crate::trends::AnomalySeverity::Critical => Color::Red,
-                    crate::trends::AnomalySeverity::High => Color::LightRed,
-                    _ => Color::Yellow,
-                }))
-        }).collect();
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(" Geographic / Travel Anomalies "));
+        let items: Vec<ListItem> = geo_anomalies
+            .iter()
+            .map(|a| {
+                ListItem::new(format!("[{:?}] {}", a.severity, a.description)).style(
+                    Style::default().fg(match a.severity {
+                        crate::trends::AnomalySeverity::Critical => Color::Red,
+                        crate::trends::AnomalySeverity::High => Color::LightRed,
+                        _ => Color::Yellow,
+                    }),
+                )
+            })
+            .collect();
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Geographic / Travel Anomalies "),
+        );
         f.render_widget(list, right_chunks[1]);
     }
 
     fn render_left_panel(&self, f: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(6), // RPS Gauge
-                Constraint::Length(6), // Sparkline
-                Constraint::Length(6), // Resource Gauges
-                Constraint::Min(0)     // Detailed Metrics
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Length(6), // RPS Gauge
+                    Constraint::Length(6), // Sparkline
+                    Constraint::Length(6), // Resource Gauges
+                    Constraint::Min(0),    // Detailed Metrics
+                ]
+                .as_ref(),
+            )
             .split(area);
 
         // RPS Gauge
         let history = &self.snapshot.request_history;
         let rps = history.last().copied().unwrap_or(0);
         let rps_gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title(" Requests/sec "))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Requests/sec "),
+            )
             .gauge_style(Style::default().fg(Color::Green))
-            .percent((rps.min(100) as u16).into())
+            .percent(rps.min(100) as u16)
             .label(format!("{} RPS", rps));
         f.render_widget(rps_gauge, chunks[0]);
 
         // Traffic Trend (Sparkline)
         let sparkline = Sparkline::default()
-            .block(Block::default().borders(Borders::ALL).title(" Traffic Trend (60s) "))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Traffic Trend (60s) "),
+            )
             .data(history)
             .style(Style::default().fg(Color::Green));
         f.render_widget(sparkline, chunks[1]);
@@ -812,7 +965,11 @@ impl TuiApp {
         let mem_total = self.system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
         let mem_percent = (mem_used / mem_total * 100.0) as u16;
         let mem_gauge = Gauge::default()
-            .block(Block::default().title(" Memory Usage ").borders(Borders::NONE))
+            .block(
+                Block::default()
+                    .title(" Memory Usage ")
+                    .borders(Borders::NONE),
+            )
             .gauge_style(Style::default().fg(Color::Magenta))
             .percent(mem_percent)
             .label(format!("{:.1}G / {:.1}G", mem_used, mem_total));
@@ -821,7 +978,7 @@ impl TuiApp {
         // Detailed Metrics
         let avg_latency = self.snapshot.avg_latency_ms;
         let avg_waf = self.snapshot.avg_waf_detection_us;
-        
+
         let metrics_list = vec![
             ListItem::new(format!("Avg Latency:   {:.2} ms", avg_latency)),
             ListItem::new(format!("WAF Detection: {:.2} μs", avg_waf)),
@@ -829,8 +986,11 @@ impl TuiApp {
             ListItem::new(format!("Rules Loaded:  {}", self.snapshot.top_rules.len())),
         ];
 
-        let metrics = List::new(metrics_list)
-            .block(Block::default().borders(Borders::ALL).title(" System Metrics "));
+        let metrics = List::new(metrics_list).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" System Metrics "),
+        );
         f.render_widget(metrics, chunks[3]);
     }
 
@@ -848,7 +1008,11 @@ impl TuiApp {
             Cell::from("Reqs"),
             Cell::from("Status"),
         ])
-        .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow));
+        .style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Yellow),
+        );
 
         let rows = top_entities.iter().map(|e| {
             let status = if e.blocked { "BLOCKED" } else { "OK" };
@@ -880,8 +1044,12 @@ impl TuiApp {
         )
         .header(header)
         .highlight_style(Style::default().bg(Color::DarkGray))
-        .block(Block::default().borders(Borders::ALL).title(" Top Risky Entities (↑/↓ Select) "));
-        
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Top Risky Entities (↑/↓ Select) "),
+        );
+
         f.render_stateful_widget(table, chunks[0], &mut self.entity_table_state);
 
         // Recent Blocks
@@ -892,7 +1060,7 @@ impl TuiApp {
                 let time = chrono::DateTime::from_timestamp_millis(b.timestamp as i64)
                     .map(|dt| dt.format("%H:%M:%S").to_string())
                     .unwrap_or_else(|| "00:00:00".to_string());
-                
+
                 ListItem::new(format!(
                     "[{}] {} blocked on {} (Risk: {})",
                     time, b.client_ip, b.path, b.risk_score
@@ -901,8 +1069,11 @@ impl TuiApp {
             })
             .collect();
 
-        let blocks = List::new(block_items)
-            .block(Block::default().borders(Borders::ALL).title(" Recent WAF Blocks "));
+        let blocks = List::new(block_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Recent WAF Blocks "),
+        );
         f.render_widget(blocks, chunks[1]);
     }
 
@@ -912,8 +1083,8 @@ impl TuiApp {
         } else {
             " [p] Pause | [q] Quit | [b/u] Block/Unblock | [L] Reload | [Tab] Switch Tab | [h] Help "
         };
-        let footer = Paragraph::new(footer_text)
-            .style(Style::default().bg(Color::Blue).fg(Color::White));
+        let footer =
+            Paragraph::new(footer_text).style(Style::default().bg(Color::Blue).fg(Color::White));
         f.render_widget(footer, area);
     }
 
@@ -992,7 +1163,12 @@ impl TuiApp {
             Line::from(""),
             Line::from(""),
             Line::from(vec![
-                Span::styled(" [Y] Yes, proceed ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " [Y] Yes, proceed ",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw("   "),
                 Span::styled(" [N] No, cancel ", Style::default().fg(Color::Red)),
             ]),
@@ -1010,16 +1186,26 @@ impl TuiApp {
 
         let top_entities = &self.snapshot.top_entities;
         let selected_idx = self.entity_table_state.selected().unwrap_or(0);
-        
+
         if let Some(snapshot) = top_entities.get(selected_idx) {
             let mut details = vec![
                 Line::from(vec![
                     Span::styled(" Entity ID:    ", Style::default().fg(Color::Cyan)),
-                    Span::styled(&snapshot.entity_id, Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        &snapshot.entity_id,
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" Risk Score:   ", Style::default().fg(Color::Cyan)),
-                    Span::styled(format!("{:.1}", snapshot.risk), Style::default().fg(if snapshot.risk > 70.0 { Color::Red } else { Color::Yellow })),
+                    Span::styled(
+                        format!("{:.1}", snapshot.risk),
+                        Style::default().fg(if snapshot.risk > 70.0 {
+                            Color::Red
+                        } else {
+                            Color::Yellow
+                        }),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" Total Reqs:   ", Style::default().fg(Color::Cyan)),
@@ -1027,7 +1213,14 @@ impl TuiApp {
                 ]),
                 Line::from(vec![
                     Span::styled(" Status:       ", Style::default().fg(Color::Cyan)),
-                    Span::styled(if snapshot.blocked { "BLOCKED" } else { "OK" }, Style::default().fg(if snapshot.blocked { Color::Red } else { Color::Green })),
+                    Span::styled(
+                        if snapshot.blocked { "BLOCKED" } else { "OK" },
+                        Style::default().fg(if snapshot.blocked {
+                            Color::Red
+                        } else {
+                            Color::Green
+                        }),
+                    ),
                 ]),
             ];
 
@@ -1042,7 +1235,11 @@ impl TuiApp {
             details.push(Line::from(" [ Press Enter or Esc to return ] "));
 
             let paragraph = Paragraph::new(details)
-                .block(Block::default().title(" Entity Analysis ").borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title(" Entity Analysis ")
+                        .borders(Borders::ALL),
+                )
                 .style(Style::default().fg(Color::White));
             f.render_widget(paragraph, area);
         }
@@ -1054,42 +1251,83 @@ impl TuiApp {
 
         let actors = &self.snapshot.top_risky_actors;
         let selected_idx = self.actor_table_state.selected().unwrap_or(0);
-        
+
         if let Some(actor) = actors.get(selected_idx) {
             let mut details = vec![
                 Line::from(vec![
                     Span::styled(" Actor ID:     ", Style::default().fg(Color::Cyan)),
-                    Span::styled(&actor.actor_id, Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        &actor.actor_id,
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" Risk Score:   ", Style::default().fg(Color::Cyan)),
-                    Span::styled(format!("{:.1}", actor.risk_score), Style::default().fg(if actor.risk_score > 70.0 { Color::Red } else { Color::Yellow })),
+                    Span::styled(
+                        format!("{:.1}", actor.risk_score),
+                        Style::default().fg(if actor.risk_score > 70.0 {
+                            Color::Red
+                        } else {
+                            Color::Yellow
+                        }),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" IPs:          ", Style::default().fg(Color::Cyan)),
-                    Span::raw(actor.ips.iter().map(|ip: &std::net::IpAddr| ip.to_string()).collect::<Vec<_>>().join(", ")),
+                    Span::raw(
+                        actor
+                            .ips
+                            .iter()
+                            .map(|ip: &std::net::IpAddr| ip.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" Fingerprints: ", Style::default().fg(Color::Cyan)),
-                    Span::raw(actor.fingerprints.iter().cloned().collect::<Vec<_>>().join(", ")),
+                    Span::raw(
+                        actor
+                            .fingerprints
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled(" Status:       ", Style::default().fg(Color::Cyan)),
-                    Span::styled(if actor.is_blocked { "BLOCKED" } else { "OK" }, Style::default().fg(if actor.is_blocked { Color::Red } else { Color::Green })),
+                    Span::styled(
+                        if actor.is_blocked { "BLOCKED" } else { "OK" },
+                        Style::default().fg(if actor.is_blocked {
+                            Color::Red
+                        } else {
+                            Color::Green
+                        }),
+                    ),
                 ]),
                 Line::from(""),
-                Line::from(Span::styled(" Recent Rule Matches:", Style::default().add_modifier(Modifier::UNDERLINED))),
+                Line::from(Span::styled(
+                    " Recent Rule Matches:",
+                    Style::default().add_modifier(Modifier::UNDERLINED),
+                )),
             ];
 
             for m in actor.rule_matches.iter().rev().take(5) {
-                details.push(Line::from(format!("  - {} ({}) : +{:.1} risk", m.rule_id, m.category, m.risk_contribution)));
+                details.push(Line::from(format!(
+                    "  - {} ({}) : +{:.1} risk",
+                    m.rule_id, m.category, m.risk_contribution
+                )));
             }
 
             details.push(Line::from(""));
             details.push(Line::from(" [ Press Enter or Esc to return ] "));
 
             let paragraph = Paragraph::new(details)
-                .block(Block::default().title(" Actor Behavior Analysis ").borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title(" Actor Behavior Analysis ")
+                        .borders(Borders::ALL),
+                )
                 .style(Style::default().fg(Color::White));
             f.render_widget(paragraph, area);
         }

@@ -336,7 +336,9 @@ impl HubMessage {
 /// Connection state for the Horizon client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ConnectionState {
+    #[default]
     Disconnected,
     Connecting,
     Authenticating,
@@ -361,11 +363,6 @@ impl ConnectionState {
     }
 }
 
-impl Default for ConnectionState {
-    fn default() -> Self {
-        ConnectionState::Disconnected
-    }
-}
 
 #[cfg(test)]
 mod tests {

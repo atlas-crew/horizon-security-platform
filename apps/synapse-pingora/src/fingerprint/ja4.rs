@@ -240,7 +240,7 @@ pub fn parse_ja4_from_header(header: Option<&str>) -> Option<Ja4Fingerprint> {
     let ext_count = u8::from_str_radix(ext_count_str, 16).ok()?;
 
     // Validate TLS version range
-    if tls_version < 10 || tls_version > 13 {
+    if !(10..=13).contains(&tls_version) {
         return None;
     }
 

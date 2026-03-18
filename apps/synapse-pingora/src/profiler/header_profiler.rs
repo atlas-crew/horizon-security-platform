@@ -123,7 +123,8 @@ impl HeaderProfiler {
             .or_insert_with(|| HeaderBaseline::new(endpoint.to_string()));
 
         // Track which headers are present in this request (normalized to lowercase)
-        let present_headers: HashSet<String> = headers.iter().map(|(k, _)| k.to_lowercase()).collect();
+        let present_headers: HashSet<String> =
+            headers.iter().map(|(k, _)| k.to_lowercase()).collect();
 
         // Update header value statistics
         for (header_name, header_value) in headers {
@@ -185,7 +186,8 @@ impl HeaderProfiler {
         let mut result = HeaderAnomalyResult::new();
 
         // Create set of headers present in this request (normalized to lowercase)
-        let present_headers: HashSet<String> = headers.iter().map(|(k, _)| k.to_lowercase()).collect();
+        let present_headers: HashSet<String> =
+            headers.iter().map(|(k, _)| k.to_lowercase()).collect();
 
         // 1. Check for missing required headers
         for required_header in &baseline.required_headers {
@@ -781,15 +783,17 @@ mod tests {
 
         // Train with one order
         for _ in 0..20 {
-            profiler.learn("/api/order", &make_headers(&[
-                ("A", "1"), ("B", "2"), ("C", "3")
-            ]));
+            profiler.learn(
+                "/api/order",
+                &make_headers(&[("A", "1"), ("B", "2"), ("C", "3")]),
+            );
         }
 
         // Analyze with different order
-        let result = profiler.analyze("/api/order", &make_headers(&[
-            ("C", "3"), ("A", "1"), ("B", "2")
-        ]));
+        let result = profiler.analyze(
+            "/api/order",
+            &make_headers(&[("C", "3"), ("A", "1"), ("B", "2")]),
+        );
 
         assert!(!result.has_anomalies());
     }
@@ -800,17 +804,16 @@ mod tests {
 
         // Train with Title-Case
         for _ in 0..20 {
-            profiler.learn("/api/case", &make_headers(&[
-                ("X-Custom", "value")
-            ]));
+            profiler.learn("/api/case", &make_headers(&[("X-Custom", "value")]));
         }
 
         // Analyze with lower-case
-        let result = profiler.analyze("/api/case", &make_headers(&[
-            ("x-custom", "value")
-        ]));
+        let result = profiler.analyze("/api/case", &make_headers(&[("x-custom", "value")]));
 
         // If this fails, it means we're sensitive to case (which is bad for HTTP headers)
-        assert!(!result.has_anomalies(), "Header analysis should be case-insensitive");
+        assert!(
+            !result.has_anomalies(),
+            "Header analysis should be case-insensitive"
+        );
     }
 }

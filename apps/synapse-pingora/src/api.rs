@@ -796,7 +796,7 @@ impl ApiHandler {
                 let mut entries: Vec<BlocklistEntryResponse> = blocklist
                     .all_ips()
                     .into_iter()
-                    .chain(blocklist.all_fingerprints().into_iter())
+                    .chain(blocklist.all_fingerprints())
                     .take(limit)
                     .map(|e| BlocklistEntryResponse {
                         entry_type: format!("{:?}", e.block_type),

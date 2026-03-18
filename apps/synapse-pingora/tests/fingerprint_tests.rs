@@ -11,8 +11,7 @@ use http::header::{HeaderName, HeaderValue};
 use synapse_pingora::fingerprint::{
     analyze_ja4, analyze_ja4_spoofing, extract_client_fingerprint, fingerprints_match,
     generate_ja4h, is_valid_ja4, is_valid_ja4h, matches_pattern, parse_ja4_from_header,
-    sha256_first12, HttpHeaders, Ja4Fingerprint, Ja4Protocol,
-    Ja4SniType,
+    sha256_first12, HttpHeaders, Ja4Fingerprint, Ja4Protocol, Ja4SniType,
 };
 
 // ============================================================================
@@ -49,7 +48,9 @@ fn make_test_ja4(
 
     let raw = format!(
         "{}{}{}{}{}{}_{}_{}",
-        protocol_char, tls_version, sni_char,
+        protocol_char,
+        tls_version,
+        sni_char,
         format!("{:02x}", cipher_count),
         format!("{:02x}", ext_count),
         alpn,
@@ -86,11 +87,23 @@ fn test_ja4_parsing_format_extraction_basic() {
     assert_eq!(fp.protocol, Ja4Protocol::TCP, "Protocol should be TCP");
     assert_eq!(fp.tls_version, 13, "TLS version should be 13");
     assert_eq!(fp.sni_type, Ja4SniType::Domain, "SNI type should be Domain");
-    assert_eq!(fp.cipher_count, 0x15, "Cipher count should be 0x15 (21 decimal)");
-    assert_eq!(fp.ext_count, 0x16, "Extension count should be 0x16 (22 decimal)");
+    assert_eq!(
+        fp.cipher_count, 0x15,
+        "Cipher count should be 0x15 (21 decimal)"
+    );
+    assert_eq!(
+        fp.ext_count, 0x16,
+        "Extension count should be 0x16 (22 decimal)"
+    );
     assert_eq!(fp.alpn, "h2", "ALPN should be h2");
-    assert_eq!(fp.cipher_hash, "8daaf6152771", "Cipher hash should be extracted");
-    assert_eq!(fp.ext_hash, "e5627efa2ab1", "Extension hash should be extracted");
+    assert_eq!(
+        fp.cipher_hash, "8daaf6152771",
+        "Cipher hash should be extracted"
+    );
+    assert_eq!(
+        fp.ext_hash, "e5627efa2ab1",
+        "Extension hash should be extracted"
+    );
 }
 
 #[test]
@@ -141,11 +154,20 @@ fn test_ja4_parsing_case_insensitivity() {
 #[test]
 fn test_ja4_parsing_invalid_format() {
     // Test that invalid formats return None
-    assert!(parse_ja4_from_header(Some("invalid")).is_none(), "Invalid format");
+    assert!(
+        parse_ja4_from_header(Some("invalid")).is_none(),
+        "Invalid format"
+    );
     assert!(parse_ja4_from_header(Some("")).is_none(), "Empty string");
     assert!(parse_ja4_from_header(None).is_none(), "None input");
-    assert!(parse_ja4_from_header(Some("t13d1516h2_short_hash")).is_none(), "Short hash");
-    assert!(parse_ja4_from_header(Some("t13d1516h2_aabbccddeeff_")).is_none(), "Missing ext_hash");
+    assert!(
+        parse_ja4_from_header(Some("t13d1516h2_short_hash")).is_none(),
+        "Short hash"
+    );
+    assert!(
+        parse_ja4_from_header(Some("t13d1516h2_aabbccddeeff_")).is_none(),
+        "Missing ext_hash"
+    );
 }
 
 #[test]
@@ -215,8 +237,14 @@ fn test_ja4h_generation_basic_get_request() {
     assert_eq!(result.http_version, 11, "HTTP/1.1 should be 11");
     assert!(!result.has_cookie, "Should not have cookie");
     assert!(!result.has_referer, "Should not have referer");
-    assert_eq!(result.accept_lang, "00", "No Accept-Language should be '00'");
-    assert_eq!(result.cookie_hash, "000000000000", "No cookie should hash to zeros");
+    assert_eq!(
+        result.accept_lang, "00",
+        "No Accept-Language should be '00'"
+    );
+    assert_eq!(
+        result.cookie_hash, "000000000000",
+        "No cookie should hash to zeros"
+    );
 }
 
 #[test]
@@ -240,8 +268,14 @@ fn test_ja4h_generation_with_known_headers_post() {
     assert_eq!(result.http_version, 11);
     assert!(result.has_cookie, "Should detect cookie");
     assert!(result.has_referer, "Should detect referer");
-    assert_eq!(result.accept_lang, "en", "Should extract 'en' from Accept-Language");
-    assert_ne!(result.cookie_hash, "000000000000", "Cookie hash should be computed");
+    assert_eq!(
+        result.accept_lang, "en",
+        "Should extract 'en' from Accept-Language"
+    );
+    assert_ne!(
+        result.cookie_hash, "000000000000",
+        "Cookie hash should be computed"
+    );
 }
 
 #[test]
@@ -366,7 +400,11 @@ fn test_ja4h_generation_format_string() {
 
     // Should have underscores at correct positions
     let parts: Vec<&str> = raw.split('_').collect();
-    assert_eq!(parts.len(), 3, "Should have 3 parts separated by underscores");
+    assert_eq!(
+        parts.len(),
+        3,
+        "Should have 3 parts separated by underscores"
+    );
     assert_eq!(parts[1].len(), 12, "Header hash should be 12 chars");
     assert_eq!(parts[2].len(), 12, "Cookie hash should be 12 chars");
 }
@@ -374,7 +412,10 @@ fn test_ja4h_generation_format_string() {
 #[test]
 fn test_ja4h_generation_cookie_header_hash_computation() {
     // Test that cookie names are properly hashed
-    let headers = vec![header("Cookie", "session=abc123; user=john; preferences=dark")];
+    let headers = vec![header(
+        "Cookie",
+        "session=abc123; user=john; preferences=dark",
+    )];
     let request = HttpHeaders {
         headers: &headers,
         method: "GET",
@@ -388,7 +429,11 @@ fn test_ja4h_generation_cookie_header_hash_computation() {
         result.cookie_hash != "000000000000",
         "Should have non-zero cookie hash"
     );
-    assert_eq!(result.cookie_hash.len(), 12, "Cookie hash should be 12 hex chars");
+    assert_eq!(
+        result.cookie_hash.len(),
+        12,
+        "Cookie hash should be 12 hex chars"
+    );
 }
 
 #[test]
@@ -465,7 +510,12 @@ fn test_sha256_first12_consistent_length() {
 
     for input in inputs {
         let result = sha256_first12(input);
-        assert_eq!(result.len(), 12, "Hash should always be 12 chars for '{}'", input);
+        assert_eq!(
+            result.len(),
+            12,
+            "Hash should always be 12 chars for '{}'",
+            input
+        );
 
         // Verify all characters are valid hex
         for ch in result.chars() {
@@ -483,7 +533,9 @@ fn test_sha256_first12_lowercase_output() {
     // Test that output is lowercase hex
     let result = sha256_first12("TEST");
     assert!(
-        result.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+        result
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
         "Should be lowercase hex"
     );
 }
@@ -519,10 +571,7 @@ fn test_sha256_first12_avalanche_effect() {
         }
     }
 
-    assert!(
-        diff_count > 0,
-        "Hashes should differ in multiple positions"
-    );
+    assert!(diff_count > 0, "Hashes should differ in multiple positions");
 }
 
 // ============================================================================
@@ -561,8 +610,14 @@ fn test_fingerprints_match_no_match() {
 #[test]
 fn test_fingerprints_match_none_handling() {
     // Test handling of None values
-    assert!(!fingerprints_match(None, Some("t13d1516h2_8daaf6152771_e5627efa2ab1")));
-    assert!(!fingerprints_match(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), None));
+    assert!(!fingerprints_match(
+        None,
+        Some("t13d1516h2_8daaf6152771_e5627efa2ab1")
+    ));
+    assert!(!fingerprints_match(
+        Some("t13d1516h2_8daaf6152771_e5627efa2ab1"),
+        None
+    ));
     assert!(!fingerprints_match(None, None));
 }
 
@@ -648,16 +703,17 @@ fn test_matches_pattern_case_insensitive() {
 #[test]
 fn test_ja4_spoofing_microsoft_edge_tls_with_firefox_ua() {
     // SECURITY: Test that Microsoft Edge TLS with Firefox UA is flagged as spoofing
-    let edge_ja4 = make_test_ja4(
-        't', 13, 'd', 20, 22, "h2",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let edge_ja4 = make_test_ja4('t', 13, 'd', 20, 22, "h2", "8daaf6152771", "e5627efa2ab1");
 
-    let firefox_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
+    let firefox_ua =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
 
     let result = analyze_ja4_spoofing(&edge_ja4, firefox_ua);
 
-    assert_eq!(result.claimed_browser, "firefox", "Should detect Firefox claim");
+    assert_eq!(
+        result.claimed_browser, "firefox",
+        "Should detect Firefox claim"
+    );
     // Note: The analysis validates against Firefox profile, and a 13-cipher H2 browser
     // might not perfectly match Firefox's expected profile, but the key is that
     // the estimated_actual would be "modern-browser" for this JA4
@@ -666,10 +722,7 @@ fn test_ja4_spoofing_microsoft_edge_tls_with_firefox_ua() {
 #[test]
 fn test_ja4_spoofing_old_tls_version_with_modern_browser_claim() {
     // SECURITY: Test that old TLS with modern browser claim is flagged
-    let old_ja4 = make_test_ja4(
-        't', 10, 'd', 10, 10, "h1",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let old_ja4 = make_test_ja4('t', 10, 'd', 10, 10, "h1", "8daaf6152771", "e5627efa2ab1");
 
     let chrome_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -689,10 +742,7 @@ fn test_ja4_spoofing_old_tls_version_with_modern_browser_claim() {
 #[test]
 fn test_ja4_spoofing_minimal_ciphers_with_chrome_claim() {
     // SECURITY: Test that minimal ciphers with Chrome claim is flagged
-    let minimal_ja4 = make_test_ja4(
-        't', 12, 'd', 3, 3, "h1",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let minimal_ja4 = make_test_ja4('t', 12, 'd', 3, 3, "h1", "8daaf6152771", "e5627efa2ab1");
 
     let chrome_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -711,10 +761,7 @@ fn test_ja4_spoofing_minimal_ciphers_with_chrome_claim() {
 #[test]
 fn test_ja4_spoofing_legitimate_chrome() {
     // Test that legitimate Chrome fingerprint is NOT flagged as spoofed
-    let legitimate_ja4 = make_test_ja4(
-        't', 13, 'd', 16, 18, "h2",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let legitimate_ja4 = make_test_ja4('t', 13, 'd', 16, 18, "h2", "8daaf6152771", "e5627efa2ab1");
 
     let chrome_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -735,10 +782,7 @@ fn test_ja4_spoofing_legitimate_chrome() {
 #[test]
 fn test_ja4_spoofing_curl_with_browser_fingerprint() {
     // Test CLI tool with browser fingerprint
-    let browser_ja4 = make_test_ja4(
-        't', 13, 'd', 16, 18, "h2",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let browser_ja4 = make_test_ja4('t', 13, 'd', 16, 18, "h2", "8daaf6152771", "e5627efa2ab1");
 
     let curl_ua = "curl/8.4.0";
 
@@ -752,10 +796,7 @@ fn test_ja4_spoofing_curl_with_browser_fingerprint() {
 #[test]
 fn test_ja4_spoofing_python_requests_with_minimal_tls() {
     // Test Python library with minimal TLS
-    let minimal_ja4 = make_test_ja4(
-        't', 12, 'd', 2, 2, "h1",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let minimal_ja4 = make_test_ja4('t', 12, 'd', 2, 2, "h1", "8daaf6152771", "e5627efa2ab1");
 
     let python_ua = "python-requests/2.31.0";
 
@@ -786,7 +827,11 @@ fn test_extract_client_fingerprint_with_ja4_and_ja4h() {
     let result = extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
 
     assert!(result.ja4.is_some(), "Should extract JA4");
-    assert_eq!(result.combined_hash.len(), 16, "Combined hash should be 16 hex chars");
+    assert_eq!(
+        result.combined_hash.len(),
+        16,
+        "Combined hash should be 16 hex chars"
+    );
 
     let ja4 = result.ja4.unwrap();
     assert_eq!(ja4.raw, "t13d1516h2_8daaf6152771_e5627efa2ab1");
@@ -805,7 +850,11 @@ fn test_extract_client_fingerprint_without_ja4() {
     let result = extract_client_fingerprint(None, &request);
 
     assert!(result.ja4.is_none(), "Should not have JA4");
-    assert_eq!(result.combined_hash.len(), 16, "Combined hash should still be computed");
+    assert_eq!(
+        result.combined_hash.len(),
+        16,
+        "Combined hash should still be computed"
+    );
 }
 
 #[test]
@@ -818,10 +867,15 @@ fn test_extract_client_fingerprint_combined_hash_deterministic() {
         http_version: "1.1",
     };
 
-    let result1 = extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
-    let result2 = extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
+    let result1 =
+        extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
+    let result2 =
+        extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
 
-    assert_eq!(result1.combined_hash, result2.combined_hash, "Combined hash should be deterministic");
+    assert_eq!(
+        result1.combined_hash, result2.combined_hash,
+        "Combined hash should be deterministic"
+    );
 }
 
 #[test]
@@ -841,10 +895,15 @@ fn test_extract_client_fingerprint_different_inputs_different_hashes() {
         http_version: "2.0",
     };
 
-    let result1 = extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request1);
-    let result2 = extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request2);
+    let result1 =
+        extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request1);
+    let result2 =
+        extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request2);
 
-    assert_ne!(result1.combined_hash, result2.combined_hash, "Different requests should produce different hashes");
+    assert_ne!(
+        result1.combined_hash, result2.combined_hash,
+        "Different requests should produce different hashes"
+    );
 }
 
 // ============================================================================
@@ -886,14 +945,14 @@ fn test_ja4h_fingerprint_structure() {
 #[test]
 fn test_analyze_ja4_modern_browser() {
     // Test JA4 analysis for modern browser
-    let fp = make_test_ja4(
-        't', 13, 'd', 15, 16, "h2",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let fp = make_test_ja4('t', 13, 'd', 15, 16, "h2", "8daaf6152771", "e5627efa2ab1");
 
     let analysis = analyze_ja4(&fp);
 
-    assert!(!analysis.suspicious, "Modern browser should not be suspicious");
+    assert!(
+        !analysis.suspicious,
+        "Modern browser should not be suspicious"
+    );
     assert!(analysis.issues.is_empty(), "Should have no issues");
     assert_eq!(analysis.estimated_client, "modern-browser");
 }
@@ -901,10 +960,7 @@ fn test_analyze_ja4_modern_browser() {
 #[test]
 fn test_analyze_ja4_bot() {
     // Test JA4 analysis for bot/script
-    let fp = make_test_ja4(
-        't', 10, 'n', 2, 2, "h1",
-        "8daaf6152771", "e5627efa2ab1"
-    );
+    let fp = make_test_ja4('t', 10, 'n', 2, 2, "h1", "8daaf6152771", "e5627efa2ab1");
 
     let analysis = analyze_ja4(&fp);
 

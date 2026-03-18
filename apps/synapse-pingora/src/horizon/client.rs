@@ -16,6 +16,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
+use arc_swap::ArcSwap;
 
 use super::blocklist::BlocklistCache;
 use super::config::HorizonConfig;
@@ -135,12 +136,13 @@ pub struct HorizonClient {
     blocklist: Arc<BlocklistCache>,
     stats: Arc<InternalStats>,
     metrics_provider: Arc<dyn MetricsProvider>,
-    signal_tx: Option<mpsc::Sender<ThreatSignal>>,
+    signal_tx: ArcSwap<Option<mpsc::Sender<ThreatSignal>>>,
     signal_retry: Arc<Mutex<VecDeque<ThreatSignal>>>,
-    shutdown_tx: Option<broadcast::Sender<()>>,
+    shutdown_tx: ArcSwap<Option<broadcast::Sender<()>>>,
     tenant_id: Arc<RwLock<Option<String>>>,
     capabilities: Arc<RwLock<Vec<String>>>,
-    config_manager: Option<Arc<ConfigManager>>,
+    // P1-012: config_manager wrapped in Arc so it can be shared with connection_loop (live updates)
+    config_manager: Arc<ArcSwap<Option<Arc<ConfigManager>>>>,
     circuit_breaker: Arc<CircuitBreaker>,
 }
 
@@ -163,42 +165,67 @@ impl HorizonClient {
                 reconnect_attempts: AtomicU32::new(0),
             }),
             metrics_provider: Arc::new(NoopMetricsProvider),
-            signal_tx: None,
+            signal_tx: ArcSwap::from_pointee(None),
             signal_retry: Arc::new(Mutex::new(VecDeque::new())),
-            shutdown_tx: None,
+            shutdown_tx: ArcSwap::from_pointee(None),
             tenant_id: Arc::new(RwLock::new(None)),
             capabilities: Arc::new(RwLock::new(Vec::new())),
-            config_manager: None,
+            config_manager: Arc::new(ArcSwap::from_pointee(None)),
             circuit_breaker,
         }
     }
 
-    /// Set the configuration manager.
-    pub fn with_config_manager(mut self, config_manager: Arc<ConfigManager>) -> Self {
-        self.config_manager = Some(config_manager);
+    /// Set a custom metrics provider.
+    pub fn with_metrics_provider(mut self, provider: Arc<dyn MetricsProvider>) -> Self {
+        self.metrics_provider = provider;
         self
     }
 
-    /// Create with a custom metrics provider.
-    pub fn with_metrics_provider(
-        config: HorizonConfig,
-        metrics_provider: Arc<dyn MetricsProvider>,
-    ) -> Self {
-        let mut client = Self::new(config);
-        client.metrics_provider = metrics_provider;
-        client
+    /// Set the configuration manager (builder pattern).
+    pub fn with_config_manager(mut self, manager: Arc<ConfigManager>) -> Self {
+        // P2-001: Direct field assignment since self is owned (not concurrent).
+        self.config_manager = Arc::new(ArcSwap::from_pointee(Some(manager)));
+        self
+    }
+
+    /// Update the configuration manager in place (runtime).
+    pub fn set_config_manager(&self, manager: Arc<ConfigManager>) {
+        self.config_manager.store(Arc::new(Some(manager)));
     }
 
     /// Start the client.
-    pub async fn start(&mut self) -> Result<(), HorizonError> {
+    pub async fn start(&self) -> Result<(), HorizonError> {
         if !self.config.enabled {
             debug!("Horizon client disabled, skipping start");
             return Ok(());
         }
 
+        // P1-001 Fix: Split lock scope. Acquire only to check/set Connecting.
+        // Release before async perform_start() to avoid blocking request threads.
+        {
+            let mut state = self.state.write();
+            if *state != ConnectionState::Disconnected {
+                debug!("Horizon client already started (state: {:?})", *state);
+                return Ok(());
+            }
+            *state = ConnectionState::Connecting;
+        }
+
+        if let Err(e) = self.perform_start().await {
+            // Re-acquire briefly to reset state on error
+            *self.state.write() = ConnectionState::Disconnected;
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Internal start logic after state transition.
+    async fn perform_start(&self) -> Result<(), HorizonError> {
         self.config.validate()?;
 
         // SP-07: SSRF protection for hub URL (fail-closed in production/release builds).
+        // Enforce in release builds (production default); keep dev/test ergonomics in debug builds.
         if should_enforce_hub_url_ssrf() {
             validate_hub_url_ssrf(&self.config.hub_url).await?;
         }
@@ -207,19 +234,22 @@ impl HorizonClient {
         let (signal_tx, signal_rx) = mpsc::channel::<ThreatSignal>(self.config.max_queued_signals);
         let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
 
-        self.signal_tx = Some(signal_tx.clone());
-        self.shutdown_tx = Some(shutdown_tx.clone());
+        self.signal_tx.store(Arc::new(Some(signal_tx.clone())));
+        self.shutdown_tx.store(Arc::new(Some(shutdown_tx.clone())));
 
         // Spawn connection task
-        let config = self.config.clone();
-        let state = Arc::clone(&self.state);
-        let blocklist = Arc::clone(&self.blocklist);
-        let stats = Arc::clone(&self.stats);
-        let metrics_provider = Arc::clone(&self.metrics_provider);
-        let tenant_id = Arc::clone(&self.tenant_id);
-        let capabilities = Arc::clone(&self.capabilities);
-        let config_manager = self.config_manager.clone();
-        let circuit_breaker = Arc::clone(&self.circuit_breaker);
+        let params = ConnectionParams {
+            config: self.config.clone(),
+            state: Arc::clone(&self.state),
+            blocklist: Arc::clone(&self.blocklist),
+            stats: Arc::clone(&self.stats),
+            metrics_provider: Arc::clone(&self.metrics_provider),
+            tenant_id: Arc::clone(&self.tenant_id),
+            capabilities: Arc::clone(&self.capabilities),
+            config_manager: Arc::clone(&self.config_manager),
+            circuit_breaker: Arc::clone(&self.circuit_breaker),
+        };
+        
         let retry_queue = Arc::clone(&self.signal_retry);
         let retry_stats = Arc::clone(&self.stats);
         let retry_tx = signal_tx.clone();
@@ -228,17 +258,9 @@ impl HorizonClient {
 
         tokio::spawn(async move {
             connection_loop(
-                config,
-                state,
-                blocklist,
-                stats,
-                metrics_provider,
+                params,
                 signal_rx,
                 shutdown_rx_conn,
-                tenant_id,
-                capabilities,
-                config_manager,
-                circuit_breaker,
             )
             .await;
         });
@@ -263,6 +285,7 @@ impl HorizonClient {
                                     break;
                                 }
                                 Err(TrySendError::Closed(_)) => {
+                                    // P2-003: Metric boundary — this covers async retry queue eviction.
                                     retry_stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
                                     queue.clear();
                                     break;
@@ -274,6 +297,7 @@ impl HorizonClient {
                             for _ in 0..overflow {
                                 queue.pop_front();
                             }
+                            // P2-003: Metric boundary — this covers async retry queue overflow.
                             retry_stats
                                 .signals_dropped
                                 .fetch_add(overflow as u64, Ordering::Relaxed);
@@ -288,8 +312,8 @@ impl HorizonClient {
     }
 
     /// Stop the client.
-    pub async fn stop(&mut self) {
-        if let Some(tx) = self.shutdown_tx.take() {
+    pub async fn stop(&self) {
+        if let Some(tx) = self.shutdown_tx.swap(Arc::new(None)).as_ref() {
             let _ = tx.send(());
         }
         *self.state.write() = ConnectionState::Disconnected;
@@ -297,7 +321,7 @@ impl HorizonClient {
 
     /// Report a threat signal.
     pub fn report_signal(&self, signal: ThreatSignal) {
-        if let Some(ref tx) = self.signal_tx {
+        if let Some(ref tx) = **self.signal_tx.load() {
             match tx.try_send(signal) {
                 Ok(()) => {
                     self.stats.signals_sent.fetch_add(1, Ordering::Relaxed);
@@ -305,6 +329,7 @@ impl HorizonClient {
                 Err(TrySendError::Full(signal)) => {
                     let mut queue = self.signal_retry.lock();
                     if queue.len() >= self.config.max_queued_signals {
+                        // P2-003: Metric boundary — this covers synchronous report rejection.
                         self.stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
                         warn!("Signal queue full; dropping signal");
                     } else {
@@ -314,6 +339,7 @@ impl HorizonClient {
                     }
                 }
                 Err(TrySendError::Closed(_)) => {
+                    // P2-003: Metric boundary — this covers synchronous report on closed channel.
                     self.stats.signals_dropped.fetch_add(1, Ordering::Relaxed);
                     warn!("Signal channel closed; dropping signal");
                 }
@@ -394,21 +420,26 @@ impl HorizonClient {
     }
 }
 
-/// Connection loop with auto-reconnect.
-async fn connection_loop(
+/// Parameters for the Horizon connection and event loop.
+struct ConnectionParams {
     config: HorizonConfig,
     state: Arc<RwLock<ConnectionState>>,
     blocklist: Arc<BlocklistCache>,
     stats: Arc<InternalStats>,
     metrics_provider: Arc<dyn MetricsProvider>,
-    mut signal_rx: mpsc::Receiver<ThreatSignal>,
-    mut shutdown_rx: broadcast::Receiver<()>,
     tenant_id: Arc<RwLock<Option<String>>>,
     capabilities: Arc<RwLock<Vec<String>>>,
-    config_manager: Option<Arc<ConfigManager>>,
+    config_manager: Arc<ArcSwap<Option<Arc<ConfigManager>>>>,
     circuit_breaker: Arc<CircuitBreaker>,
+}
+
+/// Connection loop with auto-reconnect.
+async fn connection_loop(
+    params: ConnectionParams,
+    mut signal_rx: mpsc::Receiver<ThreatSignal>,
+    mut shutdown_rx: broadcast::Receiver<()>,
 ) {
-    let mut reconnect_delay = config.reconnect_delay_ms;
+    let mut reconnect_delay = params.config.reconnect_delay_ms;
     let mut attempt = 0u32;
     let mut consecutive_failures = 0u32;
     let mut circuit_open_until: Option<Instant> = None;
@@ -416,22 +447,23 @@ async fn connection_loop(
     let mut inflight_signals: VecDeque<ThreatSignal> = VecDeque::new();
 
     loop {
-        // Check for shutdown
+        // --- Shutdown Check ---
         if let Ok(()) | Err(broadcast::error::TryRecvError::Closed) = shutdown_rx.try_recv() {
             info!("Horizon client shutdown requested");
-            *state.write() = ConnectionState::Disconnected;
+            *params.state.write() = ConnectionState::Disconnected;
             return;
         }
 
+        // --- Circuit Breaker Check ---
         if let Some(until) = circuit_open_until {
             let now = Instant::now();
             if now < until {
-                *state.write() = ConnectionState::Degraded;
+                *params.state.write() = ConnectionState::Degraded;
                 let remaining = until.saturating_duration_since(now);
                 tokio::select! {
                     _ = shutdown_rx.recv() => {
                         info!("Horizon client shutdown requested");
-                        *state.write() = ConnectionState::Disconnected;
+                        *params.state.write() = ConnectionState::Disconnected;
                         return;
                     }
                     _ = tokio::time::sleep(remaining) => {}
@@ -444,73 +476,68 @@ async fn connection_loop(
         }
 
         // Check max reconnect attempts
-        if config.max_reconnect_attempts > 0 && attempt >= config.max_reconnect_attempts {
+        if params.config.max_reconnect_attempts > 0 && attempt >= params.config.max_reconnect_attempts {
             error!("Max reconnect attempts reached");
-            *state.write() = ConnectionState::Error;
+            *params.state.write() = ConnectionState::Error;
             return;
         }
 
-        // Connect
-        *state.write() = ConnectionState::Connecting;
-        info!("Connecting to Hub: {}", config.hub_url);
+        // --- Connection Attempt ---
+        *params.state.write() = ConnectionState::Connecting;
+        info!("Connecting to Hub: {}", params.config.hub_url);
 
         match connect_and_run(
-            &config,
-            &state,
-            &blocklist,
-            &stats,
-            &metrics_provider,
+            &params,
             &mut signal_rx,
             &mut shutdown_rx,
-            &tenant_id,
-            &capabilities,
-            &config_manager,
             &mut pending_signals,
             &mut inflight_signals,
-            &circuit_breaker,
         )
         .await
         {
             ConnectionResult::Shutdown => {
                 info!("Horizon client shutdown");
-                *state.write() = ConnectionState::Disconnected;
+                *params.state.write() = ConnectionState::Disconnected;
                 return;
             }
             ConnectionResult::AuthFailed => {
                 error!("Authentication failed, not retrying");
-                *state.write() = ConnectionState::Error;
+                *params.state.write() = ConnectionState::Error;
                 return;
             }
             ConnectionResult::Disconnected { had_connection } => {
-                requeue_inflight(&mut pending_signals, &mut inflight_signals);
+                requeue_inflight(&mut pending_signals, &mut inflight_signals, params.config.max_queued_signals, &params.stats);
                 if had_connection {
                     attempt = 0;
-                    reconnect_delay = config.reconnect_delay_ms;
+                    reconnect_delay = params.config.reconnect_delay_ms;
                     consecutive_failures = 0;
                 }
 
                 attempt = attempt.saturating_add(1);
-                stats.reconnect_attempts.store(attempt, Ordering::Relaxed);
+                params.stats.reconnect_attempts.store(attempt, Ordering::Relaxed);
                 consecutive_failures = consecutive_failures.saturating_add(1);
 
-                if config.circuit_breaker_threshold > 0
-                    && consecutive_failures >= config.circuit_breaker_threshold
+                if params.config.circuit_breaker_threshold > 0
+                    && consecutive_failures >= params.config.circuit_breaker_threshold
                 {
-                    let cooldown = Duration::from_millis(config.circuit_breaker_cooldown_ms.max(1));
+                    let cooldown = Duration::from_millis(params.config.circuit_breaker_cooldown_ms.max(1));
                     circuit_open_until = Some(Instant::now() + cooldown);
-                    *state.write() = ConnectionState::Degraded;
+                    *params.state.write() = ConnectionState::Degraded;
                     warn!(
                         "Horizon circuit breaker opened after {} consecutive failures; cooling down for {}ms",
                         consecutive_failures, cooldown.as_millis()
                     );
                     consecutive_failures = 0;
-                    reconnect_delay = config.reconnect_delay_ms;
+                    reconnect_delay = params.config.reconnect_delay_ms;
                     continue;
                 }
 
-                // Add random jitter (±25%) to prevent thundering herd on reconnect
-                // This spreads out reconnection attempts when many clients disconnect simultaneously
-                // Using fastrand for efficient non-cryptographic randomness
+                // Exponential backoff (max 60s)
+                if attempt > 1 {
+                    reconnect_delay = (reconnect_delay * 2).min(60_000);
+                }
+
+                // Add random jitter (±25%)
                 let jitter_percent = fastrand::u32(0..50); // 0-50 maps to 0.75-1.25
                 let jitter_factor = 0.75 + (jitter_percent as f64 / 100.0);
                 let delay_with_jitter = (reconnect_delay as f64 * jitter_factor) as u64;
@@ -519,15 +546,12 @@ async fn connection_loop(
                     "Disconnected, reconnecting in {}ms (attempt {}, base {}ms)",
                     delay_with_jitter, attempt, reconnect_delay
                 );
-                *state.write() = ConnectionState::Reconnecting;
+                *params.state.write() = ConnectionState::Reconnecting;
 
                 tokio::time::sleep(Duration::from_millis(delay_with_jitter)).await;
-
-                // Exponential backoff (max 60s)
-                reconnect_delay = (reconnect_delay * 2).min(60_000);
             }
             ConnectionResult::Stopped => {
-                *state.write() = ConnectionState::Disconnected;
+                *params.state.write() = ConnectionState::Disconnected;
                 return;
             }
         }
@@ -610,42 +634,119 @@ async fn validate_hub_url_ssrf(hub_url: &str) -> Result<(), HorizonError> {
     Ok(())
 }
 
-fn stash_pending(pending: &mut VecDeque<ThreatSignal>, batch: &mut Vec<ThreatSignal>) {
-    if !batch.is_empty() {
-        pending.extend(batch.drain(..));
+/// FIFO Eviction: Drops oldest signals from the front of the queue to make room for new ones. (P2-002)
+fn stash_pending(
+    pending: &mut VecDeque<ThreatSignal>,
+    batch: &mut Vec<ThreatSignal>,
+    max_size: usize,
+    stats: &Arc<InternalStats>,
+) {
+    if batch.is_empty() {
+        return;
     }
+
+    let to_add = batch.len();
+    let current_size = pending.len();
+
+    if current_size + to_add > max_size {
+        let overflow = (current_size + to_add).saturating_sub(max_size);
+        // FIFO: Drop from the front of pending (the absolute oldest)
+        let drop_from_pending = overflow.min(current_size);
+        if drop_from_pending > 0 {
+            for _ in 0..drop_from_pending {
+                pending.pop_front();
+            }
+            // P2-003: Metric boundary — this covers connection loss/error eviction.
+            stats
+                .signals_dropped
+                .fetch_add(drop_from_pending as u64, Ordering::Relaxed);
+        }
+
+        // If still overflowing, drop from the front of the incoming batch
+        let drop_from_batch = overflow.saturating_sub(drop_from_pending);
+        if drop_from_batch > 0 {
+            batch.drain(0..drop_from_batch);
+            // P2-003: Metric boundary — this covers batch-delay overflow eviction.
+            stats
+                .signals_dropped
+                .fetch_add(drop_from_batch as u64, Ordering::Relaxed);
+        }
+
+        warn!(
+            "Signal buffer overflow ({} > {}); dropped {} oldest signals (FIFO)",
+            current_size + to_add,
+            max_size,
+            overflow
+        );
+    }
+
+    pending.extend(batch.drain(..));
 }
 
-fn requeue_inflight(pending: &mut VecDeque<ThreatSignal>, inflight: &mut VecDeque<ThreatSignal>) {
+/// FIFO Eviction: Preserves fresher signals by dropping the oldest first. (P2-002)
+fn requeue_inflight(
+    pending: &mut VecDeque<ThreatSignal>,
+    inflight: &mut VecDeque<ThreatSignal>,
+    max_size: usize,
+    stats: &Arc<InternalStats>,
+) {
     if inflight.is_empty() {
         return;
     }
 
-    let mut combined = VecDeque::with_capacity(inflight.len() + pending.len());
+    let to_add = inflight.len();
+    let current_size = pending.len();
+
+    if current_size + to_add > max_size {
+        let overflow = (current_size + to_add).saturating_sub(max_size);
+        // FIFO: Drop from pending first (they were queued before the currently inflight ones)
+        let drop_count = overflow.min(current_size);
+        for _ in 0..drop_count {
+            pending.pop_front();
+        }
+        // P2-003: Metric boundary — this covers requeue overflow from older pending.
+        stats
+            .signals_dropped
+            .fetch_add(drop_count as u64, Ordering::Relaxed);
+
+        // If still overflowing, drop from inflight (they are newer than pending but still too old to keep)
+        let remaining_overflow = overflow.saturating_sub(drop_count);
+        if remaining_overflow > 0 {
+            for _ in 0..remaining_overflow {
+                inflight.pop_front();
+            }
+            // P2-003: Metric boundary — this covers requeue overflow from newer inflight.
+            stats
+                .signals_dropped
+                .fetch_add(remaining_overflow as u64, Ordering::Relaxed);
+        }
+
+        warn!(
+            "Signal buffer overflow during requeue ({} > {}); dropped {} oldest signals (FIFO)",
+            current_size + to_add,
+            max_size,
+            overflow
+        );
+    }
+
+    // Prepend inflight to pending (inflight were sent before any new pending)
+    let mut combined = VecDeque::with_capacity(pending.len() + inflight.len());
     combined.extend(inflight.drain(..));
     combined.extend(pending.drain(..));
     *pending = combined;
 }
 
 async fn connect_and_run(
-    config: &HorizonConfig,
-    state: &Arc<RwLock<ConnectionState>>,
-    blocklist: &Arc<BlocklistCache>,
-    stats: &Arc<InternalStats>,
-    metrics_provider: &Arc<dyn MetricsProvider>,
+    params: &ConnectionParams,
     signal_rx: &mut mpsc::Receiver<ThreatSignal>,
     shutdown_rx: &mut broadcast::Receiver<()>,
-    tenant_id: &Arc<RwLock<Option<String>>>,
-    capabilities: &Arc<RwLock<Vec<String>>>,
-    config_manager: &Option<Arc<ConfigManager>>,
     pending_signals: &mut VecDeque<ThreatSignal>,
     inflight_signals: &mut VecDeque<ThreatSignal>,
-    circuit_breaker: &Arc<CircuitBreaker>,
 ) -> ConnectionResult {
     let mut had_connection = false;
 
-    // Connect WebSocket
-    let mut request = match config.hub_url.clone().into_client_request() {
+    // --- Connect WebSocket ---
+    let mut request = match params.config.hub_url.clone().into_client_request() {
         Ok(req) => req,
         Err(e) => {
             error!("Failed to build WebSocket request: {}", e);
@@ -653,8 +754,7 @@ async fn connect_and_run(
         }
     };
 
-    // Optional header auth (the sensor still sends an explicit Auth message after connect).
-    if let Ok(value) = http::HeaderValue::from_str(&format!("Bearer {}", config.api_key)) {
+    if let Ok(value) = http::HeaderValue::from_str(&format!("Bearer {}", params.config.api_key)) {
         request
             .headers_mut()
             .insert(http::header::AUTHORIZATION, value);
@@ -664,21 +764,21 @@ async fn connect_and_run(
         Ok((stream, _)) => stream,
         Err(e) => {
             error!("WebSocket connection failed: {}", e);
-            circuit_breaker.record_failure().await;
+            params.circuit_breaker.record_failure().await;
             return ConnectionResult::Disconnected { had_connection };
         }
     };
 
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
 
-    // Send auth
-    *state.write() = ConnectionState::Authenticating;
+    // --- Auth Handshake ---
+    *params.state.write() = ConnectionState::Authenticating;
     let auth_msg = SensorMessage::Auth {
         payload: AuthPayload {
-            api_key: config.api_key.clone(),
-            sensor_id: config.sensor_id.clone(),
-            sensor_name: config.sensor_name.clone(),
-            version: config.version.clone(),
+            api_key: params.config.api_key.clone(),
+            sensor_id: params.config.sensor_id.clone(),
+            sensor_name: params.config.sensor_name.clone(),
+            version: params.config.version.clone(),
             protocol_version: Some(PROTOCOL_VERSION.to_string()),
         },
     };
@@ -691,93 +791,87 @@ async fn connect_and_run(
         return ConnectionResult::Disconnected { had_connection };
     }
 
-    // Wait for auth response
     let auth_timeout = tokio::time::timeout(Duration::from_secs(10), ws_rx.next()).await;
 
     match auth_timeout {
-        Ok(Some(Ok(Message::Text(text)))) => {
-            match HubMessage::from_json(&text) {
-                Ok(HubMessage::AuthSuccess {
-                    sensor_id: _,
-                    tenant_id: tid,
-                    capabilities: caps,
-                    protocol_version: negotiated_version,
-                }) => {
-                    if let Some(ref pv) = negotiated_version {
-                        info!("Authenticated with Hub (tenant: {}, protocol: {})", tid, pv);
-                    } else {
-                        info!("Authenticated with Hub (tenant: {})", tid);
-                    }
-                    circuit_breaker.record_success().await;
-                    *tenant_id.write() = Some(tid);
-                    *capabilities.write() = caps;
-                    *state.write() = ConnectionState::Connected;
-                    had_connection = true;
+        Ok(Some(Ok(Message::Text(text)))) => match HubMessage::from_json(&text) {
+            Ok(HubMessage::AuthSuccess {
+                sensor_id: _,
+                tenant_id: tid,
+                capabilities: caps,
+                protocol_version: negotiated_version,
+            }) => {
+                if let Some(ref pv) = negotiated_version {
+                    info!("Authenticated with Hub (tenant: {}, protocol: {})", tid, pv);
+                } else {
+                    info!("Authenticated with Hub (tenant: {})", tid);
+                }
+                params.circuit_breaker.record_success().await;
+                *params.tenant_id.write() = Some(tid);
+                *params.capabilities.write() = caps;
+                *params.state.write() = ConnectionState::Connected;
+                had_connection = true;
 
-                    // Request initial blocklist
-                    let _ = ws_tx
-                        .send(Message::Text(
-                            SensorMessage::BlocklistSync.to_json().unwrap().into(),
-                        ))
-                        .await;
-                }
-                Ok(HubMessage::AuthFailed { error }) => {
-                    error!("Auth failed: {}", error);
-                    return ConnectionResult::AuthFailed;
-                }
-                _ => {
-                    error!("Unexpected auth response");
-                    circuit_breaker.record_failure().await;
-                    return ConnectionResult::Disconnected { had_connection };
-                }
+                let _ = ws_tx
+                    .send(Message::Text(
+                        SensorMessage::BlocklistSync.to_json().unwrap().into(),
+                    ))
+                    .await;
             }
-        }
+            Ok(HubMessage::AuthFailed { error }) => {
+                error!("Auth failed: {}", error);
+                return ConnectionResult::AuthFailed;
+            }
+            _ => {
+                error!("Unexpected auth response");
+                params.circuit_breaker.record_failure().await;
+                return ConnectionResult::Disconnected { had_connection };
+            }
+        },
         _ => {
             error!("Auth timeout or error");
-            circuit_breaker.record_failure().await;
+            params.circuit_breaker.record_failure().await;
             return ConnectionResult::Disconnected { had_connection };
         }
     }
 
-    // Main loop
+    // --- Main Event Loop ---
     let mut heartbeat_interval =
-        tokio::time::interval(Duration::from_millis(config.heartbeat_interval_ms));
-    let mut signal_batch: Vec<ThreatSignal> = Vec::with_capacity(config.signal_batch_size);
+        tokio::time::interval(Duration::from_millis(params.config.heartbeat_interval_ms));
+    let mut signal_batch: Vec<ThreatSignal> = Vec::with_capacity(params.config.signal_batch_size);
     let mut batch_timer =
-        tokio::time::interval(Duration::from_millis(config.signal_batch_delay_ms));
+        tokio::time::interval(Duration::from_millis(params.config.signal_batch_delay_ms));
 
     if !pending_signals.is_empty() {
         signal_batch.extend(pending_signals.drain(..));
-        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
+        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, &params.stats).await {
             error!("Failed to send buffered signals: {}", e);
-            circuit_breaker.record_failure().await;
-            stash_pending(pending_signals, &mut signal_batch);
+            params.circuit_breaker.record_failure().await;
+            stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
             return ConnectionResult::Disconnected { had_connection };
         }
     }
 
     loop {
         tokio::select! {
-            // Shutdown signal
             _ = shutdown_rx.recv() => {
                 info!("Shutdown received");
                 let _ = ws_tx.close().await;
                 return ConnectionResult::Shutdown;
             }
 
-            // Incoming signal to send
             signal = signal_rx.recv() => {
                 match signal {
                     Some(sig) => {
                         signal_batch.push(sig);
-                        if signal_batch.len() >= config.signal_batch_size {
-                            if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
+                        if signal_batch.len() >= params.config.signal_batch_size {
+                            if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, &params.stats).await {
                                 error!("Failed to send batch: {}", e);
-                                circuit_breaker.record_failure().await;
-                                stash_pending(pending_signals, &mut signal_batch);
+                                params.circuit_breaker.record_failure().await;
+                                stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
                                 return ConnectionResult::Disconnected { had_connection };
                             }
-                            circuit_breaker.record_success().await;
+                            params.circuit_breaker.record_success().await;
                         }
                     }
                     None => {
@@ -786,30 +880,29 @@ async fn connect_and_run(
                 }
             }
 
-            // Batch timer
             _ = batch_timer.tick() => {
                 if !signal_batch.is_empty() {
-                    if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
+                    if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, &params.stats).await {
                         error!("Failed to send batch: {}", e);
-                        circuit_breaker.record_failure().await;
-                        stash_pending(pending_signals, &mut signal_batch);
+                        params.circuit_breaker.record_failure().await;
+                        stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
                         return ConnectionResult::Disconnected { had_connection };
                     }
-                    circuit_breaker.record_success().await;
+                    params.circuit_breaker.record_success().await;
                 }
             }
 
-            // WebSocket message
             msg = ws_rx.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         if let Ok(hub_msg) = HubMessage::from_json(&text) {
+                            let cm = params.config_manager.load();
                             handle_hub_message(
                                 hub_msg,
-                                blocklist,
-                                stats,
-                                metrics_provider,
-                                config_manager,
+                                &params.blocklist,
+                                &params.stats,
+                                &params.metrics_provider,
+                                &**cm,
                                 inflight_signals,
                                 &mut ws_tx,
                             )
@@ -821,40 +914,39 @@ async fn connect_and_run(
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         warn!("WebSocket closed");
-                        stash_pending(pending_signals, &mut signal_batch);
+                        stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
                         return ConnectionResult::Disconnected { had_connection };
                     }
                     Some(Err(e)) => {
                         error!("WebSocket error: {}", e);
-                        stash_pending(pending_signals, &mut signal_batch);
+                        stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
                         return ConnectionResult::Disconnected { had_connection };
                     }
                     _ => {}
                 }
             }
 
-            // Heartbeat
             _ = heartbeat_interval.tick() => {
                 let payload = HeartbeatPayload {
                     timestamp: chrono::Utc::now().timestamp_millis(),
                     status: "healthy".to_string(),
-                    cpu: metrics_provider.cpu_usage(),
-                    memory: metrics_provider.memory_usage(),
-                    disk: metrics_provider.disk_usage(),
-                    requests_last_minute: metrics_provider.requests_last_minute(),
-                    avg_latency_ms: metrics_provider.avg_latency_ms(),
-                    config_hash: metrics_provider.config_hash(),
-                    rules_hash: metrics_provider.rules_hash(),
-                    active_connections: metrics_provider.active_connections(),
-                    blocklist_size: Some(blocklist.size()),
+                    cpu: params.metrics_provider.cpu_usage(),
+                    memory: params.metrics_provider.memory_usage(),
+                    disk: params.metrics_provider.disk_usage(),
+                    requests_last_minute: params.metrics_provider.requests_last_minute(),
+                    avg_latency_ms: params.metrics_provider.avg_latency_ms(),
+                    config_hash: params.metrics_provider.config_hash(),
+                    rules_hash: params.metrics_provider.rules_hash(),
+                    active_connections: params.metrics_provider.active_connections(),
+                    blocklist_size: Some(params.blocklist.size()),
                 };
 
                 let msg = SensorMessage::Heartbeat { payload };
                 if let Err(e) = ws_tx.send(Message::Text(msg.to_json().unwrap().into())).await {
                     warn!("Failed to send heartbeat: {}", e);
-                    stats.heartbeat_failures.fetch_add(1, Ordering::Relaxed);
+                    params.stats.heartbeat_failures.fetch_add(1, Ordering::Relaxed);
                 } else {
-                    stats.heartbeats_sent.fetch_add(1, Ordering::Relaxed);
+                    params.stats.heartbeats_sent.fetch_add(1, Ordering::Relaxed);
                     debug!("Sent heartbeat");
                 }
             }
@@ -876,7 +968,7 @@ where
         return Ok(());
     }
 
-    let signals: Vec<ThreatSignal> = batch.drain(..).collect();
+    let signals: Vec<ThreatSignal> = std::mem::take(batch);
     let count = signals.len();
 
     if count == 0 {
@@ -896,7 +988,7 @@ where
     };
 
     ws_tx
-        .send(Message::Text(msg.to_json()?.into()))
+        .send(Message::Text(msg.to_json()?))
         .await
         .map_err(|e| HorizonError::SendFailed(e.to_string()))?;
 
@@ -931,7 +1023,7 @@ async fn send_command_ack<S>(
     };
 
     if let Ok(json) = ack.to_json() {
-        if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
+        if let Err(e) = ws_tx.send(Message::Text(json)).await {
             error!("Failed to send command ack: {}", e);
         }
     }
@@ -1159,9 +1251,7 @@ async fn handle_hub_message<S>(
                 remaining -= 1;
             }
         }
-        HubMessage::Ping { timestamp: _ } => {
-            // Handled by WebSocket ping/pong
-        }
+        HubMessage::Ping { timestamp: _ } => {}
         HubMessage::BlocklistSnapshot {
             entries,
             sequence_id,
@@ -1192,7 +1282,6 @@ async fn handle_hub_message<S>(
                 "Received config update (legacy direct) version: {}",
                 version
             );
-            // ... (legacy handling if needed, but PushConfig handles it better)
         }
         HubMessage::PushConfig {
             command_id,
@@ -1339,7 +1428,7 @@ async fn handle_hub_message<S>(
             info!("Received SyncBlocklist command (id: {})", command_id);
             let result = match SensorMessage::BlocklistSync.to_json() {
                 Ok(json) => {
-                    if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
+                    if let Err(e) = ws_tx.send(Message::Text(json)).await {
                         Err(format!("Failed to request blocklist sync: {}", e))
                     } else {
                         Ok(None)
@@ -1353,14 +1442,12 @@ async fn handle_hub_message<S>(
         HubMessage::RulesUpdate { rules, version } => {
             info!("Received rules update (version: {})", version);
 
-            // Apply rules update via ConfigManager
             let result = if let Some(manager) = config_manager {
-                // Convert rules JSON to bytes for the WAF engine
                 match serde_json::to_vec(&rules) {
                     Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes, None) {
                         Ok(count) => {
                             info!("Applied rules update v{}: {} rules loaded", version, count);
-                            Ok(())
+                            Ok(count)
                         }
                         Err(e) => {
                             error!("Failed to apply rules update v{}: {}", version, e);
@@ -1377,7 +1464,6 @@ async fn handle_hub_message<S>(
                 Err("ConfigManager not available".to_string())
             };
 
-            // Send Ack for rules update
             send_command_ack(
                 ws_tx,
                 format!("rules_update_{}", version),
@@ -1395,11 +1481,9 @@ async fn handle_hub_message<S>(
                 "Auth success: tenant={} sensor={} capabilities={:?} protocol={:?}",
                 tenant_id, sensor_id, capabilities, protocol_version
             );
-            // Auth is handled in connect_once, this is a redundant message
         }
         HubMessage::AuthFailed { error } => {
             error!("Auth failed (redundant): {}", error);
-            // Auth failure is handled in connect_once, this shouldn't happen
         }
         HubMessage::TunnelOpen {
             tunnel_id,
@@ -1416,7 +1500,7 @@ async fn handle_hub_message<S>(
                 message: "This sensor does not support tunnel connections".to_string(),
             };
             if let Ok(json) = error_msg.to_json() {
-                let _ = ws_tx.send(Message::Text(json.into())).await;
+                let _ = ws_tx.send(Message::Text(json)).await;
             }
         }
         HubMessage::TunnelClose { tunnel_id } => {
@@ -1465,9 +1549,8 @@ mod tests {
     #[tokio::test]
     async fn test_client_disabled() {
         let config = HorizonConfig::default();
-        let mut client = HorizonClient::new(config);
+        let client = HorizonClient::new(config);
 
-        // Should succeed without actually connecting
         assert!(client.start().await.is_ok());
     }
 
@@ -1476,7 +1559,6 @@ mod tests {
         let config = HorizonConfig::default();
         let client = HorizonClient::new(config);
 
-        // Add entries to blocklist directly for testing
         client
             .blocklist
             .add(super::super::blocklist::BlocklistEntry {
@@ -1514,9 +1596,4 @@ mod tests {
             .await
             .expect("expected public IP to be allowed");
     }
-
-    // Note: send_batch tests removed - TestSink cannot be passed to send_batch
-    // which requires SplitSink<S, Message>. These would need a full WebSocket
-    // mock to test properly. The function is tested indirectly through integration
-    // tests with actual WebSocket connections.
 }

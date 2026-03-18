@@ -96,9 +96,11 @@ pub enum CampaignError {
 /// through resolution or dormancy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CampaignStatus {
     /// Newly detected, under observation.
     /// The system has identified potential correlation but is gathering more evidence.
+    #[default]
     Detected,
 
     /// Confirmed active threat.
@@ -114,11 +116,6 @@ pub enum CampaignStatus {
     Resolved,
 }
 
-impl Default for CampaignStatus {
-    fn default() -> Self {
-        Self::Detected
-    }
-}
 
 impl std::fmt::Display for CampaignStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -623,12 +620,11 @@ impl CampaignStore {
 
         for entry in self.campaigns.iter() {
             let campaign = entry.value();
-            if campaign.status == status {
-                if oldest_time.map_or(true, |t| campaign.last_activity < t) {
+            if campaign.status == status
+                && oldest_time.is_none_or(|t| campaign.last_activity < t) {
                     oldest_id = Some(entry.key().clone());
                     oldest_time = Some(campaign.last_activity);
                 }
-            }
         }
 
         if let Some(id) = oldest_id {

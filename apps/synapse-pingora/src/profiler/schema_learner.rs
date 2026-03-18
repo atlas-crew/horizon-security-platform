@@ -1342,7 +1342,7 @@ mod tests {
 
         // Validation - should not crash
         let result = learner.validate_request("/api/nested", &body);
-        
+
         // Deep parts should be ignored due to max_nesting_depth
         assert!(result.is_valid());
     }
@@ -1361,10 +1361,10 @@ mod tests {
     #[test]
     fn test_learn_from_response_does_not_increment_sample_count() {
         let learner = SchemaLearner::new();
-        
+
         // Response learning should not increment sample_count
         learner.learn_from_response("/api/test", &json!({"ok": true}));
-        
+
         let schema = learner.get_schema("/api/test").unwrap();
         assert_eq!(schema.sample_count, 0);
         assert!(schema.response_schema.contains_key("ok"));
@@ -1378,10 +1378,10 @@ mod tests {
     #[test]
     fn test_learn_from_pair_both_none() {
         let learner = SchemaLearner::new();
-        
+
         // Should increment sample count even if bodies are None
         learner.learn_from_pair("/api/empty", None, None);
-        
+
         let schema = learner.get_schema("/api/empty").unwrap();
         assert_eq!(schema.sample_count, 1);
         assert!(schema.request_schema.is_empty());

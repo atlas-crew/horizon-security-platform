@@ -864,7 +864,7 @@ async fn require_ws_auth(
         .get("X-Admin-Key")
         .and_then(|v| v.to_str().ok());
     let query_key = extract_admin_key_from_query(&request);
-    let provided_key = header_key.or_else(|| query_key.as_deref());
+    let provided_key = header_key.or(query_key.as_deref());
 
     match validate_admin_key(&state, client_ip, provided_key) {
         Ok(()) => Ok(next.run(request).await),
@@ -1629,7 +1629,7 @@ pub async fn start_admin_server(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app)
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        .map_err(std::io::Error::other)
 }
 
 /// GET / - API info
@@ -1840,7 +1840,7 @@ struct ShadowConfigRequest {
 /// GET /_sensor/shadow/status - Shadow mirroring status
 async fn sensor_shadow_status_handler(State(state): State<AdminState>) -> impl IntoResponse {
     // Get count of sites with shadow mirroring enabled
-    let sites_with_shadow = if let Some(ref config_mgr) = state.handler.config_manager() {
+    let sites_with_shadow = if let Some(config_mgr) = state.handler.config_manager() {
         let hostnames = config_mgr.list_sites();
         hostnames
             .iter()
@@ -1880,23 +1880,20 @@ async fn get_site_shadow_handler(
     State(state): State<AdminState>,
     Path(hostname): Path<String>,
 ) -> impl IntoResponse {
-    if let Some(ref config_mgr) = state.handler.config_manager() {
-        match config_mgr.get_site(&hostname) {
-            Ok(site) => {
-                let shadow_config = site.shadow_mirror.clone();
-                return (
-                    StatusCode::OK,
-                    Json(serde_json::json!({
-                        "success": true,
-                        "data": {
-                            "hostname": hostname,
-                            "shadow_mirror": shadow_config
-                        }
-                    })),
-                )
-                    .into_response();
-            }
-            Err(_) => {}
+    if let Some(config_mgr) = state.handler.config_manager() {
+        if let Ok(site) = config_mgr.get_site(&hostname) {
+            let shadow_config = site.shadow_mirror.clone();
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "data": {
+                        "hostname": hostname,
+                        "shadow_mirror": shadow_config
+                    }
+                })),
+            )
+                .into_response();
         }
     }
 
@@ -1911,7 +1908,7 @@ async fn update_site_shadow_handler(
 ) -> impl IntoResponse {
     use crate::config_manager::UpdateSiteRequest;
 
-    if let Some(ref config_mgr) = state.handler.config_manager() {
+    if let Some(config_mgr) = state.handler.config_manager() {
         // First check if site exists and get current shadow config
         let existing_shadow = match config_mgr.get_site(&hostname) {
             Ok(site) => site.shadow_mirror,
@@ -3606,7 +3603,7 @@ async fn sensor_sessions_handler(
             };
 
             if params.actor_id.is_some() || params.suspicious.unwrap_or(false) {
-                sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+                sessions.sort_by_key(|s| std::cmp::Reverse(s.last_activity));
                 sessions.truncate(limit);
             }
 

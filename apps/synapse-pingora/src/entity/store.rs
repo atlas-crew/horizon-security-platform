@@ -916,7 +916,7 @@ impl EntityManager {
     fn maybe_evict(&self) {
         // Lazy check - only evaluate every 100th operation
         let count = self.touch_counter.fetch_add(1, Ordering::Relaxed);
-        if count % 100 != 0 {
+        if !count.is_multiple_of(100) {
             return;
         }
 

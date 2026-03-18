@@ -17,17 +17,16 @@ use super::types::{
 };
 use crate::geo::{GeoLocation, ImpossibleTravelDetector, LoginEvent, TravelConfig};
 
+/// Callback to apply risk: (entity_id, risk_score, reason)
+type RiskCallback = Box<dyn Fn(&str, u32, &str) + Send + Sync>;
+
 /// Dependencies for the trends manager.
+#[derive(Default)]
 pub struct TrendsManagerDependencies {
     /// Callback to apply risk to an entity
-    pub apply_risk: Option<Box<dyn Fn(&str, u32, &str) + Send + Sync>>,
+    pub apply_risk: Option<RiskCallback>,
 }
 
-impl Default for TrendsManagerDependencies {
-    fn default() -> Self {
-        Self { apply_risk: None }
-    }
-}
 
 /// High-level trends manager.
 pub struct TrendsManager {

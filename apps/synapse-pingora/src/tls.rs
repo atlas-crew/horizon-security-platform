@@ -45,6 +45,10 @@ impl SecureString {
         self.0.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -126,6 +130,8 @@ pub struct TlsManager {
     default_cert_config: RwLock<Option<TlsCertConfig>>,
 }
 
+use std::str::FromStr;
+
 /// Supported TLS versions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TlsVersion {
@@ -133,9 +139,11 @@ pub enum TlsVersion {
     Tls13,
 }
 
-impl TlsVersion {
+impl FromStr for TlsVersion {
+    type Err = TlsError;
+
     /// Parses a TLS version string.
-    pub fn from_str(s: &str) -> Result<Self, TlsError> {
+    fn from_str(s: &str) -> Result<Self, TlsError> {
         match s {
             "1.2" | "TLS1.2" | "TLSv1.2" => Ok(TlsVersion::Tls12),
             "1.3" | "TLS1.3" | "TLSv1.3" => Ok(TlsVersion::Tls13),

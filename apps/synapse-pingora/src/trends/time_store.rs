@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::config::TrendsConfig;
 use super::types::{
-    BucketSummary, CategorySummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend,
+    BucketSummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend,
     SignalType, TimeRange, TopSignalType, TrendHistogramBucket, TrendQueryOptions, TrendsSummary,
 };
 
@@ -41,7 +41,7 @@ impl SignalBucket {
             .summary
             .by_category
             .entry(signal.category)
-            .or_insert_with(CategorySummary::default);
+            .or_default();
 
         category_summary.count += 1;
         category_summary.unique_values.insert(signal.value.clone());
@@ -106,7 +106,7 @@ impl TimeStore {
             // Update entity index
             self.entity_index
                 .entry(signal.entity_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(bucket_idx);
         }
 
@@ -150,7 +150,7 @@ impl TimeStore {
             for signal in &bucket.signals {
                 self.entity_index
                     .entry(signal.entity_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(bucket_idx);
             }
         }

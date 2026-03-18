@@ -554,7 +554,7 @@ fn compute_sha256_hex(data: &str) -> String {
 /// Generate random hex string of given length using cryptographically secure random
 fn generate_random_hex(len: usize) -> String {
     // Calculate number of bytes needed (2 hex chars per byte)
-    let byte_len = (len + 1) / 2;
+    let byte_len = len.div_ceil(2);
     let mut bytes = vec![0u8; byte_len];
     getrandom::getrandom(&mut bytes).expect("Failed to get random bytes");
 

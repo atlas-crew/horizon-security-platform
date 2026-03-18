@@ -477,7 +477,7 @@ mod tests {
             pt.update(10.0);
             pt.update(f64::NAN);
         }
-        
+
         let (p50, p95, p99) = pt.get();
         assert!(p50.is_finite());
         assert!(p95.is_finite());

@@ -240,7 +240,7 @@ impl ProfileStore {
 
         // Pure numeric (user IDs, etc.)
         if segment.chars().all(|c| c.is_ascii_digit()) {
-            return segment.len() >= 1 && segment.len() <= 20; // Reasonable ID length
+            return !segment.is_empty() && segment.len() <= 20; // Reasonable ID length
         }
 
         // UUID format: 8-4-4-4-12 hex

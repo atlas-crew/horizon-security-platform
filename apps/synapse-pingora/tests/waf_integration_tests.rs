@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use synapse_pingora::waf::{Action, Engine, Request, Header};
+use synapse_pingora::waf::{Action, Engine, Header, Request};
 
 /// Helper to create a basic GET request
 fn make_get_request<'a>(path: &'a str, client_ip: &'a str) -> Request<'a> {
@@ -31,9 +31,10 @@ fn make_post_request<'a>(path: &'a str, body: &'a [u8], client_ip: &'a str) -> R
         method: "POST",
         path,
         query: None,
-        headers: vec![
-            Header::new("Content-Type", "application/x-www-form-urlencoded"),
-        ],
+        headers: vec![Header::new(
+            "Content-Type",
+            "application/x-www-form-urlencoded",
+        )],
         body: Some(body),
         client_ip,
         is_static: false,
@@ -46,9 +47,7 @@ fn make_json_request<'a>(path: &'a str, body: &'a [u8], client_ip: &'a str) -> R
         method: "POST",
         path,
         query: None,
-        headers: vec![
-            Header::new("Content-Type", "application/json"),
-        ],
+        headers: vec![Header::new("Content-Type", "application/json")],
         body: Some(body),
         client_ip,
         is_static: false,
@@ -315,7 +314,10 @@ fn test_sql_injection_union_select() {
     load_test_rules(&mut engine);
 
     // UNION-based: 1' UNION SELECT NULL,NULL--
-    let req = make_get_request("/api/products?id=1' UNION SELECT NULL,NULL--", "192.168.1.1");
+    let req = make_get_request(
+        "/api/products?id=1' UNION SELECT NULL,NULL--",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     assert_eq!(verdict.action, Action::Block);
@@ -340,7 +342,10 @@ fn test_sql_injection_blind_substring() {
     load_test_rules(&mut engine);
 
     // Blind SQL injection: 1' AND ... - contains ' OR '
-    let req = make_get_request("/api/users?id=1' AND SUBSTRING(version(),1,1)='5' OR '1'='1'--", "192.168.1.1");
+    let req = make_get_request(
+        "/api/users?id=1' AND SUBSTRING(version(),1,1)='5' OR '1'='1'--",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     // Should detect due to injection indicators (OR pattern)
@@ -407,7 +412,10 @@ fn test_sql_injection_blind_with_wait() {
     load_test_rules(&mut engine);
 
     // Alternative: payload with standard OR and DROP pattern
-    let req = make_get_request("/api/items?id=1' OR '1'='1'; DROP TABLE users--", "192.168.1.1");
+    let req = make_get_request(
+        "/api/items?id=1' OR '1'='1'; DROP TABLE users--",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     // Should detect OR and DROP patterns
@@ -476,7 +484,10 @@ fn test_xss_event_handler_onclick() {
     load_test_rules(&mut engine);
 
     // onclick handler with onerror fallback: uses onerror= pattern
-    let req = make_get_request("/comment?text=<div onerror=alert('XSS')>Click me</div>", "192.168.1.1");
+    let req = make_get_request(
+        "/comment?text=<div onerror=alert('XSS')>Click me</div>",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     assert_eq!(verdict.action, Action::Block);
@@ -488,7 +499,10 @@ fn test_xss_javascript_uri() {
     load_test_rules(&mut engine);
 
     // JavaScript URI: <a href="javascript:alert(1)">Click</a>
-    let req = make_get_request("/post?content=<a href=\"javascript:alert(1)\">Click</a>", "192.168.1.1");
+    let req = make_get_request(
+        "/post?content=<a href=\"javascript:alert(1)\">Click</a>",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     assert_eq!(verdict.action, Action::Block);
@@ -501,7 +515,10 @@ fn test_xss_data_uri() {
     load_test_rules(&mut engine);
 
     // Data URI: <img src="data:text/html,<script>alert(1)</script>">
-    let req = make_get_request("/image?url=data:text/html,<script>alert(1)</script>", "192.168.1.1");
+    let req = make_get_request(
+        "/image?url=data:text/html,<script>alert(1)</script>",
+        "192.168.1.1",
+    );
     let verdict = engine.analyze(&req);
 
     // Should detect <script> in the data URI

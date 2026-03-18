@@ -1038,7 +1038,7 @@ impl ConfigManager {
         };
 
         let updated = rules::merge_rule_update(&rules[index], update)
-            .map_err(|err| ConfigManagerError::Persistence(err))?;
+            .map_err(ConfigManagerError::Persistence)?;
         rules[index] = updated.clone();
         self.apply_rules(rules, true, None)?;
         Ok(updated)

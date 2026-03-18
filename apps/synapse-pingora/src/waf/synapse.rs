@@ -71,7 +71,10 @@ impl Synapse {
     }
 
     /// Precompute all rule structures including regex compilation.
-    pub fn precompute_rules(&self, json: &[u8]) -> Result<crate::waf::engine::CompiledRules, WafError> {
+    pub fn precompute_rules(
+        &self,
+        json: &[u8],
+    ) -> Result<crate::waf::engine::CompiledRules, WafError> {
         self.engine.precompute_rules(json)
     }
 

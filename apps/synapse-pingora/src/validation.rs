@@ -360,14 +360,13 @@ fn validate_pkcs8_key(pem_bytes: &[u8], path: &str) -> ValidationResult<()> {
                         path, bits, MIN_RSA_KEY_BITS
                     )));
                 }
-            } else if pkey.ec_key().is_ok() {
-                if bits < MIN_EC_KEY_BITS as u32 {
+            } else if pkey.ec_key().is_ok()
+                && bits < MIN_EC_KEY_BITS as u32 {
                     return Err(ValidationError::WeakKey(format!(
                         "EC key in '{}' is {} bits, minimum required is {} bits",
                         path, bits, MIN_EC_KEY_BITS
                     )));
                 }
-            }
             // DSA, DH, and other key types - accept with warning
             // These are less common for TLS but may be used in legacy systems
 
@@ -701,7 +700,7 @@ pub fn validate_cidr(cidr: &str) -> ValidationResult<()> {
 
 /// Validates WAF risk threshold (0-100).
 pub fn validate_waf_threshold(threshold: f64) -> ValidationResult<()> {
-    if threshold < 0.0 || threshold > 100.0 {
+    if !(0.0..=100.0).contains(&threshold) {
         return Err(ValidationError::InvalidDomain(format!(
             "WAF threshold must be 0-100, got {}",
             threshold

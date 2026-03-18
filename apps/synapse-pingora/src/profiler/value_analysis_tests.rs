@@ -289,10 +289,25 @@ mod tests {
         }
 
         // Test with anomalous value containing PII
-        let result = profiler.analyze_request(template, 100, &[("user", "very-long-email-address-that-is-clearly-anomalous@example.com")], None);
+        let result = profiler.analyze_request(
+            template,
+            100,
+            &[(
+                "user",
+                "very-long-email-address-that-is-clearly-anomalous@example.com",
+            )],
+            None,
+        );
 
         // Signal detail should be redacted
-        let signal = result.signals.iter().find(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly || s.signal_type == AnomalySignalType::UnexpectedParam).unwrap();
+        let signal = result
+            .signals
+            .iter()
+            .find(|s| {
+                s.signal_type == AnomalySignalType::ParamValueAnomaly
+                    || s.signal_type == AnomalySignalType::UnexpectedParam
+            })
+            .unwrap();
         assert!(signal.detail.contains("ve***om") || signal.detail.contains("****"));
         assert!(!signal.detail.contains("@example.com"));
     }
@@ -320,7 +335,10 @@ mod tests {
         profiler.update_response_profile(template, 10000, 500, None);
 
         let profile_after = profiler.get_profile(template).unwrap();
-        assert_eq!(profile_before.response_size.mean(), profile_after.response_size.mean());
+        assert_eq!(
+            profile_before.response_size.mean(),
+            profile_after.response_size.mean()
+        );
     }
 
     #[test]
@@ -333,7 +351,7 @@ mod tests {
 
         profiler.get_or_create_profile("/a");
         profiler.get_or_create_profile("/b");
-        
+
         // Third unique profile should be rejected
         let result = profiler.get_or_create_profile("/c");
         assert!(result.is_none());
@@ -358,7 +376,10 @@ mod tests {
         // Test with massive response
         let result = profiler.analyze_response(template, 10000, 200, None);
 
-        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
+        assert!(result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
     }
 
     #[test]
@@ -375,6 +396,9 @@ mod tests {
         // Test with very small payload
         let result = profiler.analyze_request(template, 10, &[], None);
 
-        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::PayloadSizeLow));
+        assert!(result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::PayloadSizeLow));
     }
 }

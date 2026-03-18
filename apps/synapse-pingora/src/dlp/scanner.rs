@@ -97,6 +97,7 @@ pub struct DlpMatch {
 
 /// Result of a DLP scan
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ScanResult {
     pub scanned: bool,
     pub has_matches: bool,
@@ -110,20 +111,6 @@ pub struct ScanResult {
     pub original_length: usize,
 }
 
-impl Default for ScanResult {
-    fn default() -> Self {
-        Self {
-            scanned: false,
-            has_matches: false,
-            matches: Vec::new(),
-            match_count: 0,
-            scan_time_us: 0,
-            content_length: 0,
-            truncated: false,
-            original_length: 0,
-        }
-    }
-}
 
 /// DLP scanner statistics
 #[derive(Debug, Clone)]
@@ -150,10 +137,12 @@ pub struct DlpViolation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum RedactionMode {
     /// Mask all characters (e.g., "**********")
     Full,
     /// Show partial characters (e.g., "****-1234") - Default
+    #[default]
     Partial,
     /// Replace with hash (e.g., "sha256:...")
     Hash,
@@ -161,11 +150,6 @@ pub enum RedactionMode {
     None,
 }
 
-impl Default for RedactionMode {
-    fn default() -> Self {
-        Self::Partial
-    }
-}
 
 /// Error type for DLP configuration validation
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -401,7 +385,7 @@ pub fn validate_credit_card(number: &str) -> bool {
     }
 
     // Valid card: 13-19 digits, not all zeros, Luhn checksum passes
-    digit_count >= 13 && digit_count <= 19 && has_nonzero && sum % 10 == 0
+    (13..=19).contains(&digit_count) && has_nonzero && sum.is_multiple_of(10)
 }
 
 /// Validate SSN format (zero-allocation implementation)
@@ -608,16 +592,14 @@ pub fn validate_iban(iban: &str) -> bool {
         if total_len < 4 {
             // Validate format: first 2 must be letters, next 2 must be digits
             match total_len {
-                0 | 1 => {
-                    if !upper.is_ascii_alphabetic() {
+                0 | 1
+                    if !upper.is_ascii_alphabetic() => {
                         return false;
                     }
-                }
-                2 | 3 => {
-                    if !upper.is_ascii_digit() {
+                2 | 3
+                    if !upper.is_ascii_digit() => {
                         return false;
                     }
-                }
                 _ => {}
             }
             first_four[first_four_idx] = upper as u8;
@@ -627,7 +609,7 @@ pub fn validate_iban(iban: &str) -> bool {
     }
 
     // IBAN must be 15-34 characters (after removing whitespace)
-    if total_len < 15 || total_len > 34 {
+    if !(15..=34).contains(&total_len) {
         return false;
     }
 
@@ -635,7 +617,7 @@ pub fn validate_iban(iban: &str) -> bool {
     // Country code is first two characters
     let country_code = [first_four[0], first_four[1]];
     for &(code, expected_len) in IBAN_LENGTHS.iter() {
-        if code.as_bytes() == &country_code {
+        if code.as_bytes() == country_code {
             if total_len != expected_len {
                 return false;
             }
@@ -920,7 +902,7 @@ lazy_static! {
     };
 
     /// RegexSet for non-AC patterns - single pass detects which patterns have potential matches
-    static ref NON_AC_REGEX_SET: RegexSet = RegexSet::new(&[
+    static ref NON_AC_REGEX_SET: RegexSet = RegexSet::new([
         // Index 0 -> Pattern 4: SSN formatted
         r"\b\d{3}-\d{2}-\d{4}\b",
         // Index 1 -> Pattern 5: SSN unformatted

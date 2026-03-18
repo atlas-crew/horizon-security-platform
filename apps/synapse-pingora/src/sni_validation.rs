@@ -215,8 +215,8 @@ impl SniValidator {
         }
 
         // Get normalized values
-        let sni_lower = sni.map(|s| normalize_hostname(s));
-        let host_lower = host_header.map(|h| normalize_hostname(h));
+        let sni_lower = sni.map(normalize_hostname);
+        let host_lower = host_header.map(normalize_hostname);
 
         // Check for excluded domains
         if let Some(ref host) = host_lower {

@@ -149,11 +149,10 @@ impl WafStats {
     /// Returns the average detection time in microseconds.
     pub fn avg_detection_time_us(&self) -> u64 {
         let analyzed = self.analyzed.load(Ordering::Relaxed);
-        if analyzed == 0 {
-            0
-        } else {
-            self.total_detection_time_us.load(Ordering::Relaxed) / analyzed
-        }
+        self.total_detection_time_us
+            .load(Ordering::Relaxed)
+            .checked_div(analyzed)
+            .unwrap_or(0)
     }
 }
 

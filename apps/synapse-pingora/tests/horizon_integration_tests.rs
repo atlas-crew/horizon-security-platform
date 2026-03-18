@@ -10,12 +10,12 @@
 //! 7. Threat signal builder bounds (confidence clamping)
 //! 8. DNS resolution for hub URL (SSRF validation)
 
-use synapse_pingora::horizon::{
-    BlocklistAction, BlocklistCache, BlocklistEntry, BlocklistUpdate, BlockType, ConnectionState,
-    HorizonClient, HorizonConfig, HubMessage, Severity, SignalType, ThreatSignal,
-};
 use std::sync::Arc;
 use std::time::Duration;
+use synapse_pingora::horizon::{
+    BlockType, BlocklistAction, BlocklistCache, BlocklistEntry, BlocklistUpdate, ConnectionState,
+    HorizonClient, HorizonConfig, HubMessage, Severity, SignalType, ThreatSignal,
+};
 
 // ============================================================================
 // 1. CONNECTION STATE MACHINE TESTS
@@ -31,7 +31,10 @@ async fn test_connection_state_machine_lifecycle() {
     let mut client = HorizonClient::new(config);
 
     // Initial state: Disconnected
-    assert_eq!(client.connection_state().await, ConnectionState::Disconnected);
+    assert_eq!(
+        client.connection_state().await,
+        ConnectionState::Disconnected
+    );
 
     // Start client (will fail to connect to invalid URL, but state transitions should happen)
     let _ = client.start().await;
@@ -56,7 +59,10 @@ async fn test_connection_state_order() {
     let client = HorizonClient::new(config);
 
     // Disabled client should remain Disconnected
-    assert_eq!(client.connection_state().await, ConnectionState::Disconnected);
+    assert_eq!(
+        client.connection_state().await,
+        ConnectionState::Disconnected
+    );
 }
 
 #[tokio::test]
@@ -64,11 +70,17 @@ async fn test_client_stop_transitions_to_disconnected() {
     let config = HorizonConfig::default();
     let mut client = HorizonClient::new(config);
 
-    assert_eq!(client.connection_state().await, ConnectionState::Disconnected);
+    assert_eq!(
+        client.connection_state().await,
+        ConnectionState::Disconnected
+    );
 
     client.stop().await;
 
-    assert_eq!(client.connection_state().await, ConnectionState::Disconnected);
+    assert_eq!(
+        client.connection_state().await,
+        ConnectionState::Disconnected
+    );
 }
 
 // ============================================================================
@@ -158,13 +170,9 @@ async fn test_blocklist_snapshot_concurrent_lookups() {
     let blocklist_clone2 = Arc::clone(&blocklist);
 
     // Concurrent lookup should work
-    let handle1 = tokio::spawn(async move {
-        blocklist_clone1.is_ip_blocked("192.168.1.1")
-    });
+    let handle1 = tokio::spawn(async move { blocklist_clone1.is_ip_blocked("192.168.1.1") });
 
-    let handle2 = tokio::spawn(async move {
-        blocklist_clone2.is_ip_blocked("192.168.1.1")
-    });
+    let handle2 = tokio::spawn(async move { blocklist_clone2.is_ip_blocked("192.168.1.1") });
 
     let result1 = handle1.await.unwrap();
     let result2 = handle2.await.unwrap();
@@ -256,7 +264,8 @@ async fn test_reconnect_backoff_caps_at_60_seconds() {
 
 #[tokio::test]
 async fn test_auth_success_message_parsing() {
-    let json = r#"{"type":"auth-success","sensorId":"s1","tenantId":"t1","capabilities":["signals"]}"#;
+    let json =
+        r#"{"type":"auth-success","sensorId":"s1","tenantId":"t1","capabilities":["signals"]}"#;
     let msg = HubMessage::from_json(json).unwrap();
 
     match msg {
@@ -464,13 +473,9 @@ async fn test_fingerprint_concurrent_add_remove() {
     let fp2 = fp.to_string();
     let fp3 = fp.to_string();
 
-    let handle1 = tokio::spawn(async move {
-        blocklist_clone1.is_fingerprint_blocked(&fp1)
-    });
+    let handle1 = tokio::spawn(async move { blocklist_clone1.is_fingerprint_blocked(&fp1) });
 
-    let handle2 = tokio::spawn(async move {
-        blocklist_clone2.is_fingerprint_blocked(&fp2)
-    });
+    let handle2 = tokio::spawn(async move { blocklist_clone2.is_fingerprint_blocked(&fp2) });
 
     let handle3 = tokio::spawn(async move {
         blocklist_clone3.remove(BlockType::Fingerprint, &fp3);
@@ -492,44 +497,39 @@ async fn test_fingerprint_concurrent_add_remove() {
 
 #[tokio::test]
 async fn test_confidence_clamping_above_max() {
-    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(2.0); // Above max of 1.0
+    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(2.0); // Above max of 1.0
 
     assert_eq!(signal.confidence, 1.0);
 }
 
 #[tokio::test]
 async fn test_confidence_clamping_below_min() {
-    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(-0.5); // Below min of 0.0
+    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(-0.5); // Below min of 0.0
 
     assert_eq!(signal.confidence, 0.0);
 }
 
 #[tokio::test]
 async fn test_confidence_clamping_within_bounds() {
-    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(0.75); // Within valid range
+    let signal = ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(0.75); // Within valid range
 
     assert_eq!(signal.confidence, 0.75);
 }
 
 #[tokio::test]
 async fn test_confidence_clamping_edge_values() {
-    let signal_min = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(0.0);
+    let signal_min = ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(0.0);
     assert_eq!(signal_min.confidence, 0.0);
 
-    let signal_max = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(1.0);
+    let signal_max = ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(1.0);
     assert_eq!(signal_max.confidence, 1.0);
 
-    let signal_just_below = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(0.00001);
+    let signal_just_below =
+        ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(0.00001);
     assert_eq!(signal_just_below.confidence, 0.00001);
 
-    let signal_just_above = ThreatSignal::new(SignalType::IpThreat, Severity::High)
-        .with_confidence(0.99999);
+    let signal_just_above =
+        ThreatSignal::new(SignalType::IpThreat, Severity::High).with_confidence(0.99999);
     assert_eq!(signal_just_above.confidence, 0.99999);
 }
 
@@ -587,11 +587,7 @@ async fn test_url_parsing_valid_formats() {
 
     for url in valid_urls {
         let parsed = reqwest::Url::parse(url);
-        assert!(
-            parsed.is_ok(),
-            "Failed to parse valid URL: {}",
-            url
-        );
+        assert!(parsed.is_ok(), "Failed to parse valid URL: {}", url);
     }
 }
 

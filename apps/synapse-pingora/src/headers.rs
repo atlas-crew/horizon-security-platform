@@ -363,8 +363,7 @@ mod tests {
     #[test]
     fn test_add_header_appends_to_existing_response_header() {
         let mut ops = HeaderOps::default();
-        ops.add
-            .insert("x-custom".to_string(), "second".to_string());
+        ops.add.insert("x-custom".to_string(), "second".to_string());
 
         let compiled = ops.compile();
         let mut resp = ResponseHeader::build(200, None).unwrap();
@@ -420,11 +419,7 @@ mod tests {
 
         // Should have been removed, then set to the new value
         assert_eq!(
-            resp.headers
-                .get("x-replaced")
-                .unwrap()
-                .to_str()
-                .unwrap(),
+            resp.headers.get("x-replaced").unwrap().to_str().unwrap(),
             "set-after-remove"
         );
     }
@@ -444,11 +439,7 @@ mod tests {
         apply_response_headers(&mut resp, &compiled);
 
         assert_eq!(
-            resp.headers
-                .get("x-new-header")
-                .unwrap()
-                .to_str()
-                .unwrap(),
+            resp.headers.get("x-new-header").unwrap().to_str().unwrap(),
             "fresh"
         );
     }

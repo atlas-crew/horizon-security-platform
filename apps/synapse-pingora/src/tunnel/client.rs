@@ -743,7 +743,7 @@ async fn connect_and_run(
         }
     };
 
-    if let Err(e) = ws_tx.send(Message::Text(auth_json.into())).await {
+    if let Err(e) = ws_tx.send(Message::Text(auth_json)).await {
         error!("Failed to send tunnel auth: {}", e);
         return ConnectionResult::Disconnected { connected: false };
     }
@@ -810,7 +810,7 @@ async fn connect_and_run(
                     Some(payload) => {
                         match serde_json::to_string(&payload) {
                             Ok(text) => {
-                                if let Err(e) = ws_tx.send(Message::Text(text.into())).await {
+                                if let Err(e) = ws_tx.send(Message::Text(text)).await {
                                     error!("Tunnel send failed: {}", e);
                                     return ConnectionResult::Disconnected { connected: authenticated };
                                 }
@@ -893,7 +893,7 @@ async fn connect_and_run(
                     "payload": { "timestamp": chrono::Utc::now().to_rfc3339() },
                     "timestamp": chrono::Utc::now().to_rfc3339(),
                 });
-                if let Err(e) = ws_tx.send(Message::Text(heartbeat.to_string().into())).await {
+                if let Err(e) = ws_tx.send(Message::Text(heartbeat.to_string())).await {
                     error!("Failed to send tunnel heartbeat: {}", e);
                     return ConnectionResult::Disconnected { connected: authenticated };
                 }

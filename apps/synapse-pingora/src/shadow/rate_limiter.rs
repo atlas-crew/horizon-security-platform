@@ -69,7 +69,7 @@ impl RateLimiter {
 
         // Amortized capacity enforcement: check every CAPACITY_CHECK_INTERVAL ops
         let ops = self.ops.fetch_add(1, Ordering::Relaxed);
-        if ops % CAPACITY_CHECK_INTERVAL == 0 && self.state.len() >= MAX_ENTRIES {
+        if ops.is_multiple_of(CAPACITY_CHECK_INTERVAL) && self.state.len() >= MAX_ENTRIES {
             self.evict_expired(now);
         }
 

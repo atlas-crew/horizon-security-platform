@@ -252,7 +252,7 @@ impl BlockPageRenderer {
         accept_header: Option<&str>,
     ) -> (String, &'static str) {
         let prefers_json = accept_header
-            .map(|h| Self::prefers_json(h))
+            .map(Self::prefers_json)
             .unwrap_or(false);
 
         if prefers_json {

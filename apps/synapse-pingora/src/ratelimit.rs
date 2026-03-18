@@ -44,10 +44,10 @@ impl AdaptiveRateLimiter {
     /// - If latency < 100ms AND CPU < 50%: increase rate by 5% (up to 1.0)
     pub fn adjust(&self) {
         let avg_latency = self.metrics.avg_latency_ms();
-        
+
         // Simple CPU check using sysinfo (if available in metrics)
         // For now, let's just use latency as the primary signal
-        
+
         let current_mult = self.multiplier.load(Ordering::Relaxed);
         let mut next_mult = current_mult;
 
@@ -74,7 +74,7 @@ impl AdaptiveRateLimiter {
 
     fn apply_multiplier(&self, multiplier: f64) {
         let manager = self.manager.read();
-        
+
         // Update global limiter if present
         if let Some(global) = &manager.global_limiter {
             global.set_multiplier(multiplier);
@@ -366,7 +366,7 @@ impl KeyedRateLimiter {
     pub fn set_multiplier(&self, multiplier: f64) {
         let m = (multiplier * 1000.0) as u64;
         self.multiplier.store(m, Ordering::Relaxed);
-        
+
         // Update all existing buckets
         let new_rps = (self.config.rps as f64 * multiplier) as u32;
         let buckets = self.buckets.read();

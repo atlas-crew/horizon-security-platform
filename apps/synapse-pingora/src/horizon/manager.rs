@@ -1,6 +1,5 @@
 //! High-level manager for Signal Horizon Hub integration.
 
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -74,7 +73,7 @@ pub struct HorizonStatsSnapshot {
 
 /// High-level manager for Signal Horizon Hub integration.
 pub struct HorizonManager {
-    client: Arc<RwLock<HorizonClient>>,
+    client: Arc<HorizonClient>,
     config: HorizonConfig,
 }
 
@@ -86,7 +85,7 @@ impl HorizonManager {
         let client = HorizonClient::new(config.clone());
 
         Ok(Self {
-            client: Arc::new(RwLock::new(client)),
+            client: Arc::new(client),
             config,
         })
     }
@@ -98,117 +97,89 @@ impl HorizonManager {
     ) -> Result<Self, HorizonError> {
         config.validate()?;
 
-        let client = HorizonClient::with_metrics_provider(config.clone(), metrics_provider);
+        // P0-002: Updated call site to builder pattern
+        let client = HorizonClient::new(config.clone()).with_metrics_provider(metrics_provider);
 
         Ok(Self {
-            client: Arc::new(RwLock::new(client)),
+            client: Arc::new(client),
             config,
         })
     }
 
     /// Set the configuration manager.
-    pub fn set_config_manager(&self, _config_manager: Arc<ConfigManager>) {
-        let _client = self.client.write();
-        // Replace the client with a new one that has the config manager
-        // This is a bit hacky because we're inside a RwLock, but HorizonClient
-        // doesn't expose a setter for config_manager.
-        // Better to add a setter on HorizonClient or rebuild it.
-        // Actually, HorizonClient::with_config_manager consumes self.
-
-        // Since we can't easily replace the client in-place if it's already running,
-        // we should really pass it during construction.
-        // Let's rely on the Builder pattern.
+    pub fn set_config_manager(&self, config_manager: Arc<ConfigManager>) {
+        self.client.set_config_manager(config_manager);
     }
 
     /// Start the manager.
     pub async fn start(&self) -> Result<(), HorizonError> {
-        let mut client = self.client.write();
-        client.start().await
+        self.client.start().await
     }
 
     /// Stop the manager.
     pub async fn stop(&self) {
-        let mut client = self.client.write();
-        client.stop().await;
+        self.client.stop().await;
     }
 
     /// Report a threat signal.
     pub fn report_signal(&self, signal: ThreatSignal) {
-        let client = self.client.read();
-        client.report_signal(signal);
+        self.client.report_signal(signal);
     }
 
     /// Flush pending signals.
     pub async fn flush_signals(&self) {
-        let client = self.client.read();
-        client.flush_signals().await;
+        self.client.flush_signals().await;
     }
 
     /// Check if an IP address is blocked.
     #[inline]
     pub fn is_ip_blocked(&self, ip: &str) -> bool {
-        let client = self.client.read();
-        client.is_ip_blocked(ip)
+        self.client.is_ip_blocked(ip)
     }
 
     /// Check if a fingerprint is blocked.
     #[inline]
     pub fn is_fingerprint_blocked(&self, fingerprint: &str) -> bool {
-        let client = self.client.read();
-        client.is_fingerprint_blocked(fingerprint)
+        self.client.is_fingerprint_blocked(fingerprint)
     }
 
     /// Check if an IP or fingerprint is blocked.
     pub fn is_blocked(&self, ip: Option<&str>, fingerprint: Option<&str>) -> bool {
-        if let Some(ip) = ip {
-            if self.is_ip_blocked(ip) {
-                return true;
-            }
-        }
-        if let Some(fp) = fingerprint {
-            if self.is_fingerprint_blocked(fp) {
-                return true;
-            }
-        }
-        false
+        self.client.is_blocked(ip, fingerprint)
     }
 
     /// Get the current connection state.
     pub async fn connection_state(&self) -> ConnectionState {
-        let client = self.client.read();
-        client.connection_state().await
+        self.client.connection_state().await
     }
 
     /// Check if connected to the hub.
     pub async fn is_connected(&self) -> bool {
-        let client = self.client.read();
-        client.is_connected().await
+        self.client.is_connected().await
     }
 
     /// Get the blocklist size.
     pub fn blocklist_size(&self) -> usize {
-        let client = self.client.read();
-        client.blocklist_size()
+        self.client.blocklist_size()
     }
 
     /// Get a reference to the blocklist cache.
     pub fn blocklist(&self) -> Arc<BlocklistCache> {
-        let client = self.client.read();
-        Arc::clone(client.blocklist())
+        Arc::clone(self.client.blocklist())
     }
 
     /// Get the circuit breaker.
     pub fn circuit_breaker(&self) -> Arc<CircuitBreaker> {
-        let client = self.client.read();
-        client.circuit_breaker()
+        self.client.circuit_breaker()
     }
 
     /// Get statistics.
     pub async fn stats(&self) -> HorizonStats {
-        let client = self.client.read();
-        let client_stats = client.stats();
-        let state = client.connection_state().await;
-        let blocklist = client.blocklist();
+        let client_stats = self.client.stats();
+        let state = self.client.connection_state().await;
+        let blocklist = self.client.blocklist();
+        let tenant_id = self.client.tenant_id().await;
+        let capabilities = self.client.capabilities().await;
 
         HorizonStats {
             connection_state: state.as_str().to_string(),
@@ -222,8 +193,8 @@ impl HorizonManager {
             heartbeats_sent: client_stats.heartbeats_sent,
             heartbeat_failures: client_stats.heartbeat_failures,
             reconnect_attempts: client_stats.reconnect_attempts,
-            tenant_id: client.tenant_id().await,
-            capabilities: client.capabilities().await,
+            tenant_id,
+            capabilities,
         }
     }
 
@@ -291,18 +262,18 @@ impl HorizonManagerBuilder {
 
     /// Build the HorizonManager.
     pub async fn build(self) -> Result<HorizonManager, HorizonError> {
-        let mut client = if let Some(provider) = self.metrics_provider {
-            HorizonClient::with_metrics_provider(self.config.clone(), provider)
-        } else {
-            HorizonClient::new(self.config.clone())
-        };
+        let mut client = HorizonClient::new(self.config.clone());
+
+        if let Some(provider) = self.metrics_provider {
+            client = client.with_metrics_provider(provider);
+        }
 
         if let Some(config_manager) = self.config_manager {
             client = client.with_config_manager(config_manager);
         }
 
         Ok(HorizonManager {
-            client: Arc::new(RwLock::new(client)),
+            client: Arc::new(client),
             config: self.config,
         })
     }

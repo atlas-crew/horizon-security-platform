@@ -63,8 +63,10 @@ const DEFAULT_BLOCK_PAGE: &str = r#"<!DOCTYPE html>
 /// Actions that can be taken for a rule match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum WafAction {
     /// Block the request
+    #[default]
     Block,
     /// Log but allow the request
     Log,
@@ -74,11 +76,6 @@ pub enum WafAction {
     Challenge,
 }
 
-impl Default for WafAction {
-    fn default() -> Self {
-        WafAction::Block
-    }
-}
 
 /// Rule override configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

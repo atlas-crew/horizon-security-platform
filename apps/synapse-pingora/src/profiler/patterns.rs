@@ -152,21 +152,19 @@ pub fn detect_pattern(value: &str) -> Option<PatternType> {
         }
 
         // Credit card detection
-        if len >= 13 && len <= 19 && CREDIT_CARD_PATTERN.is_match(value) {
+        if (13..=19).contains(&len) && CREDIT_CARD_PATTERN.is_match(value) {
             return Some(PatternType::CreditCard);
         }
     }
 
     // Phone number detection (can start with + or digit)
-    if len >= 7 && len <= 20 {
+    if (7..=20).contains(&len) {
         let first_char = value.chars().next();
-        if matches!(first_char, Some('+') | Some('('))
-            || value.starts_with(|c: char| c.is_ascii_digit())
-        {
-            if PHONE_PATTERN.is_match(value) {
+        if (matches!(first_char, Some('+') | Some('('))
+            || value.starts_with(|c: char| c.is_ascii_digit()))
+            && PHONE_PATTERN.is_match(value) {
                 return Some(PatternType::Phone);
             }
-        }
     }
 
     // URL detection (starts with http)
@@ -376,18 +374,33 @@ mod tests {
             PatternType::CreditCard
         ));
         assert!(matches_pattern("4111111111111111", PatternType::CreditCard));
-        assert!(matches_pattern("4111 1111 1111 1111", PatternType::CreditCard));
-        
+        assert!(matches_pattern(
+            "4111 1111 1111 1111",
+            PatternType::CreditCard
+        ));
+
         // Short/Long variants
         assert!(matches_pattern("1234567890123", PatternType::CreditCard)); // 13 digits
-        assert!(matches_pattern("1234567890123456789", PatternType::CreditCard)); // 19 digits
-        
+        assert!(matches_pattern(
+            "1234567890123456789",
+            PatternType::CreditCard
+        )); // 19 digits
+
         // detect_pattern end-to-end
-        assert_eq!(detect_pattern("4111-2222-3333-4444"), Some(PatternType::CreditCard));
-        assert_eq!(detect_pattern("4111222233334444"), Some(PatternType::CreditCard));
-        
+        assert_eq!(
+            detect_pattern("4111-2222-3333-4444"),
+            Some(PatternType::CreditCard)
+        );
+        assert_eq!(
+            detect_pattern("4111222233334444"),
+            Some(PatternType::CreditCard)
+        );
+
         // Negative cases
         assert_ne!(detect_pattern("12345"), Some(PatternType::CreditCard)); // Too short
-        assert_ne!(detect_pattern("1234-5678-9012-3456-7890"), Some(PatternType::CreditCard)); // Too long
+        assert_ne!(
+            detect_pattern("1234-5678-9012-3456-7890"),
+            Some(PatternType::CreditCard)
+        ); // Too long
     }
 }

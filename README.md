@@ -1,6 +1,19 @@
-# Atlas Crew Monorepo
+<p align="center">
+  <img src="brand/edge-protection-banner.png" alt="Edge Protection Platform" width="720" />
+</p>
 
-Edge protection and fleet intelligence platform. A polyglot monorepo containing a Rust-based WAF/edge engine, a Node.js fleet intelligence API, a React dashboard, and supporting TypeScript libraries.
+<p align="center">
+  <strong>Edge protection and fleet intelligence platform</strong><br/>
+  <sub>A polyglot monorepo containing a Rust-based WAF/edge engine, a Node.js fleet intelligence API, a React dashboard, and supporting TypeScript libraries.</sub>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/rust-nightly-orange?logo=rust" alt="Rust" />
+  <img src="https://img.shields.io/badge/node-%3E%3D20-green?logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/react-19-blue?logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-purple" alt="License" />
+  <img src="https://img.shields.io/badge/pingora-0.6-blue?logo=cloudflare" alt="Pingora" />
+</p>
 
 ## Architecture
 
@@ -27,17 +40,62 @@ packages/
 |------|---------|---------|
 | [Node.js](https://nodejs.org) | >= 20 | TypeScript projects |
 | [pnpm](https://pnpm.io) | >= 10 | Package management |
-| [Rust](https://rustup.rs) | stable | Synapse Pingora |
+| [Rust](https://rustup.rs) | nightly | Synapse Pingora |
 | [just](https://github.com/casey/just) | >= 1.0 | Task runner |
+| [Redis](https://redis.io) | any | Session state, job queues |
+| [PostgreSQL](https://www.postgresql.org) | >= 15 | Signal Horizon database |
+| [ClickHouse](https://clickhouse.com) | >= 24 | Time-series telemetry (optional in dev) |
 
 ## Getting Started
 
-```bash
-# Install JS/TS dependencies
-just install
+### First-time setup
 
-# Start everything in parallel (API :3100, UI :5180, Synapse :6190/:6191)
-just dev
+```bash
+# 1. Start infrastructure services
+brew services start redis       # Redis on :6379
+open -a Postgres                # PostgreSQL on :5432 (or brew services start postgresql)
+just ch-start                   # ClickHouse on :8123
+
+# 2. Verify services are running
+just services
+
+# 3. Install dependencies
+just install
+pnpm rebuild esbuild prisma @prisma/client @prisma/engines
+
+# 4. Set up databases
+cp apps/signal-horizon/api/.env.example apps/signal-horizon/api/.env
+# Edit .env — set DATABASE_URL to match your local PostgreSQL credentials
+just db-generate                # Generate Prisma client
+just db-migrate                 # Apply schema to PostgreSQL
+just ch-init                    # Apply schema to ClickHouse
+just db-seed                    # Seed tenants, sensors, and API keys
+```
+
+### Day-to-day
+
+```bash
+just dev                        # Start everything in parallel
+```
+
+After startup:
+
+| Service | URL |
+|---------|-----|
+| Signal Horizon UI | http://localhost:5180 |
+| Signal Horizon API | http://localhost:3100 |
+| Synapse Proxy | http://localhost:6190 |
+| Synapse Admin API | http://localhost:6191 |
+
+The seed creates a default tenant with API key `dev-dashboard-key` — the UI uses this automatically, so no manual auth configuration is needed.
+
+### Infrastructure services
+
+```bash
+just services                   # Check status of Redis, PostgreSQL, ClickHouse
+just ch-start                   # Start ClickHouse (launchd)
+just ch-stop                    # Stop ClickHouse
+just ch-init                    # Initialize ClickHouse schema
 ```
 
 ## Development

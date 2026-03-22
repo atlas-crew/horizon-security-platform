@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/edge-protection-banner.png" alt="Edge Protection Platform" width="720" />
+  <img src="brand/banners/edge-protection-banner.png" alt="Edge Protection Platform" width="720" />
 </p>
 
 <p align="center">
@@ -82,10 +82,10 @@ After startup:
 
 | Service | URL |
 |---------|-----|
-| Signal Horizon UI | http://localhost:5180 |
-| Signal Horizon API | http://localhost:3100 |
-| Synapse Proxy | http://localhost:6190 |
-| Synapse Admin API | http://localhost:6191 |
+| Signal Horizon UI | <http://localhost:5180> |
+| Signal Horizon API | <http://localhost:3100> |
+| Synapse Proxy | <http://localhost:6190> |
+| Synapse Admin API | <http://localhost:6191> |
 
 The seed creates a default tenant with API key `dev-dashboard-key` — the UI uses this automatically, so no manual auth configuration is needed.
 

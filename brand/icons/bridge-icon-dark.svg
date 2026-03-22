@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="110" height="110" viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg">
+  <rect width="110" height="110" fill="#0c1220"/>
+  <rect x="22" y="22" width="66" height="66" fill="none" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.2" stroke-dasharray="4 4"/>
+  <line x1="55" y1="22" x2="55" y2="88" stroke="#1E90FF" stroke-width="1" stroke-linecap="square" opacity="0.12"/>
+  <line x1="22" y1="55" x2="88" y2="55" stroke="#1E90FF" stroke-width="1" stroke-linecap="square" opacity="0.12"/>
+  <rect x="28" y="28" width="10" height="10" fill="none" stroke="#F97316" stroke-width="2"/>
+  <rect x="50" y="28" width="10" height="10" fill="none" stroke="#F97316" stroke-width="2"/>
+  <rect x="72" y="28" width="10" height="10" fill="none" stroke="#F97316" stroke-width="2"/>
+  <rect x="28" y="50" width="10" height="10" fill="none" stroke="#F97316" stroke-width="2"/>
+  <rect x="50" y="50" width="10" height="10" fill="none" stroke="#1E90FF" stroke-width="3"/>
+  <rect x="72" y="50" width="10" height="10" fill="#F97316"/>
+  <rect x="28" y="72" width="10" height="10" fill="none" stroke="#F97316" stroke-width="2"/>
+  <rect x="50" y="72" width="10" height="10" fill="none" stroke="#F97316" stroke-width="1.5" opacity="0.4"/>
+  <rect x="72" y="72" width="10" height="10" fill="none" stroke="#F97316" stroke-width="1.5" opacity="0.4"/>
+  <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3">
+    <polyline points="8,20 8,8 20,8"/>
+    <polyline points="90,8 102,8 102,20"/>
+    <polyline points="102,90 102,102 90,102"/>
+    <polyline points="20,102 8,102 8,90"/>
+  </g>
+</svg>

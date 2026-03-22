@@ -115,11 +115,17 @@ p, li {
 a {
   color: var(--ac-blue);
   text-decoration: none;
-  font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -5;
-  font-size: 13px; /* Matches body but with link styling */
   transition: opacity 0.15s ease;
 }
 a:hover { opacity: 0.8; }
+
+/* Content links (not navigation) get the branded lean treatment */
+main a:not([class]),
+p a,
+li a {
+  font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -5;
+  font-size: 13px;
+}
 
 /* ─── Scrollbar ────────────────────────────────────────────────────────────── */
 

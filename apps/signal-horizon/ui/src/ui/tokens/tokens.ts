@@ -32,6 +32,12 @@ export const colors = {
     mid: '#6B7D96',
   },
 
+  // Typography-specific semantic tokens
+  text: '#E8ECF4',
+  textSecondary: '#8899B0',
+  textMuted: '#5A6F8A',
+  textDim: '#4e6580',
+
   // Semantic
   status: {
     success: '#10B981',
@@ -122,11 +128,108 @@ export const typography = {
     bold: 700,
     black: 900,
   },
-  // Recursive-specific axes
-  axes: {
-    mono: { prose: 0, data: 1 },
-    casl: { clinical: 0, warm: 0.6 },
-  }
+  // Named variants used by <Text variant="..." />
+  display: {
+    fontSize: '36px',
+    lineHeight: '48px',
+    fontVariationSettings: "'wght' 300, 'MONO' 0, 'CASL' 0, 'slnt' 0",
+  },
+  heading: {
+    fontSize: '24px',
+    lineHeight: '32px',
+    fontVariationSettings: "'wght' 500, 'MONO' 0, 'CASL' 0.2, 'slnt' 0",
+  },
+  subhead: {
+    fontSize: '14px',
+    lineHeight: '20px',
+    letterSpacing: '1.5px',
+    textTransform: 'uppercase',
+    fontVariationSettings: "'wght' 600, 'MONO' 0, 'CASL' 0.3, 'slnt' -3",
+  },
+  body: {
+    fontSize: '13px',
+    lineHeight: '20px',
+    fontVariationSettings: "'wght' 400, 'MONO' 0, 'CASL' 0.6, 'slnt' 0",
+  },
+  label: {
+    fontSize: '12px',
+    lineHeight: '16px',
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+    fontVariationSettings: "'wght' 600, 'MONO' 1, 'CASL' 0.3, 'slnt' -4",
+  },
+  tag: {
+    fontSize: '11px',
+    lineHeight: '14px',
+    letterSpacing: '1.5px',
+    textTransform: 'uppercase',
+    fontVariationSettings: "'wght' 800, 'MONO' 0, 'CASL' 0, 'slnt' -3",
+  },
+  metric: {
+    fontSize: '32px',
+    lineHeight: '40px',
+    letterSpacing: '-0.5px',
+    fontVariationSettings: "'wght' 400, 'MONO' 1, 'CASL' 0.6, 'slnt' 0",
+  },
+  data: {
+    fontSize: '13px',
+    lineHeight: '18px',
+    fontVariationSettings: "'wght' 500, 'MONO' 1, 'CASL' 0, 'slnt' 0",
+  },
+  code: {
+    fontSize: '13px',
+    lineHeight: '18px',
+    letterSpacing: '0.5px',
+    fontVariationSettings: "'wght' 400, 'MONO' 1, 'CASL' 0, 'slnt' 0",
+  },
+  timestamp: {
+    fontSize: '11px',
+    lineHeight: '14px',
+    letterSpacing: '0.5px',
+    fontVariationSettings: "'wght' 500, 'MONO' 1, 'CASL' 0, 'slnt' 0",
+  },
+  nav: {
+    fontSize: '14px',
+    lineHeight: '20px',
+    letterSpacing: '1px',
+    fontVariationSettings: "'wght' 500, 'MONO' 0.5, 'CASL' 0.2, 'slnt' -2",
+  },
+  navActive: {
+    fontSize: '14px',
+    lineHeight: '20px',
+    letterSpacing: '1px',
+    fontVariationSettings: "'wght' 700, 'MONO' 0.5, 'CASL' 0.1, 'slnt' -2",
+  },
+  link: {
+    fontSize: '10px',
+    lineHeight: '14px',
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+    fontVariationSettings: "'wght' 700, 'MONO' 0, 'CASL' 0, 'slnt' -15",
+  },
+  breadcrumb: {
+    fontSize: '10px',
+    lineHeight: '14px',
+    letterSpacing: '2.5px',
+    textTransform: 'uppercase',
+    fontVariationSettings: "'wght' 700, 'MONO' 1, 'CASL' 0.2, 'slnt' -7",
+  },
+  small: {
+    fontSize: '11px',
+    lineHeight: '14px',
+    fontVariationSettings: "'wght' 400, 'MONO' 0, 'CASL' 0.6, 'slnt' 0",
+  },
+  caption: {
+    fontSize: '11px',
+    lineHeight: '14px',
+    fontVariationSettings: "'wght' 400, 'MONO' 0, 'CASL' 0.6, 'slnt' 0",
+  },
+  h1: { fontSize: '36px', fontVariationSettings: "'wght' 300, 'MONO' 0, 'CASL' 0, 'slnt' 0" },
+  h2: { fontSize: '24px', fontVariationSettings: "'wght' 500, 'MONO' 0, 'CASL' 0.2, 'slnt' 0" },
+  h3: { fontSize: '20px', fontVariationSettings: "'wght' 500, 'MONO' 0, 'CASL' 0.2, 'slnt' 0" },
+  h4: { fontSize: '18px', fontVariationSettings: "'wght' 600, 'MONO' 0, 'CASL' 0.3, 'slnt' -3" },
+  h5: { fontSize: '16px', fontVariationSettings: "'wght' 600, 'MONO' 0, 'CASL' 0.3, 'slnt' -3" },
+  h6: { fontSize: '14px', fontVariationSettings: "'wght' 600, 'MONO' 0, 'CASL' 0.3, 'slnt' -3" },
 } as const;
 
 // ─── Spacing ────────────────────────────────────────────────────────────────
@@ -134,7 +237,9 @@ export const typography = {
 export const spacing = {
   none: 0,
   xs: 4,
+  xsPlus: 6,
   sm: 8,
+  smPlus: 12,
   md: 16,
   lg: 24,
   xl: 32,

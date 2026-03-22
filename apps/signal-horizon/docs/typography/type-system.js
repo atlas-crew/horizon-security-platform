@@ -114,7 +114,7 @@ export const type = {
 
   /** Clickable links, actions — subtle lean, no casual */
   link: {
-    fontVariationSettings: "'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -5",
+    fontVariationSettings: "'wght' 600, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -5",
     fontSize: 10,
     letterSpacing: "1px",
   },

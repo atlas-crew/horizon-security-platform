@@ -41,7 +41,7 @@ const bgMap: Record<BgPreset, string> = {
   card: colors.card.dark,
   navy: colors.navy,
   dark: colors.bg.dark,
-  surface: colors.surface,
+  surface: colors.surface.base,
   light: colors.bg.light,
   transparent: 'transparent',
 };

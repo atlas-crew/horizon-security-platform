@@ -47,6 +47,12 @@ const headingSizes = {
   h4: { fontSize: '1.125rem', lineHeight: '24px' },
 };
 
+export const PAGE_TITLE_STYLE: React.CSSProperties = {
+  fontSize: '32px',
+  lineHeight: '40px',
+  fontVariationSettings: "'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0",
+};
+
 export const CARD_HEADER_TITLE_STYLE: React.CSSProperties = {
   fontSize: '16px',
   lineHeight: '22px',

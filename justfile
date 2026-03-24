@@ -240,6 +240,22 @@ clean:
     cd "{{root}}/packages/synapse-api" && rm -rf dist
     cd "{{root}}/apps/synapse-pingora" && cargo clean
 
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCS SITE (VitePress)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Serve the documentation site locally
+docs-dev:
+    cd "{{root}}/site" && npm run dev
+
+# Build the documentation site
+docs-build:
+    cd "{{root}}/site" && npm run build
+
+# Preview the documentation site build
+docs-preview:
+    cd "{{root}}/site" && npm run preview
+
 # Clean only JS/TS build artifacts (faster, skips Rust)
 clean-ts:
     cd "{{root}}" && rm -rf node_modules/.cache

@@ -283,10 +283,7 @@ impl CorrelationEngine {
         for fp in &fingerprints {
             if fp.value.len() >= 8 {
                 let prefix = fp.value[..8].to_string();
-                prefix_groups
-                    .entry(prefix)
-                    .or_default()
-                    .push(fp);
+                prefix_groups.entry(prefix).or_default().push(fp);
             }
         }
 

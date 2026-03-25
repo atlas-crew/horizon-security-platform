@@ -168,15 +168,14 @@ impl ShadowMirrorManager {
         }
 
         // Check sampling rate
-        if self.config.sampling_rate < 1.0
-            && fastrand::f32() > self.config.sampling_rate {
-                self.skipped_sampling.fetch_add(1, Ordering::Relaxed);
-                debug!(
-                    sampling = self.config.sampling_rate,
-                    "Skipping mirror: not selected by sampling"
-                );
-                return false;
-            }
+        if self.config.sampling_rate < 1.0 && fastrand::f32() > self.config.sampling_rate {
+            self.skipped_sampling.fetch_add(1, Ordering::Relaxed);
+            debug!(
+                sampling = self.config.sampling_rate,
+                "Skipping mirror: not selected by sampling"
+            );
+            return false;
+        }
 
         // Check per-IP rate limit
         if !self.rate_limiter.check_and_increment(client_ip) {

@@ -1,5 +1,6 @@
 //! WebSocket client for Signal Horizon Hub communication.
 
+use arc_swap::ArcSwap;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,6 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
-use arc_swap::ArcSwap;
 
 use super::blocklist::BlocklistCache;
 use super::config::HorizonConfig;
@@ -249,7 +249,7 @@ impl HorizonClient {
             config_manager: Arc::clone(&self.config_manager),
             circuit_breaker: Arc::clone(&self.circuit_breaker),
         };
-        
+
         let retry_queue = Arc::clone(&self.signal_retry);
         let retry_stats = Arc::clone(&self.stats);
         let retry_tx = signal_tx.clone();
@@ -257,12 +257,7 @@ impl HorizonClient {
         let shutdown_rx_conn = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
-            connection_loop(
-                params,
-                signal_rx,
-                shutdown_rx_conn,
-            )
-            .await;
+            connection_loop(params, signal_rx, shutdown_rx_conn).await;
         });
 
         let mut shutdown_rx_retry = shutdown_tx.subscribe();
@@ -476,7 +471,9 @@ async fn connection_loop(
         }
 
         // Check max reconnect attempts
-        if params.config.max_reconnect_attempts > 0 && attempt >= params.config.max_reconnect_attempts {
+        if params.config.max_reconnect_attempts > 0
+            && attempt >= params.config.max_reconnect_attempts
+        {
             error!("Max reconnect attempts reached");
             *params.state.write() = ConnectionState::Error;
             return;
@@ -506,7 +503,12 @@ async fn connection_loop(
                 return;
             }
             ConnectionResult::Disconnected { had_connection } => {
-                requeue_inflight(&mut pending_signals, &mut inflight_signals, params.config.max_queued_signals, &params.stats);
+                requeue_inflight(
+                    &mut pending_signals,
+                    &mut inflight_signals,
+                    params.config.max_queued_signals,
+                    &params.stats,
+                );
                 if had_connection {
                     attempt = 0;
                     reconnect_delay = params.config.reconnect_delay_ms;
@@ -514,13 +516,17 @@ async fn connection_loop(
                 }
 
                 attempt = attempt.saturating_add(1);
-                params.stats.reconnect_attempts.store(attempt, Ordering::Relaxed);
+                params
+                    .stats
+                    .reconnect_attempts
+                    .store(attempt, Ordering::Relaxed);
                 consecutive_failures = consecutive_failures.saturating_add(1);
 
                 if params.config.circuit_breaker_threshold > 0
                     && consecutive_failures >= params.config.circuit_breaker_threshold
                 {
-                    let cooldown = Duration::from_millis(params.config.circuit_breaker_cooldown_ms.max(1));
+                    let cooldown =
+                        Duration::from_millis(params.config.circuit_breaker_cooldown_ms.max(1));
                     circuit_open_until = Some(Instant::now() + cooldown);
                     *params.state.write() = ConnectionState::Degraded;
                     warn!(
@@ -844,10 +850,22 @@ async fn connect_and_run(
 
     if !pending_signals.is_empty() {
         signal_batch.extend(pending_signals.drain(..));
-        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, &params.stats).await {
+        if let Err(e) = send_batch(
+            &mut ws_tx,
+            &mut signal_batch,
+            inflight_signals,
+            &params.stats,
+        )
+        .await
+        {
             error!("Failed to send buffered signals: {}", e);
             params.circuit_breaker.record_failure().await;
-            stash_pending(pending_signals, &mut signal_batch, params.config.max_queued_signals, &params.stats);
+            stash_pending(
+                pending_signals,
+                &mut signal_batch,
+                params.config.max_queued_signals,
+                &params.stats,
+            );
             return ConnectionResult::Disconnected { had_connection };
         }
     }

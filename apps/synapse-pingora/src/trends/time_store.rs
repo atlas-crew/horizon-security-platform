@@ -4,8 +4,8 @@ use std::collections::{HashMap, VecDeque};
 
 use super::config::TrendsConfig;
 use super::types::{
-    BucketSummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend,
-    SignalType, TimeRange, TopSignalType, TrendHistogramBucket, TrendQueryOptions, TrendsSummary,
+    BucketSummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend, SignalType,
+    TimeRange, TopSignalType, TrendHistogramBucket, TrendQueryOptions, TrendsSummary,
 };
 
 /// A time bucket for signal aggregation.
@@ -37,11 +37,7 @@ impl SignalBucket {
         // Update summary
         self.summary.total_count += 1;
 
-        let category_summary = self
-            .summary
-            .by_category
-            .entry(signal.category)
-            .or_default();
+        let category_summary = self.summary.by_category.entry(signal.category).or_default();
 
         category_summary.count += 1;
         category_summary.unique_values.insert(signal.value.clone());

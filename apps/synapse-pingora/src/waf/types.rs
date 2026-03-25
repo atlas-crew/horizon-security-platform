@@ -175,8 +175,7 @@ pub enum AnomalySignalType {
 }
 
 /// Modes for behavioral anomaly blocking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BlockingMode {
     /// Only log anomalies, never block.
     #[default]
@@ -184,7 +183,6 @@ pub enum BlockingMode {
     /// Block requests that exceed the anomaly threshold.
     Enforcement,
 }
-
 
 /// Risk calculation configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

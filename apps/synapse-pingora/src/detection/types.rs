@@ -49,7 +49,6 @@ impl StuffingSeverity {
     }
 }
 
-
 /// Verdict from credential stuffing analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StuffingVerdict {

@@ -148,10 +148,7 @@ impl Detector for NetworkProximityDetector {
                 * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
-                campaign_id: Some(format!(
-                    "network-{}",
-                    subnet.replace(['/', '.'], "-")
-                )),
+                campaign_id: Some(format!("network-{}", subnet.replace(['/', '.'], "-"))),
                 status: None,
                 confidence: Some(confidence),
                 attack_types: Some(vec!["distributed_attack".to_string()]),

@@ -52,7 +52,9 @@ impl AuthCoverageAggregator {
 
         // If at limit and endpoint is new, merge into "OTHER"
         // Account for "OTHER" entry by using saturating_sub(1)
-        let target_endpoint = if counts.contains_key(endpoint) || counts.len() < self.max_endpoints.saturating_sub(1) {
+        let target_endpoint = if counts.contains_key(endpoint)
+            || counts.len() < self.max_endpoints.saturating_sub(1)
+        {
             endpoint
         } else {
             self.dropped_endpoints.fetch_add(1, Ordering::Relaxed);

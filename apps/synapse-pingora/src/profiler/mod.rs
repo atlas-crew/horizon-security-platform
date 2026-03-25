@@ -442,13 +442,14 @@ impl Profiler {
                     let numeric_ratio =
                         *stats.type_counts.get("numeric").unwrap_or(&0) as f64 / stats.count as f64;
                     if numeric_ratio > self.config.type_ratio_threshold
-                        && value.parse::<f64>().is_err() {
-                            result.add(
-                                AnomalySignalType::ParamValueAnomaly,
-                                5,
-                                format!("Parameter {} expected numeric, got string", param),
-                            );
-                        }
+                        && value.parse::<f64>().is_err()
+                    {
+                        result.add(
+                            AnomalySignalType::ParamValueAnomaly,
+                            5,
+                            format!("Parameter {} expected numeric, got string", param),
+                        );
+                    }
                 }
             }
         }

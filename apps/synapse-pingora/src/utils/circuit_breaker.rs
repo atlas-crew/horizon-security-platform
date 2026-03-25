@@ -76,11 +76,10 @@ impl CircuitBreaker {
         let mut inner = self.inner.lock().await;
         inner.last_failure = Some(Instant::now());
 
-        if count >= self.failure_threshold
-            && inner.state != CircuitState::Open {
-                inner.state = CircuitState::Open;
-                warn!("Circuit breaker opened after {} failures", count);
-            }
+        if count >= self.failure_threshold && inner.state != CircuitState::Open {
+            inner.state = CircuitState::Open;
+            warn!("Circuit breaker opened after {} failures", count);
+        }
     }
 
     /// Check if requests should be allowed through.

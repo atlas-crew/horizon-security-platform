@@ -421,7 +421,9 @@ impl CrawlerDetector {
 
     /// Record bad bot stat with bounded map size
     fn record_bad_bot_stat(&self, name: &str) {
-        if self.stats.by_bad_bot.len() < self.config.max_stats_entries || self.stats.by_bad_bot.contains_key(name) {
+        if self.stats.by_bad_bot.len() < self.config.max_stats_entries
+            || self.stats.by_bad_bot.contains_key(name)
+        {
             *self.stats.by_bad_bot.entry(name.to_string()).or_insert(0) += 1;
         }
     }

@@ -76,7 +76,6 @@ pub enum WafAction {
     Challenge,
 }
 
-
 /// Rule override configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleOverride {

@@ -27,7 +27,6 @@ pub struct TrendsManagerDependencies {
     pub apply_risk: Option<RiskCallback>,
 }
 
-
 /// High-level trends manager.
 pub struct TrendsManager {
     config: TrendsConfig,

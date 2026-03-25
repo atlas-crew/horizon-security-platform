@@ -621,7 +621,9 @@ fn parse_filter(payload: &Value) -> LogStreamFilter {
             chrono::DateTime::parse_from_rfc3339(s)
                 .ok()
                 .map(|dt| dt.timestamp_millis().max(0) as u64)
-        } else { value.as_u64().map(|ms| ms) }
+        } else {
+            value.as_u64().map(|ms| ms)
+        }
     });
 
     LogStreamFilter {

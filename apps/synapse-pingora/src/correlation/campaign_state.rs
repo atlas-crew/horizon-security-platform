@@ -116,7 +116,6 @@ pub enum CampaignStatus {
     Resolved,
 }
 
-
 impl std::fmt::Display for CampaignStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -620,11 +619,10 @@ impl CampaignStore {
 
         for entry in self.campaigns.iter() {
             let campaign = entry.value();
-            if campaign.status == status
-                && oldest_time.is_none_or(|t| campaign.last_activity < t) {
-                    oldest_id = Some(entry.key().clone());
-                    oldest_time = Some(campaign.last_activity);
-                }
+            if campaign.status == status && oldest_time.is_none_or(|t| campaign.last_activity < t) {
+                oldest_id = Some(entry.key().clone());
+                oldest_time = Some(campaign.last_activity);
+            }
         }
 
         if let Some(id) = oldest_id {

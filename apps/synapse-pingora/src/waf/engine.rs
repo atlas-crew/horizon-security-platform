@@ -1074,9 +1074,10 @@ impl Engine {
         let name = condition.name.as_deref().unwrap_or("*");
         for entry in &ctx.arg_entries {
             if (name == "*" || entry.key == name)
-                && self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id, depth + 1) {
-                    return true;
-                }
+                && self.eval_condition(child, ctx, Some(&entry.value), trace, rule_id, depth + 1)
+            {
+                return true;
+            }
         }
         false
     }

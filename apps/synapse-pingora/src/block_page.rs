@@ -251,9 +251,7 @@ impl BlockPageRenderer {
         ctx: &BlockContext,
         accept_header: Option<&str>,
     ) -> (String, &'static str) {
-        let prefers_json = accept_header
-            .map(Self::prefers_json)
-            .unwrap_or(false);
+        let prefers_json = accept_header.map(Self::prefers_json).unwrap_or(false);
 
         if prefers_json {
             (self.render_json(ctx), "application/json")

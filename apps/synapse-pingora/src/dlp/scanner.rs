@@ -96,8 +96,7 @@ pub struct DlpMatch {
 }
 
 /// Result of a DLP scan
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ScanResult {
     pub scanned: bool,
     pub has_matches: bool,
@@ -110,7 +109,6 @@ pub struct ScanResult {
     /// Original content length before truncation (0 if not truncated)
     pub original_length: usize,
 }
-
 
 /// DLP scanner statistics
 #[derive(Debug, Clone)]
@@ -149,7 +147,6 @@ pub enum RedactionMode {
     /// No redaction (dangerous, debug only)
     None,
 }
-
 
 /// Error type for DLP configuration validation
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -592,14 +589,12 @@ pub fn validate_iban(iban: &str) -> bool {
         if total_len < 4 {
             // Validate format: first 2 must be letters, next 2 must be digits
             match total_len {
-                0 | 1
-                    if !upper.is_ascii_alphabetic() => {
-                        return false;
-                    }
-                2 | 3
-                    if !upper.is_ascii_digit() => {
-                        return false;
-                    }
+                0 | 1 if !upper.is_ascii_alphabetic() => {
+                    return false;
+                }
+                2 | 3 if !upper.is_ascii_digit() => {
+                    return false;
+                }
                 _ => {}
             }
             first_four[first_four_idx] = upper as u8;

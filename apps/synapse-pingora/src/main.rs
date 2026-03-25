@@ -42,12 +42,12 @@ use std::cell::RefCell;
 use std::fs;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig};
 use sysinfo::{Disks, System};
-use std::str::FromStr;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
@@ -1269,7 +1269,9 @@ impl SynapseProxy {
 
         // Start adaptive rate limiting if configured
         if let Some(ref adaptive_rl) = self.adaptive_rate_limiter {
-            adaptive_rl.clone().start_background_task(Duration::from_secs(5));
+            adaptive_rl
+                .clone()
+                .start_background_task(Duration::from_secs(5));
         }
 
         info!("SynapseProxy internal background tasks started");
@@ -1325,10 +1327,7 @@ impl SynapseProxy {
         Self::with_health(backends, deps)
     }
 
-    pub fn with_health(
-        backends: Vec<(String, u16)>,
-        deps: ProxyDependencies,
-    ) -> Self {
+    pub fn with_health(backends: Vec<(String, u16)>, deps: ProxyDependencies) -> Self {
         // Create tarpit manager first (needed by progression manager)
         let tarpit_manager = Arc::new(TarpitManager::new(deps.tarpit_config.clone()));
 
@@ -2854,7 +2853,13 @@ impl ProxyHttp for SynapseProxy {
                             || lower.starts_with("phpsessid=")
                             || lower.starts_with("sid=")
                     })
-                    .map(|cookie| cookie.split_once('=').map(|x| x.1).unwrap_or("").to_string())
+                    .map(|cookie| {
+                        cookie
+                            .split_once('=')
+                            .map(|x| x.1)
+                            .unwrap_or("")
+                            .to_string()
+                    })
             });
 
         if let Some(token) = session_token {
@@ -3802,8 +3807,7 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
-        if let (Some(method), Some(path)) =
-            (ctx.request_method.as_ref(), ctx.request_path.as_ref())
+        if let (Some(method), Some(path)) = (ctx.request_method.as_ref(), ctx.request_path.as_ref())
         {
             record_auth_coverage(
                 &self.auth_coverage,
@@ -5511,10 +5515,7 @@ fn main() {
             per_ip_rps_limit: config.rate_limit.per_ip_rps,
         };
 
-        SynapseProxy::with_health(
-            legacy_backends,
-            deps,
-        )
+        SynapseProxy::with_health(legacy_backends, deps)
     };
 
     // Finding #15: Inject dependencies for snapshotting
@@ -5627,7 +5628,12 @@ fn main() {
         });
 
         // Run TUI in main thread (blocks until 'q' is pressed)
-        if let Err(e) = synapse_pingora::tui::start_tui(metrics_for_tui as Arc<dyn synapse_pingora::metrics::TuiDataProvider>, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
+        if let Err(e) = synapse_pingora::tui::start_tui(
+            metrics_for_tui as Arc<dyn synapse_pingora::metrics::TuiDataProvider>,
+            entities_for_tui,
+            block_log_for_tui,
+            Arc::clone(&SYNAPSE),
+        ) {
             eprintln!("TUI error: {}", e);
         }
 
@@ -5652,7 +5658,7 @@ fn main() {
 
 fn init_tui_logging() {
     use std::fs::OpenOptions;
-    
+
     let log_file = match OpenOptions::new()
         .create(true)
         .append(true)
@@ -5665,7 +5671,8 @@ fn init_tui_logging() {
         }
     };
 
-    let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    let mut builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     builder.format(|buf, record| {
         use std::io::Write;
         let level = format!("{:<5}", record.level());
@@ -5678,11 +5685,11 @@ fn init_tui_logging() {
             record.args()
         )
     });
-    
+
     // Redirect all logs to the file
     builder.target(env_logger::Target::Pipe(Box::new(log_file)));
     builder.init();
-    
+
     info!("TUI logging initialized, writing to synapse-tui.log");
 }
 

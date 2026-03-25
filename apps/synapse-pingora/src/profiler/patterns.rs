@@ -162,9 +162,10 @@ pub fn detect_pattern(value: &str) -> Option<PatternType> {
         let first_char = value.chars().next();
         if (matches!(first_char, Some('+') | Some('('))
             || value.starts_with(|c: char| c.is_ascii_digit()))
-            && PHONE_PATTERN.is_match(value) {
-                return Some(PatternType::Phone);
-            }
+            && PHONE_PATTERN.is_match(value)
+        {
+            return Some(PatternType::Phone);
+        }
     }
 
     // URL detection (starts with http)

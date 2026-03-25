@@ -1,4 +1,4 @@
-# Shadow Mirroring for Honeypot Analysis (Synapse-Pingora)
+# Shadow Mirroring for Honeypot Analysis (Synapse WAF)
 
 Shadow mirroring lets you copy suspicious traffic to one or more honeypot
 targets without impacting the primary request path. This tutorial covers setup,

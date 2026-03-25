@@ -1,4 +1,4 @@
-# Synapse-Pingora PoC
+# Synapse WAF PoC
 
 A proof-of-concept integrating the **real Synapse WAF detection engine** (237 production rules) with Cloudflare's [Pingora](https://github.com/cloudflare/pingora) proxy framework. **Pure Rust, no Node.js, no FFI boundary**.
 
@@ -23,7 +23,7 @@ A proof-of-concept integrating the **real Synapse WAF detection engine** (237 pr
 
 ```mermaid
 flowchart LR
-    Client -->|request| SP["Synapse-Pingora<br/><b>Single Binary</b>"]
+    Client -->|request| SP["Synapse WAF<br/><b>Single Binary</b>"]
     SP -->|proxy| Backend[Backend Server]
     Backend -->|response| SP
     SP -->|response| Client
@@ -70,14 +70,14 @@ flowchart LR
 cargo build --release
 
 # Run (uses default config)
-./target/release/synapse-pingora
+./target/release/synapse-waf
 
 # Run with interactive TUI dashboard
-./target/release/synapse-pingora --tui
+./target/release/synapse-waf --tui
 
 # Or with config file
 cp config.example.yaml config.yaml
-./target/release/synapse-pingora
+./target/release/synapse-waf
 
 # Run integration tests
 ./test.sh
@@ -121,7 +121,7 @@ Criterion.rs results from 19 benchmark suites (306 benchmarks), release build wi
 
 | Implementation | Detection Latency | Notes |
 |----------------|-------------------|-------|
-| **Synapse-Pingora** | **~10-25 μs** | Pure Rust, no FFI boundary |
+| **Synapse WAF** | **~10-25 μs** | Pure Rust, no FFI boundary |
 | libsynapse (NAPI) | ~62-73 μs | Node.js + Rust FFI overhead |
 | ModSecurity | 100-500 μs | Depends on ruleset |
 | AWS WAF | 50-200 μs | Cloud service |
@@ -207,9 +207,10 @@ Run the test script to verify everything works:
 ```
 
 Sample output:
+
 ```
 ============================================
-  Synapse-Pingora Integration Tests
+  Synapse WAF Integration Tests
 ============================================
 
 [INFO] Testing clean requests (should PASS)...
@@ -239,6 +240,7 @@ curl -X POST http://localhost:6191/reload -H "X-Admin-Key: $ADMIN_KEY"
 ```
 
 How it works:
+
 1. New config is parsed and validated
 2. Routing table and WAF rules are rebuilt
 3. Atomic `RwLock` swap replaces the live config
@@ -274,6 +276,7 @@ cargo bench
 ## Example Usage
 
 ### Clean Request (Allowed)
+
 ```bash
 curl -v http://localhost:6190/api/users/123
 # → Proxied to backend
@@ -282,6 +285,7 @@ curl -v http://localhost:6190/api/users/123
 ```
 
 ### SQL Injection (Blocked)
+
 ```bash
 curl -v "http://localhost:6190/api/users?id=1'+OR+'1'%3D'1"
 # → HTTP 403 Forbidden
@@ -289,6 +293,7 @@ curl -v "http://localhost:6190/api/users?id=1'+OR+'1'%3D'1"
 ```
 
 ### XSS (Blocked)
+
 ```bash
 curl -v "http://localhost:6190/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
 # → HTTP 403 Forbidden
@@ -296,6 +301,7 @@ curl -v "http://localhost:6190/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
 ```
 
 ### POST with Body
+
 ```bash
 curl -v -X POST -d '{"user":"test"}' http://localhost:6190/api/users
 # Body size logged: "Request body complete: 15 bytes"
@@ -323,6 +329,7 @@ This PoC uses the **real libsynapse engine** from `../risk-server/libsynapse/`, 
 ### Verified Detections
 
 Tested and verified to block:
+
 - `UNION SELECT` SQLi attacks (rule 200200)
 - Path traversal attempts (rules 200014, 200016)
 - Various other attack patterns from the production rule set
@@ -330,6 +337,7 @@ Tested and verified to block:
 ### Rules Loading
 
 Rules are loaded at startup from (in order of preference):
+
 1. `../risk-server/libsynapse/rules.json` (production rules)
 2. `rules.json` (local override)
 3. `/etc/synapse-pingora/rules.json` (system-wide)
@@ -378,6 +386,7 @@ DlpConfig {
 ```
 
 **Tuning Recommendations**:
+
 - **High-security environments**: Set `max_body_inspection_bytes` to 32KB+ for deeper inspection
 - **High-throughput APIs**: Keep default 8KB cap for sub-100μs scan times
 - **File upload endpoints**: Binary content types are automatically skipped
@@ -396,6 +405,7 @@ DlpConfig {
 ## Future Work (For Feature Parity with nginx)
 
 ### Core Features (Required for Production)
+
 - [x] Full detection rule parity with libsynapse (DONE - using real engine)
 - [x] **Multi-site/vhost support** - Hostname-based routing with per-site config
 - [x] **TLS termination** - SSL certificates, SNI support
@@ -403,6 +413,7 @@ DlpConfig {
 - [x] **Per-site WAF config** - Override rules, thresholds per hostname
 
 ### Management Features (Important)
+
 - [x] **Metrics endpoint** - Prometheus-compatible `/metrics`
 - [x] **Config hot-reload API** - Update config without restart
 - [x] **Access lists** - Allow/deny CIDRs per site
@@ -410,6 +421,7 @@ DlpConfig {
 - [x] Signal Horizon telemetry integration
 
 ### Advanced Features
+
 - [x] DLP scanning in `request_body_filter` (DONE - with performance optimizations)
 - [x] Request body inspection (POST/PUT payloads) (DONE - with truncation cap)
 - [x] Custom block pages per site
@@ -474,7 +486,7 @@ synapse-pingora/
 ## License
 
 Licensed under the GNU Affero General Public License v3.0 only.
-Copyright AtlasCrew, LLC.
+Copyright Nicholas Crew Ferguson
 See [LICENSE](../../LICENSE).
 
 ## See Also

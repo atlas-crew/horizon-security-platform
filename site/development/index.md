@@ -13,7 +13,7 @@ graph TD
     subgraph Apps
         API["signal-horizon/api<br/>Node.js · Express"]
         UI["signal-horizon/ui<br/>React 19 · Vite"]
-        SP["synapse-pingora<br/>Rust · Pingora"]
+        SP["synapse-waf<br/>Rust · Pingora"]
         SC["synapse-client<br/>TypeScript CLI"]
     end
 

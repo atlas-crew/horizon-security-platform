@@ -1,4 +1,4 @@
-# Implementing Custom DLP Patterns (Synapse-Pingora)
+# Implementing Custom DLP Patterns (Synapse WAF)
 
 This tutorial shows how to define custom Data Loss Prevention (DLP) patterns,
 apply redaction, and validate detections safely.

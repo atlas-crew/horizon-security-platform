@@ -1,6 +1,6 @@
-# Synapse-Pingora Demo Instructions
+# Synapse WAF Demo Instructions
 
-This directory contains scripts to demonstrate the Synapse-Pingora WAF capabilities.
+This directory contains scripts to demonstrate the Synapse WAF capabilities.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ This runs the vulnerable Python Flask application on port 5000.
 ./run-upstream.sh
 ```
 
-**Terminal 2: Synapse-Pingora Proxy**
+**Terminal 2: Synapse WAF Proxy**
 This runs the Rust-based WAF proxy on port 6190 (HTTPS).
 ```bash
 ./run-proxy.sh

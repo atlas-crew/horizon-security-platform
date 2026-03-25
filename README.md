@@ -23,7 +23,7 @@ apps/
     api/        → Fleet intelligence API (Node.js, Express, Prisma)
     ui/         → Dashboard (React 19, Vite, Tailwind)
     shared/     → Shared types and defaults
-  synapse-pingora/  → Edge WAF engine (Rust, Cloudflare Pingora)
+  synapse-waf/  → Edge WAF engine (Rust, Cloudflare Pingora)
   synapse-client/   → CLI and client for Synapse APIs (TypeScript)
 
 packages/
@@ -32,7 +32,7 @@ packages/
 
 **Signal Horizon** is the fleet intelligence control plane — it aggregates telemetry from edge sensors, correlates attack campaigns, and drives collective defense decisions across a fleet of Synapse nodes.
 
-**Synapse Pingora** is a high-performance WAF and edge proxy built on Cloudflare's Pingora framework. It handles request inspection, entity tracking, risk scoring, DLP scanning, behavioral blocking, and campaign correlation at the edge.
+**Synapse WAF** is a high-performance WAF and edge proxy built on Cloudflare's Pingora framework. It handles request inspection, entity tracking, risk scoring, DLP scanning, behavioral blocking, and campaign correlation at the edge.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ packages/
 |------|---------|---------|
 | [Node.js](https://nodejs.org) | >= 20 | TypeScript projects |
 | [pnpm](https://pnpm.io) | >= 10 | Package management |
-| [Rust](https://rustup.rs) | nightly | Synapse Pingora |
+| [Rust](https://rustup.rs) | nightly | Synapse WAF |
 | [just](https://github.com/casey/just) | >= 1.0 | Task runner |
 | [Redis](https://redis.io) | any | Session state, job queues |
 | [PostgreSQL](https://www.postgresql.org) | >= 15 | Signal Horizon database |
@@ -107,7 +107,7 @@ All common tasks are available through the root `justfile`. Run `just` to see th
 ```bash
 just dev            # All services in parallel
 just dev-horizon    # Signal Horizon API + UI only
-just dev-synapse    # Synapse Pingora only
+just dev-synapse    # Synapse WAF only
 ```
 
 ### Build
@@ -115,8 +115,8 @@ just dev-synapse    # Synapse Pingora only
 ```bash
 just build                # All projects (Nx dependency graph)
 just build-horizon        # Signal Horizon API + UI
-just build-synapse        # Synapse Pingora (release)
-just build-synapse-dev    # Synapse Pingora (debug, faster compile)
+just build-synapse        # Synapse WAF (release)
+just build-synapse-dev    # Synapse WAF (debug, faster compile)
 just build-synapse-api    # synapse-api library
 just build-synapse-client # synapse-client CLI
 ```
@@ -126,8 +126,8 @@ just build-synapse-client # synapse-client CLI
 ```bash
 just test               # Everything
 just test-horizon       # Signal Horizon API + UI
-just test-synapse       # Synapse Pingora (cargo test)
-just test-synapse-heavy # Synapse Pingora integration tests
+just test-synapse       # Synapse WAF (cargo test)
+just test-synapse-heavy # Synapse WAF integration tests
 just test-synapse-api   # synapse-api library
 just test-synapse-client # synapse-client CLI
 ```
@@ -160,24 +160,27 @@ just db-studio    # Open Prisma Studio
 
 ## Releasable Artifacts
 
-| Artifact | Path | Type |
-|----------|------|------|
-| Signal Horizon | `apps/signal-horizon/` | API + UI (container) |
-| Synapse Pingora | `apps/synapse-pingora/` | Rust binary |
-| synapse-api | `packages/synapse-api/` | npm package |
-| synapse-client | `apps/synapse-client/` | npm package / CLI |
+| Artifact | Path | Registry |
+|----------|------|----------|
+| Signal Horizon | `apps/signal-horizon/` | Container image |
+| synapse-waf | `apps/synapse-waf/` | [crates.io](https://crates.io/crates/synapse-waf) |
+| @atlascrew/synapse-api | `packages/synapse-api/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-api) |
+| @atlascrew/synapse-client | `apps/synapse-client/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-client) |
 
 ## Workspace Tooling
 
 - **[pnpm](https://pnpm.io)** — package management with workspaces
 - **[Nx](https://nx.dev)** — build orchestration and dependency graph (`just graph` to visualize)
 - **[just](https://github.com/casey/just)** — task runner (root `justfile`)
-- **[Cargo](https://doc.rust-lang.org/cargo/)** — Rust build system (self-contained within `synapse-pingora`)
+- **[Cargo](https://doc.rust-lang.org/cargo/)** — Rust build system (self-contained within `synapse-waf`)
 
-Synapse Pingora also has its own `justfile` at `apps/synapse-pingora/justfile` with demo and service management recipes.
+Synapse WAF also has its own `justfile` at `apps/synapse-waf/justfile` with demo and service management recipes.
 
 ## License
 
-AGPL-3.0-only — see [LICENSE](LICENSE).
-
-Synapse Pingora is licensed under Apache-2.0.
+| Component | License |
+|-----------|---------|
+| Signal Horizon (API, UI) | [AGPL-3.0-only](LICENSE) |
+| Synapse WAF | [AGPL-3.0-only](LICENSE) |
+| @atlascrew/synapse-api | [MIT](packages/synapse-api/package.json) |
+| @atlascrew/synapse-client | [MIT](apps/synapse-client/package.json) |

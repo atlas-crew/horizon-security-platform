@@ -1,9 +1,9 @@
 # Synapse Sensor Configuration Reference
 
-Complete YAML configuration reference for the Synapse Sensor (synapse-pingora). The sensor loads configuration from a YAML file at startup:
+Complete YAML configuration reference for the Synapse Sensor (synapse-waf). The sensor loads configuration from a YAML file at startup:
 
 ```bash
-synapse-pingora --config /etc/synapse/config.yaml
+synapse-waf --config /etc/synapse/config.yaml
 ```
 
 Configuration file maximum size is 10 MB. All file paths are validated against path traversal at load time.

@@ -1,6 +1,6 @@
 /**
  * Telemetry ingestion routes
- * Accepts batched and single-event payloads from synapse-pingora.
+ * Accepts batched and single-event payloads from synapse-waf.
  */
 
 import { Router, type Request, type Response } from 'express';

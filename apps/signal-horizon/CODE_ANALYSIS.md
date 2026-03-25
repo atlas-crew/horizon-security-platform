@@ -2,7 +2,7 @@
 
 ## Code Analysis
 
-### 18. Rust (synapse-pingora)
+### 18. Rust (synapse-waf)
 
 Run:
 ```bash

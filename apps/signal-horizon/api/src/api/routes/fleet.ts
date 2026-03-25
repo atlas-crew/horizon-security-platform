@@ -1251,7 +1251,7 @@ export function createFleetRoutes(
             remoteAddress: `203.0.113.${i + 1}:${443 + i * 100}`,
             state: ['ESTABLISHED', 'TIME_WAIT', 'CLOSE_WAIT'][i % 3],
             pid: 1000 + i,
-            program: ['synapse-pingora', 'atlascrew-agent', 'node'][i % 3],
+            program: ['synapse-waf', 'atlascrew-agent', 'node'][i % 3],
             duration: Math.floor(Math.random() * 3600),
           })),
           dns: {
@@ -1300,8 +1300,8 @@ export function createFleetRoutes(
 
         const processes = [
           { pid: 1, name: 'systemd', user: 'root', cpu: 0.1, memory: 0.2, status: 'running', threads: 1 },
-          { pid: 1234, name: 'synapse-pingora', user: 'atlascrew', cpu: 2.5, memory: 1.8, status: 'running', threads: 4 },
-          { pid: 1235, name: 'synapse-pingora', user: 'atlascrew', cpu: 2.3, memory: 1.7, status: 'running', threads: 4 },
+          { pid: 1234, name: 'synapse-waf', user: 'atlascrew', cpu: 2.5, memory: 1.8, status: 'running', threads: 4 },
+          { pid: 1235, name: 'synapse-waf', user: 'atlascrew', cpu: 2.3, memory: 1.7, status: 'running', threads: 4 },
           { pid: 2001, name: 'atlascrew-agent', user: 'atlascrew', cpu: 5.2, memory: 3.4, status: 'running', threads: 8 },
           { pid: 2002, name: 'atlascrew-collector', user: 'atlascrew', cpu: 3.1, memory: 2.1, status: 'running', threads: 4 },
           { pid: 2003, name: 'atlascrew-waf', user: 'atlascrew', cpu: 8.5, memory: 6.2, status: 'running', threads: 16 },
@@ -1315,7 +1315,7 @@ export function createFleetRoutes(
           { name: 'atlascrew-waf', status: 'active', pid: 2003, uptime: 86400 * 7, health: 'healthy' },
           { name: 'atlascrew-agent', status: 'active', pid: 2001, uptime: 86400 * 7, health: 'healthy' },
           { name: 'atlascrew-collector', status: 'active', pid: 2002, uptime: 86400 * 7, health: 'healthy' },
-          { name: 'synapse-pingora', status: 'active', pid: 1234, uptime: 86400 * 14, health: 'healthy' },
+          { name: 'synapse-waf', status: 'active', pid: 1234, uptime: 86400 * 14, health: 'healthy' },
           { name: 'postgresql', status: 'active', pid: 3001, uptime: 86400 * 30, health: 'healthy' },
           { name: 'redis', status: 'active', pid: 3002, uptime: 86400 * 30, health: 'healthy' },
         ];

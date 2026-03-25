@@ -155,10 +155,10 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
   const summary: SeedSummary = { tenants: [] };
 
   // Compatibility: allow sensor-bridge to work with defaults from config.ts
-  // SENSOR_BRIDGE_SENSOR_ID defaults to 'synapse-pingora-1'
-  // SENSOR_BRIDGE_SENSOR_NAME defaults to 'Synapse Pingora WAF'
-  const BRIDGE_SENSOR_ID = 'synapse-pingora-1';
-  const BRIDGE_SENSOR_NAME = 'Synapse Pingora WAF';
+  // SENSOR_BRIDGE_SENSOR_ID defaults to 'synapse-waf-1'
+  // SENSOR_BRIDGE_SENSOR_NAME defaults to 'Synapse WAF'
+  const BRIDGE_SENSOR_ID = 'synapse-waf-1';
+  const BRIDGE_SENSOR_NAME = 'Synapse WAF';
   const BRIDGE_SENSOR_API_KEY = 'sk-sensor-bridge-dev';
   const BRIDGE_SENSOR_FINGERPRINT = sha256Hex(`${BRIDGE_SENSOR_ID}:${BRIDGE_SENSOR_API_KEY}`).slice(0, 32);
   // Compatibility: UI defaults assume this API key value exists.
@@ -517,7 +517,7 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
           id: BRIDGE_SENSOR_ID,
           tenantId,
           name: BRIDGE_SENSOR_NAME,
-          hostname: 'synapse-pingora',
+          hostname: 'synapse-waf',
           region,
           version: '1.0.0-bridge',
           connectionState: ConnectionState.CONNECTED,

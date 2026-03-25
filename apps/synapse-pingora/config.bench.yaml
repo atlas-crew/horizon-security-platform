@@ -1,4 +1,4 @@
-# Synapse-Pingora Load Test Config
+# Synapse WAF Load Test Config
 server:
   listen: "127.0.0.1:6190"
   workers: 4 # Fixed workers for consistency

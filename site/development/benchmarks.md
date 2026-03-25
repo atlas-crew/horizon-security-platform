@@ -204,7 +204,7 @@ DLP achieves the best scaling (3.1x degradation at 8 threads) because scanning i
 - **Sustained load** — all benchmarks are burst-mode (Criterion.rs). No 10+ minute sustained load tests have been performed. Memory growth under extended load is unmeasured.
 
 ::: info Test environment
-Apple M3 Pro, 36 GB RAM. Rust release build with LTO. 237 production rules, 500+ bot signatures, 22+ DLP patterns. February 2026. All benchmarks are reproducible: `cargo bench` from the synapse-pingora workspace.
+Apple M3 Pro, 36 GB RAM. Rust release build with LTO. 237 production rules, 500+ bot signatures, 22+ DLP patterns. February 2026. All benchmarks are reproducible: `cargo bench` from the synapse-waf workspace.
 :::
 
 ## Load Testing

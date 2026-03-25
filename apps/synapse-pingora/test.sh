@@ -17,7 +17,7 @@ set -euo pipefail
 PROXY_HOST="${PROXY_HOST:-localhost}"
 PROXY_PORT="${PROXY_PORT:-6190}"
 PROXY_URL="http://${PROXY_HOST}:${PROXY_PORT}"
-BINARY="./target/release/synapse-pingora"
+BINARY="./target/release/synapse-waf"
 TIMEOUT=2
 
 # Colors

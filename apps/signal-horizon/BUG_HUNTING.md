@@ -121,7 +121,7 @@ Quick things that often break:
 ## risk-server Integration
 
 ### 8. Schema Enforcement
-risk-server handles deep schema validation. synapse-pingora handles fast WAF.
+risk-server handles deep schema validation. synapse-waf handles fast WAF.
 
 Test scenarios:
 - Request matches WAF rule AND violates schema — both fire?
@@ -169,10 +169,10 @@ Look for:
 - Crashes on binary content
 
 ### 11. risk-server Down
-synapse-pingora should keep working if risk-server dies.
+synapse-waf should keep working if risk-server dies.
 
 Test scenarios:
-- Kill risk-server — does synapse-pingora still block WAF matches?
+- Kill risk-server — does synapse-waf still block WAF matches?
 - Bring risk-server back — does schema enforcement resume?
 - risk-server slow (5s response) — timeout handling?
 - risk-server returns 500 — fail open or closed?
@@ -185,7 +185,7 @@ Look for:
 
 ---
 
-## synapse-pingora Internals
+## synapse-waf Internals
 
 ### 12. Entity Tracking
 Risk accumulation per IP/fingerprint.

@@ -1,7 +1,7 @@
 /**
  * SynapseConfigEditor - Visual and YAML editor for Synapse sensor configuration
  *
- * Matches the actual synapse-pingora ConfigFile structure from config.rs
+ * Matches the actual synapse-waf ConfigFile structure from config.rs
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -102,7 +102,7 @@ interface GlobalConfig {
   waf_regex_timeout_ms?: number;
 }
 
-// Complete config structure matching synapse-pingora ConfigFile
+// Complete config structure matching synapse-waf ConfigFile
 export interface SynapseConfig {
   server: GlobalConfig;
   sites: SiteYamlConfig[];

@@ -1,7 +1,7 @@
 /**
  * Fleet Releases API Routes
  *
- * Endpoints for firmware/release management for Synapse-Pingora sensors.
+ * Endpoints for firmware/release management for Synapse WAF sensors.
  * Handles release creation, rollout orchestration, and update progress tracking.
  */
 

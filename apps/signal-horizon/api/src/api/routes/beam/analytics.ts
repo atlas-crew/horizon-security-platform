@@ -125,7 +125,7 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
         }
         if (sensorMetrics) {
           dataSource = 'synapse-direct';
-          logger.info({ tenantId, source: 'synapse-direct' }, 'Using synapse-pingora sensor metrics');
+          logger.info({ tenantId, source: 'synapse-direct' }, 'Using synapse-waf sensor metrics');
         }
       } catch (err) {
         logger.warn({ err }, 'Failed to fetch synapse-direct metrics, using fallback');

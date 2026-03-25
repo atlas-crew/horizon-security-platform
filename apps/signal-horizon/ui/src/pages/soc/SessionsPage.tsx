@@ -146,7 +146,7 @@ export default function SessionsPage() {
                 <Input
                   value={sensorId}
                   onChange={(event) => setSensorId(event.target.value)}
-                  placeholder="synapse-pingora-1"
+                  placeholder="synapse-waf-1"
                   size="sm"
                 />
               </Box>

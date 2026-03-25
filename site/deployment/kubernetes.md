@@ -144,7 +144,7 @@ spec:
     spec:
       containers:
         - name: synapse
-          image: atlascrew/synapse-pingora:latest
+          image: atlascrew/synapse-waf:latest
           ports:
             - containerPort: 6190
               hostPort: 6190

@@ -1,4 +1,4 @@
-# Synapse-Pingora Demo Configuration
+# Synapse WAF Demo Configuration
 server:
   listen: "127.0.0.1:6190"
   admin_listen: "127.0.0.1:6191"
@@ -57,7 +57,7 @@ telemetry:
     secs: 60
     nanos: 0
   enabled_events: []
-  instance_id: "synapse-pingora-1"
+  instance_id: "synapse-waf-1"
 
 tarpit:
   enabled: true

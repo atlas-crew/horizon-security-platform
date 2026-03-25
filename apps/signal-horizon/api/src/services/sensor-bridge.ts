@@ -1,13 +1,13 @@
 /**
  * Sensor Bridge Service
  *
- * Bridges synapse-pingora (Rust WAF) to Signal Horizon's fleet management
+ * Bridges synapse-waf (Rust WAF) to Signal Horizon's fleet management
  * by connecting as a sensor via WebSocket and relaying health/metrics data.
  *
  * This service:
  * 1. Connects to Signal Horizon's sensor gateway WebSocket
  * 2. Authenticates using an API key
- * 3. Polls synapse-pingora's admin API for health/stats
+ * 3. Polls synapse-waf's admin API for health/stats
  * 4. Sends heartbeats with metrics to register as an online sensor
  */
 
@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 interface SensorBridgeConfig {
   /** Signal Horizon WebSocket URL (e.g., ws://localhost:3200/ws/sensors) */
   hubWsUrl: string;
-  /** synapse-pingora admin API URL (e.g., http://localhost:6191) */
+  /** synapse-waf admin API URL (e.g., http://localhost:6191) */
   pingoraAdminUrl: string;
   /** API key for Signal Horizon authentication */
   apiKey: string;
@@ -363,7 +363,7 @@ export class SensorBridge {
     return {
       timestamp: now,
       status,
-      // synapse-pingora doesn't expose system metrics, use placeholders
+      // synapse-waf doesn't expose system metrics, use placeholders
       cpu: 15 + Math.random() * 10,
       memory: 25 + Math.random() * 5,
       disk: 10 + Math.random() * 2,

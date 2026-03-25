@@ -31,7 +31,7 @@ flowchart TB
     end
 
     subgraph Sensor["Synapse Sensor (Edge)"]
-        Pingora[Synapse-Pingora<br>Rust WAF]
+        Pingora[Synapse WAF<br>Rust WAF]
         TunnelC[Tunnel Client<br>Reconnecting WS]
         ShellH[Shell Handler<br>PTY Manager]
         LogH[Log Streamer]
@@ -185,9 +185,9 @@ Rate limiting is implemented at multiple levels:
 | control | 5 | 65,536 (64KB) | 1 |
 | files | 50 | 5,242,880 (5MB) | 2 |
 
-### Synapse-Pingora (Sensor)
+### Synapse WAF (Sensor)
 
-Synapse-Pingora is the Rust-based WAF sensor that runs at the edge. It includes components for remote management.
+Synapse WAF is the Rust-based WAF sensor that runs at the edge. It includes components for remote management.
 
 #### Tunnel Client with Reconnection
 

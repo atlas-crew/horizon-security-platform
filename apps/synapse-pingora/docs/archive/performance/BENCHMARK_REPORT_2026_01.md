@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-End-to-end proxy benchmarks have provided a definitive "all-in" latency profile for the Synapse-Pingora system. While the internal WAF logic is highly efficient (~20µs), the total overhead for a standard business request including Proxy, WAF, and DLP scanning is approximately **450µs** with optimizations enabled.
+End-to-end proxy benchmarks have provided a definitive "all-in" latency profile for the Synapse WAF system. While the internal WAF logic is highly efficient (~20µs), the total overhead for a standard business request including Proxy, WAF, and DLP scanning is approximately **450µs** with optimizations enabled.
 
 *   **Fast Path (GET):** ~300 µs end-to-end
 *   **Standard Business Payload (4-8KB):** ~450 µs end-to-end (Optimized)

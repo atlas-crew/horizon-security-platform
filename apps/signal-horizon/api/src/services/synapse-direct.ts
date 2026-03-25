@@ -1,9 +1,9 @@
 /**
  * Synapse Direct Adapter Service
  *
- * Provides direct integration with synapse-pingora admin API.
- * Transforms synapse-pingora's response format to match what beam routes expect,
- * allowing Signal Horizon to work with synapse-pingora without risk-server.
+ * Provides direct integration with synapse-waf admin API.
+ * Transforms synapse-waf's response format to match what beam routes expect,
+ * allowing Signal Horizon to work with synapse-waf without risk-server.
  *
  * Endpoints mapped:
  * - /health      → /_sensor/status equivalent
@@ -23,7 +23,7 @@ import type {
 } from '../types/beam.js';
 
 // ============================================================================
-// Synapse-Pingora Response Types
+// Synapse WAF Response Types
 // ============================================================================
 
 interface PingoraHealthResponse {
@@ -122,7 +122,7 @@ export class SynapseDirectAdapter {
   }
 
   /**
-   * Fetch JSON from synapse-pingora with error handling
+   * Fetch JSON from synapse-waf with error handling
    */
   private async fetch<T>(path: string, traceHeaders?: Record<string, string>): Promise<T | null> {
     const url = `${this.baseUrl}${path}`;
@@ -242,7 +242,7 @@ export class SynapseDirectAdapter {
       requestsTotal,
       blocksTotal,
       entitiesTracked: stats?.data.rate_limit?.total_tracked_keys || 0,
-      activeCampaigns: 0, // Not available from synapse-pingora
+      activeCampaigns: 0, // Not available from synapse-waf
       uptime: uptimeSecs,
       rps,
       latencyP50: avgLatencyMs > 0 ? avgLatencyMs * 0.8 : 0,
@@ -255,7 +255,7 @@ export class SynapseDirectAdapter {
 
   /**
    * Get bandwidth analytics - synthesized from available data
-   * Note: synapse-pingora doesn't expose detailed bandwidth metrics,
+   * Note: synapse-waf doesn't expose detailed bandwidth metrics,
    * so we provide estimates based on request counts
    */
   async getBandwidthAnalytics(traceHeaders?: Record<string, string>): Promise<BandwidthAnalytics | null> {
@@ -272,7 +272,7 @@ export class SynapseDirectAdapter {
     const avgResponseSize = 4096; // 4KB average response
 
     return {
-      timeline: [], // Real-time timeline not available from synapse-pingora
+      timeline: [], // Real-time timeline not available from synapse-waf
       topEndpoints: [], // Endpoint-level data not available
       totalBytesIn: analyzed * avgRequestSize,
       totalBytesOut: analyzed * avgResponseSize,
@@ -282,7 +282,7 @@ export class SynapseDirectAdapter {
 
   /**
    * Get threat summary - synthesized from WAF stats
-   * Note: synapse-pingora doesn't expose detailed threat breakdown,
+   * Note: synapse-waf doesn't expose detailed threat breakdown,
    * so we provide summary based on block counts
    */
   async getThreatSummary(traceHeaders?: Record<string, string>): Promise<ThreatSummary | null> {
@@ -299,7 +299,7 @@ export class SynapseDirectAdapter {
     const blocked = waf?.blocked || 0;
 
     // Estimate severity distribution based on block count
-    // In reality, synapse-pingora would need to expose this data
+    // In reality, synapse-waf would need to expose this data
     const critical = Math.floor(blocked * 0.1);
     const high = Math.floor(blocked * 0.3);
     const medium = Math.floor(blocked * 0.4);
@@ -309,12 +309,12 @@ export class SynapseDirectAdapter {
       total: blocked,
       bySeverity: { critical, high, medium, low },
       byType: blocked > 0 ? { WAF_BLOCK: blocked } : {},
-      recentEvents: [], // Detailed events not available from synapse-pingora
+      recentEvents: [], // Detailed events not available from synapse-waf
     };
   }
 
   /**
-   * Get top endpoints - not available from synapse-pingora
+   * Get top endpoints - not available from synapse-waf
    * Returns empty array, beam routes will use demo data as fallback
    */
   async getTopEndpoints(): Promise<TopEndpoint[]> {
@@ -346,7 +346,7 @@ export class SynapseDirectAdapter {
   }
 
   /**
-   * Health check - verify connection to synapse-pingora
+   * Health check - verify connection to synapse-waf
    */
   async healthCheck(traceHeaders?: Record<string, string>): Promise<{ connected: boolean; status?: string; uptime?: number }> {
     const health = await this.fetch<PingoraHealthResponse>('/health', traceHeaders);

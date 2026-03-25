@@ -646,13 +646,13 @@ async function start() {
     }
   });
 
-  // Initialize Synapse Direct adapter for synapse-pingora connection (if configured)
+  // Initialize Synapse Direct adapter for synapse-waf connection (if configured)
   if (config.synapseDirect.enabled && config.synapseDirect.url) {
     initSynapseDirectAdapter(config.synapseDirect.url, logger);
     logger.info({ url: config.synapseDirect.url }, 'Synapse Direct adapter initialized');
   }
 
-  // Initialize Sensor Bridge (bridges synapse-pingora to fleet management via WebSocket)
+  // Initialize Sensor Bridge (bridges synapse-waf to fleet management via WebSocket)
   if (config.sensorBridge.enabled && config.synapseDirect.url && config.sensorBridge.apiKey) {
     const bridge = initSensorBridge({
       hubWsUrl: `ws://localhost:${config.server.port}${config.websocket.sensorPath}`,

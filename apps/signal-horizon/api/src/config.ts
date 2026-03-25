@@ -99,17 +99,17 @@ const envSchema = z.object({
   // Risk Server (upstream Synapse proxy)
   RISK_SERVER_URL: z.string().url().default('http://localhost:3000'),
 
-  // Direct Synapse-Pingora connection (optional)
-  // When set, beam routes will fetch directly from synapse-pingora admin API
+  // Direct Synapse WAF connection (optional)
+  // When set, beam routes will fetch directly from synapse-waf admin API
   // instead of going through risk-server
   SYNAPSE_DIRECT_URL: z.string().url().optional(),
 
-  // Sensor Bridge (bridges synapse-pingora to fleet management)
+  // Sensor Bridge (bridges synapse-waf to fleet management)
   // Requires SYNAPSE_DIRECT_URL to be set
   SENSOR_BRIDGE_ENABLED: booleanString('false'),
   SENSOR_BRIDGE_API_KEY: z.string().optional(),
-  SENSOR_BRIDGE_SENSOR_ID: z.string().default('synapse-pingora-1'),
-  SENSOR_BRIDGE_SENSOR_NAME: z.string().default('Synapse Pingora WAF'),
+  SENSOR_BRIDGE_SENSOR_ID: z.string().default('synapse-waf-1'),
+  SENSOR_BRIDGE_SENSOR_NAME: z.string().default('Synapse WAF'),
   SENSOR_BRIDGE_HEARTBEAT_MS: positiveIntString(5000, 120000).catch(15000), // 5s - 2min
 
   // Fleet command feature flags
@@ -250,13 +250,13 @@ function loadConfig() {
       url: env.RISK_SERVER_URL,
     },
 
-    // Direct Synapse-Pingora connection (optional)
+    // Direct Synapse WAF connection (optional)
     synapseDirect: {
       url: env.SYNAPSE_DIRECT_URL,
       enabled: !!env.SYNAPSE_DIRECT_URL,
     },
 
-    // Sensor Bridge (bridges synapse-pingora to fleet management)
+    // Sensor Bridge (bridges synapse-waf to fleet management)
     sensorBridge: {
       enabled: env.SENSOR_BRIDGE_ENABLED && !!env.SYNAPSE_DIRECT_URL,
       apiKey: env.SENSOR_BRIDGE_API_KEY,

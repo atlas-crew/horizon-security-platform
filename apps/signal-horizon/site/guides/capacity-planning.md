@@ -54,4 +54,4 @@ Note that during an active **DDoS Attack** or a **Credential Stuffing Campaign**
 
 ## Next Steps
 - **[Fleet Overview](../guides/remote-shell.md)**: Check real-time health of sensors nearing their threshold.
-- **[Firmware Updates](../guides/firmware-updates.md)**: Optimize performance by deploying the latest Synapse-Pingora binary.
+- **[Firmware Updates](../guides/firmware-updates.md)**: Optimize performance by deploying the latest Synapse WAF binary.

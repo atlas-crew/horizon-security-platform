@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-synapse-pingora = { path = ".." }
+synapse-pingora = { path = "..", package = "synapse-waf" }
 
 [dependencies.arbitrary]
 version = "1"

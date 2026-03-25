@@ -1,4 +1,4 @@
-# Synapse-Pingora: 426ns Benchmark - Complete Cost Breakdown
+# Synapse WAF: 426ns Benchmark - Complete Cost Breakdown
 
 **Date**: January 7, 2026
 **Question**: What's actually included in the 426ns measurement?

@@ -3,7 +3,7 @@
  *
  * Generates canonical JSON fixtures from TypeScript protocol types defined in
  * signal-horizon's protocol.ts. These fixtures are consumed by Rust
- * deserialization tests in synapse-pingora to validate cross-language type
+ * deserialization tests in synapse-waf to validate cross-language type
  * compatibility.
  *
  * This test is the **source of truth** for the protocol wire format.

@@ -73,7 +73,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
           // Try to get graph for specific campaign, or default to camp-001
           graphData = demoData.fleet.campaignGraphs[campaignId] || demoData.fleet.campaignGraphs['camp-001'];
         } else {
-          const targetSensorId = sensorId || 'synapse-pingora-1';
+          const targetSensorId = sensorId || 'synapse-waf-1';
           graphData = await fetchGraphData(targetSensorId, campaignId);
         }
 

@@ -1,9 +1,9 @@
 /**
  * Beam Analytics Routes
- * Proxies and aggregates data from risk-server or synapse-pingora for the Beam analytics dashboard
+ * Proxies and aggregates data from risk-server or synapse-waf for the Beam analytics dashboard
  *
  * Data sources (in priority order):
- * 1. Synapse Direct (SYNAPSE_DIRECT_URL) - Direct connection to synapse-pingora admin API
+ * 1. Synapse Direct (SYNAPSE_DIRECT_URL) - Direct connection to synapse-waf admin API
  * 2. Risk Server (RISK_SERVER_URL) - Upstream Synapse proxy with full analytics
  * 3. Derived Data - Fallback when metrics are unavailable
  */
@@ -295,7 +295,7 @@ export function createBeamRoutes(logger: Logger): Router {
 
   /**
    * GET /api/v1/beam/analytics
-   * Returns combined analytics data from synapse-pingora or risk-server with derived fallbacks
+   * Returns combined analytics data from synapse-waf or risk-server with derived fallbacks
    *
    * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
@@ -313,7 +313,7 @@ export function createBeamRoutes(logger: Logger): Router {
     let statusCodes = EMPTY_STATUS_CODES;
 
     if (synapseAdapter) {
-      // Use direct synapse-pingora connection
+      // Use direct synapse-waf connection
       log.debug('Using synapse-direct adapter');
 
       const [sensorData, bandwidthData, threatData, prometheusAnalytics] = await Promise.all([
@@ -455,7 +455,7 @@ export function createBeamRoutes(logger: Logger): Router {
 
   /**
    * GET /api/v1/beam/health
-   * Check synapse-pingora or risk-server connectivity
+   * Check synapse-waf or risk-server connectivity
    *
    * Security: Requires analytics:health scope (or dashboard:read via alias)
    */

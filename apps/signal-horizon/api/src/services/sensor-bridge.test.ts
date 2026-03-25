@@ -72,8 +72,8 @@ describe('SensorBridge', () => {
       hubWsUrl: 'ws://localhost:3100/ws/sensors',
       pingoraAdminUrl: 'http://localhost:6191',
       apiKey: 'bridge-api-key',
-      sensorId: 'synapse-pingora-1',
-      sensorName: 'Synapse Pingora',
+      sensorId: 'synapse-waf-1',
+      sensorName: 'Synapse WAF',
     }, createLogger());
 
     await bridge.start();
@@ -95,8 +95,8 @@ describe('SensorBridge', () => {
       hubWsUrl: 'ws://localhost:3100/ws/sensors',
       pingoraAdminUrl: 'http://localhost:6191',
       apiKey: 'bridge-api-key',
-      sensorId: 'synapse-pingora-1',
-      sensorName: 'Synapse Pingora',
+      sensorId: 'synapse-waf-1',
+      sensorName: 'Synapse WAF',
     }, logger);
 
     await bridge.start();
@@ -119,8 +119,8 @@ describe('SensorBridge', () => {
       hubWsUrl: 'ws://localhost:3100/ws/sensors',
       pingoraAdminUrl: 'http://localhost:6191',
       apiKey: 'bridge-api-key',
-      sensorId: 'synapse-pingora-1',
-      sensorName: 'Synapse Pingora',
+      sensorId: 'synapse-waf-1',
+      sensorName: 'Synapse WAF',
     }, logger);
 
     await bridge.start();
@@ -152,8 +152,8 @@ describe('SensorBridge', () => {
       hubWsUrl: 'ws://localhost:3100/ws/sensors',
       pingoraAdminUrl: 'http://localhost:6191',
       apiKey: 'bridge-api-key',
-      sensorId: 'synapse-pingora-1',
-      sensorName: 'Synapse Pingora',
+      sensorId: 'synapse-waf-1',
+      sensorName: 'Synapse WAF',
     }, logger);
 
     await bridge.start();
@@ -180,8 +180,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         heartbeatIntervalMs: 5000,
         reconnectDelayMs: 1000,
       }, createLogger());
@@ -216,8 +216,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
       }, createLogger());
 
       await bridge.start();
@@ -270,8 +270,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         heartbeatIntervalMs: 30000,
       }, createLogger());
 
@@ -373,8 +373,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         heartbeatIntervalMs: 30000,
       }, createLogger());
 
@@ -409,8 +409,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         reconnectDelayMs: 2000,
       }, createLogger());
 
@@ -442,8 +442,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         reconnectDelayMs: 1000,
       }, createLogger());
 
@@ -466,8 +466,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
       }, createLogger());
 
       await bridge.start();
@@ -486,8 +486,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
       }, createLogger());
 
       await bridge.start();
@@ -507,8 +507,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
       }, createLogger());
 
       await bridge.start();
@@ -558,8 +558,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         heartbeatIntervalMs: 60000,
       }, createLogger());
 
@@ -608,8 +608,8 @@ describe('SensorBridge', () => {
         hubWsUrl: 'ws://localhost:3100/ws/sensors',
         pingoraAdminUrl: 'http://localhost:6191',
         apiKey: 'bridge-api-key',
-        sensorId: 'synapse-pingora-1',
-        sensorName: 'Synapse Pingora',
+        sensorId: 'synapse-waf-1',
+        sensorName: 'Synapse WAF',
         heartbeatIntervalMs: 60000,
       }, createLogger());
 

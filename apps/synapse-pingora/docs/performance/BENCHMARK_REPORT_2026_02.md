@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-February 2026 represents a major expansion of the Synapse-Pingora benchmark suite. The original 3 benchmark files from January (detection, pipeline, goblins) have grown to **19 dedicated benchmark suites** covering every subsystem in the WAF proxy. This report presents the first comprehensive, full-stack performance profile of Synapse-Pingora.
+February 2026 represents a major expansion of the Synapse WAF benchmark suite. The original 3 benchmark files from January (detection, pipeline, goblins) have grown to **19 dedicated benchmark suites** covering every subsystem in the WAF proxy. This report presents the first comprehensive, full-stack performance profile of Synapse WAF.
 
 **Key findings:**
 

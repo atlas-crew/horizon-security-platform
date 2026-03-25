@@ -1,4 +1,4 @@
-# Prometheus Metrics (Synapse Pingora Sensor)
+# Prometheus Metrics (Synapse WAF Sensor)
 
 Source of truth: `src/metrics.rs` (`MetricsRegistry::render_prometheus()`).
 

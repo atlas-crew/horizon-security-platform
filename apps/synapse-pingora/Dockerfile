@@ -1,4 +1,4 @@
-# Synapse-Pingora Dockerfile
+# Synapse WAF Dockerfile
 # Multi-stage build for Rust-based WAF proxy
 
 # =============================================================================
@@ -45,7 +45,7 @@ COPY apps/synapse-pingora/config.yaml /app/config.yaml
 COPY apps/synapse-pingora/data/rules.json /app/data/rules.json
 
 # Copy binary from builder
-COPY --from=builder /usr/src/app/apps/synapse-pingora/target/release/synapse-pingora /usr/local/bin/synapse-pingora
+COPY --from=builder /usr/src/app/apps/synapse-pingora/target/release/synapse-waf /usr/local/bin/synapse-waf
 
 # Set permissions
 RUN chown -R synapse:synapse /app
@@ -57,4 +57,4 @@ EXPOSE 6190 6191
 
 USER synapse
 
-CMD ["synapse-pingora", "--config", "/app/config.yaml"]
+CMD ["synapse-waf", "--config", "/app/config.yaml"]

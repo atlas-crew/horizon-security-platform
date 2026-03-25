@@ -174,7 +174,7 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
           {/* Key Processes */}
           <h4 className="text-md font-semibold text-ink-primary mt-6 mb-3">Key Processes</h4>
           <div className="space-y-2">
-            {['atlascrew-waf', 'atlascrew-agent', 'atlascrew-collector', 'synapse-pingora'].map((proc) => (
+            {['atlascrew-waf', 'atlascrew-agent', 'atlascrew-collector', 'synapse-waf'].map((proc) => (
               <div key={proc} className="flex items-center justify-between">
                 <span className="text-ink-secondary">{proc}</span>
                 <span className="inline-flex items-center gap-2 text-xs text-ink-primary">

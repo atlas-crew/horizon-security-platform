@@ -1,7 +1,7 @@
 /**
  * Fleet Control API Routes
  *
- * REST endpoints for remote service control operations on Synapse-Pingora sensors.
+ * REST endpoints for remote service control operations on Synapse WAF sensors.
  * Supports the following control commands:
  * - reload: Hot-reload configuration without restart
  * - restart: Graceful restart (drain connections first)

@@ -1,5 +1,5 @@
 {
-  "name": "synapse-pingora",
+  "name": "synapse-waf",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/synapse-pingora/src",
   "projectType": "application",
@@ -22,7 +22,7 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "RUST_LOG=info,synapse_pingora=debug cargo run --bin synapse-pingora -- --dev",
+        "command": "RUST_LOG=info,synapse_pingora=debug cargo run --bin synapse-waf -- --dev",
         "cwd": "apps/synapse-pingora"
       }
     },

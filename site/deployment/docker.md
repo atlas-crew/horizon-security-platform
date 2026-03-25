@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   synapse:
-    image: atlascrew/synapse-pingora:latest
+    image: atlascrew/synapse-waf:latest
     ports:
       - "6190:6190"
       - "6191:6191"
@@ -82,7 +82,7 @@ docker run -d \
   -p 6190:6190 \
   -p 6191:6191 \
   -v $(pwd)/config.yaml:/etc/synapse/config.yaml:ro \
-  atlascrew/synapse-pingora:latest
+  atlascrew/synapse-waf:latest
 ```
 
 ## Building the Synapse Image
@@ -91,7 +91,7 @@ The Synapse Dockerfile uses a multi-stage build:
 
 ```sh
 cd apps/synapse-pingora
-docker build -t synapse-pingora:latest .
+docker build -t synapse-waf:latest .
 ```
 
 - **Builder stage:** `rust:1.77-bookworm` with cmake, openssl, clang

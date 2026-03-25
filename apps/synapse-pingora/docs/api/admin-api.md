@@ -1,4 +1,4 @@
-# Synapse-Pingora Admin API Reference
+# Synapse WAF Admin API Reference
 
 Admin server default port: **6191**
 

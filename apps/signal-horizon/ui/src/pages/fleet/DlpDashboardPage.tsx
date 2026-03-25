@@ -31,12 +31,12 @@ const CARD_HEADER_TITLE_STYLE = {
 };
 
 async function fetchDlpStats(): Promise<DlpStats> {
-  const sensorId = 'synapse-pingora-1';
+  const sensorId = 'synapse-waf-1';
   return apiFetch<DlpStats>(`/synapse/${sensorId}/proxy/_sensor/dlp/stats`);
 }
 
 async function fetchDlpViolations(): Promise<{ violations: DlpViolation[] }> {
-  const sensorId = 'synapse-pingora-1';
+  const sensorId = 'synapse-waf-1';
   return apiFetch<{ violations: DlpViolation[] }>(
     `/synapse/${sensorId}/proxy/_sensor/dlp/violations`,
   );

@@ -1,4 +1,4 @@
-# Tuning WAF Rules and Thresholds (Synapse-Pingora)
+# Tuning WAF Rules and Thresholds (Synapse WAF)
 
 This tutorial shows how to tune WAF behavior using configuration thresholds and
 rule overrides. You will adjust global and per-site thresholds, override rule

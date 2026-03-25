@@ -1,4 +1,4 @@
-# Synapse-Pingora local sensor config for Signal Horizon tunnel + hub
+# Synapse WAF local sensor config for Signal Horizon tunnel + hub
 
 server:
   listen: "127.0.0.1:6190"
@@ -51,7 +51,7 @@ telemetry:
     secs: 60
     nanos: 0
   enabled_events: []
-  instance_id: "synapse-pingora-1"
+  instance_id: "synapse-waf-1"
   dry_run: false
 
 horizon:

@@ -8,11 +8,11 @@ Synapse is a WAF and reverse proxy built in pure Rust on [Cloudflare Pingora](ht
 
 ## Architecture Comparison
 
-### Synapse-Pingora (Current)
+### Synapse WAF (Current)
 
 ```mermaid
 flowchart LR
-    Client -->|request| SP["Synapse-Pingora<br/>Single Binary"]
+    Client -->|request| SP["Synapse WAF<br/>Single Binary"]
     SP -->|proxy| Backend[Backend Server]
     Backend -->|response| SP
     SP -->|response| Client

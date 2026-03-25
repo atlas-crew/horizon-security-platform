@@ -249,7 +249,7 @@ export function createSynapseRoutes(
     const isOffline = error instanceof SynapseProxyError && 
       (error.code === 'TUNNEL_NOT_FOUND' || error.code === 'SENSOR_DISCONNECTED' || error.code === 'TIMEOUT');
 
-    const effectiveSensorId = sensorId || 'synapse-pingora-1';
+    const effectiveSensorId = sensorId || 'synapse-waf-1';
 
     if (isOffline && fleetIntelService) {
       logger.info({ sensorId: effectiveSensorId, context, errorCode: (error as SynapseProxyError).code }, 'Sensor unreachable, attempting database fallback');

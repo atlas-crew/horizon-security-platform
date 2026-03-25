@@ -24,7 +24,7 @@ cargo build --release
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
 
-The binary is at `target/release/synapse-pingora`.
+The binary is at `target/release/synapse-waf`.
 
 ## Configuration
 
@@ -67,13 +67,13 @@ logging:
 
 ```sh
 # Standard mode
-./target/release/synapse-pingora
+./target/release/synapse-waf
 
 # With interactive TUI dashboard
-./target/release/synapse-pingora --tui
+./target/release/synapse-waf --tui
 
 # With explicit config path
-./target/release/synapse-pingora --config /etc/synapse/config.yaml
+./target/release/synapse-waf --config /etc/synapse/config.yaml
 ```
 
 ## TLS Termination

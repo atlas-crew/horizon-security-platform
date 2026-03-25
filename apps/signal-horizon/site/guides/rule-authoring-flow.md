@@ -8,7 +8,7 @@ The rule lifecycle follows a **3-tier architecture**:
 
 1.  **Authoring (Control Plane)**: Rules are created in Signal Horizon (GUI, Sigma Import) or Risk-Server (Local Prototyping).
 2.  **Distribution (Orchestration)**: Signal Horizon calculates rule deltas and pushes `FleetCommand` payloads to relevant sensors.
-3.  **Enforcement (Data Plane)**: `synapse-pingora` sensors receive the rules, update their in-memory engine (hot-reload), and enforce them at line speed.
+3.  **Enforcement (Data Plane)**: `synapse-waf` sensors receive the rules, update their in-memory engine (hot-reload), and enforce them at line speed.
 
 ## 1. Authoring Environments
 
@@ -32,7 +32,7 @@ The rule lifecycle follows a **3-tier architecture**:
 
 ## 2. Rule Structure (`libsynapse`)
 
-All rules, regardless of authoring source, are compiled into the `libsynapse` JSON format shared by `risk-server` and `synapse-pingora`.
+All rules, regardless of authoring source, are compiled into the `libsynapse` JSON format shared by `risk-server` and `synapse-waf`.
 
 ```json
 {
@@ -60,7 +60,7 @@ All rules, regardless of authoring source, are compiled into the `libsynapse` JS
 3.  **Push**:
     - Command sent via WebSocket (`/ws/tunnel`).
 4.  **Enforce**:
-    - `synapse-pingora` receives the payload.
+    - `synapse-waf` receives the payload.
     - It acquires a write lock on the `Synapse` engine.
     - Rules are hot-swapped (zero downtime).
     - New traffic is immediately evaluated against the new rules.

@@ -1,6 +1,6 @@
 # Remote Management API
 
-The Remote Management API provides secure, authenticated access to remote Synapse-Pingora sensors for monitoring, diagnostics, control operations, and file management. This API enables fleet-wide management capabilities through a unified interface.
+The Remote Management API provides secure, authenticated access to remote Synapse WAF sensors for monitoring, diagnostics, control operations, and file management. This API enables fleet-wide management capabilities through a unified interface.
 
 ## Overview
 

@@ -48,7 +48,7 @@ The release profile uses fat LTO with a single codegen unit for maximum optimiza
 
 ```sh
 cd apps/synapse-pingora
-docker build -t synapse-pingora:latest .
+docker build -t synapse-waf:latest .
 ```
 
 The multi-stage Dockerfile:

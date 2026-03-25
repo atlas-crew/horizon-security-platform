@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the standardized methodology for benchmarking the Synapse-Pingora WAF engine. The suite covers **19 benchmark files** organized across **7 categories**: Detection Engine, Request Pipeline, Threat Intelligence, Security Features, Session Management, Operational, and Concurrency.
+This document outlines the standardized methodology for benchmarking the Synapse WAF engine. The suite covers **19 benchmark files** organized across **7 categories**: Detection Engine, Request Pipeline, Threat Intelligence, Security Features, Session Management, Operational, and Concurrency.
 
 All benchmarks use the [Criterion](https://bheisler.github.io/criterion.rs/book/) harness for statistically rigorous measurement, with configurable warm-up, sample sizes, and noise thresholds appropriate to each workload type.
 

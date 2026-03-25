@@ -1,6 +1,6 @@
-# Advanced Threat Detection in Synapse-Pingora
+# Advanced Threat Detection in Synapse WAF
 
-This document describes the three advanced security features integrated into Synapse-Pingora for sophisticated threat detection beyond traditional signature-based WAF rules.
+This document describes the three advanced security features integrated into Synapse WAF for sophisticated threat detection beyond traditional signature-based WAF rules.
 
 ## Table of Contents
 

@@ -124,4 +124,4 @@ This reference provides a comprehensive overview of all Signal Horizon platform 
 | WebSocket Dashboard Protocol | Real-time push notifications for UI dashboards |
 | Server-Sent Events | Live diagnostics streaming |
 | ClickHouse Integration | Optional historical analytics backend |
-| Synapse Pingora WAF | Native integration with the Synapse WAF sensor |
+| Synapse WAF | Native integration with the Synapse WAF sensor |

@@ -1,4 +1,4 @@
-import type { WafConfig } from 'synapse-api';
+import type { WafConfig } from '@atlascrew/synapse-api';
 import { parseConfigValue } from './config.js';
 import { pretty, formatStatus, formatTable } from './format.js';
 import { UsageError, defaultIO, type IO, type Parsed, type SynapseClientLike } from './types.js';

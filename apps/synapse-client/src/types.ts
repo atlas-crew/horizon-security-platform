@@ -2,7 +2,7 @@
  * Re-export types from synapse-api
  * This file exists for backward compatibility
  *
- * @deprecated Import directly from 'synapse-api' instead
+ * @deprecated Import directly from '@atlascrew/synapse-api' instead
  */
 
 export type {
@@ -35,6 +35,6 @@ export type {
   ActorsResponse,
   ActorStats,
   SetFingerprintResponse,
-} from 'synapse-api';
+} from '@atlascrew/synapse-api';
 
-export { SynapseError } from 'synapse-api';
+export { SynapseError } from '@atlascrew/synapse-api';

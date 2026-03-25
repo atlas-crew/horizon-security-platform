@@ -1,17 +1,39 @@
 {
-  "name": "synapse-client",
+  "name": "@atlascrew/synapse-client",
   "version": "0.1.0",
   "description": "TypeScript client and CLI for Synapse API",
-  "license": "AGPL-3.0-only",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "synapse": "dist/cli.js",
-    "syn": "dist/cli.js"
+  "author": "Nicholas Crew Ferguson <nick@atlascrew.dev> (https://atlascrew.dev)",
+  "keywords": ["security", "WAF", "CLI", "synapse", "horizon"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atlas-crew/horizon-security-platform",
+    "directory": "apps/synapse-client"
   },
+  "homepage": "https://horizon.atlascrew.dev/reference/synapse-cli",
+  "bugs": "https://github.com/atlas-crew/horizon-security-platform/issues",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "synapse": "./dist/cli.js",
+    "syn": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p .",
@@ -21,7 +43,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "synapse-api": "workspace:*"
+    "@atlascrew/synapse-api": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.19.22",

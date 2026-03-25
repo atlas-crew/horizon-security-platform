@@ -16,4 +16,4 @@
  */
 
 // Re-export everything from the standalone package
-export * from 'synapse-api';
+export * from '@atlascrew/synapse-api';

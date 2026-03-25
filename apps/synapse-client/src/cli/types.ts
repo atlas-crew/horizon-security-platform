@@ -20,7 +20,7 @@ import type {
   ActorsResponse,
   ActorStats,
   SetFingerprintResponse,
-} from 'synapse-api';
+} from '@atlascrew/synapse-api';
 
 export const VERSION = '0.1.0';
 

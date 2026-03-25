@@ -4,7 +4,7 @@
  * Most logic lives in cli-lib.ts for testability.
  */
 
-import { SynapseClient } from 'synapse-api';
+import { SynapseClient } from '@atlascrew/synapse-api';
 import { main } from './cli-lib.js';
 
 const exitCode = await main(

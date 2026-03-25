@@ -321,7 +321,7 @@ importers:
 
   apps/synapse-client:
     dependencies:
-      synapse-api:
+      '@atlascrew/synapse-api':
         specifier: workspace:*
         version: link:../../packages/synapse-api
     devDependencies:

@@ -4,6 +4,8 @@ This guide covers deploying Signal Horizon, the central command plane for Atlas 
 
 The repo now includes a baseline Render Blueprint at [`render.yaml`](../../../render.yaml) for the current monorepo layout. Use it as the source of truth for a managed deployment of the UI, API, PostgreSQL, and Redis.
 
+Render-specific environment templates are available at [`api/.env.render.example`](../api/.env.render.example), [`ui/.env.render.example`](../ui/.env.render.example), and a local preflight script is available at [`scripts/render-preflight.sh`](../scripts/render-preflight.sh).
+
 ## Architecture Overview
 
 Signal Horizon consists of three main components:
@@ -152,6 +154,12 @@ Recommended custom-domain shape:
 - Dashboard WebSocket: `wss://api.signal-horizon.example.com/ws/dashboard`
 
 ClickHouse is not defined inside the Blueprint. If you need historical hunting on day one, create ClickHouse separately and set the `CLICKHOUSE_*` variables on the API service.
+
+Before the first platform deploy, run:
+
+```bash
+bash ./apps/signal-horizon/scripts/render-preflight.sh
+```
 
 ### Option 2: Native Installation / VM
 

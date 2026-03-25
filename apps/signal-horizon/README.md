@@ -39,33 +39,29 @@ signal-horizon/
 ### Prerequisites
 
 - Node.js >= 18.18.0
+- pnpm 10+
 - PostgreSQL (Source of truth)
+- Redis (recommended for production queue/distributed state)
 - ClickHouse (Optional: Historical analytics)
 
 ### Installation
 
 1. Clone the repository
-2. Install dependencies:
+2. From the monorepo root, install dependencies:
    ```bash
-   # Root
-   npm install
-
-   # API
-   cd api && npm install
-
-   # UI
-   cd ../ui && npm install
+   corepack enable
+   pnpm install
    ```
 
 3. Setup environment variables:
-   - Copy `api/.env.example` to `api/.env` and configure.
+   - Copy `apps/signal-horizon/api/.env.example` to `apps/signal-horizon/api/.env` and configure.
 
 4. Initialize Database:
    ```bash
-   cd api
-   npx prisma migrate dev
+   cd apps/signal-horizon/api
+   pnpm prisma migrate dev
    # Default seed profile (small):
-   npx prisma db seed
+   pnpm prisma db seed
    # Larger, more "realistic" volumes:
    pnpm run db:seed -- --profile=medium --seed=42 --wipe=true
    ```
@@ -74,17 +70,29 @@ signal-horizon/
 
 **Start API:**
 ```bash
-cd api
-npm run dev
+pnpm signal-horizon:api
 ```
 
 **Start UI:**
 ```bash
-cd ui
-npm run dev
+pnpm signal-horizon:ui
 ```
 
-The API will be available at `http://localhost:3000` and the UI at `http://localhost:5173`.
+The API will be available at `http://localhost:3100` and the UI at `http://localhost:5180`.
+
+## Deployment
+
+For the managed deployment path, use the repo-root [`render.yaml`](../../render.yaml) plus the Render-specific env templates:
+
+- [`api/.env.render.example`](./api/.env.render.example)
+- [`ui/.env.render.example`](./ui/.env.render.example)
+- [`scripts/render-preflight.sh`](./scripts/render-preflight.sh)
+
+Run the preflight via:
+
+```bash
+bash ./apps/signal-horizon/scripts/render-preflight.sh
+```
 
 ## Documentation
 

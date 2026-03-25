@@ -1,6 +1,6 @@
 [package]
 name = "synapse-waf"
-version = "0.1.0"
+version = "0.9.0"
 edition = "2021"
 description = "High-performance WAF and reverse proxy with embedded intelligence — built on Cloudflare Pingora"
 authors = ["Nicholas Crew Ferguson"]

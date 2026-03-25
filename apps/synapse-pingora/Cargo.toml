@@ -1,8 +1,8 @@
 [package]
-name = "synapse-pingora"
+name = "synapse-waf"
 version = "0.1.0"
 edition = "2021"
-description = "Synapse WAF detection engine on Cloudflare Pingora proxy framework"
+description = "High-performance WAF and reverse proxy with embedded intelligence — built on Cloudflare Pingora"
 authors = ["Nicholas Crew Ferguson"]
 license = "AGPL-3.0-only"
 repository = "https://github.com/atlas-crew/horizon-security-platform"
@@ -20,7 +20,7 @@ name = "synapse_pingora"
 path = "src/lib.rs"
 
 [[bin]]
-name = "synapse-pingora"
+name = "synapse-waf"
 path = "src/main.rs"
 
 [dependencies]

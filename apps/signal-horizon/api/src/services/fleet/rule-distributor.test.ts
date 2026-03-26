@@ -1333,9 +1333,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       };
 
-      const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
-
-      const result = await settleResult(resultPromise, 'immediate deployment (all sensors)');
+      const result = await distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(3);
@@ -1361,9 +1359,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       };
 
-      const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
-
-      await settleResult(resultPromise, 'immediate deployment (sync state creation)');
+      await distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       // Should have called upsert for each sensor-rule combination
       expect(mockPrisma.ruleSyncState.upsert).toHaveBeenCalledTimes(4);
@@ -1395,9 +1391,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       };
 
-      const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
-
-      await settleResult(resultPromise, 'immediate deployment (hash)');
+      await distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       const sentPayload = vi.mocked(mockFleetCommander.sendCommandToMultiple).mock.calls[0][2]
         .payload as { hash: string };
@@ -1418,9 +1412,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       };
 
-      const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
-
-      const result = await settleResult(resultPromise, 'immediate deployment (command ids)');
+      const result = await distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       expect(result.results).toHaveLength(2);
       expect(result.results[0].commandId).toBe('cmd-001');

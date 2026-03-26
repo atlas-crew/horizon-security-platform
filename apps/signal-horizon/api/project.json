@@ -21,6 +21,21 @@
       "dependsOn": ["db:generate"],
       "outputs": ["{projectRoot}/dist"]
     },
+    "build:standalone": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["signal-horizon-ui"],
+          "target": "build"
+        }
+      ],
+      "options": {
+        "command": "node ../scripts/build-standalone.mjs",
+        "cwd": "apps/signal-horizon/api"
+      },
+      "outputs": ["{projectRoot}/dist"]
+    },
     "start": {
       "executor": "nx:run-commands",
       "options": {

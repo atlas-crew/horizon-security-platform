@@ -27,6 +27,7 @@ import { createOpsRoutes } from './api/routes/ops.js';
 import { ClickHouseService, ClickHouseRetryBuffer } from './storage/clickhouse/index.js';
 import { FileRetryStore } from './storage/clickhouse/persistent-store.js';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Fleet management services
 import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
 import {
@@ -108,6 +109,13 @@ import {
   RedisSensorMetricsStore,
   ResilientSensorMetricsStore,
 } from './services/fleet/sensor-metrics-store.js';
+import { resolveBundledUiDir, shouldServeAppShell } from './app-shell.js';
+import {
+  API_V1_PREFIX,
+  HEALTH_PATH,
+  METRICS_PATH,
+  READY_PATH,
+} from './top-level-route-paths.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -148,6 +156,13 @@ const logger = pino({
 // Initialize Prisma
 const prisma = new PrismaClient({
   log: config.isDev ? ['query', 'info', 'warn', 'error'] : ['error'],
+});
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const bundledUiDir = resolveBundledUiDir({
+  cwd: process.cwd(),
+  explicitUiDist: process.env.SIGNAL_HORIZON_UI_DIST,
+  moduleDir,
 });
 
 // Initialize Express
@@ -220,7 +235,7 @@ app.use(pinoHttp({
 }));
 
 // Health check
-app.get('/health', (_req, res) => {
+app.get(HEALTH_PATH, (_req, res) => {
   res.json({
     status: 'healthy',
     service: 'signal-horizon-hub',
@@ -230,7 +245,7 @@ app.get('/health', (_req, res) => {
 });
 
 // Ready check (includes database connectivity)
-app.get('/ready', async (_req, res) => {
+app.get(READY_PATH, async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
@@ -622,7 +637,7 @@ async function start() {
    * Prometheus Metrics Endpoint (P1-OBSERVABILITY-002)
    * Protected by bearer token or localhost-only access (labs-igrw).
    */
-  app.get('/metrics', async (req, res) => {
+  app.get(METRICS_PATH, async (req, res) => {
     // Allow localhost access for Prometheus scraping without auth
     const clientIp = req.ip ?? req.socket.remoteAddress ?? '';
     const isLocalhost = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1';
@@ -909,24 +924,60 @@ async function start() {
     playbookService,
     securityAuditService,
   });
-  app.use('/api/v1', apiRouter);
-  logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
+  app.use(API_V1_PREFIX, apiRouter);
+  logger.info({ basePath: API_V1_PREFIX }, 'API routes mounted (includes fleet and synapse routes)');
 
   // Ops routes (fleet-admin infra visibility). Kept outside createApiRouter so we can
   // safely iterate without touching the central routes index.
   app.use(
-    '/api/v1/ops',
+    `${API_V1_PREFIX}/ops`,
     createOpsRoutes(prisma, logger, {
       clickhouse,
       clickhouseConfig: config.clickhouse,
       kv: sharedRedis?.kv ?? null,
     })
   );
-  logger.info('Ops routes mounted at /api/v1/ops');
+  logger.info({ basePath: `${API_V1_PREFIX}/ops` }, 'Ops routes mounted');
 
   const authCoverageAggregator = new AuthCoverageAggregator();
-  app.use('/api/v1/auth-coverage', createAuthCoverageRoutes(authCoverageAggregator));
-  logger.info('Auth coverage routes mounted at /api/v1/auth-coverage');
+  app.use(`${API_V1_PREFIX}/auth-coverage`, createAuthCoverageRoutes(authCoverageAggregator));
+  logger.info({ basePath: `${API_V1_PREFIX}/auth-coverage` }, 'Auth coverage routes mounted');
+
+  if (bundledUiDir) {
+    const appShellPath = path.join(bundledUiDir, 'index.html');
+    app.use(
+      express.static(bundledUiDir, {
+        index: false,
+        maxAge: config.isDev ? 0 : '1h',
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(`${path.sep}index.html`)) {
+            res.setHeader('Cache-Control', 'no-cache');
+            return;
+          }
+
+          if (!config.isDev && filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
+    // SPA catch-all: register all server-side routes above this point.
+    app.get('*', (req, res, next) => {
+      if (!shouldServeAppShell(req.path)) {
+        next();
+        return;
+      }
+
+      res.sendFile(appShellPath, {
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+    });
+    logger.info({ uiDist: bundledUiDir }, 'Bundled UI assets mounted');
+  } else {
+    logger.info('Bundled UI assets not found; API will run without serving the dashboard');
+  }
 
   // Initialize core services (pass ClickHouse for dual-write)
   const blocklistStore = sharedRedis

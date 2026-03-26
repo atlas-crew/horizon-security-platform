@@ -80,6 +80,23 @@ pnpm signal-horizon:ui
 
 The API will be available at `http://localhost:3100` and the UI at `http://localhost:5180`.
 
+### Single-Process Packaging
+
+Signal Horizon can also run as a single Node-delivered app without Docker. Build the standalone artifact from the monorepo root:
+
+```bash
+pnpm signal-horizon:standalone
+```
+
+That command builds the Vite UI, builds the API, and copies the UI bundle into `apps/signal-horizon/api/dist/public`. After that, start the API normally:
+
+```bash
+cd apps/signal-horizon/api
+pnpm start
+```
+
+When the bundled UI assets are present, the API serves the dashboard, static assets, and SPA routes itself. PostgreSQL remains required, and Redis/ClickHouse stay optional external dependencies.
+
 ## Deployment
 
 For the managed deployment path, use the repo-root [`render.yaml`](../../render.yaml) plus the Render-specific env templates:

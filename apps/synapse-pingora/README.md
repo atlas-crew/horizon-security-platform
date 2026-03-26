@@ -1,281 +1,156 @@
-# Synapse WAF PoC
+# Synapse WAF
 
-A proof-of-concept integrating the **real Synapse WAF detection engine** (237 production rules) with Cloudflare's [Pingora](https://github.com/cloudflare/pingora) proxy framework. **Pure Rust, no Node.js, no FFI boundary**.
+High-performance Web Application Firewall and reverse proxy with embedded intelligence, built on Cloudflare's [Pingora](https://github.com/cloudflare/pingora) framework. Single Rust binary, sub-millisecond detection, 237 production rules.
 
-## Performance Headlines
+## Performance
 
 | Metric | Result |
 |--------|--------|
-| **Clean GET** | **~10 μs** |
-| **Attack detection** | **~25 μs** avg across all vectors |
-| **Full pipeline (WAF + DLP, 4 KB)** | **~247 μs** |
-| Rules loaded | **237** production rules |
-| Benchmark suites | **19** suites, **306** benchmarks |
-| vs NAPI (Node.js FFI) | **~2-3x faster** |
-| vs ModSecurity | **4-19x faster** |
+| **Simple GET detection** | **~10 μs** |
+| **Full pipeline** (ACL, rate limit, WAF, entity tracking) | **~72 μs** |
+| **WAF + DLP** (4 KB body) | **~247 μs** |
+| **Full stack E2E** | **~450 μs** |
+| **Sustained throughput** | **72K req/s** |
+| **DLP throughput** | **188 MiB/s** |
+| Production rules | **237** (sub-linear scaling) |
 
-> **Note**: February 2026 Criterion.rs numbers on macOS arm64. See
-> [`docs/performance/BENCHMARK_REPORT_2026_02.md`](docs/performance/BENCHMARK_REPORT_2026_02.md) for the full report.
+> Criterion.rs benchmarks on Apple M3 Pro. See the
+> [full benchmark report](docs/performance/BENCHMARK_REPORT_2026_02.md) and
+> [methodology](docs/performance/BENCHMARK_METHODOLOGY.md) for details.
 
 ## Architecture
 
-### Pingora Approach (This PoC)
-
 ```mermaid
 flowchart LR
-    Client -->|request| SP["Synapse WAF<br/><b>Single Binary</b>"]
-    SP -->|proxy| Backend[Backend Server]
-    Backend -->|response| SP
-    SP -->|response| Client
+    Client -->|request| SW["Synapse WAF<br/><b>Single Binary</b>"]
+    SW -->|proxy| Backend[Backend Server]
+    Backend -->|response| SW
+    SW -->|response| Client
 
-    subgraph SP_inner [" "]
+    subgraph SW_inner [" "]
         direction TB
-        Engine["libsynapse (in-proc)<br/>237 Rules · Entity Tracking · Risk Scoring"]
+        Pipeline["ACL → Rate Limit → Tarpit → WAF → DLP → Entity Tracking"]
     end
 
-    style SP fill:#1e40af,color:#fff
-    style Engine fill:#2563eb,color:#fff
+    style SW fill:#1e40af,color:#fff
+    style Pipeline fill:#2563eb,color:#fff
     style Client fill:#f8fafc,stroke:#334155
     style Backend fill:#f8fafc,stroke:#334155
 ```
 
-### Current Approach (nginx + Node.js)
+Every request is fully inspected — ACL, rate limiting, WAF rule evaluation, entity tracking, DLP scanning, campaign correlation, and behavioral profiling — in a single process with no serialization boundaries.
 
-```mermaid
-flowchart LR
-    Client -->|request| Nginx[nginx]
-    Nginx -->|subrequest| RS["risk-server<br/>(Node.js)"]
-    RS -->|verdict| Nginx
-    Nginx -->|proxy| Backend[Backend Server]
+## Features
 
-    RS --- NAPI["NAPI Bridge"]
-    NAPI --- Lib["libsynapse<br/>(Rust FFI)"]
+### Detection
 
-    style Nginx fill:#dc2626,color:#fff
-    style RS fill:#dc2626,color:#fff
-    style NAPI fill:#b91c1c,color:#fff
-    style Lib fill:#991b1b,color:#fff
-    style Client fill:#f8fafc,stroke:#334155
-    style Backend fill:#f8fafc,stroke:#334155
-```
+- **WAF engine** — 237 production rules covering SQLi, XSS, path traversal, command injection, and evasion techniques (hex, double-encoding, unicode, polyglot). Indexed rule selection for sub-linear scaling.
+- **DLP scanning** — 25 sensitive data patterns (credit cards with Luhn validation, SSN, IBAN, API keys, JWT, RSA/EC private keys, medical records). Aho-Corasick multi-pattern optimization, configurable inspection depth cap, content-type short-circuit for binary payloads.
+- **Credential stuffing detection** — Login endpoint monitoring with rate tracking, distributed attack correlation, and cross-fingerprint analysis.
+- **Crawler and bot detection** — 46 malicious bot signatures and 19 known crawler definitions with reverse DNS verification for legitimate crawlers. Configurable TTL cache.
+- **API profiling** — Endpoint schema learning with anomaly detection for unusual parameter counts, payload sizes, and content types.
 
-> **3 components + FFI overhead** vs a single Rust binary.
+### Intelligence
 
-**Key difference**: Detection happens *inside* the proxy, not across a process boundary.
+- **Entity tracking** — Per-IP risk scoring with behavioral decay, LRU eviction, and configurable thresholds. Risk accumulates across requests and decays over time.
+- **Actor tracking** — Behavioral fingerprinting and state management across sessions.
+- **Session management** — Session hijacking detection with cookie-based validation.
+- **Campaign correlation** — Attack campaign identification via fingerprint clustering across IPs.
+- **Trend analysis** — Request and signal trend tracking with anomaly detection.
+- **GeoIP** — Impossible travel detection for login events.
+
+### Protection
+
+- **Rate limiting** — Per-IP token-bucket with burst capacity, per-site overrides.
+- **Access lists** — CIDR-based allow/deny rules per site, IPv4 and IPv6.
+- **Tarpit** — Progressive response delays for suspicious actors (configurable base, max, and multiplier).
+- **Trap endpoints** — Honeypot paths that flag reconnaissance activity.
+- **Interrogator** — Progressive challenge escalation: JS challenge, CAPTCHA, proof-of-work, then block. HMAC-signed cookies for session continuity.
+- **SNI validation** — Domain fronting prevention via TLS/HTTP hostname cross-check.
+
+### Operations
+
+- **Multi-site support** — Hostname-based virtual host routing with per-site WAF thresholds, rate limits, access lists, block pages, and TLS certificates.
+- **Admin API** — 90+ endpoints for configuration, diagnostics, WAF statistics, entity/actor intelligence, campaign views, and more. See the [Admin API reference](docs/api/admin-api.md).
+- **Hot reload** — Configuration updates via `POST /reload` with ~240 μs atomic swap. No dropped requests.
+- **Graceful shutdown** — SIGQUIT/SIGTERM/SIGINT handling with in-flight request draining and configurable timeout.
+- **Shadow mirroring** — Mirror traffic to a honeypot backend with rate-limited sampling.
+- **Signal Horizon** — Fleet-wide threat intelligence sharing via WebSocket hub.
+- **Secure tunnel** — Encrypted tunnel client for agent-to-hub connectivity.
+
+### Observability
+
+- **Prometheus metrics** — Requests, blocks, latencies, WAF, DLP, crawler, entity, tarpit, and system metrics at `/metrics`. See the [metrics reference](docs/observability/PROMETHEUS_METRICS.md).
+- **Health endpoint** — `GET /_sensor/status` for load balancer integration.
+- **Web console** — Built-in admin dashboard at `/console`.
+- **TUI dashboard** — Interactive terminal UI with `--tui` flag.
+- **Access and block logging** — JSON or text format with detection timing.
+- **Diagnostic bundle** — Export full system state via the admin API.
 
 ## Quick Start
 
 ```bash
-# Build release binary
+# Build
 cargo build --release
 
-# Run (uses default config)
+# Configure
+cp config.example.yaml config.yaml
+# Edit config.yaml with your upstream backends
+
+# Run
 ./target/release/synapse-waf
 
-# Run with interactive TUI dashboard
+# Run with terminal dashboard
 ./target/release/synapse-waf --tui
 
-# Or with config file
-cp config.example.yaml config.yaml
-./target/release/synapse-waf
-
-# Run integration tests
-./test.sh
+# Validate configuration
+./target/release/synapse-waf check-config config.yaml
 ```
-
-## Benchmark Results (February 2026)
-
-Criterion.rs results from 19 benchmark suites (306 benchmarks), release build with LTO:
-
-### Detection Engine
-
-| Benchmark | Latency | Notes |
-|-----------|---------|-------|
-| **Simple GET** | **10.0 μs** | Minimal GET, no params |
-| **SQLi detection** | **26.6 μs** | Average across 5 SQLi variants |
-| **XSS detection** | **23.3 μs** | Average across 3 XSS variants |
-| **Evasive attacks** | **25-33 μs** | Hex, double-encoding, unicode, polyglot |
-| **Full rule set (237)** | **71.6 μs** | Linear scaling, ~302 ns/rule |
-
-### Per-Request Hot Path
-
-| Operation | Latency |
-|-----------|---------|
-| Rate limit check | 61 ns |
-| ACL evaluation (100 rules) | 156 ns |
-| Trap matching (honeypot) | 33 ns |
-| Actor is-blocked check | 45 ns |
-| Session validation | 304 ns |
-
-### End-to-End Pipeline
-
-| Scenario | Latency |
-|----------|---------|
-| Clean GET, full chain | 72 μs |
-| WAF + DLP (4 KB body) | 247 μs |
-| WAF + DLP (8 KB body) | 442 μs |
-| E-commerce order (heavy) | 1.6 ms |
-| Healthcare claim (PII + DLP) | 2.3 ms |
-
-### Comparison
-
-| Implementation | Detection Latency | Notes |
-|----------------|-------------------|-------|
-| **Synapse WAF** | **~10-25 μs** | Pure Rust, no FFI boundary |
-| libsynapse (NAPI) | ~62-73 μs | Node.js + Rust FFI overhead |
-| ModSecurity | 100-500 μs | Depends on ruleset |
-| AWS WAF | 50-200 μs | Cloud service |
-
-### Value Proposition
-
-Pingora eliminates the **~47 μs FFI overhead** (73 μs NAPI vs 25 μs pure Rust), providing
-a **~2-3x speedup** over the Node.js architecture:
-
-1. **Simpler architecture** - Single Rust binary vs nginx + Node.js + NAPI stack
-2. **No serialization boundary** - Detection runs in-process, no IPC
-3. **No GC pauses** - No V8 heap, predictable latency
-4. **Graceful reload** - Zero-downtime updates via SIGQUIT + socket handoff
-5. **Thread-local engines** - Each Pingora worker has its own Synapse instance
-
-| Metric | Current (nginx + NAPI) | Pingora | Improvement |
-|--------|------------------------|---------|-------------|
-| Per-request latency | ~73 μs | ~25 μs | **~3x faster** |
-| Components to deploy | 3 (nginx, Node.js, NAPI) | 1 binary | **Simpler** |
-| Memory footprint | Node.js + V8 heap | Rust only | **~50% smaller** |
-| Cold start | Seconds (V8 init) | Milliseconds | **Much faster** |
-| Config reload | Service restart | 240 μs hot reload | **Zero downtime** |
 
 ## Configuration
 
-Copy `config.example.yaml` to `config.yaml`:
-
 ```yaml
-# Server settings (flat fields on GlobalConfig)
-http_addr: "0.0.0.0:80"
-https_addr: "0.0.0.0:443"
-workers: 0                    # 0 = auto-detect CPU count
-shutdown_timeout_secs: 30
-waf_threshold: 70             # Global risk threshold (0-100)
-waf_enabled: true
-log_level: "info"             # trace, debug, info, warn, error
-waf_regex_timeout_ms: 100     # ReDoS protection (max 500)
-# admin_api_key: "..."        # Optional; random key generated if unset
+server:
+  listen: "0.0.0.0:6190"
+  workers: 0                      # 0 = auto-detect CPU count
 
-# Upstream backends (round-robin)
 upstreams:
   - host: "127.0.0.1"
     port: 8080
 
-# Rate limiting
 rate_limit:
   rps: 10000
   enabled: true
 
-# Detection toggles
 detection:
   sqli: true
   xss: true
   path_traversal: true
   command_injection: true
-  action: "block"             # block, log, challenge
+  action: "block"                 # block, log, challenge
   block_status: 403
+
+dlp:
+  enabled: false
+  max_body_inspection_bytes: 8192 # 8 KB inspection cap
+  scan_text_only: true
+  action: "mask"                  # mask, hash, block, log
+
+tls:
+  enabled: false
+  min_version: "1.2"
+
+logging:
+  level: "info"
+  format: "text"
+  access_log: true
 ```
 
-See [`docs/reference/configuration.md`](docs/reference/configuration.md) for the full reference.
+See [`docs/reference/configuration.md`](docs/reference/configuration.md) for the full reference including per-site overrides, crawler detection, tarpit, profiler, trap endpoints, and Signal Horizon integration.
 
-## Pingora Hooks Used
+## Usage Examples
 
-| Hook | Purpose |
-|------|---------|
-| `early_request_filter` | Rate limiting (pre-TLS) |
-| `request_filter` | Attack detection (main filter) |
-| `request_body_filter` | DLP body inspection (PII/sensitive data scanning) |
-| `upstream_peer` | Round-robin backend selection |
-| `upstream_request_filter` | Add `X-Synapse-*` headers |
-| `logging` | Access logs with timing |
-
-## Integration Tests
-
-Run the test script to verify everything works:
-
-```bash
-# With proxy already running
-./test.sh
-
-# Or start proxy, run tests, stop proxy
-./test.sh --start
-```
-
-Sample output:
-
-```
-============================================
-  Synapse WAF Integration Tests
-============================================
-
-[INFO] Testing clean requests (should PASS)...
-[PASS] Simple GET / (502 - allowed)
-[PASS] API endpoint (502 - allowed)
-...
-
-[INFO] Testing SQL injection (should BLOCK)...
-[PASS] SQLi: OR condition (403) - 2ms
-[PASS] SQLi: UNION SELECT (403) - 1ms
-...
-
-============================================
-  Results: 23/23 passed
-============================================
-
-All tests passed!
-```
-
-## Configuration Hot-Reload
-
-Synapse supports zero-downtime configuration updates via the admin API:
-
-```bash
-# Reload configuration (~240 μs atomic swap, no dropped requests)
-curl -X POST http://localhost:6191/reload -H "X-Admin-Key: $ADMIN_KEY"
-```
-
-How it works:
-
-1. New config is parsed and validated
-2. Routing table and WAF rules are rebuilt
-3. Atomic `RwLock` swap replaces the live config
-4. In-flight requests continue unaffected
-
-## Graceful Shutdown
-
-The process handles `SIGQUIT`, `SIGTERM`, and `SIGINT` for graceful shutdown:
-
-1. Signal received — stop accepting new connections
-2. In-flight requests are allowed to complete (draining)
-3. Process exits when all connections are closed
-
-## Building
-
-```bash
-# Development build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# With full optimizations (LTO + native CPU)
-RUSTFLAGS="-C target-cpu=native" cargo build --release
-
-# Run tests
-cargo test
-
-# Run benchmarks
-cargo bench
-```
-
-## Example Usage
-
-### Clean Request (Allowed)
+### Clean request (proxied)
 
 ```bash
 curl -v http://localhost:6190/api/users/123
@@ -284,7 +159,7 @@ curl -v http://localhost:6190/api/users/123
 # → X-Synapse-Detection-Time-Us: 1
 ```
 
-### SQL Injection (Blocked)
+### SQL injection (blocked)
 
 ```bash
 curl -v "http://localhost:6190/api/users?id=1'+OR+'1'%3D'1"
@@ -292,204 +167,107 @@ curl -v "http://localhost:6190/api/users?id=1'+OR+'1'%3D'1"
 # → {"error": "blocked", "reason": "sqli"}
 ```
 
-### XSS (Blocked)
+### Admin API
 
 ```bash
-curl -v "http://localhost:6190/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
-# → HTTP 403 Forbidden
-# → {"error": "blocked", "reason": "xss"}
+# Health check
+curl http://localhost:6191/health
+
+# Hot reload
+curl -X POST http://localhost:6191/reload -H "X-Admin-Key: $ADMIN_KEY"
+
+# WAF statistics
+curl http://localhost:6191/waf/stats -H "X-Admin-Key: $ADMIN_KEY"
+
+# Dry-run evaluation
+curl -X POST http://localhost:6191/_sensor/evaluate \
+  -H "X-Admin-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"method": "GET", "path": "/test?id=1 OR 1=1"}'
 ```
 
-### POST with Body
+## Benchmarks (February 2026)
+
+19 Criterion.rs suites, ~306 benchmarks. Release profile with LTO.
+
+### Detection Engine
+
+| Technique | Latency |
+|-----------|---------|
+| Simple GET | 10.0 μs |
+| Path traversal (all variants) | 10-12 μs |
+| XSS (hex/double/unicode evasion) | 26-28 μs |
+| SQLi (comment/case/concat evasion) | 30-32 μs |
+| Command injection (backtick) | 33 μs |
+| Polyglot XSS+SQLi | 25.7 μs |
+| Full rule set (237 rules) | 71.8 μs |
+
+All evasion payloads detected under 34 μs.
+
+### Hot Path
+
+| Component | Latency |
+|-----------|---------|
+| Rate limit check | 50-64 ns |
+| ACL (5 rules, first hit) | 5 ns |
+| ACL (100 rules, last hit) | 156 ns |
+| IPv6 CIDR match | 6 ns |
+| Trap match | 33 ns |
+| Tarpit peek | 36-59 ns |
+| Actor is-blocked | 45 ns |
+| Session validate (existing) | 304 ns |
+| Domain validation | 75 ns |
+
+### Realistic Scenarios
+
+| Scenario | Latency |
+|----------|---------|
+| Simple GET | 10.0 μs |
+| Heavy request (14 KB + 20 headers) | 1.46 ms |
+| E-commerce order | 1.61 ms |
+| GraphQL mutation | 1.61 ms |
+| Healthcare claim (PII + DLP) | 2.26 ms |
+| Bulk import | 5.43 ms |
+
+### Full Stack Latency Budget
+
+Pipeline (72 μs) + Trends (96 μs) + Campaign (65 μs) + DLP (34 μs) + Crawler (3 μs) + Session (7 μs) + Profiler (1 μs) + Proxy (~150 μs) = **~428 μs worst-case**.
+
+Measured WAF+DLP combined: 247 μs (4 KB) / 442 μs (8 KB) — work sharing reduces actual cost below sum of parts.
+
+## Building
 
 ```bash
-curl -v -X POST -d '{"user":"test"}' http://localhost:6190/api/users
-# Body size logged: "Request body complete: 15 bytes"
+# Development
+cargo build
+
+# Release (optimized)
+cargo build --release
+
+# With native CPU targeting
+RUSTFLAGS="-C target-cpu=native" cargo build --release
+
+# Tests
+cargo test
+
+# Benchmarks
+cargo bench
 ```
 
-## Upstream Headers
+## Documentation
 
-The proxy adds these headers to upstream requests:
-
-| Header | Description |
-|--------|-------------|
-| `X-Synapse-Analyzed` | Always "true" |
-| `X-Synapse-Detection-Time-Us` | Detection time in microseconds |
-| `X-Synapse-Client-IP` | Client IP (from X-Forwarded-For or connection) |
-
-## Detection Engine
-
-This PoC uses the **real libsynapse engine** from `../risk-server/libsynapse/`, which includes:
-
-- **237 production rules** covering SQLi, XSS, path traversal, command injection, and more
-- **Behavioral tracking** - Entity risk accumulates across requests from the same IP
-- **Risk scoring** - Graduated risk levels (0-100) with configurable blocking thresholds
-- **Rule chaining** - Multiple rules can match and contribute to overall risk
-
-### Verified Detections
-
-Tested and verified to block:
-
-- `UNION SELECT` SQLi attacks (rule 200200)
-- Path traversal attempts (rules 200014, 200016)
-- Various other attack patterns from the production rule set
-
-### Rules Loading
-
-Rules are loaded at startup from (in order of preference):
-
-1. `../risk-server/libsynapse/rules.json` (production rules)
-2. `rules.json` (local override)
-3. `/etc/synapse-pingora/rules.json` (system-wide)
-4. `src/minimal_rules.json` (fallback with 7 basic patterns)
-
-## Performance Optimizations
-
-1. **Thread-local engines**: Each Pingora worker has its own Synapse instance
-2. **Lazy rule loading**: Rules parsed once at startup via `once_cell::Lazy`
-3. **Zero-copy headers**: Header references passed directly to engine
-4. **LTO**: Link-time optimization in release builds (profile: fat LTO, 1 codegen unit)
-5. **Native CPU**: Build with `RUSTFLAGS="-C target-cpu=native"` for best performance
-
-### DLP Body Inspection Optimizations
-
-The DLP scanner has been optimized for high-throughput request body scanning:
-
-| Optimization | Description | Impact |
-|--------------|-------------|--------|
-| **Content-Type Short Circuit** | Skip binary types (image/*, video/*, multipart/form-data) | Eliminates scan overhead for file uploads |
-| **Inspection Depth Cap** | Truncate body to first 8KB by default | O(1) scan time for large payloads |
-| **Aho-Corasick Prefilter** | Single-pass multi-pattern detection | 30-50% faster than sequential regex |
-
-#### DLP Performance Benchmarks (February 2026)
-
-| Payload Size | With PII | Clean Traffic | Notes |
-|--------------|----------|---------------|-------|
-| 4 KB | **~34 μs** | ~21 μs | E-commerce order payloads |
-| 8 KB | ~65 μs | ~42 μs | At inspection cap limit |
-| 18 KB | ~68 μs | ~42 μs | Truncated to 8KB cap |
-| 32 KB | ~64 μs | ~41 μs | Plateaus due to truncation |
-
-DLP fast mode saves 30-34%: 4 KB drops from ~34 μs to ~24 μs, 8 KB from ~70 μs to ~46 μs.
-
-#### DLP Configuration Options
-
-```rust
-// In code (DlpConfig)
-DlpConfig {
-    enabled: true,                        // Enable/disable DLP scanning
-    max_scan_size: 5 * 1024 * 1024,       // 5MB hard limit (reject if larger)
-    max_matches: 100,                     // Stop after 100 matches
-    scan_text_only: true,                 // Only scan text content types
-    max_body_inspection_bytes: 8 * 1024,  // 8KB inspection cap (truncate, don't reject)
-}
-```
-
-**Tuning Recommendations**:
-
-- **High-security environments**: Set `max_body_inspection_bytes` to 32KB+ for deeper inspection
-- **High-throughput APIs**: Keep default 8KB cap for sub-100μs scan times
-- **File upload endpoints**: Binary content types are automatically skipped
-
-#### Content Types Automatically Skipped
-
-- `image/*` - All image formats
-- `audio/*` - All audio formats
-- `video/*` - All video formats
-- `application/octet-stream` - Binary data
-- `multipart/form-data` - File uploads
-- `application/zip`, `application/gzip`, etc. - Archives
-- `font/*` - Font files
-- `model/*` - 3D models
-
-## Future Work (For Feature Parity with nginx)
-
-### Core Features (Required for Production)
-
-- [x] Full detection rule parity with libsynapse (DONE - using real engine)
-- [x] **Multi-site/vhost support** - Hostname-based routing with per-site config
-- [x] **TLS termination** - SSL certificates, SNI support
-- [x] **Health check endpoint** - `/_sensor/status` equivalent
-- [x] **Per-site WAF config** - Override rules, thresholds per hostname
-
-### Management Features (Important)
-
-- [x] **Metrics endpoint** - Prometheus-compatible `/metrics`
-- [x] **Config hot-reload API** - Update config without restart
-- [x] **Access lists** - Allow/deny CIDRs per site
-- [x] **Per-site rate limiting** - Hostname-aware rate limits
-- [x] Signal Horizon telemetry integration
-
-### Advanced Features
-
-- [x] DLP scanning in `request_body_filter` (DONE - with performance optimizations)
-- [x] Request body inspection (POST/PUT payloads) (DONE - with truncation cap)
-- [x] Custom block pages per site
-- [x] Dashboard UI integration (Dashboard compatibility routes)
-- [x] Production hardening (security audit remediations complete)
-
-## Files
-
-```
-synapse-pingora/
-├── Cargo.toml              # Dependencies
-├── config.example.yaml     # Example configuration
-├── test.sh                 # Integration test script
-├── README.md
-├── benches/
-│   └── detection.rs        # Criterion benchmarks
-├── assets/
-│   └── admin_console.html  # Embedded admin web console
-├── docs/                   # Project documentation
-│   ├── reference/          # Configuration reference
-│   ├── tutorials/          # Tuning, DLP, shadow mirroring
-│   └── api/                # Admin API reference
-└── src/
-    ├── main.rs             # Binary entrypoint + Pingora proxy impl
-    ├── lib.rs              # Library crate root
-    ├── config.rs           # YAML config loading & validation
-    ├── admin_server.rs     # Admin HTTP API (90+ endpoints)
-    ├── api.rs              # API handler traits
-    ├── metrics.rs          # Prometheus metrics registry
-    ├── health.rs           # Health check logic
-    ├── rules.rs            # Rule loading & management
-    ├── tui.rs              # Interactive terminal dashboard
-    ├── waf/                # WAF detection engine
-    ├── entity/             # IP/actor entity store & risk tracking
-    ├── actor/              # Behavioral actor tracking
-    ├── session/            # Session tracking & hijack detection
-    ├── detection/          # Credential stuffing & login detection
-    ├── correlation/        # Campaign correlation engine
-    ├── intelligence/       # Signal intelligence manager
-    ├── dlp/                # Data Loss Prevention scanner
-    ├── profiler/           # Endpoint profiling & schema learning
-    ├── payload/            # Bandwidth & payload analysis
-    ├── trends/             # Trend analysis & anomaly detection
-    ├── fingerprint/        # JA4 fingerprinting & integrity
-    ├── crawler/            # Bot & crawler detection
-    ├── geo/                # GeoIP & impossible travel detection
-    ├── shadow/             # Shadow traffic mirroring
-    ├── signals/            # Signal adapter layer
-    ├── horizon/            # Signal Horizon hub integration
-    ├── tunnel/             # Secure tunnel client
-    ├── telemetry/          # Telemetry & reporting
-    ├── interrogator/       # CAPTCHA, JS challenge, cookie mgmt
-    ├── persistence/        # State persistence layer
-    ├── tarpit/             # Tarpit (not shown: src/tarpit/)
-    ├── utils/              # Circuit breaker & shared utilities
-    └── (14 more modules)   # access, block_log, block_page, body,
-                            # config_manager, headers, ratelimit,
-                            # reload, shutdown, site_waf, sni_validation,
-                            # tls, trap, validation, vhost
-```
+| Document | Description |
+|----------|-------------|
+| [Configuration Reference](docs/reference/configuration.md) | Full configuration options |
+| [Admin API Reference](docs/api/admin-api.md) | 90+ management endpoints |
+| [Prometheus Metrics](docs/observability/PROMETHEUS_METRICS.md) | 50+ exported metrics |
+| [Benchmark Report](docs/performance/BENCHMARK_REPORT_2026_02.md) | February 2026 benchmark results |
+| [Benchmark Methodology](docs/performance/BENCHMARK_METHODOLOGY.md) | How benchmarks are run |
+| [Reproducing Benchmarks](docs/performance/REPRODUCING_BENCHMARKS.md) | Run benchmarks locally |
+| [Advanced Threat Detection](docs/architecture/ADVANCED_THREAT_DETECTION.md) | Trap endpoints, session tracking, JA4 |
 
 ## License
 
 Licensed under the GNU Affero General Public License v3.0 only.
-Copyright Nicholas Crew Ferguson
+Copyright Nicholas Crew Ferguson.
 See [LICENSE](../../LICENSE).
-
-## See Also
-
-- [Pingora GitHub](https://github.com/cloudflare/pingora)
-- [Pingora Documentation](https://docs.rs/pingora)

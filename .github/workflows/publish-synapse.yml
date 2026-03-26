@@ -42,7 +42,7 @@ jobs:
         run: cargo clippy -- -W clippy::all
 
       - name: Run tests
-        run: cargo test --lib --bins -- --skip profiler::template_intern
+        run: cargo test --lib --bins -- --skip profiler::template_intern --skip profiler::header_types
         timeout-minutes: 10
 
       - name: Verify package

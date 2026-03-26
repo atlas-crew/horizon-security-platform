@@ -122,6 +122,20 @@ The release artifact is self-contained for migrations and runtime startup. It do
 
 Use the self-hosted runbook in [`site/guides/self-hosted-standalone.md`](./site/guides/self-hosted-standalone.md) for the exact install flow.
 
+For npm distribution, the same release flow now emits a publishable `@atlas-crew/signal-horizon` package manifest. Maintainers can validate the publish payload with:
+
+```bash
+pnpm signal-horizon:publish:dry-run
+```
+
+and publish it with:
+
+```bash
+pnpm signal-horizon:publish
+```
+
+That package is intended for customer-managed installs where the UI and API ship together as one Node-delivered runtime.
+
 ## Deployment
 
 For the managed deployment path, use the repo-root [`render.yaml`](../../render.yaml) plus the Render-specific env templates:

@@ -15,6 +15,9 @@ const tarballPath = path.join(outRoot, 'signal-horizon-standalone.tar.gz');
 const deployExamplesRoot = path.join(appRoot, 'deploy', 'standalone');
 const stagingParent = await fs.mkdtemp(path.join(os.tmpdir(), 'signal-horizon-release-'));
 const stagingRoot = path.join(stagingParent, 'signal-horizon-standalone');
+// Customer-facing standalone builds publish under the external npm scope used for deployable products.
+const standalonePackageName = '@atlas-crew/signal-horizon';
+const sourcePackageJsonPath = path.join(appRoot, 'api', 'package.json');
 
 function readGitRevision(args) {
   const result = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8' });
@@ -27,6 +30,11 @@ function readGitRevision(args) {
 
 const gitSha = readGitRevision(['rev-parse', 'HEAD']);
 const gitShortSha = readGitRevision(['rev-parse', '--short', 'HEAD']);
+const sourcePackage = JSON.parse(await fs.readFile(sourcePackageJsonPath, 'utf8'));
+const prismaVersion = sourcePackage.devDependencies?.prisma;
+if (!prismaVersion) {
+  throw new Error('prisma not found in apps/signal-horizon/api/package.json devDependencies');
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -82,6 +90,73 @@ async function pruneReleaseBundle() {
   await Promise.all(pathsToRemove.map((relativePath) => removeIfExists(path.join(stagingRoot, relativePath))));
 }
 
+async function writeStandalonePackageManifest() {
+  const stagedPackagePath = path.join(stagingRoot, 'package.json');
+  const stagedPackage = JSON.parse(await fs.readFile(stagedPackagePath, 'utf8'));
+  const dependencies = {
+    ...stagedPackage.dependencies,
+    prisma: prismaVersion,
+  };
+  delete dependencies['@signal-horizon/shared'];
+
+  const standalonePackage = {
+    name: standalonePackageName,
+    version: sourcePackage.version,
+    description: 'Standalone Signal Horizon UI and API runtime for customer-managed deployments',
+    author: 'Nicholas Crew Ferguson <nick@atlascrew.dev> (https://atlascrew.dev)',
+    keywords: ['signal-horizon', 'security', 'soc', 'fleet', 'hunting', 'dashboard'],
+    repository: {
+      type: 'git',
+      url: 'https://github.com/atlas-crew/horizon-security-platform',
+      directory: 'apps/signal-horizon',
+    },
+    homepage: 'https://horizon.atlascrew.dev/signal-horizon',
+    bugs: 'https://github.com/atlas-crew/horizon-security-platform/issues',
+    license: sourcePackage.license,
+    type: sourcePackage.type,
+    main: 'dist/index.js',
+    types: 'dist/index.d.ts',
+    files: ['dist', 'prisma', 'bin', 'config', 'docs', 'README.md', 'LICENSE', 'RELEASE.txt', '.env.example'],
+    scripts: {
+      postinstall: 'prisma generate',
+      start: 'node dist/index.js',
+      'db:generate': 'prisma generate',
+      'db:migrate:prod': 'prisma migrate deploy',
+      'db:studio': 'prisma studio',
+    },
+    engines: sourcePackage.engines,
+    publishConfig: {
+      access: 'public',
+    },
+    dependencies,
+  };
+
+  await fs.writeFile(stagedPackagePath, `${JSON.stringify(standalonePackage, null, 2)}\n`, 'utf8');
+}
+
+async function removeSourceMaps(targetPath) {
+  const entries = await fs.readdir(targetPath, { withFileTypes: true }).catch((error) => {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  });
+  await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(targetPath, entry.name);
+      if (entry.isDirectory()) {
+        await removeSourceMaps(entryPath);
+        return;
+      }
+
+      if (entry.isFile() && entry.name.endsWith('.map')) {
+        await fs.rm(entryPath, { force: true });
+      }
+    })
+  );
+}
+
 const generatedAt = new Date().toISOString();
 
 try {
@@ -94,6 +169,8 @@ try {
   });
 
   await pruneReleaseBundle();
+  await writeStandalonePackageManifest();
+  await removeSourceMaps(path.join(stagingRoot, 'dist'));
 
   await copyIntoRelease('api/.env.example', '.env.example');
   await copyIntoRelease('site/guides/self-hosted-standalone.md', 'README.md');

@@ -6,6 +6,7 @@ on:
     # Keep this list in sync with push.paths below.
     paths:
       - '.github/workflows/signal-horizon-preflight.yml'
+      - '.github/workflows/publish-npm.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -20,6 +21,7 @@ on:
     # Keep this list in sync with pull_request.paths above.
     paths:
       - '.github/workflows/signal-horizon-preflight.yml'
+      - '.github/workflows/publish-npm.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -57,3 +59,10 @@ jobs:
 
       - name: Render deployment preflight
         run: bash ./apps/signal-horizon/scripts/render-preflight.sh
+
+      - name: Validate standalone npm package
+        run: |
+          pnpm signal-horizon:release
+          cd apps/signal-horizon/out/signal-horizon-standalone
+          mkdir -p /tmp/signal-horizon-pack
+          pnpm pack --json --pack-destination /tmp/signal-horizon-pack

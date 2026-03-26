@@ -122,7 +122,7 @@ The release artifact is self-contained for migrations and runtime startup. It do
 
 Use the self-hosted runbook in [`site/guides/self-hosted-standalone.md`](./site/guides/self-hosted-standalone.md) for the exact install flow.
 
-For npm distribution, the same release flow now emits a publishable `@atlas-crew/horizon` package manifest. Maintainers can validate the publish payload with:
+For npm distribution, the same release flow now emits a publishable `@atlascrew/horizon` package manifest. Maintainers can validate the publish payload with:
 
 ```bash
 pnpm signal-horizon:publish:dry-run

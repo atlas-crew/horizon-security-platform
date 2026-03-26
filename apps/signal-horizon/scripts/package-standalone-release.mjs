@@ -16,7 +16,7 @@ const deployExamplesRoot = path.join(appRoot, 'deploy', 'standalone');
 const stagingParent = await fs.mkdtemp(path.join(os.tmpdir(), 'signal-horizon-release-'));
 const stagingRoot = path.join(stagingParent, 'signal-horizon-standalone');
 // Customer-facing standalone builds publish under the external npm scope used for deployable products.
-const standalonePackageName = '@atlas-crew/horizon';
+const standalonePackageName = '@atlascrew/horizon';
 const sourcePackageJsonPath = path.join(appRoot, 'api', 'package.json');
 
 function readGitRevision(args) {

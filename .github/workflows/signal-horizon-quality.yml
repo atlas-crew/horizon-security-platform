@@ -1,0 +1,118 @@
+name: Signal Horizon quality
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/signal-horizon-quality.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/signal-horizon/.node-version'
+      - 'apps/signal-horizon/api/**'
+      - 'apps/signal-horizon/ui/**'
+      - 'apps/signal-horizon/shared/**'
+      - 'apps/signal-horizon/scripts/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/signal-horizon-quality.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/signal-horizon/.node-version'
+      - 'apps/signal-horizon/api/**'
+      - 'apps/signal-horizon/ui/**'
+      - 'apps/signal-horizon/shared/**'
+      - 'apps/signal-horizon/scripts/**'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signal-horizon-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-quality:
+    name: Signal Horizon API
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@02f6c237bd2518259fed6c71566509edfb3f2b74 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: apps/signal-horizon/.node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @atlascrew/signal-horizon-api db:generate
+
+      - name: Lint API
+        run: pnpm --filter @atlascrew/signal-horizon-api lint
+
+      - name: Type-check API
+        run: pnpm --filter @atlascrew/signal-horizon-api type-check
+
+      - name: Test API
+        run: pnpm --filter @atlascrew/signal-horizon-api test
+
+      - name: Build API
+        run: pnpm --filter @atlascrew/signal-horizon-api build
+
+  ui-quality:
+    name: Signal Horizon UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@02f6c237bd2518259fed6c71566509edfb3f2b74 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: apps/signal-horizon/.node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint UI
+        run: pnpm --filter @atlascrew/signal-horizon-ui lint
+
+      - name: Type-check UI
+        run: pnpm --filter @atlascrew/signal-horizon-ui type-check
+
+      - name: Build UI
+        run: pnpm --filter @atlascrew/signal-horizon-ui build
+
+  ui-tests:
+    name: Signal Horizon UI tests (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@02f6c237bd2518259fed6c71566509edfb3f2b74 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: apps/signal-horizon/.node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run UI tests
+        run: pnpm --filter @atlascrew/signal-horizon-ui test

@@ -211,6 +211,8 @@ bash ./apps/signal-horizon/scripts/render-preflight.sh
 
 GitHub Actions also runs the same preflight automatically on Render blueprint changes, root dependency/workspace file changes, plus Signal Horizon API, UI, `shared/`, and deployment-script changes via [`.github/workflows/signal-horizon-preflight.yml`](../../.github/workflows/signal-horizon-preflight.yml).
 
+For pull requests and pushes that touch Signal Horizon code, GitHub Actions now also runs [`.github/workflows/signal-horizon-quality.yml`](../../.github/workflows/signal-horizon-quality.yml). That workflow publishes two required status checks, `Signal Horizon API` and `Signal Horizon UI`, for the green-path lint, type-check, test, and build gates we can enforce today. It also runs `Signal Horizon UI tests (informational)` as a visible non-blocking job until the broader UI suite is stabilized enough to promote to a required gate.
+
 For customer-managed installs, prefer the standalone bundle plus the self-hosted guide:
 
 - [`site/guides/self-hosted-standalone.md`](./site/guides/self-hosted-standalone.md)

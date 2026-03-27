@@ -187,3 +187,23 @@ jobs:
         run: pnpm publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify package is visible on npm
+        if: "!(github.event_name == 'workflow_dispatch' && inputs.dry_run)"
+        working-directory: apps/signal-horizon/out/signal-horizon-standalone
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          for attempt in $(seq 1 18); do
+            PUBLISHED_VERSION=$(npm view "${PKG_NAME}@${PKG_VERSION}" version 2>/dev/null || true)
+            if [ "$PUBLISHED_VERSION" = "$PKG_VERSION" ]; then
+              echo "Verified ${PKG_NAME}@${PKG_VERSION} on npm"
+              exit 0
+            fi
+
+            echo "Package not visible yet (attempt ${attempt}/18); waiting 10s..."
+            sleep 10
+          done
+
+          echo "${PKG_NAME}@${PKG_VERSION} did not become visible on npm within the retry window"
+          exit 1

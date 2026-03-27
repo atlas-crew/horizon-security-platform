@@ -54,6 +54,18 @@ async function ensureFile(filePath) {
   });
 }
 
+async function ensureExecutableScript(filePath) {
+  const contents = await fs.readFile(filePath, 'utf8');
+  if (!contents.startsWith('#!/usr/bin/env bash')) {
+    throw new Error(`Expected bash shebang in ${filePath}`);
+  }
+
+  const stats = await fs.stat(filePath);
+  if ((stats.mode & 0o111) === 0) {
+    throw new Error(`Expected executable permissions on ${filePath}`);
+  }
+}
+
 async function removeIfExists(targetPath) {
   await fs.rm(targetPath, { force: true, recursive: true });
 }
@@ -116,6 +128,10 @@ async function writeStandalonePackageManifest() {
     type: sourcePackage.type,
     main: 'dist/index.js',
     types: 'dist/index.d.ts',
+    bin: {
+      horizon: 'bin/start.sh',
+      'horizon-migrate': 'bin/migrate.sh',
+    },
     files: ['dist', 'prisma', 'bin', 'config', 'docs', 'README.md', 'LICENSE', 'RELEASE.txt', '.env.example'],
     scripts: {
       postinstall: 'prisma generate',
@@ -209,7 +225,8 @@ try {
     ensureFile(path.join(stagingRoot, 'dist', 'public', 'index.html')),
     ensureFile(path.join(stagingRoot, 'node_modules', '.bin', 'prisma')),
     ensureFile(path.join(stagingRoot, 'README.md')),
-    ensureFile(path.join(stagingRoot, 'bin', 'start.sh')),
+    ensureExecutableScript(path.join(stagingRoot, 'bin', 'start.sh')),
+    ensureExecutableScript(path.join(stagingRoot, 'bin', 'migrate.sh')),
   ]);
 
   await removeIfExists(releaseRoot);

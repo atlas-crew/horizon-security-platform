@@ -14,6 +14,7 @@
     "signal-horizon:ui": "pnpm --filter @atlascrew/signal-horizon-ui dev",
     "signal-horizon:standalone": "pnpm exec nx run signal-horizon-api:build:standalone",
     "signal-horizon:release": "node apps/signal-horizon/scripts/package-standalone-release.mjs",
+    "signal-horizon:release:tag": "node apps/signal-horizon/scripts/create-release-tag.mjs",
     "signal-horizon:publish:dry-run": "node apps/signal-horizon/scripts/publish-standalone-package.mjs --dry-run",
     "signal-horizon:publish": "node apps/signal-horizon/scripts/publish-standalone-package.mjs",
     "synapse-client:build": "pnpm --filter @atlascrew/synapse-client build",

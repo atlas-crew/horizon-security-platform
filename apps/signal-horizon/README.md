@@ -136,6 +136,65 @@ pnpm signal-horizon:publish
 
 That package is intended for customer-managed installs where the UI and API ship together as one Node-delivered runtime.
 
+### Install From npm
+
+For a customer-managed host, prefer a project-local install:
+
+```bash
+mkdir signal-horizon
+cd signal-horizon
+npm init -y
+npm install @atlascrew/horizon
+cp ./node_modules/@atlascrew/horizon/.env.example ./.env
+npx horizon-migrate
+npx horizon
+```
+
+That keeps the runtime, Prisma CLI, and migrations inside the deployment directory while exposing the packaged entrypoints `horizon` and `horizon-migrate`.
+
+If you prefer a global install on an operator-managed box:
+
+```bash
+npm install -g @atlascrew/horizon
+mkdir signal-horizon
+cd signal-horizon
+cp "$(npm root -g)/@atlascrew/horizon/.env.example" ./.env
+horizon-migrate
+horizon
+```
+
+Local install is still the recommended path because the package files, `.env`, and database lifecycle all stay together in one deployment directory.
+
+### Release Flow
+
+The recommended publish path is GitHub Actions using the `npm` environment secret, not a local `npm publish` from a workstation shell.
+
+To preview the next tag without creating it:
+
+```bash
+pnpm signal-horizon:release:tag -- --print-only
+```
+
+To create the local release tag from the current Signal Horizon version:
+
+```bash
+pnpm signal-horizon:release:tag
+```
+
+To create and push the tag in one step:
+
+```bash
+pnpm signal-horizon:release:tag -- --push
+```
+
+Pushing a tag like `signal-horizon-v0.1.1` triggers the npm publish workflow automatically. You can also publish manually through Actions with:
+
+```bash
+gh workflow run "Publish npm packages" --ref main -f package=signal-horizon -f dry_run=false
+```
+
+The workflow now waits for npm registry propagation and verifies that the exact published version becomes visible before it marks the job successful.
+
 ## Deployment
 
 For the managed deployment path, use the repo-root [`render.yaml`](../../render.yaml) plus the Render-specific env templates:

@@ -4,7 +4,7 @@
 # =============================================================================
 # Builder Stage
 # =============================================================================
-FROM rust:1.77-bookworm as builder
+FROM rustlang/rust:nightly-bookworm AS builder
 
 # Install build dependencies for Pingora (OpenSSL, CMake, Clang)
 RUN apt-get update && apt-get install -y \

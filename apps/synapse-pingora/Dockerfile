@@ -40,9 +40,8 @@ RUN groupadd -r synapse && useradd -r -g synapse synapse
 
 WORKDIR /app
 
-# Copy configuration and rules
+# Copy default configuration (rules are embedded in the binary)
 COPY apps/synapse-pingora/config.yaml /app/config.yaml
-COPY apps/synapse-pingora/data/rules.json /app/data/rules.json
 
 # Copy binary from builder
 COPY --from=builder /usr/src/app/apps/synapse-pingora/target/release/synapse-waf /usr/local/bin/synapse-waf

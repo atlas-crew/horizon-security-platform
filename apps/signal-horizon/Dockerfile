@@ -16,6 +16,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml nx.json ./
 # Copy the signal-horizon app (API, UI, shared, scripts, deploy examples)
 COPY apps/signal-horizon/ ./apps/signal-horizon/
 
+# Root LICENSE is needed by the release script
+COPY LICENSE ./LICENSE
+
 # Install all dependencies (dev included — needed for build tooling)
 RUN pnpm install --frozen-lockfile
 

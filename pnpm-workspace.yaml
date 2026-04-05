@@ -1,4 +1,7 @@
 packages:
-  - 'apps/*'
-  - 'apps/signal-horizon/*'
-  - 'packages/*'
+  - apps/*
+  - apps/signal-horizon/*
+  - packages/*
+
+overrides:
+  '@atlascrew/apparatus-lib': link:../Apparatus/libs/client

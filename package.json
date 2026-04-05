@@ -23,5 +23,8 @@
   },
   "devDependencies": {
     "nx": "21.6.4"
+  },
+  "dependencies": {
+    "@atlascrew/apparatus-lib": "link:../Apparatus/libs/client"
   }
 }

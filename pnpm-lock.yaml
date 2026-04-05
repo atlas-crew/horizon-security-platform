@@ -4,9 +4,16 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@atlascrew/apparatus-lib': link:../Apparatus/libs/client
+
 importers:
 
   .:
+    dependencies:
+      '@atlascrew/apparatus-lib':
+        specifier: link:../Apparatus/libs/client
+        version: link:../Apparatus/libs/client
     devDependencies:
       nx:
         specifier: 21.6.4
@@ -14,6 +21,9 @@ importers:
 
   apps/signal-horizon/api:
     dependencies:
+      '@atlascrew/apparatus-lib':
+        specifier: link:../../../../Apparatus/libs/client
+        version: link:../../../../Apparatus/libs/client
       '@clickhouse/client':
         specifier: ^1.15.0
         version: 1.18.2

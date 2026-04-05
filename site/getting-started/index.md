@@ -7,7 +7,7 @@ title: Getting Started
 Horizon is an edge protection platform that pairs a central intelligence hub with distributed WAF sensors. This section covers the platform architecture, system requirements, and how to get a development environment running.
 
 ::: tip Try it now
-Explore the Horizon dashboard with synthetic data — no install required: [**Live Demo**](https://horizon-demo.nickf4.workers.dev)
+Explore the Horizon dashboard with synthetic data — no install required: [**Live Demo**](https://horizon-demo.atlascrew.dev)
 :::
 
 ## What is Horizon?

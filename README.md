@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://horizon-demo.nickf4.workers.dev"><strong>Live Demo</strong></a> · <a href="https://atlascrew.dev">Documentation</a>
+  <a href="https://horizon-demo.atlascrew.dev"><strong>Live Demo</strong></a> · <a href="https://atlascrew.dev">Documentation</a>
 </p>
 
 ## Architecture

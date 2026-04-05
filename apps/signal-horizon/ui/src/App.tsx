@@ -34,6 +34,9 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { ToastProvider } from './components/ui/Toast';
 import { DemoModeControls } from './components/beam/DemoModeControls';
+import { DemoTourModal } from './components/feedback/DemoTourModal';
+import { useDemoLiveUpdates, useIsDemo, DEMO_HIDDEN_PATHS } from './stores/demoModeStore';
+import { useApparatusStatus } from './hooks/useApparatusStatus';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { ShortcutHelpModal } from './components/ui/ShortcutHelpModal';
@@ -126,6 +129,9 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme());
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const isDemo = useIsDemo();
+  useDemoLiveUpdates();
+  const { status: apparatusStatus } = useApparatusStatus();
   const [isTimeRangeOpen, setIsTimeRangeOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -321,6 +327,7 @@ function App() {
         isOpen={isShortcutHelpOpen}
         onClose={() => setIsShortcutHelpOpen(false)}
       />
+      <DemoTourModal />
       {/* Skip to main content — WCAG 2.4.1 */}
 
 
@@ -397,6 +404,19 @@ function App() {
                   </span>
                 </Stack>
               </Link>
+              {/* Apparatus Connection Status */}
+              {apparatusStatus.state !== 'disabled' && (
+                <Link to="/settings/admin" className="hover:text-white transition-colors group">
+                  <Stack direction="row" align="center" gap="sm">
+                    <Target className={clsx('w-4 h-4', apparatusStatus.state === 'connected' ? 'text-ac-magenta' : 'text-white/40')} />
+                    <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
+                      <span className={clsx('font-semibold uppercase', apparatusStatus.state === 'connected' ? 'text-ac-magenta' : 'text-white/40')}>
+                        APT
+                      </span>
+                    </span>
+                  </Stack>
+                </Link>
+              )}
             </Stack>
           </Stack>
           <Stack direction="row" align="center" gap="sm">
@@ -496,9 +516,9 @@ function App() {
           <nav aria-label="Main navigation" className={clsx('flex-1 py-4 overflow-y-auto', sidebarCollapsed ? 'px-1' : 'px-3')}>
             {renderCollapsibleSection('threat', 'Threat Intelligence', primaryNavItems, 'bg-ac-magenta')}
             {renderCollapsibleSection('sensor', 'Sensor Console', beamNavItems, 'bg-ac-sky')}
-            {renderCollapsibleSection('fleet', 'Fleet Operations', fleetNavItems, 'bg-ac-green')}
+            {renderCollapsibleSection('fleet', 'Fleet Operations', isDemo ? fleetNavItems.filter((i) => !DEMO_HIDDEN_PATHS.has(i.path)) : fleetNavItems, 'bg-ac-green')}
 
-            {!sidebarCollapsed && (
+            {!sidebarCollapsed && !isDemo && (
               <div className="sidebar-nav-section">
                 <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2 mt-1">Settings</p>
                 <div className="space-y-0.5">

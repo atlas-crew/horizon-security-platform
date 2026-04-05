@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Live Demo
-      link: https://horizon-demo.nickf4.workers.dev
+      link: https://horizon-demo.atlascrew.dev
     - theme: alt
       text: Get Started
       link: /getting-started/

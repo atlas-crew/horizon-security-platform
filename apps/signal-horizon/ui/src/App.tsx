@@ -26,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Cpu,
+  GitBranch,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -61,6 +62,7 @@ import DesignLabPage from './pages/DesignLabPage';
 const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
 const AutopilotPage = lazy(() => import('./pages/AutopilotPage'));
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage'));
+const SupplyChainPage = lazy(() => import('./pages/SupplyChainPage'));
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -84,6 +86,7 @@ const primaryNavItems = [
   { path: '/warroom', icon: Users, label: 'War Room' },
   { path: '/drills', icon: Shield, label: 'Breach Drills' },
   { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
+  { path: '/supply-chain', icon: GitBranch, label: 'Supply Chain' },
 ];
 
 const supportNavItems = [
@@ -668,6 +671,7 @@ function App() {
                 <Route path="/drills" element={<Suspense fallback={<LoadingSpinner message="Loading breach drills..." size="lg" />}><SignalHorizonPageWrapper><BreachDrillsPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/autopilot" element={<Suspense fallback={<LoadingSpinner message="Loading autopilot..." size="lg" />}><SignalHorizonPageWrapper><AutopilotPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/scenarios" element={<Suspense fallback={<LoadingSpinner message="Loading scenarios..." size="lg" />}><SignalHorizonPageWrapper><ScenariosPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/supply-chain" element={<Suspense fallback={<LoadingSpinner message="Loading supply chain simulator..." size="lg" />}><SignalHorizonPageWrapper><SupplyChainPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
                 
                 {fleetRoutes.map((route) => (

@@ -430,5 +430,59 @@ export function createApparatusRoutes(
     }
   });
 
+  // ===========================================================================
+  // Supply Chain Simulator
+  // ===========================================================================
+
+  /** GET /simulator/graph — get the dependency graph */
+  router.get('/simulator/graph', requireScope('fleet:read'), requireApparatus, async (_req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.simulator.getDependencyGraph());
+    } catch (err) {
+      log.error({ err }, 'Failed to get dependency graph');
+      sendProblem(res, 502, 'Failed to fetch dependency graph');
+    }
+  });
+
+  /** POST /simulator/infect — inject malware into a dependency node */
+  router.post('/simulator/infect', requireScope('fleet:write'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      const { id } = req.body as { id: string };
+      const result = await client.simulator.infect(id);
+      log.info({ nodeId: id, impact: result.impact }, 'Supply chain node infected');
+      res.json(result);
+    } catch (err) {
+      log.error({ err }, 'Failed to infect node');
+      sendProblem(res, 502, 'Failed to infect dependency node');
+    }
+  });
+
+  /** POST /simulator/attack — trigger full supply chain attack */
+  router.post('/simulator/attack', requireScope('fleet:write'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      const { target } = (req.body ?? {}) as { target?: string };
+      const result = await client.simulator.triggerSupplyChainAttack(target);
+      log.info({ target }, 'Supply chain attack triggered');
+      res.json(result);
+    } catch (err) {
+      log.error({ err }, 'Failed to trigger supply chain attack');
+      sendProblem(res, 502, 'Failed to trigger supply chain attack');
+    }
+  });
+
+  /** POST /simulator/reset — reset graph to clean state */
+  router.post('/simulator/reset', requireScope('fleet:write'), requireApparatus, async (_req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.simulator.reset());
+    } catch (err) {
+      log.error({ err }, 'Failed to reset simulator');
+      sendProblem(res, 502, 'Failed to reset supply chain simulator');
+    }
+  });
+
   return router;
 }

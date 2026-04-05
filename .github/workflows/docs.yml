@@ -35,13 +35,23 @@ jobs:
         working-directory: site
         run: npm ci
 
-      - name: Build
+      - name: Build VitePress docs
         working-directory: site
         run: npm run build
 
+      - name: Assemble site
+        run: |
+          mkdir -p _site/docs
+          # VitePress output goes under /docs/
+          cp -r site/.vitepress/dist/* _site/docs/
+          # Landing page becomes the root
+          cp site/horizon.html _site/index.html
+          # Copy infographics referenced by the landing page
+          cp -r site/infographics _site/infographics 2>/dev/null || true
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site/.vitepress/dist
+          path: _site
 
   deploy:
     needs: build

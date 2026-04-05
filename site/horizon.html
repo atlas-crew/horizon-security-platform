@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horizon + Synapse — Edge Protection Platform</title>
+<meta name="description" content="Embedded intelligence for API security and application defense. 450μs detection, 72K RPS, 500+ bot signatures, 8 campaign correlation detectors, 22+ DLP patterns.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'><rect width='110' height='110' fill='%230c1220'/><path d='M20,50A35,32,0,0,1,90,50' fill='none' stroke='%23F97316' stroke-width='5'/><circle cx='55' cy='50' r='4.5' fill='%23F97316'/><line x1='55' y1='55' x2='26' y2='94' stroke='%231E90FF' stroke-width='3.5'/><line x1='55' y1='55' x2='84' y2='94' stroke='%231E90FF' stroke-width='3.5'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0d11;
+  --bg-raised: #111419;
+  --bg-card: #0c1220;
+  --bg-hover: #161a20;
+  --border: #1e2d44;
+  --border-strong: #2a3f5c;
+  --text: #e8ecf4;
+  --text-secondary: #8899b0;
+  --muted: #5a6f8a;
+  --blue: #1E90FF;
+  --blue-dark: #0B4F8A;
+  --coral: #F97316;
+  --violet: #8B5CF6;
+  --violet-dark: #4C1D95;
+  --green: #10B981;
+  --red: #EF4444;
+  --amber: #F59E0B;
+  --warm: #c4a882;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Recursive', -apple-system, sans-serif;
+  font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.4, 'CRSV' 0.5, 'slnt' 0;
+  font-size: 14px; line-height: 1.65; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+}
+.grid-bg {
+  position: fixed; inset: 0;
+  background-image: linear-gradient(rgba(30,144,255,0.02) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(30,144,255,0.02) 1px, transparent 1px);
+  background-size: 60px 60px; pointer-events: none; z-index: 0;
+}
+.atmo {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 30% 20%, rgba(249,115,22,0.04) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(139,92,246,0.03) 0%, transparent 40%);
+}
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.7s ease, transform 0.7s ease; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.rd1{transition-delay:.1s}.rd2{transition-delay:.2s}.rd3{transition-delay:.3s}.rd4{transition-delay:.4s}
+.container { max-width: 960px; margin: 0 auto; padding: 0 40px; position: relative; z-index: 1; }
+section { padding: 64px 0; }
+/* Nav */
+.nav { padding: 24px 0; position: relative; z-index: 10; }
+.nav-inner { max-width: 960px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; justify-content: space-between; }
+.nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.nav-brand span { font-variation-settings: 'wght' 350, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; }
+.nav-links { display: flex; gap: 20px; }
+.nav-links a { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 11px; color: var(--muted); text-decoration: none; transition: color 0.3s; letter-spacing: 0.5px; }
+.nav-links a:hover { color: var(--text); }
+
+/* Hero */
+.hero { padding: 100px 0 40px; }
+.hero-lockups { display: flex; gap: 48px; align-items: flex-start; margin-bottom: 32px; flex-wrap: wrap; }
+.lockup { display: flex; align-items: center; gap: 16px; }
+.wm { font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: clamp(28px, 4vw, 40px); letter-spacing: 1.5px; line-height: 1.1; }
+.tagline-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.tagline-rule { height: 1px; width: 24px; flex-shrink: 0; }
+.tagline { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 10px; letter-spacing: 2.5px; color: var(--muted); text-transform: uppercase; }
+.lockup-divider { width: 1px; height: 60px; background: var(--border); flex-shrink: 0; }
+.hero-sub { font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.5, 'CRSV' 0.5, 'slnt' 0; font-size: 16px; color: var(--text-secondary); line-height: 1.75; max-width: 640px; margin-bottom: 12px; }
+/* Stats */
+.stats-row { display: flex; gap: 40px; padding: 24px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.stat-val { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0; font-size: 28px; letter-spacing: -0.5px; line-height: 1; }
+.stat-lbl { font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+
+/* Section labels */
+.section-label { font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+.section-title { font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0; font-size: 22px; color: var(--text); margin-bottom: 8px; }
+.section-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.7; max-width: 640px; margin-bottom: 32px; }
+
+/* Two-column cards */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.col-card { background: var(--bg-raised); padding: 28px 24px; }
+.col-card:first-child { border-radius: 8px 0 0 8px; }
+.col-card:last-child { border-radius: 0 8px 8px 0; }
+.col-card-title { font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+.col-card-sub { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 10px; letter-spacing: 1px; color: var(--muted); margin-bottom: 16px; }
+.feat-list { list-style: none; }
+.feat-list li { font-size: 13px; color: var(--text-secondary); line-height: 1.7; padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid rgba(30,45,68,0.4); }
+.feat-list li:last-child { border-bottom: none; }
+.feat-list li::before { content: '›'; position: absolute; left: 0; color: var(--muted); font-weight: 600; }
+.feat-list li strong { color: var(--text); font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0; }
+/* Data table */
+.data-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-tbl th { text-align: left; font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; padding: 8px 12px; color: var(--text); background: var(--blue-dark); }
+.data-tbl td { padding: 8px 12px; border-bottom: 1px solid rgba(30,45,68,0.5); color: var(--text-secondary); }
+.data-tbl tr:hover td { background: rgba(30,144,255,0.04); }
+.badge { display: inline-block; font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 10px; letter-spacing: 0.5px; padding: 1px 6px; }
+
+/* Three-col modules */
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; }
+.mod-card { background: var(--bg-raised); padding: 24px 20px; }
+.mod-card:first-child { border-radius: 8px 0 0 8px; }
+.mod-card:last-child { border-radius: 0 8px 8px 0; }
+.mod-icon { margin-bottom: 12px; }
+.mod-name { font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+.mod-domain { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 9px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+
+/* Four-col stat strip */
+.stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 24px; }
+.stat-strip-item { background: var(--bg-raised); padding: 16px; text-align: center; }
+.stat-strip-val { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0; font-size: 22px; letter-spacing: -0.5px; }
+.stat-strip-lbl { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 9px; letter-spacing: 1px; color: var(--muted); margin-top: 2px; }
+/* Terminal */
+.terminal { background: #080e1a; border: 1px solid var(--border); overflow: hidden; }
+.terminal-bar { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.terminal-title { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 11px; color: var(--muted); margin-left: 8px; }
+.terminal-body { padding: 18px 20px; font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 12px; line-height: 2; }
+.t-muted{color:var(--muted)}.t-cmd{color:var(--text)}.t-blue{color:var(--blue)}.t-coral{color:var(--coral)}
+.t-violet{color:var(--violet)}.t-green{color:var(--green)}.t-red{color:var(--red)}.t-amber{color:var(--amber)}
+
+/* Callout */
+.callout { background: var(--bg-raised); border-left: 3px solid var(--blue); padding: 16px 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+.callout strong { color: var(--text); }
+
+/* Footer */
+footer { padding: 40px 0; border-top: 1px solid var(--border); }
+.footer-inner { display: flex; justify-content: space-between; align-items: center; }
+.footer-text { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.footer-links { display: flex; gap: 20px; }
+.footer-links a { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 11px; color: var(--muted); text-decoration: none; transition: color 0.3s; }
+.footer-links a:hover { color: var(--text); }
+
+@media (max-width: 768px) {
+  .container, .nav-inner { padding: 0 24px; }
+  .hero-lockups { flex-direction: column; gap: 24px; }
+  .lockup-divider { width: 60px; height: 1px; }
+  .two-col, .three-col { grid-template-columns: 1fr; }
+  .col-card, .mod-card { border-radius: 0 !important; }
+  .col-card:first-child, .mod-card:first-child { border-radius: 8px 8px 0 0 !important; }
+  .col-card:last-child, .mod-card:last-child { border-radius: 0 0 8px 8px !important; }
+  .stat-strip { grid-template-columns: 1fr 1fr; }
+  .stats-row { gap: 20px; }
+  .nav-links { display: none; }
+  .footer-inner { flex-direction: column; gap: 12px; text-align: center; }
+  .hero { padding: 60px 0 32px; }
+  .data-tbl { font-size: 12px; }
+  .data-tbl th, .data-tbl td { padding: 6px 8px; }
+}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="atmo"></div>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M40 8 A26 26 0 1 0 40 56" fill="none" stroke="#c4a882" stroke-width="5" stroke-linecap="square"/><path d="M20 50 L32 14 L44 50" fill="none" stroke="#d8dce4" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/><line x1="8" y1="34" x2="56" y2="34" stroke="#c4a882" stroke-width="1.2"/><line x1="10" y1="40" x2="56" y2="40" stroke="#c4a882" stroke-width="0.8" opacity="0.35"/></svg>
+      <span>Atlas Crew</span>
+    </a>
+    <div class="nav-links">
+      <a href="https://atlascrew.dev">Home</a>
+      <a href="https://github.com/atlas-crew/horizon-security-platform">GitHub</a>
+      <a href="/docs/">Documentation</a>
+      <a href="https://horizon-demo.atlascrew.dev" style="color:var(--coral);">Live Demo</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+<div class="container">
+  <div class="hero-lockups reveal">
+    <div class="lockup">
+      <svg width="56" height="56" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
+      <div>
+        <div class="wm" style="color:var(--coral);">HORIZON</div>
+        <div class="tagline-row"><div class="tagline-rule" style="background:#2a3f5c;"></div><div class="tagline">See Further. Act Faster.</div></div>
+      </div>
+    </div>
+    <div class="lockup-divider"></div>
+    <div class="lockup">
+      <svg width="56" height="56" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
+      <div>
+        <div class="wm" style="color:var(--violet);">SYNAPSE</div>
+        <div class="tagline-row"><div class="tagline-rule" style="background:var(--violet-dark);opacity:0.6;"></div><div class="tagline">On-Board Intelligence</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="hero-sub reveal rd1">Embedded intelligence for API security and application defense. All detection and blocking decisions happen locally at the edge. No cloud round-trips. No external dependencies. Full protection continues even with backend down.</p>
+
+  <div class="stats-row reveal rd2">
+    <div><div class="stat-val" style="color:var(--coral);">&lt;1ms</div><div class="stat-lbl">Detection Latency</div></div>
+    <div><div class="stat-val" style="color:var(--amber);">72K+</div><div class="stat-lbl">Sustained RPS</div></div>
+    <div><div class="stat-val" style="color:var(--blue);">25MB</div><div class="stat-lbl">Sensor Binary</div></div>
+    <div><div class="stat-val" style="color:var(--violet);">500+</div><div class="stat-lbl">Bot Signatures</div></div>
+    <div><div class="stat-val" style="color:var(--green);">8+</div><div class="stat-lbl">Correlation Detectors</div></div>
+    <div><div class="stat-val" style="color:var(--text);">22+</div><div class="stat-lbl">DLP Patterns</div></div>
+
+  </div>
+</div>
+</section>
+
+<!-- Two-column product overview -->
+<section>
+<div class="container">
+  <div class="section-label reveal">The Platform</div>
+  <div class="two-col">
+    <div class="col-card reveal rd1">
+      <div class="col-card-title" style="color:var(--violet);">Synapse</div>
+      <div class="col-card-sub">Autonomous Edge Sensor</div>
+      <ul class="feat-list">
+        <li><strong>Pingora-powered proxy</strong> — single Rust binary, zero-downtime reload</li>
+        <li><strong>Campaign correlation + graph</strong> — 8 detectors + 2nd-degree relationship analysis</li>
+        <li><strong>Auto-mitigation</strong> — high-confidence campaigns trigger automatic blocking</li>
+        <li><strong>Bot detection</strong> — 500+ signatures, DNS verification, client integrity</li>
+        <li><strong>Credential stuffing</strong> — distributed attack correlation, account takeover detection</li>
+        <li><strong>API intelligence</strong> — schema learning, param value analysis, response profiling</li>
+        <li><strong>Trends &amp; anomaly</strong> — 13 anomaly types, impossible travel, velocity spikes</li>
+        <li><strong>DLP scanning</strong> — 22+ sensitive data patterns with validation (Luhn, format checks)</li>
+        <li><strong>Interrogation</strong> — tarpit, cookie/JS challenges, progressive escalation</li>
+      </ul>
+    </div>
+    <div class="col-card reveal rd2">
+      <div class="col-card-title" style="color:var(--coral);">Horizon</div>
+      <div class="col-card-sub">Fleet Intelligence &amp; SOC Platform</div>
+      <ul class="feat-list">
+        <li><strong>Live Threat Map</strong> — real-time global attack visualization, geo-IP correlation</li>
+        <li><strong>Campaign Map</strong> — visual attack infrastructure linking IPs, fingerprints, payloads</li>
+        <li><strong>Sigma Rules</strong> — industry-standard detection rules, custom queries, hunt workflows</li>
+        <li><strong>CyberChef</strong> — integrated payload decoder, encoder, analysis toolkit</li>
+        <li><strong>War Room</strong> — collaborative incident response, quick blocks, automation hooks</li>
+        <li><strong>Cross-tenant correlation</strong> — threat sharing across fleet, distributed attack detection</li>
+        <li><strong>Fleet management</strong> — health scoring, config drift, centralized rule distribution</li>
+        <li><strong>Hunt API</strong> — time-window queries across PostgreSQL + ClickHouse</li>
+        <li><strong>Remote access</strong> — secure WebSocket tunnels to sensor shell + dashboards</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- Benchmarks -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Performance</div>
+  <div class="section-title reveal">End-to-End Proxy Benchmarks</div>
+  <div class="section-desc reveal">Real-world benchmarks with DLP enabled, 100 concurrent VUs, full behavioral tracking. Detection doesn't evaluate all 237 rules per request — a rule index pre-filters based on request characteristics, reducing candidates to ~35 rules before matching begins.</div>
+
+  <div class="two-col reveal rd1">
+    <div class="col-card">
+      <table class="data-tbl">
+        <thead><tr><th>Scenario</th><th>Latency</th></tr></thead>
+        <tbody>
+          <tr><td>WAF detection (under load)</td><td style="color:var(--green);">&lt;50μs</td></tr>
+          <tr><td>Fast path (GET, no body)</td><td>~300μs</td></tr>
+          <tr><td>Standard payload (4-8KB)</td><td>~450μs</td></tr>
+          <tr><td>P95 latency</td><td style="color:var(--coral);">&lt;1ms</td></tr>
+          <tr><td>Blocked + tarpit</td><td style="color:var(--muted);">~1000ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col-card">
+      <div class="col-card-title" style="color:var(--blue); margin-bottom: 12px;">Full Stack in Benchmark</div>
+      <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.8; columns: 2; column-gap: 16px;">
+        237 production rules (indexed to ~35) · DLP scanning (22+ patterns, parallel) · Campaign correlation (8 detectors) · Graph correlation (2nd-degree) · Credential stuffing detection · Bot detection (500+ signatures) · Client integrity analysis · JA4/JA4H fingerprinting (~3μs) · Actor/Entity/Session stores · Schema learning + validation · Parameter value analysis · Response profiling · Trends/anomaly (13 types) · Auto-mitigation engine · Rate limiting · Tarpit enforcement
+      </div>
+    </div>
+  </div>
+
+  <div class="callout reveal rd2" style="margin-top: 2px;">
+    <strong>Smart Rule Indexing:</strong> Index by HTTP method, request features, header presence, content type. Static assets bypass detection entirely. Decode/parse only when a rule condition requires it. Short-circuit after first false condition.
+  </div>
+</div>
+</section>
+
+<!-- Behavioral Intelligence -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Beyond Rules</div>
+  <div class="section-title reveal">Behavioral Intelligence</div>
+  <div class="section-desc reveal">Rules are table stakes. What differentiates Synapse is embedded intelligence that correlates signals, tracks actors across sessions, and detects coordinated attacks — all locally, without cloud round-trips.</div>
+
+  <div class="two-col reveal rd1">
+    <div class="col-card">
+      <div class="col-card-title" style="color:var(--violet); margin-bottom: 12px;">Campaign Correlation + Graph</div>
+      <table class="data-tbl">
+        <thead><tr><th>Detector</th><th>Weight</th><th>Catches</th></tr></thead>
+        <tbody>
+          <tr><td>Attack Sequence</td><td style="color:var(--coral);">50</td><td>Same payloads across IPs</td></tr>
+          <tr><td>Auth Token</td><td style="color:var(--coral);">45</td><td>Same JWT structure = same actor</td></tr>
+          <tr><td>HTTP Fingerprint</td><td style="color:var(--amber);">40</td><td>Different IPs, same browser</td></tr>
+          <tr><td>Graph Correlation</td><td style="color:var(--amber);">40</td><td>2nd-degree relationships</td></tr>
+          <tr><td>TLS Fingerprint</td><td style="color:var(--amber);">35</td><td>Same TLS signature = same tooling</td></tr>
+          <tr><td>Behavioral</td><td>30</td><td>Same navigation patterns</td></tr>
+          <tr><td>Timing</td><td>25</td><td>Coordinated timing = botnet</td></tr>
+          <tr><td>Network Proximity</td><td style="color:var(--muted);">15</td><td>Same ASN/subnet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col-card">
+      <div class="col-card-title" style="color:var(--coral); margin-bottom: 12px;">Bot &amp; Crawler Detection</div>
+      <div class="feat-list" style="margin-bottom: 16px;">
+        <li><strong>Known Crawlers (500+)</strong> — Googlebot, Bingbot, social bots, SEO tools, classified by trust</li>
+        <li><strong>DNS Reversal Verification</strong> — reverse DNS → forward lookup validates crawler claims</li>
+        <li><strong>Client Integrity Analysis</strong> — User-Agent vs Sec-CH-UA, Fetch Metadata consistency</li>
+        <li><strong>Bad Bot Blocklist</strong> — SQLMap, Nikto, Nmap, Metasploit → instant block</li>
+      </div>
+      <div class="callout" style="border-color: var(--coral);">Catches Python scripts claiming to be Chrome</div>
+    </div>
+  </div>
+
+  <div class="stat-strip reveal rd2">
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--violet);">8+</div><div class="stat-strip-lbl">Correlation Detectors</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--coral);">500+</div><div class="stat-strip-lbl">Bot Signatures</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--blue);">100K</div><div class="stat-strip-lbl">Actor LRU Cache</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--green);">Auto</div><div class="stat-strip-lbl">Campaign Mitigation</div></div>
+  </div>
+</div>
+</section>
+
+<!-- Session Intelligence + DLP -->
+<section>
+<div class="container">
+  <div class="two-col">
+    <div class="col-card reveal">
+      <div class="section-label" style="margin-bottom:8px;">Sessions</div>
+      <div class="col-card-title" style="color:var(--blue); margin-bottom: 12px;">Session Intelligence</div>
+      <table class="data-tbl" style="margin-bottom:16px;">
+        <thead><tr><th>Detection</th><th>Trigger</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td>Session Hijacking</td><td>Fingerprint change mid-session</td><td><span class="badge" style="color:var(--red);border:1px solid rgba(239,68,68,0.3);">HIGH</span></td></tr>
+          <tr><td>Impossible Travel</td><td>Geo-impossible location change</td><td><span class="badge" style="color:var(--red);border:1px solid rgba(239,68,68,0.3);">HIGH</span></td></tr>
+          <tr><td>Credential Stuffing</td><td>Auth pattern anomalies</td><td><span class="badge" style="color:var(--amber);border:1px solid rgba(245,158,11,0.3);">MED</span></td></tr>
+          <tr><td>Multi-IP Session</td><td>&gt;2 IPs per session</td><td><span class="badge" style="color:var(--amber);border:1px solid rgba(245,158,11,0.3);">MED</span></td></tr>
+          <tr><td>Fingerprint Velocity</td><td>Rapid fingerprint changes</td><td><span class="badge" style="color:var(--amber);border:1px solid rgba(245,158,11,0.3);">+40</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout" style="border-color:var(--blue);font-size:12px;">
+        <strong>Composite Identity:</strong> JA4 + JA4H + IP + Auth Token → actor continuity even when cookies cleared. No cloud required.
+      </div>
+    </div>
+    <div class="col-card reveal rd1">
+      <div class="section-label" style="margin-bottom:8px;">DLP</div>
+      <div class="col-card-title" style="color:var(--green); margin-bottom: 12px;">Data Loss Prevention</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text);letter-spacing:1px;margin-bottom:4px;">FINANCIAL</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;">Credit Card (Luhn) · Bank Account · Routing Number · IBAN</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text);letter-spacing:1px;margin-bottom:4px;">IDENTITY</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;">SSN (format check) · Passport · Driver License · National ID</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text);letter-spacing:1px;margin-bottom:4px;">CREDENTIALS</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;">AWS Keys · GitHub Tokens · Stripe/Twilio Keys · Private Keys</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text);letter-spacing:1px;margin-bottom:4px;">HEALTHCARE</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;">Medical Record # · DEA Number · NPI · HIPAA identifiers</div>
+        </div>
+      </div>
+      <div class="callout" style="border-color:var(--green);font-size:12px;">
+        <strong>Parallel scanning:</strong> DLP runs DURING network setup, not before. 4KB payload ~29μs, 8KB payload ~71μs. 8KB cap for bounded latency.
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- Active Defense -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Active Defense</div>
+  <div class="section-title reveal">Interrogator System</div>
+  <div class="section-desc reveal">Progressive challenge escalation separates bots from humans without blocking legitimate traffic. Suspicious actors face increasing friction; clean traffic flows unimpeded.</div>
+
+  <div class="two-col reveal rd1">
+    <div class="col-card">
+      <div class="col-card-title" style="color:var(--coral);margin-bottom:12px;">Challenge Progression</div>
+      <div class="feat-list">
+        <li><strong>Level 1: Cookie Challenge</strong> — set tracking cookie, verify acceptance</li>
+        <li><strong>Level 2: JavaScript PoW</strong> — SHA-256 proof-of-work computation</li>
+        <li><strong>Level 3: CAPTCHA</strong> — human verification challenge</li>
+        <li><strong>Level 4: Tarpit</strong> — progressive delays: 1.5^level (max 30s)</li>
+      </div>
+    </div>
+    <div class="col-card">
+      <div class="col-card-title" style="color:var(--red);margin-bottom:12px;">Honeypot Traps</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px;">Configurable trap paths that instantly max risk for any actor that touches them.</div>
+      <div style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--muted);padding:10px 12px;background:rgba(0,0,0,0.3);margin-bottom:16px;">/.env, /wp-admin, /admin/config<br>// Hit = instant risk 100</div>
+      <div class="callout" style="border-color:var(--green);">
+        <strong>De-escalation:</strong> Good behavior reduces challenge level. Legitimate users who pass challenges get remembered and flow freely on subsequent requests.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-strip reveal rd2">
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--coral);">10K</div><div class="stat-strip-lbl">Tarpit States</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--blue);">50K</div><div class="stat-strip-lbl">Cookie Tracker</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--violet);">10K</div><div class="stat-strip-lbl">JS Challenges</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--text);">30s</div><div class="stat-strip-lbl">Max Tarpit</div></div>
+  </div>
+</div>
+</section>
+
+<!-- SOC Tooling -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Horizon</div>
+  <div class="section-title reveal">SOC Analyst Tooling</div>
+  <div class="section-desc reveal">Beyond fleet management, Horizon provides purpose-built tools for security analysts. Real-time visualization, industry-standard detection rules, and integrated analysis utilities.</div>
+
+  <div class="two-col" style="margin-bottom:2px;">
+    <div class="col-card reveal rd1" style="border-radius:8px 0 0 0;">
+      <div class="col-card-title" style="color:var(--coral);margin-bottom:6px;">Live Threat Map</div>
+      <div class="feat-list">
+        <li>Geo-IP attack origin visualization</li>
+        <li>Attack type breakdown (SQLi, XSS, etc.)</li>
+        <li>Top targeted endpoints</li>
+        <li>Real-time block/allow counters</li>
+        <li>Sensor health status overlay</li>
+      </div>
+    </div>
+    <div class="col-card reveal rd2" style="border-radius:0 8px 0 0;">
+      <div class="col-card-title" style="color:var(--coral);margin-bottom:6px;">Campaign Map</div>
+      <div class="feat-list">
+        <li>Node types: IPs, JA4 fingerprints, auth tokens, ASNs</li>
+        <li>Edge relationships with confidence weights</li>
+        <li>2nd-degree connection discovery</li>
+        <li>Campaign timeline view</li>
+        <li>One-click block entire campaign</li>
+      </div>
+    </div>
+  </div>
+  <div class="two-col reveal rd3">
+    <div class="col-card" style="border-radius:0 0 0 8px;">
+      <div class="col-card-title" style="color:var(--violet);margin-bottom:6px;">Sigma Rules</div>
+      <div class="feat-list">
+        <li>Native Sigma rule parsing and execution</li>
+        <li>Import from SigmaHQ repository</li>
+        <li>Custom rule editor with syntax highlighting</li>
+        <li>Rule testing against historical data</li>
+        <li>Scheduled hunt jobs with alerting</li>
+      </div>
+    </div>
+    <div class="col-card" style="border-radius:0 0 8px 0;">
+      <div class="col-card-title" style="color:var(--violet);margin-bottom:6px;">CyberChef Integration</div>
+      <div class="feat-list">
+        <li>Base64, URL, HTML entity decoding</li>
+        <li>Hex/binary conversion</li>
+        <li>Hash computation (MD5, SHA-256)</li>
+        <li>Regex extraction and testing</li>
+        <li>Recipe chaining for complex transforms</li>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-strip reveal rd4">
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--coral);">∞</div><div class="stat-strip-lbl">Sensors Supported</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--blue);">&lt;100ms</div><div class="stat-strip-lbl">Sync Latency</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--violet);">80+</div><div class="stat-strip-lbl">API Endpoints</div></div>
+    <div class="stat-strip-item"><div class="stat-strip-val" style="color:var(--green);">100%</div><div class="stat-strip-lbl">Self-Hostable</div></div>
+  </div>
+</div>
+</section>
+
+<!-- Terminal -->
+<section>
+<div class="container">
+  <div class="section-label reveal">In Action</div>
+  <div class="terminal reveal rd1">
+    <div class="terminal-bar">
+      <div class="dot" style="background:#ff5f56;"></div>
+      <div class="dot" style="background:#ffbd2e;"></div>
+      <div class="dot" style="background:#27c93f;"></div>
+      <span class="terminal-title">synapse — detection feed</span>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-muted">[11:19:35]</span> <span class="t-red">CRITICAL</span> <span class="t-cmd">Shell command injection</span> <span class="t-muted">/api/orders · 198.51.100.12</span></div>
+      <div><span class="t-muted">[11:19:35]</span> <span class="t-violet">CAMPAIGN</span> <span class="t-cmd">C-2847 escalated</span> <span class="t-muted">12 IPs · 3 ASNs · credential stuffing</span></div>
+      <div><span class="t-muted">[11:19:35]</span> <span class="t-amber">JA4</span> <span class="t-cmd">Fingerprint rotation detected</span> <span class="t-muted">3 prints / 60s · 198.51.100.12</span></div>
+      <div><span class="t-muted">[11:19:36]</span> <span class="t-coral">BLOCKED</span> <span class="t-cmd">198.51.100.12</span> <span class="t-muted">risk 87 · auto-block · campaign C-2847</span></div>
+      <div><span class="t-muted">[11:19:36]</span> <span class="t-green">DLP</span> <span class="t-cmd">Credit card detected in response</span> <span class="t-muted">/api/users/export · Luhn validated · BLOCKED</span></div>
+      <div><span class="t-muted">[11:19:37]</span> <span class="t-blue">INTERROGATE</span> <span class="t-cmd">Level 2 JS challenge issued</span> <span class="t-muted">203.0.113.42 · failed cookie check</span></div>
+      <div>&nbsp;</div>
+      <div class="t-muted">  Detection: &lt;50μs avg · 38,291 evals/sec · 0 drops · 237 rules (35 indexed)</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- Deep Dives -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Deep Dives</div>
+  <div class="section-title reveal rd1">Technical Infographics</div>
+  <div class="section-desc reveal rd2">Interactive visual references for Synapse's core capabilities — each built in the Edge Protection design system.</div>
+  <div class="three-col reveal rd3">
+    <a href="infographics/campaign-correlation-engine.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);border-right:none;">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg></div>
+      <div class="mod-name" style="color:var(--violet);">Campaign Correlation</div>
+      <div class="mod-domain">7 Weighted Detectors</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">How Synapse links distributed attacks into unified campaigns. Seven detectors, confidence thresholds, fleet-wide correlation.</div>
+    </a>
+    <a href="infographics/dlp-edge-protection.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);border-right:none;">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg></div>
+      <div class="mod-name" style="color:var(--green);">DLP at the Edge</div>
+      <div class="mod-domain">Inline Response Inspection</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Data Loss Prevention built into the WAF decision path. 5 detection categories, real-time blocking, traditional vs edge architecture.</div>
+    </a>
+    <a href="infographics/request-processing-lifecycle.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg></div>
+      <div class="mod-name" style="color:var(--blue);">Request Processing</div>
+      <div class="mod-domain">Complete Lifecycle</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Six-stage sequential pipeline from TLS fingerprint to decision. Stage timing, challenge escalation, edge vs cloud latency comparison.</div>
+    </a>
+  </div>
+</div>
+</section>
+
+<!-- CTA -->
+<section style="padding:48px 0;">
+<div class="container">
+  <div class="callout reveal" style="border-color:var(--coral);text-align:center;padding:32px 24px;">
+    <div style="font-size:15px;color:var(--text);margin-bottom:20px;">Embedded Intelligence. Zero External Dependencies.</div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="https://horizon-demo.atlascrew.dev" style="display:inline-block;font-family:'Recursive',sans-serif;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--bg);background:var(--coral);padding:10px 28px;border-radius:4px;text-decoration:none;transition:opacity 0.3s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Live Demo →</a>
+      <a href="/docs/" style="display:inline-block;font-family:'Recursive',sans-serif;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--text);background:transparent;padding:10px 28px;border-radius:4px;text-decoration:none;border:1px solid var(--border-strong);transition:opacity 0.3s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Documentation</a>
+    </div>
+  </div>
+</div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-text">
+        <svg width="14" height="14" viewBox="0 0 64 64" fill="none"><path d="M40 8 A26 26 0 1 0 40 56" fill="none" stroke="#5a6f8a" stroke-width="5" stroke-linecap="square"/><path d="M20 50 L32 14 L44 50" fill="none" stroke="#5a6f8a" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/><line x1="8" y1="34" x2="56" y2="34" stroke="#5a6f8a" stroke-width="1.2"/><line x1="10" y1="40" x2="56" y2="40" stroke="#5a6f8a" stroke-width="0.8" opacity="0.35"/></svg>
+        Atlas Crew · Open-Source Security
+      </div>
+      <div class="footer-links">
+        <a href="https://atlascrew.dev">Home</a>
+        <a href="https://github.com/atlas-crew/horizon-security-platform">GitHub</a>
+        <a href="/docs/">Documentation</a>
+        <a href="https://horizon-demo.atlascrew.dev">Live Demo</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+});
+</script>
+
+</body>
+</html>

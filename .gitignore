@@ -26,3 +26,4 @@ format_schemas/
 tmp/
 uuid
 status
+_site/

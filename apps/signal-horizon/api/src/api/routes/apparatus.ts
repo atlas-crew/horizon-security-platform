@@ -484,5 +484,107 @@ export function createApparatusRoutes(
     }
   });
 
+  // ===========================================================================
+  // Identity (JWT Testing)
+  // ===========================================================================
+
+  /** GET /identity/jwks — JSON Web Key Set */
+  router.get('/identity/jwks', requireScope('fleet:read'), requireApparatus, async (_req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.identity.jwks());
+    } catch (err) {
+      log.error({ err }, 'Failed to get JWKS');
+      sendProblem(res, 502, 'Failed to fetch JWKS');
+    }
+  });
+
+  /** POST /identity/jwt/debug — decode and inspect a JWT */
+  router.post('/identity/jwt/debug', requireScope('fleet:read'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.identity.decodeJwt(req.body.token));
+    } catch (err) {
+      log.error({ err }, 'Failed to debug JWT');
+      sendProblem(res, 502, 'Failed to debug JWT');
+    }
+  });
+
+  /** POST /identity/jwt/forge — generate a crafted JWT */
+  router.post('/identity/jwt/forge', requireScope('fleet:write'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.identity.forgeToken(req.body));
+    } catch (err) {
+      log.error({ err }, 'Failed to forge JWT');
+      sendProblem(res, 502, 'Failed to forge JWT');
+    }
+  });
+
+  /** POST /identity/jwt/verify — verify with bypass checks */
+  router.post('/identity/jwt/verify', requireScope('fleet:read'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.identity.verifyToken(req.body));
+    } catch (err) {
+      log.error({ err }, 'Failed to verify JWT');
+      sendProblem(res, 502, 'Failed to verify JWT');
+    }
+  });
+
+  // ===========================================================================
+  // Security (Red Team Scanner + Sentinel Rules)
+  // ===========================================================================
+
+  /** POST /security/redteam — run red team validation scan */
+  router.post('/security/redteam', requireScope('fleet:write'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      const result = await client.security.redteam(req.body);
+      log.info({ target: req.body.target, summary: result.summary }, 'Red team scan completed');
+      res.json(result);
+    } catch (err) {
+      log.error({ err }, 'Failed to run red team scan');
+      sendProblem(res, 502, 'Failed to run red team scan');
+    }
+  });
+
+  /** GET /security/sentinel/rules — list Sentinel WAF rules */
+  router.get('/security/sentinel/rules', requireScope('fleet:read'), requireApparatus, async (_req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.security.listRules());
+    } catch (err) {
+      log.error({ err }, 'Failed to list Sentinel rules');
+      sendProblem(res, 502, 'Failed to fetch Sentinel rules');
+    }
+  });
+
+  /** POST /security/sentinel/rules — create a Sentinel rule */
+  router.post('/security/sentinel/rules', requireScope('fleet:write'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.status(201).json(await client.security.addRule(req.body));
+    } catch (err) {
+      log.error({ err }, 'Failed to create Sentinel rule');
+      sendProblem(res, 502, 'Failed to create Sentinel rule');
+    }
+  });
+
+  // ===========================================================================
+  // DLP Scanning
+  // ===========================================================================
+
+  /** POST /data/dlp-scan — on-demand DLP content scan */
+  router.post('/data/dlp-scan', requireScope('fleet:read'), requireApparatus, async (req, res) => {
+    try {
+      const client = apparatusService.getClient()!;
+      res.json(await client.data.dlpScan(req.body));
+    } catch (err) {
+      log.error({ err }, 'Failed to run DLP scan');
+      sendProblem(res, 502, 'Failed to run DLP scan');
+    }
+  });
+
   return router;
 }

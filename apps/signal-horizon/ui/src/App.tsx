@@ -27,6 +27,7 @@ import {
   PanelLeftOpen,
   Cpu,
   GitBranch,
+  Crosshair,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -63,6 +64,9 @@ const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
 const AutopilotPage = lazy(() => import('./pages/AutopilotPage'));
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage'));
 const SupplyChainPage = lazy(() => import('./pages/SupplyChainPage'));
+const JwtTestingPage = lazy(() => import('./pages/JwtTestingPage'));
+const RedTeamScannerPage = lazy(() => import('./pages/RedTeamScannerPage'));
+const DlpScannerPage = lazy(() => import('./pages/DlpScannerPage'));
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -87,6 +91,8 @@ const primaryNavItems = [
   { path: '/drills', icon: Shield, label: 'Breach Drills' },
   { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
   { path: '/supply-chain', icon: GitBranch, label: 'Supply Chain' },
+  { path: '/jwt-testing', icon: Key, label: 'JWT Testing' },
+  { path: '/redteam', icon: Crosshair, label: 'Red Team Scanner' },
 ];
 
 const supportNavItems = [
@@ -97,6 +103,7 @@ const fleetNavItems = [
   { path: '/fleet', icon: Server, label: 'Fleet Overview' },
   { path: '/fleet/config', icon: Settings, label: 'Fleet Configuration' },
   { path: '/fleet/dlp', icon: Shield, label: 'DLP Dashboard' },
+  { path: '/dlp-scanner', icon: Shield, label: 'DLP Scanner' },
   { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
@@ -672,6 +679,9 @@ function App() {
                 <Route path="/autopilot" element={<Suspense fallback={<LoadingSpinner message="Loading autopilot..." size="lg" />}><SignalHorizonPageWrapper><AutopilotPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/scenarios" element={<Suspense fallback={<LoadingSpinner message="Loading scenarios..." size="lg" />}><SignalHorizonPageWrapper><ScenariosPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/supply-chain" element={<Suspense fallback={<LoadingSpinner message="Loading supply chain simulator..." size="lg" />}><SignalHorizonPageWrapper><SupplyChainPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/jwt-testing" element={<Suspense fallback={<LoadingSpinner message="Loading JWT testing..." size="lg" />}><SignalHorizonPageWrapper><JwtTestingPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/redteam" element={<Suspense fallback={<LoadingSpinner message="Loading red team scanner..." size="lg" />}><SignalHorizonPageWrapper><RedTeamScannerPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/dlp-scanner" element={<Suspense fallback={<LoadingSpinner message="Loading DLP scanner..." size="lg" />}><SignalHorizonPageWrapper><DlpScannerPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
                 
                 {fleetRoutes.map((route) => (

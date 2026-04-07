@@ -9,6 +9,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
+import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import type { ApparatusService } from '../../services/apparatus.js';
 
@@ -522,7 +523,7 @@ export function createApparatusRoutes(
   });
 
   /** POST /identity/jwt/verify — verify with bypass checks */
-  router.post('/identity/jwt/verify', requireScope('fleet:read'), requireApparatus, async (req, res) => {
+  router.post('/identity/jwt/verify', rateLimiters.fleetCommand, requireScope('fleet:read'), requireApparatus, async (req, res) => {
     try {
       const client = apparatusService.getClient()!;
       res.json(await client.identity.verifyToken(req.body));

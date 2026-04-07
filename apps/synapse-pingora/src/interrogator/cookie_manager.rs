@@ -417,6 +417,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 mod tests {
     use super::*;
 
+    // Test-only key — compiled only under #[cfg(test)], never in production binaries.
     fn test_config() -> CookieConfig {
         CookieConfig {
             cookie_name: "__test_cookie".to_string(),
@@ -623,6 +624,7 @@ mod tests {
 
     #[test]
     fn test_different_secrets_produce_different_signatures() {
+        // Test-only keys — compiled only under #[cfg(test)], never in production binaries.
         let config1 = CookieConfig {
             secret_key: [0x01; 32],
             ..test_config()

@@ -180,6 +180,7 @@ async fn test_shadow_mirror_delivers_payload_and_headers() {
 
     assert!(manager.should_mirror(55.0, "203.0.113.10"));
     let payload = build_payload(&manager, "req-1", "203.0.113.10");
+    // Test-only secret — never used in production.
     let expected_signature = compute_signature("test-secret", &payload);
 
     assert!(manager.mirror_async(payload));

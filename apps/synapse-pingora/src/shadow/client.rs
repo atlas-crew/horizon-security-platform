@@ -257,6 +257,7 @@ mod tests {
 
     #[test]
     fn test_hmac_computation() {
+        // Test-only secret — compiled only under #[cfg(test)], never in production binaries.
         let client =
             ShadowMirrorClient::new(Some("test-secret".to_string()), Duration::from_secs(5))
                 .expect("client creation should succeed");

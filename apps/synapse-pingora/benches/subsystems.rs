@@ -67,6 +67,7 @@ fn make_signal(entity_id: &str, signal_type: TrendsSignalType, value: &str) -> S
     }
 }
 
+// Benchmark-only key — never compiled into production binaries.
 fn test_cookie_config() -> CookieConfig {
     CookieConfig {
         cookie_name: "__tx_bench".to_string(),

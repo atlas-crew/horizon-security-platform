@@ -337,6 +337,7 @@ impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            // Local-only default; production MUST override via YAML config with HTTPS.
             endpoint: "http://localhost:3100/telemetry".to_string(),
             api_key: None,
             batch_size: 100,

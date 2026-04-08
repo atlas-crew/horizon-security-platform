@@ -3,7 +3,7 @@
 //! Features:
 //! - 18 legitimate crawler definitions with DNS verification
 //! - 45+ bad bot signatures for attack tools and scrapers
-//! - Async DNS verification using trust-dns-resolver
+//! - Async DNS verification using hickory-resolver
 //! - LRU cache with TTL using moka crate
 
 pub mod bad_bots;

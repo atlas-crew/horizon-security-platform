@@ -96,13 +96,13 @@ idna = "1.0"            # IDNA punycode for Unicode homograph detection (WAF-P2-
 
 # Crawler detection (risk-server port)
 moka = { version = "0.12", features = ["sync"] }  # LRU cache with TTL
-trust-dns-resolver = "0.23"                        # Async DNS resolution
+hickory-resolver = "0.25"                            # Async DNS resolution (renamed from trust-dns)
 ipnet = "2.9"                                      # IP network/CIDR handling
 
 # Signal Horizon integration (risk-server port)
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }  # WebSocket client
-rustls = "0.22"
-rustls-pemfile = "1"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }  # WebSocket client
+rustls = "0.23"
+rustls-pemfile = "2"
 webpki-roots = "0.26"
 
 # System monitoring

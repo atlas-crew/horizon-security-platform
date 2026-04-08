@@ -632,12 +632,14 @@ fn load_root_store() -> Result<RootCertStore, TunnelError> {
             ))
         })?;
         let mut reader = BufReader::new(file);
-        let certs = rustls_pemfile::certs(&mut reader).map_err(|e| {
-            TunnelError::ConfigError(format!(
-                "failed to read SYNAPSE_CA_BUNDLE {}: {}",
-                trimmed, e
-            ))
-        })?;
+        let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut reader)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                TunnelError::ConfigError(format!(
+                    "failed to read SYNAPSE_CA_BUNDLE {}: {}",
+                    trimmed, e
+                ))
+            })?;
         if certs.is_empty() {
             return Err(TunnelError::ConfigError(format!(
                 "SYNAPSE_CA_BUNDLE {} contained no certificates",
@@ -645,7 +647,7 @@ fn load_root_store() -> Result<RootCertStore, TunnelError> {
             )));
         }
         let (added, ignored) =
-            root_store.add_parsable_certificates(certs.into_iter().map(CertificateDer::from));
+            root_store.add_parsable_certificates(certs);
         if added == 0 {
             return Err(TunnelError::ConfigError(format!(
                 "SYNAPSE_CA_BUNDLE {} contained no valid certificates (ignored {})",
@@ -743,7 +745,7 @@ async fn connect_and_run(
         }
     };
 
-    if let Err(e) = ws_tx.send(Message::Text(auth_json)).await {
+    if let Err(e) = ws_tx.send(Message::text(auth_json)).await {
         error!("Failed to send tunnel auth: {}", e);
         return ConnectionResult::Disconnected { connected: false };
     }
@@ -810,7 +812,7 @@ async fn connect_and_run(
                     Some(payload) => {
                         match serde_json::to_string(&payload) {
                             Ok(text) => {
-                                if let Err(e) = ws_tx.send(Message::Text(text)).await {
+                                if let Err(e) = ws_tx.send(Message::text(text)).await {
                                     error!("Tunnel send failed: {}", e);
                                     return ConnectionResult::Disconnected { connected: authenticated };
                                 }
@@ -893,12 +895,12 @@ async fn connect_and_run(
                     "payload": { "timestamp": chrono::Utc::now().to_rfc3339() },
                     "timestamp": chrono::Utc::now().to_rfc3339(),
                 });
-                if let Err(e) = ws_tx.send(Message::Text(heartbeat.to_string())).await {
+                if let Err(e) = ws_tx.send(Message::text(heartbeat.to_string())).await {
                     error!("Failed to send tunnel heartbeat: {}", e);
                     return ConnectionResult::Disconnected { connected: authenticated };
                 }
                 if heartbeat_inflight_at.is_none() {
-                    if let Err(e) = ws_tx.send(Message::Ping(Vec::new())).await {
+                    if let Err(e) = ws_tx.send(Message::Ping(bytes::Bytes::new())).await {
                         error!("Failed to send tunnel ping: {}", e);
                         return ConnectionResult::Disconnected { connected: authenticated };
                     }

@@ -790,7 +790,7 @@ async fn connect_and_run(
     };
 
     if let Err(e) = ws_tx
-        .send(Message::Text(auth_msg.to_json().unwrap().into()))
+        .send(Message::text(auth_msg.to_json().unwrap()))
         .await
     {
         error!("Failed to send auth: {}", e);
@@ -819,8 +819,8 @@ async fn connect_and_run(
                 had_connection = true;
 
                 let _ = ws_tx
-                    .send(Message::Text(
-                        SensorMessage::BlocklistSync.to_json().unwrap().into(),
+                    .send(Message::text(
+                        SensorMessage::BlocklistSync.to_json().unwrap(),
                     ))
                     .await;
             }
@@ -960,7 +960,7 @@ async fn connect_and_run(
                 };
 
                 let msg = SensorMessage::Heartbeat { payload };
-                if let Err(e) = ws_tx.send(Message::Text(msg.to_json().unwrap().into())).await {
+                if let Err(e) = ws_tx.send(Message::text(msg.to_json().unwrap())).await {
                     warn!("Failed to send heartbeat: {}", e);
                     params.stats.heartbeat_failures.fetch_add(1, Ordering::Relaxed);
                 } else {
@@ -1006,7 +1006,7 @@ where
     };
 
     ws_tx
-        .send(Message::Text(msg.to_json()?))
+        .send(Message::text(msg.to_json()?))
         .await
         .map_err(|e| HorizonError::SendFailed(e.to_string()))?;
 
@@ -1041,7 +1041,7 @@ async fn send_command_ack<S>(
     };
 
     if let Ok(json) = ack.to_json() {
-        if let Err(e) = ws_tx.send(Message::Text(json)).await {
+        if let Err(e) = ws_tx.send(Message::text(json)).await {
             error!("Failed to send command ack: {}", e);
         }
     }
@@ -1446,7 +1446,7 @@ async fn handle_hub_message<S>(
             info!("Received SyncBlocklist command (id: {})", command_id);
             let result = match SensorMessage::BlocklistSync.to_json() {
                 Ok(json) => {
-                    if let Err(e) = ws_tx.send(Message::Text(json)).await {
+                    if let Err(e) = ws_tx.send(Message::text(json)).await {
                         Err(format!("Failed to request blocklist sync: {}", e))
                     } else {
                         Ok(None)
@@ -1518,7 +1518,7 @@ async fn handle_hub_message<S>(
                 message: "This sensor does not support tunnel connections".to_string(),
             };
             if let Ok(json) = error_msg.to_json() {
-                let _ = ws_tx.send(Message::Text(json)).await;
+                let _ = ws_tx.send(Message::text(json)).await;
             }
         }
         HubMessage::TunnelClose { tunnel_id } => {

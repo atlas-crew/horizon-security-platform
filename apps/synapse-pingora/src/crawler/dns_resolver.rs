@@ -10,8 +10,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Semaphore;
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::TokioAsyncResolver;
+use hickory_resolver::config::ResolverConfig;
+use hickory_resolver::name_server::TokioConnectionProvider;
+use hickory_resolver::Resolver;
 
 /// DNS resolution errors.
 #[derive(Debug, Error, Clone)]
@@ -30,8 +31,8 @@ pub enum DnsError {
     IpMismatch,
 }
 
-impl From<trust_dns_resolver::error::ResolveError> for DnsError {
-    fn from(e: trust_dns_resolver::error::ResolveError) -> Self {
+impl From<hickory_resolver::ResolveError> for DnsError {
+    fn from(e: hickory_resolver::ResolveError) -> Self {
         DnsError::ResolverCreation(e.to_string())
     }
 }
@@ -39,7 +40,7 @@ impl From<trust_dns_resolver::error::ResolveError> for DnsError {
 /// Async DNS resolver for crawler verification with rate limiting.
 #[derive(Debug)]
 pub struct DnsResolver {
-    resolver: TokioAsyncResolver,
+    resolver: Resolver<TokioConnectionProvider>,
     timeout: Duration,
     /// Semaphore to limit concurrent DNS lookups
     semaphore: Arc<Semaphore>,
@@ -54,11 +55,17 @@ impl DnsResolver {
     /// * `timeout_ms` - DNS lookup timeout in milliseconds
     /// * `max_concurrent` - Maximum concurrent DNS lookups (semaphore permits)
     pub async fn new(timeout_ms: u64, max_concurrent: usize) -> Result<Self, DnsError> {
-        let mut opts = ResolverOpts::default();
-        opts.timeout = Duration::from_millis(timeout_ms);
-        opts.attempts = 2;
-
-        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), opts);
+        let resolver = Resolver::builder_with_config(
+            ResolverConfig::default(),
+            TokioConnectionProvider::default(),
+        )
+        .with_options({
+            let mut opts = hickory_resolver::config::ResolverOpts::default();
+            opts.timeout = Duration::from_millis(timeout_ms);
+            opts.attempts = 2;
+            opts
+        })
+        .build();
 
         Ok(Self {
             resolver,

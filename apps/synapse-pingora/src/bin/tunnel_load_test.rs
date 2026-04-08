@@ -424,7 +424,7 @@ async fn handle_mock_connection(
         "signature": signature,
     });
 
-    let _ = ws.send(Message::Text(response.to_string())).await;
+    let _ = ws.send(Message::text(response.to_string())).await;
 
     while let Some(message) = ws.next().await {
         match message {

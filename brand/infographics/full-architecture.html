@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Platform Architecture — Horizon + Synapse</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+</style>
+</head>
+<body>
+<div class="page">
+<style>
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+/* Hero stats with glow */
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;flex:1;}
+.hero-stat .value{position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+</style>
+<style>
+/* Architecture layers */
+.arch-layer{background:var(--card);border:1px solid var(--border);padding:18px 20px;position:relative;overflow:hidden;margin-bottom:8px;}
+.arch-layer::before{content:'';position:absolute;top:0;left:0;bottom:0;width:3px;}
+.arch-layer.clients::before{background:var(--muted);}
+.arch-layer.edge::before{background:var(--violet);}
+.arch-layer.hub::before{background:var(--coral);}
+.arch-layer.storage::before{background:var(--blue);}
+.arch-layer.consumers::before{background:var(--green);}
+.layer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.layer-title{display:flex;align-items:center;gap:10px;}
+.layer-num{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);padding:2px 8px;border:1px solid var(--border);}
+.layer-name{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;}
+.layer-tag{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);}
+.layer-boxes{display:grid;gap:8px;}
+.layer-boxes.cols-3{grid-template-columns:repeat(3,1fr);}
+.layer-boxes.cols-4{grid-template-columns:repeat(4,1fr);}
+.layer-boxes.cols-5{grid-template-columns:repeat(5,1fr);}
+.arch-box{background:var(--subtle);border:1px solid var(--border);padding:10px 12px;position:relative;}
+.arch-box::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;opacity:0.4;}
+.arch-layer.clients .arch-box::after{background:var(--muted);}
+.arch-layer.edge .arch-box::after{background:var(--violet);}
+.arch-layer.hub .arch-box::after{background:var(--coral);}
+.arch-layer.storage .arch-box::after{background:var(--blue);}
+.arch-layer.consumers .arch-box::after{background:var(--green);}
+.box-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-bottom:2px;}
+.box-sub{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--text-sec);line-height:1.5;}
+/* Flow connector between layers */
+.flow-arrow{display:flex;align-items:center;justify-content:center;gap:12px;height:24px;margin:-2px 0;position:relative;}
+.flow-arrow .flow-label{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);padding:2px 10px;background:var(--bg);border:1px solid var(--border);letter-spacing:0.5px;}
+.flow-arrow .flow-line{flex:1;height:1px;background:var(--border-strong);}
+.flow-arrow.bidir .flow-down{color:var(--violet);}
+.flow-arrow.bidir .flow-up{color:var(--coral);}
+/* Component responsibility table */
+.comp-table{width:100%;border-collapse:collapse;margin-top:20px;}
+.comp-table th{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);}
+.comp-table td{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:12px;padding:10px 12px;border-bottom:1px solid rgba(30,45,68,0.5);color:var(--text-sec);vertical-align:top;}
+.comp-table td:first-child{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;color:var(--text);width:18%;}
+.comp-table td:nth-child(2){width:22%;color:var(--violet);}
+.comp-table tr:hover td{background:rgba(30,144,255,0.03);}
+.comp-tag{display:inline-block;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;padding:1px 6px;margin-right:4px;letter-spacing:0.5px;}
+.comp-tag.edge{color:var(--violet);border:1px solid rgba(139,92,246,0.3);}
+.comp-tag.hub{color:var(--coral);border:1px solid rgba(249,115,22,0.3);}
+.comp-tag.store{color:var(--blue);border:1px solid rgba(30,144,255,0.3);}
+/* Resilience two-col */
+.resilience{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+.res-col{padding:20px;border:1px solid var(--border);background:var(--card);position:relative;overflow:hidden;}
+.res-col::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.res-col.online::before{background:var(--green);}
+.res-col.offline::before{background:var(--amber);}
+.res-title{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
+.res-col.online .res-title{color:var(--green);}
+.res-col.offline .res-title{color:var(--amber);}
+.res-headline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text);margin-bottom:12px;}
+.res-list{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.8;}
+.res-list div{padding-left:14px;position:relative;}
+.res-list div::before{content:'›';position:absolute;left:0;color:var(--muted);font-weight:600;}
+/* Perf table shared style */
+.perf-table{width:100%;border-collapse:collapse;margin-top:20px;}
+.perf-table th{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);}
+.perf-table td{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;padding:8px 12px;border-bottom:1px solid rgba(30,45,68,0.5);}
+.perf-table td:nth-child(2){color:var(--blue);}
+.perf-table td:nth-child(4){color:var(--green);}
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(249,115,22,0.06);border-left:3px solid var(--coral);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — dual synapse + horizon -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">+</span><span class="t-label" style="color:var(--coral);">Horizon</span><span class="t-label" style="color:var(--muted);">Edge Protection Platform</span>
+</div>
+<h1 class="t-display">Platform Architecture</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:760px;">End-to-end view of the Horizon edge protection platform. Sensors at the edge, a central hub in the middle, storage and consumers at the back. Every edge decision is local; every signal flows to the hub asynchronously; the hub stays out of the request path.</p>
+
+<!-- HERO STATS with glow -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric" style="color:var(--violet);">∞</div><div class="label t-label">Sensors Per Fleet</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--coral);"></div><div class="value t-metric" style="color:var(--coral);">&lt;100ms</div><div class="label t-label">Signal Sync</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric" style="color:var(--blue);">5-tier</div><div class="label t-label">Architecture</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric" style="color:var(--green);">0</div><div class="label t-label">Edge Deps</div></div>
+</div>
+
+<!-- LAYERED ARCHITECTURE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Layered Architecture</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">Top to bottom: request origin → edge decision → hub intelligence → persistence → consumers</span></div>
+
+<!-- Layer 1: Clients -->
+<div class="arch-layer clients">
+<div class="layer-head"><div class="layer-title"><span class="layer-num">01</span><span class="layer-name" style="color:var(--muted);">Clients</span></div><span class="layer-tag">REQUEST ORIGIN</span></div>
+<div class="layer-boxes cols-5">
+<div class="arch-box"><div class="box-name">Browser</div><div class="box-sub">Human traffic</div></div>
+<div class="arch-box"><div class="box-name">Mobile App</div><div class="box-sub">Native clients</div></div>
+<div class="arch-box"><div class="box-name">API Client</div><div class="box-sub">Machine-to-machine</div></div>
+<div class="arch-box"><div class="box-name">Crawler</div><div class="box-sub">Good bots · verified DNS</div></div>
+<div class="arch-box"><div class="box-name">Attacker</div><div class="box-sub">Bots · scanners · botnets</div></div>
+</div>
+</div>
+
+<div class="flow-arrow"><div class="flow-line"></div><div class="flow-label" style="color:var(--violet);">▼ HTTPS — request + headers + body</div><div class="flow-line"></div></div>
+
+<!-- Layer 2: Edge (Synapse) -->
+<div class="arch-layer edge">
+<div class="layer-head"><div class="layer-title"><span class="layer-num">02</span><span class="layer-name" style="color:var(--violet);">Edge · Synapse Sensors</span></div><span class="layer-tag">&lt;1ms LOCAL DECISION</span></div>
+<div class="layer-boxes cols-3">
+<div class="arch-box"><div class="box-name">Synapse US-East</div><div class="box-sub">Pingora proxy + WAF + DLP + Bot</div></div>
+<div class="arch-box"><div class="box-name">Synapse EU-West</div><div class="box-sub">Pingora proxy + WAF + DLP + Bot</div></div>
+<div class="arch-box"><div class="box-name">Synapse AP-South</div><div class="box-sub">Pingora proxy + WAF + DLP + Bot</div></div>
+</div>
+<div style="margin-top:8px;font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.6;">237 rules · 500+ bot signatures · 22+ DLP patterns · 8 correlation detectors · JA4/JA4H · Actor cache 100K · Auto-mitigation</div>
+</div>
+
+<div class="flow-arrow bidir"><div class="flow-line"></div><div class="flow-label"><span class="flow-down">▼ signals</span> <span style="color:var(--muted);">·</span> <span class="flow-up">▲ commands</span></div><div class="flow-line"></div></div>
+
+<!-- Layer 3: Hub (Horizon) -->
+<div class="arch-layer hub">
+<div class="layer-head"><div class="layer-title"><span class="layer-num">03</span><span class="layer-name" style="color:var(--coral);">Control Plane · Horizon Hub</span></div><span class="layer-tag">CENTRALIZED INTELLIGENCE</span></div>
+<div class="layer-boxes cols-5">
+<div class="arch-box"><div class="box-name">WS Gateway</div><div class="box-sub">Signal ingest · fan-in</div></div>
+<div class="arch-box"><div class="box-name">Aggregator</div><div class="box-sub">Dedupe · batch · persist</div></div>
+<div class="arch-box"><div class="box-name">Correlator</div><div class="box-sub">Cross-sensor campaigns</div></div>
+<div class="arch-box"><div class="box-name">Broadcaster</div><div class="box-sub">Real-time push to UI</div></div>
+<div class="arch-box"><div class="box-name">REST API</div><div class="box-sub">80+ endpoints · admin</div></div>
+</div>
+<div style="margin-top:8px;font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.6;">Fleet manager · Rule distributor · Sigma engine · CyberChef · War room · Hunt API · Remote shell tunnels</div>
+</div>
+
+<div class="flow-arrow"><div class="flow-line"></div><div class="flow-label" style="color:var(--blue);">▼ persist · ▲ query</div><div class="flow-line"></div></div>
+
+<!-- Layer 4: Storage -->
+<div class="arch-layer storage">
+<div class="layer-head"><div class="layer-title"><span class="layer-num">04</span><span class="layer-name" style="color:var(--blue);">Storage</span></div><span class="layer-tag">STATE &amp; ANALYTICS</span></div>
+<div class="layer-boxes cols-3">
+<div class="arch-box"><div class="box-name">PostgreSQL</div><div class="box-sub">Source of truth · tenants · rules · fleet state</div></div>
+<div class="arch-box"><div class="box-name">ClickHouse</div><div class="box-sub">Time-series · signal history · hunt queries</div></div>
+<div class="arch-box"><div class="box-name">Redis</div><div class="box-sub">Cache · pub/sub · multi-instance sessions</div></div>
+</div>
+</div>
+
+<div class="flow-arrow"><div class="flow-line"></div><div class="flow-label" style="color:var(--green);">▲ read · realtime push</div><div class="flow-line"></div></div>
+
+<!-- Layer 5: Consumers -->
+<div class="arch-layer consumers">
+<div class="layer-head"><div class="layer-title"><span class="layer-num">05</span><span class="layer-name" style="color:var(--green);">Consumers</span></div><span class="layer-tag">OPERATORS &amp; INTEGRATIONS</span></div>
+<div class="layer-boxes cols-4">
+<div class="arch-box"><div class="box-name">Horizon UI</div><div class="box-sub">SOC dashboard · live map</div></div>
+<div class="arch-box"><div class="box-name">Synapse CLI</div><div class="box-sub">Admin · rules · diagnostics</div></div>
+<div class="arch-box"><div class="box-name">Webhooks</div><div class="box-sub">Slack · PagerDuty · SIEM</div></div>
+<div class="arch-box"><div class="box-name">Apparatus Lib</div><div class="box-sub">Embedded SDK · drills</div></div>
+</div>
+</div>
+</div>
+
+<!-- COMPONENT RESPONSIBILITIES -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Component Responsibilities</span><div class="section-line"></div></div>
+<table class="comp-table">
+<tr><th>Component</th><th>Layer</th><th>Responsibility</th></tr>
+<tr><td>Synapse</td><td><span class="comp-tag edge">EDGE</span>Rust · Pingora</td><td>Inline WAF, DLP, bot detection, behavioral profiling, interrogation. Makes every allow/block decision locally — no network calls.</td></tr>
+<tr><td>WS Gateway</td><td><span class="comp-tag hub">HUB</span>Node.js</td><td>Accepts persistent WebSocket connections from sensors, authenticates each tenant, streams signals into the aggregator.</td></tr>
+<tr><td>Aggregator</td><td><span class="comp-tag hub">HUB</span>Node.js</td><td>Deduplicates, batches, and writes signals. Dual-write to PostgreSQL (hot) and ClickHouse (cold). Failure of either doesn't block ingest.</td></tr>
+<tr><td>Correlator</td><td><span class="comp-tag hub">HUB</span>Node.js</td><td>Cross-sensor campaign correlation. Links distributed attacks via JA4 fingerprints, auth tokens, ASN proximity. Emits campaign events.</td></tr>
+<tr><td>Broadcaster</td><td><span class="comp-tag hub">HUB</span>Node.js</td><td>Pub/sub fan-out from aggregator and correlator to Horizon UI. Real-time threat map updates, campaign timelines, SOC alerts.</td></tr>
+<tr><td>REST API</td><td><span class="comp-tag hub">HUB</span>Fastify</td><td>80+ endpoints for admin, hunt queries, rule management, drill orchestration, and external integrations. Rate-limited per tenant.</td></tr>
+<tr><td>PostgreSQL</td><td><span class="comp-tag store">STORE</span>primary</td><td>Tenants, rules, config, fleet state, recent signals. Row-level tenant isolation. The source of truth for everything operational.</td></tr>
+<tr><td>ClickHouse</td><td><span class="comp-tag store">STORE</span>analytics</td><td>Full signal history for time-window queries, hunt jobs, and aggregation. Write-heavy, read-optimized for SOC workflows.</td></tr>
+<tr><td>Redis</td><td><span class="comp-tag store">STORE</span>cache</td><td>Session sharing across Horizon instances, rate limit counters, correlation pub/sub, and multi-instance coordination.</td></tr>
+</table></div>
+
+<!-- RESILIENCE MODEL -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Resilience Model</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">The hub is additive intelligence — not a dependency</span></div>
+<div class="resilience">
+<div class="res-col online">
+<div class="res-title">Hub Online — Full Fleet Mode</div>
+<div class="res-headline">Centralized intelligence &amp; cross-fleet correlation</div>
+<div class="res-list">
+<div>Campaign correlation across every sensor in the fleet</div>
+<div>Real-time rule distribution — ~240μs hot reload per sensor</div>
+<div>Shared blocklists and IoC propagation across tenants</div>
+<div>Live threat map, hunt queries, and SOC war-room workflows</div>
+<div>Anonymized cross-tenant signal sharing via SHA-256 fingerprints</div>
+</div>
+</div>
+<div class="res-col offline">
+<div class="res-title">Hub Offline — Independent Edge Mode</div>
+<div class="res-headline">Every sensor continues protecting its edge</div>
+<div class="res-list">
+<div>All WAF, DLP, and bot decisions keep running locally</div>
+<div>Per-sensor campaign correlation and actor scoring unaffected</div>
+<div>Signals buffer locally and replay when the hub returns</div>
+<div>Last-known rules, blocklists, and challenge state remain in effect</div>
+<div>No blocked requests, no dropped traffic, no customer impact</div>
+</div>
+</div>
+</div></div>
+
+<!-- DATA FLOW TIMING -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">End-to-End Timing</span><div class="section-line"></div></div>
+<table class="perf-table">
+<tr><th>Operation</th><th>Latency</th><th>Path</th><th>Target</th></tr>
+<tr><td>Request → Edge decision</td><td>&lt;1ms</td><td>Client → Synapse → Origin</td><td>✓ Met</td></tr>
+<tr><td>Signal → Hub ingest</td><td>&lt;100ms</td><td>Synapse → WS Gateway → Aggregator</td><td>✓ Met</td></tr>
+<tr><td>Campaign correlation window</td><td>~1s</td><td>Aggregator → Correlator → Broadcaster</td><td>✓ Met</td></tr>
+<tr><td>Rule push → sensor applied</td><td>~240μs</td><td>Horizon API → WS command → Synapse reload</td><td>✓ Met</td></tr>
+<tr><td>UI update (live threat map)</td><td>&lt;500ms</td><td>Broadcaster → UI WebSocket → render</td><td>✓ Met</td></tr>
+</table></div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Independent at the edge. Intelligent at the hub. Resilient by design.</div><div class="tagline-sub">Every sensor decides locally; every decision flows to the fleet. The hub never gates a request — it amplifies every one that happens.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

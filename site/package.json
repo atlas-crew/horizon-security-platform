@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "copy:brand": "mkdir -p public/brand && cp ../brand/horizon-brand-guidelines/*.html ../brand/horizon-brand-guidelines/*.png ../brand/horizon-brand-guidelines/*.zip public/brand/",
+    "copy:brand": "mkdir -p public/brand public/infographics && cp ../brand/horizon-brand-guidelines/*.html ../brand/horizon-brand-guidelines/*.png ../brand/horizon-brand-guidelines/*.zip public/brand/ && cp ../brand/infographics/html/*.html public/infographics/",
     "dev": "npm run copy:brand && vitepress dev",
     "build": "npm run copy:brand && vitepress build",
     "preview": "vitepress preview"

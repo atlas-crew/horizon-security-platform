@@ -43,16 +43,15 @@ jobs:
 
       - name: Assemble site
         run: |
-          mkdir -p _site/docs
-          # VitePress output goes under /docs/
-          cp -r site/.vitepress/dist/* _site/docs/
-          # Landing page becomes the root
-          cp site/horizon.html _site/index.html
-          # Copy HTML infographics from brand directory (referenced by landing page)
-          mkdir -p _site/infographics
-          cp brand/infographics/*.html _site/infographics/
-          # OG image for social previews
-          cp brand/social/edge-protection-social.png _site/og-image.png
+          mkdir -p _site
+          # VitePress output is the entire site (served at horizon.atlascrew.dev)
+          cp -r site/.vitepress/dist/. _site/
+          # OG image for social previews (location may change with brand reorg)
+          if [ -f brand/social/edge-protection-social.png ]; then
+            cp brand/social/edge-protection-social.png _site/og-image.png
+          elif [ -f brand/banners/edge-protection-social.png ]; then
+            cp brand/banners/edge-protection-social.png _site/og-image.png
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

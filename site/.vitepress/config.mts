@@ -6,7 +6,7 @@ export default withMermaid(
     title: 'Horizon',
     description:
       'Administration, deployment, and development documentation for the Horizon edge protection platform.',
-    base: '/docs/',
+    base: '/',
     appearance: 'dark',
     head: [
       ['link', { rel: 'icon', href: '/images/brand/horizon-icon-dark.svg' }],

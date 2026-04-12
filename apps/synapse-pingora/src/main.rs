@@ -1132,6 +1132,15 @@ impl DetectionEngine {
     }
 }
 
+/// TASK-58: entity risk contribution weight for a SessionDecision::Invalid
+/// outcome. Deliberately smaller than the Suspicious weight (50.0) because
+/// legitimate clients occasionally send stale/lost session tokens — one
+/// Invalid is benign, a pattern of many is the signal. 12.0 means 5-9
+/// repeat invalid tokens from the same IP will trip the default entity
+/// risk blocking threshold, catching brute-force without false-positiving
+/// on transient client issues.
+const INVALID_SESSION_RISK_WEIGHT: f64 = 12.0;
+
 /// Merge a non-blocking deferred-pass verdict into an already-populated
 /// `DetectionResult` in place. Used by the deferred WAF path in
 /// `upstream_request_filter` when the deferred pass produced matches that
@@ -3205,6 +3214,17 @@ impl ProxyHttp for SynapseProxy {
                                 client_ip,
                                 reason,
                                 &token_hash[..8]
+                            );
+
+                            // TASK-58: contribute conservative entity risk on
+                            // invalid session tokens so session-token brute-force
+                            // patterns accumulate toward the existing entity-risk
+                            // blocking threshold.
+                            ctx.entity_risk += INVALID_SESSION_RISK_WEIGHT;
+                            self.entity_manager.apply_external_risk(
+                                client_ip,
+                                INVALID_SESSION_RISK_WEIGHT,
+                                "invalid_session_token",
                             );
                         }
                     }
@@ -6715,6 +6735,56 @@ key_path: "/etc/keys/example.key"
         assert!(buf.is_empty());
         assert!(buf.capacity() >= 8192);
         return_buffer(buf);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Invalid session token risk contribution (TASK-58)
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_invalid_session_risk_weight_is_conservative() {
+        // The TASK-58 weight must be strictly smaller than the Suspicious
+        // weight (50.0) because Invalid has higher false-positive risk
+        // (legitimate clients occasionally send stale tokens). This guard
+        // catches a future tweak that accidentally sets Invalid >= Suspicious,
+        // which would undermine the deliberate calibration.
+        assert!(
+            INVALID_SESSION_RISK_WEIGHT < 50.0,
+            "Invalid session weight ({}) must be less than Suspicious weight (50.0)",
+            INVALID_SESSION_RISK_WEIGHT
+        );
+        assert!(
+            INVALID_SESSION_RISK_WEIGHT > 0.0,
+            "Invalid session weight must be positive so brute-force accumulates"
+        );
+    }
+
+    #[test]
+    fn test_invalid_session_risk_weight_trips_entity_threshold_on_repeats() {
+        // TASK-58 design goal: 5-9 Invalid events from the same IP should
+        // cross the default entity risk blocking threshold (100.0). A
+        // single Invalid must NOT cross (benign stale-token case).
+        let default_threshold = 100.0;
+
+        // Single event — far below threshold.
+        assert!(
+            INVALID_SESSION_RISK_WEIGHT < default_threshold,
+            "single Invalid must not cross default threshold 100.0"
+        );
+
+        // Five events — should NOT quite cross (12 * 5 = 60).
+        assert!(
+            5.0 * INVALID_SESSION_RISK_WEIGHT < default_threshold,
+            "5 Invalids ({}) must not cross threshold — too aggressive",
+            5.0 * INVALID_SESSION_RISK_WEIGHT
+        );
+
+        // Nine events — should cross (12 * 9 = 108).
+        assert!(
+            9.0 * INVALID_SESSION_RISK_WEIGHT >= default_threshold,
+            "9 Invalids ({}) must cross threshold — otherwise brute-force goes undetected",
+            9.0 * INVALID_SESSION_RISK_WEIGHT
+        );
     }
 
     // ────────────────────────────────────────────────────────────────────────

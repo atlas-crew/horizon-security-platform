@@ -1099,6 +1099,46 @@ impl DetectionEngine {
     }
 }
 
+/// Merge a non-blocking deferred-pass verdict into an already-populated
+/// `DetectionResult` in place. Used by the deferred WAF path in
+/// `upstream_request_filter` when the deferred pass produced matches that
+/// didn't reach blocking but still represent real WAF work.
+///
+/// Merge semantics (deliberate, not arbitrary):
+/// - `risk_score` is max'd. Summing would be more faithful to "two passes
+///   both scored this request" but could push downstream consumers over
+///   blocking thresholds they were tuned for on body-phase alone.
+///   Preserving the max keeps behavior compatible; changing it is a
+///   separate decision.
+/// - `entity_risk` is summed. Each pass observed risk for the entity
+///   independently; the totals are additive and there is no downstream
+///   threshold depending on a max here.
+/// - `detection_time_us` is summed (saturating) so latency dashboards
+///   see the total WAF work performed, not just the body-phase slice.
+/// - `matched_rules` are dedup-extended (preserves existing order, then
+///   appends new rules from the deferred pass).
+/// - `block_reason` is kept from `existing` when already set, otherwise
+///   filled from `deferred`. Non-blocking verdicts rarely carry a reason
+///   in practice; this handles the edge case without losing data.
+fn merge_deferred_detection_non_blocking(
+    existing: &mut DetectionResult,
+    deferred: DetectionResult,
+) {
+    existing.risk_score = existing.risk_score.max(deferred.risk_score);
+    existing.entity_risk += deferred.entity_risk;
+    existing.detection_time_us = existing
+        .detection_time_us
+        .saturating_add(deferred.detection_time_us);
+    if existing.block_reason.is_none() {
+        existing.block_reason = deferred.block_reason;
+    }
+    for rule in deferred.matched_rules {
+        if !existing.matched_rules.contains(&rule) {
+            existing.matched_rules.push(rule);
+        }
+    }
+}
+
 /// Build a `TelemetryEvent::WafBlock` for the deferred post-DLP WAF pass.
 ///
 /// Extracted as a pure free function so the event shape (rule_id prefix,
@@ -3943,12 +3983,7 @@ impl ProxyHttp for SynapseProxy {
                 // and to the cached detection result so downstream phases see them.
                 match ctx.detection.as_mut() {
                     Some(existing) => {
-                        existing.risk_score = existing.risk_score.max(deferred.risk_score);
-                        for rule in &deferred.matched_rules {
-                            if !existing.matched_rules.contains(rule) {
-                                existing.matched_rules.push(*rule);
-                            }
-                        }
+                        merge_deferred_detection_non_blocking(existing, deferred);
                     }
                     None => {
                         ctx.detection = Some(deferred);
@@ -6630,6 +6665,108 @@ key_path: "/etc/keys/example.key"
         assert_eq!(sev_for(51), "high");
         assert_eq!(sev_for(50), "medium"); // NOT high — mapping is strict >
         assert_eq!(sev_for(0), "medium");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Non-blocking deferred merge (TASK-33)
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_merge_deferred_detection_non_blocking_preserves_all_fields() {
+        let mut existing = DetectionResult {
+            blocked: false,
+            risk_score: 30,
+            matched_rules: vec![1, 2],
+            entity_risk: 10.0,
+            block_reason: None,
+            detection_time_us: 100,
+        };
+        let deferred = DetectionResult {
+            blocked: false,
+            risk_score: 40,
+            matched_rules: vec![2, 5], // rule 2 is already in existing
+            entity_risk: 15.0,
+            block_reason: Some("deferred-reason".to_string()),
+            detection_time_us: 50,
+        };
+
+        merge_deferred_detection_non_blocking(&mut existing, deferred);
+
+        // risk_score: max(30, 40) = 40 (intentional — see merge doc comment)
+        assert_eq!(existing.risk_score, 40);
+        // entity_risk: 10.0 + 15.0 (previously dropped — the AC#1 fix)
+        assert_eq!(existing.entity_risk, 25.0);
+        // detection_time_us: 100 + 50 (previously dropped — the AC#2 fix)
+        assert_eq!(existing.detection_time_us, 150);
+        // matched_rules: dedup-extended, existing order preserved
+        assert_eq!(existing.matched_rules, vec![1, 2, 5]);
+        // block_reason: taken from deferred since existing was None (AC#3 fix)
+        assert_eq!(existing.block_reason, Some("deferred-reason".to_string()));
+    }
+
+    #[test]
+    fn test_merge_deferred_detection_non_blocking_preserves_existing_block_reason() {
+        let mut existing = DetectionResult {
+            block_reason: Some("original".to_string()),
+            detection_time_us: 100,
+            ..Default::default()
+        };
+        let deferred = DetectionResult {
+            block_reason: Some("later".to_string()),
+            detection_time_us: 50,
+            ..Default::default()
+        };
+
+        merge_deferred_detection_non_blocking(&mut existing, deferred);
+
+        // Existing block_reason wins — we never clobber an already-set reason.
+        assert_eq!(existing.block_reason, Some("original".to_string()));
+        // Timing still accumulates regardless.
+        assert_eq!(existing.detection_time_us, 150);
+    }
+
+    #[test]
+    fn test_merge_deferred_detection_non_blocking_saturates_time() {
+        // If the existing detection_time_us is already near u64::MAX (which
+        // cannot happen in practice but guards against panic-on-overflow in
+        // future callers), saturating_add keeps the value finite.
+        let mut existing = DetectionResult {
+            detection_time_us: u64::MAX - 10,
+            ..Default::default()
+        };
+        let deferred = DetectionResult {
+            detection_time_us: 1000,
+            ..Default::default()
+        };
+
+        merge_deferred_detection_non_blocking(&mut existing, deferred);
+
+        assert_eq!(existing.detection_time_us, u64::MAX);
+    }
+
+    #[test]
+    fn test_merge_deferred_detection_non_blocking_empty_deferred_rules() {
+        // Defensive: the call site guards with !deferred.matched_rules.is_empty(),
+        // but the helper must still be sound when a caller hands it an empty
+        // rule vec so future refactors don't introduce a regression.
+        let mut existing = DetectionResult {
+            matched_rules: vec![1, 2, 3],
+            entity_risk: 5.0,
+            detection_time_us: 200,
+            ..Default::default()
+        };
+        let deferred = DetectionResult {
+            matched_rules: vec![],
+            entity_risk: 2.0,
+            detection_time_us: 10,
+            ..Default::default()
+        };
+
+        merge_deferred_detection_non_blocking(&mut existing, deferred);
+
+        assert_eq!(existing.matched_rules, vec![1, 2, 3]);
+        assert_eq!(existing.entity_risk, 7.0);
+        assert_eq!(existing.detection_time_us, 210);
     }
 
     #[test]

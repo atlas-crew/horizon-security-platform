@@ -46,7 +46,7 @@ mod types;
 pub use anomaly_detector::{AnomalyDetector, AnomalyDetectorConfig};
 pub use config::TrendsConfig;
 pub use correlation::{Correlation, CorrelationEngine, CorrelationMetadata, CorrelationType};
-pub use manager::{TrendsManager, TrendsManagerStats, TrendsStats};
+pub use manager::{TrendsManager, TrendsManagerDependencies, TrendsManagerStats, TrendsStats};
 pub use signal_extractor::SignalExtractor;
 pub use time_store::{SignalBucket, TimeStore, TimeStoreStats};
 pub use types::{

@@ -5607,10 +5607,40 @@ fn main() {
         shared_dlp_scanner.pattern_count()
     );
 
-    // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting
-    let shared_trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
+    // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting.
+    //
+    // TASK-55: wire TrendsManagerDependencies.apply_risk to the shared
+    // EntityManager so that when the anomaly detector produces an anomaly
+    // with risk_applied=Some(_), the risk automatically flows into
+    // entity_manager.apply_external_risk. Without this wiring, anomalies
+    // are recorded into self.anomalies but never contribute to the entity
+    // blocking threshold — the detection runs and goes nowhere.
+    //
+    // The callback casts u32 → f64 because TrendsManager stores anomaly
+    // risk as u32 but EntityManager takes f64. The reason string is
+    // prefixed with 'trends_anomaly:' so log greps can identify the
+    // contribution source.
+    let trends_deps = {
+        let entity_manager_for_trends = Arc::clone(&shared_entity_manager);
+        synapse_pingora::trends::TrendsManagerDependencies {
+            apply_risk: Some(Box::new(move |entity_id: &str, risk: u32, reason: &str| {
+                entity_manager_for_trends.apply_external_risk(
+                    entity_id,
+                    risk as f64,
+                    &format!("trends_anomaly:{}", reason),
+                );
+            })),
+        }
+    };
+    let shared_trends_manager = Arc::new(TrendsManager::with_dependencies(
+        TrendsConfig::default(),
+        trends_deps,
+    ));
     metrics_registry.set_trends_manager(Arc::clone(&shared_trends_manager));
-    info!("TrendsManager initialized with default config");
+    info!(
+        "TrendsManager initialized with default config + apply_risk callback \
+         wired to shared EntityManager (TASK-55)"
+    );
 
     // Phase 9: Shared SignalManager for intelligence aggregation
     let shared_signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
@@ -6735,6 +6765,87 @@ key_path: "/etc/keys/example.key"
         assert!(buf.is_empty());
         assert!(buf.capacity() >= 8192);
         return_buffer(buf);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // TrendsManager apply_risk callback wiring (TASK-55)
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// Proves the TASK-55 wiring: a TrendsManager constructed via
+    /// with_dependencies() correctly invokes the apply_risk callback when
+    /// an anomaly is recorded via record_payload_anomaly. Before TASK-55,
+    /// main.rs constructed TrendsManager with ::new() (no apply_risk
+    /// callback), so anomalies were recorded into the internal store but
+    /// never contributed risk to the entity blocking path. This test pins
+    /// the wiring so a regression that drops the dependency would fail
+    /// loudly in CI.
+    ///
+    /// The test uses a local TrendsManager with a test callback that
+    /// increments an AtomicU32. No need to stand up a real EntityManager —
+    /// what's being tested is the dispatch mechanism, not entity side
+    /// effects.
+    #[test]
+    fn test_trends_manager_apply_risk_callback_is_invoked_on_anomaly() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc as StdArc;
+        use synapse_pingora::trends::{
+            AnomalyMetadata, AnomalySeverity, AnomalyType, TrendsConfig, TrendsManager,
+            TrendsManagerDependencies,
+        };
+
+        // Shared counter that the test callback bumps whenever it fires.
+        let call_count = StdArc::new(AtomicU32::new(0));
+        let last_risk = StdArc::new(AtomicU32::new(0));
+
+        let count_clone = StdArc::clone(&call_count);
+        let risk_clone = StdArc::clone(&last_risk);
+
+        let deps = TrendsManagerDependencies {
+            apply_risk: Some(Box::new(move |_entity: &str, risk: u32, _reason: &str| {
+                count_clone.fetch_add(1, Ordering::SeqCst);
+                risk_clone.store(risk, Ordering::SeqCst);
+            })),
+        };
+
+        // Default TrendsConfig has anomaly_risk populated with non-zero
+        // values for each AnomalyType, so record_payload_anomaly will set
+        // risk_applied=Some(_) and trigger the callback.
+        let config = TrendsConfig::default();
+        let manager = TrendsManager::with_dependencies(config, deps);
+
+        // Sanity: before recording an anomaly, callback has not fired.
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+
+        // Record a payload anomaly via the public API. This internally
+        // constructs an Anomaly, calls handle_anomaly, which dispatches
+        // through dependencies.apply_risk — the chain under test.
+        manager.record_payload_anomaly(
+            "test-anomaly-id".to_string(),
+            AnomalyType::OversizedRequest,
+            AnomalySeverity::High,
+            1_000_000_000_000_i64, // arbitrary past timestamp
+            "/api/sensitive".to_string(),
+            "192.0.2.1".to_string(), // test IP
+            "TASK-55 test anomaly".to_string(),
+            AnomalyMetadata::default(),
+        );
+
+        // AC#4: the callback must have been invoked exactly once.
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            1,
+            "apply_risk callback must be invoked once per anomaly with a non-zero risk_applied"
+        );
+
+        // The risk value passed to the callback must be > 0 (proves
+        // risk_applied was set from TrendsConfig::default's anomaly_risk
+        // map, not None). If risk_applied were None, handle_anomaly would
+        // skip the callback and this test would fail on the call_count
+        // assertion above.
+        assert!(
+            last_risk.load(Ordering::SeqCst) > 0,
+            "risk value passed to callback must be positive"
+        );
     }
 
     // ────────────────────────────────────────────────────────────────────────

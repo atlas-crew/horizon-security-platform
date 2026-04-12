@@ -432,7 +432,7 @@ fn default_enabled() -> bool {
 }
 
 /// Create a CookieConfig with cryptographically secure random secret key
-fn create_default_cookie_config() -> CookieConfig {
+pub(crate) fn create_default_cookie_config() -> CookieConfig {
     let mut secret_key = [0u8; 32];
     if let Err(err) = getrandom::getrandom(&mut secret_key) {
         error!("Failed to generate secure cookie secret key: {}", err);
@@ -454,7 +454,7 @@ fn create_default_cookie_config() -> CookieConfig {
 }
 
 /// Progression config tuned to align with 30/60/90 risk thresholds.
-fn create_progression_config() -> ProgressionConfig {
+pub(crate) fn create_progression_config() -> ProgressionConfig {
     ProgressionConfig {
         risk_threshold_cookie: 0.30,
         risk_threshold_js: 0.60,
@@ -1096,6 +1096,17 @@ impl DetectionEngine {
     /// Get the number of loaded rules (for diagnostics)
     pub fn rule_count() -> usize {
         SYNAPSE.read().rule_count()
+    }
+
+    /// Hot-reload the WAF rule set in the global SYNAPSE engine from a
+    /// JSON byte slice. Used by the config-reload machinery and by
+    /// integration tests that need to inject test-scoped rule shapes
+    /// without touching the canonical minimal_rules.json.
+    ///
+    /// Concurrent readers block briefly while the write lock is held.
+    /// Returns the number of rules parsed on success.
+    pub fn reload_rules(json: &[u8]) -> Result<usize, synapse_pingora::waf::WafError> {
+        SYNAPSE.write().load_rules(json)
     }
 }
 

@@ -246,12 +246,13 @@ async fn test_rate_limit_short_circuits_before_waf() {
 ///    returned.
 ///
 /// The test mutates the global SYNAPSE engine via DetectionEngine::reload_rules
-/// to inject a dlp_violation rule (not present in minimal_rules.json), runs
-/// the filter chain end-to-end, captures the response from the client side of
-/// the UnixStream pair, and asserts the full client contract. It then
-/// restores minimal_rules.json to leave SYNAPSE pristine for any subsequent
-/// tests in this binary. The #[serial] attribute prevents parallel runs of
-/// the other two tests in this file from racing on the rule-swap.
+/// to inject a single dlp_violation rule (not present in the embedded
+/// production_rules.json), runs the filter chain end-to-end, captures the
+/// response from the client side of the UnixStream pair, and asserts the
+/// full client contract. It then restores production_rules.json to leave
+/// SYNAPSE pristine for any subsequent tests in this binary. The #[serial]
+/// attribute prevents parallel runs of the other two tests in this file
+/// from racing on the rule-swap.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial]
 async fn test_deferred_dlp_block_returns_403_with_canonical_envelope() {
@@ -405,10 +406,10 @@ async fn test_deferred_dlp_block_returns_403_with_canonical_envelope() {
     // with a 403 response. The successful path here IS the proof.
 
     // --- Restore canonical rules so subsequent tests in this binary see
-    // the default minimal_rules.json rule set. serial_test prevents races
-    // during the test itself; this restore prevents state leakage AFTER
-    // the test returns.
-    let minimal_rules = include_str!("../src/minimal_rules.json");
-    synapse_main::DetectionEngine::reload_rules(minimal_rules.as_bytes())
-        .expect("restore minimal rules after TASK-40 test");
+    // the default embedded production_rules.json rule set (TASK-45).
+    // serial_test prevents races during the test itself; this restore
+    // prevents state leakage AFTER the test returns.
+    let production_rules = include_str!("../src/production_rules.json");
+    synapse_main::DetectionEngine::reload_rules(production_rules.as_bytes())
+        .expect("restore production rules after TASK-40 test");
 }

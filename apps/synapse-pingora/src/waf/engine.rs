@@ -2899,6 +2899,53 @@ mod tests {
         assert!(verdict.matched_rules.is_empty());
     }
 
+    /// TASK-45 compat check: load the full embedded production ruleset
+    /// through the current Engine and assert it parses without error and
+    /// produces the expected rule count. This is the load-time regression
+    /// gate — if a future engine change breaks the production rule schema
+    /// in any way, this test fails loudly with a line-level error message
+    /// from serde_json rather than silently degrading at proxy startup.
+    #[test]
+    fn test_production_rules_load_into_current_engine() {
+        const PRODUCTION_RULES: &str = include_str!("../production_rules.json");
+
+        let mut engine = Engine::empty();
+        let count = engine
+            .load_rules(PRODUCTION_RULES.as_bytes())
+            .expect("production_rules.json must parse against the current Engine schema");
+
+        // Lower bound: the restored archive snapshot is 237. Using >= rather
+        // than == so the file can grow over time without breaking the test.
+        // An upper bound check (e.g. <= 1000) could guard against accidental
+        // duplication but would be noise until we actually start duplicating.
+        assert!(
+            count >= 237,
+            "expected >= 237 rules from production_rules.json, got {}",
+            count
+        );
+        assert_eq!(
+            engine.rule_count(),
+            count,
+            "Engine::rule_count() must match load_rules return value"
+        );
+
+        // Rule IDs must all be unique — a duplicated id would make
+        // matched_rules ordering non-deterministic and would suggest the
+        // archive copy was accidentally concatenated with itself.
+        let rules: Vec<WafRule> = serde_json::from_str(PRODUCTION_RULES)
+            .expect("production_rules.json must be valid JSON array");
+        let mut ids: Vec<u32> = rules.iter().map(|r| r.id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(
+            ids.len(),
+            rules.len(),
+            "production_rules.json must have unique rule ids — got {} rules but only {} unique ids",
+            rules.len(),
+            ids.len()
+        );
+    }
+
     #[test]
     fn test_deferred_not_dlp_violation_fires_on_zero_matches() {
         // TASK-35 correctness guarantee: a rule that wraps dlp_violation in

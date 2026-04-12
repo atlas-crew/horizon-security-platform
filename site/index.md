@@ -39,28 +39,58 @@ features:
 
 <div class="vp-doc home-sections">
 
-## Core Capabilities
+## Start Here
 
-<div class="card-grid">
+<div class="card-grid cols-3">
+  <a class="card" href="/getting-started/quickstart">
+    <div class="card-label" style="color: #10B981;">Quickstart</div>
+    <div class="card-title">Up and Running in 5 Minutes</div>
+    <div class="card-desc">The fastest path to a working Synapse + Horizon stack. Docker Compose demo, sample rules, and a local threat feed to poke at.</div>
+  </a>
+  <a class="card" href="/getting-started/installation">
+    <div class="card-label" style="color: #10B981;">Installation</div>
+    <div class="card-title">Full Install Walkthrough</div>
+    <div class="card-desc">Step-by-step installation of Horizon and one or more Synapse sensors. Covers Linux packages, Docker images, and source builds.</div>
+  </a>
+  <a class="card" href="/getting-started/requirements">
+    <div class="card-label" style="color: #10B981;">Requirements</div>
+    <div class="card-title">System Requirements</div>
+    <div class="card-desc">OS support, CPU and memory sizing, storage capacity planning, and network ports. Minimum vs. recommended for each deployment tier.</div>
+  </a>
+</div>
+
+## Reference Library
+
+<div class="card-grid cols-3">
   <a class="card" href="/reference/synapse-features">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Detection</div>
-    <div class="card-title">Synapse Feature Catalog</div>
+    <div class="card-title">Synapse Features</div>
     <div class="card-desc">Every detector, rule family, and behavioral signal Synapse evaluates — SQLi through session hijacking, with latency budgets and config knobs.</div>
   </a>
   <a class="card" href="/reference/horizon-features">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Fleet Ops</div>
-    <div class="card-title">Horizon Feature Catalog</div>
+    <div class="card-title">Horizon Features</div>
     <div class="card-desc">SOC tooling, fleet management, hunt queries, war-room workflows, and all the intelligence that coordinates a multi-sensor deployment.</div>
   </a>
   <a class="card" href="/configuration/">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Config</div>
-    <div class="card-title">Configuration &amp; Hot Reload</div>
+    <div class="card-title">Configuration Schema</div>
     <div class="card-desc">~240μs atomic config swap with zero dropped requests. Rule hot-reload, feature toggles, and fleet-wide config distribution from Horizon.</div>
   </a>
+  <a class="card" href="/reference/synapse-api">
+    <div class="card-label" style="color: var(--vp-c-brand-1);">Synapse API</div>
+    <div class="card-title">Sensor Admin API</div>
+    <div class="card-desc">Per-sensor admin endpoints — rule push, config reload, diagnostics, metrics, health, and the command tunnel protocol used by Horizon.</div>
+  </a>
   <a class="card" href="/reference/horizon-api">
-    <div class="card-label" style="color: var(--vp-c-brand-1);">APIs</div>
-    <div class="card-title">Admin &amp; Hunt APIs</div>
+    <div class="card-label" style="color: var(--vp-c-brand-1);">Horizon API</div>
+    <div class="card-title">Hub REST &amp; WebSocket</div>
     <div class="card-desc">80+ REST endpoints plus WebSocket streams. Signals, campaigns, fleet state, drills, and remote shell tunnels — all with per-tenant rate limiting.</div>
+  </a>
+  <a class="card" href="/reference/synapse-cli">
+    <div class="card-label" style="color: var(--vp-c-brand-1);">CLI</div>
+    <div class="card-title">Synapse CLI Reference</div>
+    <div class="card-desc">The <code>synapse-waf</code> binary's commands and flags — rule management, config validation, benchmark harness, and operational diagnostics.</div>
   </a>
 </div>
 
@@ -81,6 +111,31 @@ features:
     <div class="card-label" style="color: var(--vp-c-green-1, #10B981);">Production</div>
     <div class="card-title">Production Checklist</div>
     <div class="card-desc">TLS termination, secrets management, observability hooks, capacity planning, and hardening defaults for every Synapse + Horizon deployment.</div>
+  </a>
+</div>
+
+## Develop &amp; Contribute
+
+<div class="card-grid cols-4">
+  <a class="card" href="/development/local-setup">
+    <div class="card-label" style="color: #8B5CF6;">Environment</div>
+    <div class="card-title">Local Setup</div>
+    <div class="card-desc">pnpm workspace, Nx orchestration, and the <code>just</code> task runner. Get the whole monorepo building in a single command.</div>
+  </a>
+  <a class="card" href="/development/building">
+    <div class="card-label" style="color: #8B5CF6;">Build</div>
+    <div class="card-title">Build from Source</div>
+    <div class="card-desc">How Cargo, Vite, and Prisma fit together. Release profiles, cross-compilation targets, and where build artifacts land.</div>
+  </a>
+  <a class="card" href="/development/testing">
+    <div class="card-label" style="color: #8B5CF6;">Testing</div>
+    <div class="card-title">Test Suites</div>
+    <div class="card-desc">Unit, integration, end-to-end, and fuzz harnesses across Rust and TypeScript. Running specific suites and adding new ones.</div>
+  </a>
+  <a class="card" href="/development/benchmarks">
+    <div class="card-label" style="color: #8B5CF6;">Benchmarks</div>
+    <div class="card-title">Benchmark Methodology</div>
+    <div class="card-desc">Criterion micro-benches, k6 load tests, and how the sub-millisecond latency numbers on this page are actually measured.</div>
   </a>
 </div>
 
@@ -154,6 +209,10 @@ features:
   grid-template-columns: repeat(3, 1fr);
 }
 
+.card-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .card-grid.infographics {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -197,6 +256,12 @@ features:
   color: var(--vp-c-text-2);
 }
 
+@media (max-width: 1024px) {
+  .card-grid.cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .home-sections {
     padding: 0 24px;
@@ -204,6 +269,7 @@ features:
   }
   .card-grid,
   .card-grid.cols-3,
+  .card-grid.cols-4,
   .card-grid.infographics {
     grid-template-columns: 1fr;
   }

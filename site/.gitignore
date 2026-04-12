@@ -2,10 +2,6 @@ node_modules/
 .vitepress/cache/
 .vitepress/dist/
 
-# Copied at build time from brand/horizon-brand-guidelines/
-public/brand/*.html
-public/brand/*.png
-public/brand/*.zip
-
-# Copied at build time from brand/infographics/html/
+# Copied/generated at build time from brand/ by scripts/prepare-brand.sh
+public/brand/
 public/infographics/*.html

@@ -16097,5 +16097,152 @@
     ],
     "tag_name": "",
     "entity_group_classes": []
+  },
+  {
+    "id": 220001,
+    "description": "DLP: mass sensitive data leak in request body (>=5 matches, any type)",
+    "risk": 90.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "op": "gte",
+        "match": 5
+      }
+    ]
+  },
+  {
+    "id": 220002,
+    "description": "DLP: API key appearing in request body (credentials belong in Authorization header, not body)",
+    "risk": 85.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "api_key",
+        "op": "gte",
+        "match": 1
+      }
+    ]
+  },
+  {
+    "id": 220003,
+    "description": "DLP: AWS access key in request body (credential exfiltration attempt)",
+    "risk": 95.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "aws_key",
+        "op": "gte",
+        "match": 1
+      }
+    ]
+  },
+  {
+    "id": 220004,
+    "description": "DLP: private key material in request body (high-confidence credential leak)",
+    "risk": 95.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "private_key",
+        "op": "gte",
+        "match": 1
+      }
+    ]
+  },
+  {
+    "id": 220005,
+    "description": "DLP: JWT in request body (JWTs belong in Authorization header, body placement indicates misuse)",
+    "risk": 70.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "jwt",
+        "op": "gte",
+        "match": 1
+      }
+    ]
+  },
+  {
+    "id": 220006,
+    "description": "DLP: mass SSN disclosure in request body (>=3 SSNs in one request)",
+    "risk": 80.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "ssn",
+        "op": "gte",
+        "match": 3
+      }
+    ]
+  },
+  {
+    "id": 220007,
+    "description": "DLP: mass credit card disclosure in request body (>=3 PANs in one request)",
+    "risk": 80.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "dlp_violation",
+        "field": "credit_card",
+        "op": "gte",
+        "match": 3
+      }
+    ]
+  },
+  {
+    "id": 220010,
+    "description": "Schema drift warning: learned-baseline deviation score >=10 (observability, non-blocking)",
+    "risk": 15.0,
+    "blocking": false,
+    "matches": [
+      {
+        "type": "schema_violation",
+        "op": "gte",
+        "match": 10
+      }
+    ]
+  },
+  {
+    "id": 220011,
+    "description": "Schema severe deviation: learned-baseline score >=25 (block — likely API shape attack)",
+    "risk": 60.0,
+    "blocking": true,
+    "matches": [
+      {
+        "type": "schema_violation",
+        "op": "gte",
+        "match": 25
+      }
+    ]
+  },
+  {
+    "id": 220020,
+    "description": "JA4: TLS 1.0 client detected (deprecated, suspicious in 2026 — non-blocking risk contribution)",
+    "risk": 10.0,
+    "blocking": false,
+    "matches": [
+      {
+        "type": "ja4",
+        "match": "t10"
+      }
+    ]
+  },
+  {
+    "id": 220021,
+    "description": "JA4: TLS 1.1 client detected (deprecated, suspicious in 2026 — non-blocking risk contribution)",
+    "risk": 10.0,
+    "blocking": false,
+    "matches": [
+      {
+        "type": "ja4",
+        "match": "t11"
+      }
+    ]
   }
 ]

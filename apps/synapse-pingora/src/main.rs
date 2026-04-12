@@ -6723,11 +6723,14 @@ key_path: "/etc/keys/example.key"
 
     /// Asserts the global SYNAPSE engine — which is initialized via
     /// create_synapse_engine during the Lazy static's first access — loads
-    /// at least 237 rules from the embedded production_rules.json. This is
-    /// the AC#4 cold-start guarantee that closes the "237 vs 7" docs gap:
-    /// without this, a regression in create_synapse_engine (missing
-    /// include_str, wrong filename, broken load_rules) could silently
-    /// degrade the binary back to a minimal ruleset at startup.
+    /// at least 248 rules from the embedded production_rules.json. TASK-45
+    /// restored 237 rules from archive; TASK-46 added 11 signal-correlation
+    /// rules using the new match kinds, for a 248-rule floor. This test is
+    /// the cold-start guarantee that closes the "237 vs 7" docs gap (TASK-45)
+    /// and extends it to cover the m-6 signal-correlation additions (TASK-46):
+    /// a regression in create_synapse_engine (missing include_str, wrong
+    /// filename, broken load_rules) or an accidental truncation of
+    /// production_rules.json would fail this test loudly at CI time.
     ///
     /// Must be #[serial] because other tests in this file and in
     /// tests/filter_chain_integration.rs mutate SYNAPSE via reload_rules.
@@ -6735,7 +6738,7 @@ key_path: "/etc/keys/example.key"
     /// production ruleset, the count would be wrong.
     #[test]
     #[serial]
-    fn test_synapse_cold_start_ships_237_production_rules() {
+    fn test_synapse_cold_start_ships_full_production_ruleset() {
         // Touch the Lazy static to force initialization. On a fresh process
         // this invokes create_synapse_engine, which prefers RULES_DATA (an
         // external rules.json file) and falls back to the embedded
@@ -6752,8 +6755,8 @@ key_path: "/etc/keys/example.key"
         let reloaded = DetectionEngine::reload_rules(production_rules.as_bytes())
             .expect("embedded production_rules.json must reload successfully");
         assert!(
-            reloaded >= 237,
-            "embedded production_rules.json must contain >= 237 rules, got {}",
+            reloaded >= 248,
+            "embedded production_rules.json must contain >= 248 rules, got {}",
             reloaded
         );
 

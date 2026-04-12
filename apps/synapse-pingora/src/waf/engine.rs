@@ -2914,13 +2914,15 @@ mod tests {
             .load_rules(PRODUCTION_RULES.as_bytes())
             .expect("production_rules.json must parse against the current Engine schema");
 
-        // Lower bound: the restored archive snapshot is 237. Using >= rather
-        // than == so the file can grow over time without breaking the test.
-        // An upper bound check (e.g. <= 1000) could guard against accidental
-        // duplication but would be noise until we actually start duplicating.
+        // Lower bound: TASK-45 restored 237 rules from archive; TASK-46
+        // added 11 more signal-correlation rules (220001-220021) for the
+        // ja4/dlp_violation/schema_violation match kinds, for a total
+        // floor of 248. Using >= rather than == so the file can grow
+        // over time without breaking the test — bump the floor when
+        // adding more rules.
         assert!(
-            count >= 237,
-            "expected >= 237 rules from production_rules.json, got {}",
+            count >= 248,
+            "expected >= 248 rules from production_rules.json, got {}",
             count
         );
         assert_eq!(
@@ -2944,6 +2946,331 @@ mod tests {
             rules.len(),
             ids.len()
         );
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // TASK-46 signal-correlation rule coverage.
+    //
+    // Each of the three tests below loads the FULL production_rules.json
+    // (via include_str!) into a local Engine and exercises the relevant
+    // signal match kind against the specific rule ids from the 220000
+    // block. This proves both that the rule is present in production
+    // AND that it fires on its intended trigger AND that a benign
+    // baseline request does not trigger it.
+    //
+    // Tests use a local Engine rather than the global SYNAPSE so they
+    // don't need #[serial] coordination with other tests that mutate
+    // the global engine state.
+    // ────────────────────────────────────────────────────────────────────
+
+    const PRODUCTION_RULES_FOR_SIGNAL_TESTS: &str =
+        include_str!("../production_rules.json");
+
+    /// Load the full production ruleset into a fresh local engine for
+    /// signal-correlation rule-fire tests. Used by the three test
+    /// functions below.
+    fn load_production_rules_engine() -> Engine {
+        let mut engine = Engine::empty();
+        engine
+            .load_rules(PRODUCTION_RULES_FOR_SIGNAL_TESTS.as_bytes())
+            .expect("production_rules.json must load");
+        engine
+    }
+
+    #[test]
+    fn test_signal_correlation_dlp_rules_fire_on_intended_triggers() {
+        let engine = load_production_rules_engine();
+
+        // Helper: run the deferred pass with a given match vec and return
+        // the matched_rules set. All dlp_violation rules are tagged
+        // deferred at load time, so we must use analyze_deferred_with_timeout
+        // rather than analyze() — body-phase would skip them entirely.
+        let run = |matches: &[DlpMatch]| -> Vec<u32> {
+            let req = Request {
+                method: "POST",
+                path: "/api/submit",
+                client_ip: "1.2.3.4",
+                dlp_matches: Some(matches),
+                ..Default::default()
+            };
+            engine
+                .analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT)
+                .matched_rules
+        };
+
+        // Helper: synthesize a DlpMatch with a specific data_type. The
+        // DLP match kind filters by data_type string, so the type is
+        // load-bearing — severity and masked_value are not.
+        fn typed_match(dt: SensitiveDataType) -> DlpMatch {
+            DlpMatch {
+                pattern_name: "test",
+                data_type: dt,
+                severity: PatternSeverity::High,
+                masked_value: "***".to_string(),
+                start: 0,
+                end: 3,
+                stream_offset: None,
+            }
+        }
+
+        // Rule 220001: mass DLP leak — any 5 matches of any type.
+        // Five SSN matches should trip both 220001 AND 220006 (mass SSN
+        // at >=3), so we check 220001 is among the matched rules but
+        // don't demand exclusivity.
+        let mass = vec![
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+        ];
+        let hits = run(&mass);
+        assert!(
+            hits.contains(&220001),
+            "220001 (mass DLP leak >=5) must fire on 5 matches, got {:?}",
+            hits
+        );
+
+        // Rule 220002: any api_key match in request body.
+        let hits = run(&[typed_match(SensitiveDataType::ApiKey)]);
+        assert!(
+            hits.contains(&220002),
+            "220002 (api_key in body) must fire on 1 api_key match"
+        );
+
+        // Rule 220003: any aws_key match.
+        let hits = run(&[typed_match(SensitiveDataType::AwsKey)]);
+        assert!(
+            hits.contains(&220003),
+            "220003 (aws_key in body) must fire on 1 aws_key match"
+        );
+
+        // Rule 220004: any private_key match.
+        let hits = run(&[typed_match(SensitiveDataType::PrivateKey)]);
+        assert!(
+            hits.contains(&220004),
+            "220004 (private_key in body) must fire on 1 private_key match"
+        );
+
+        // Rule 220005: any jwt match in body.
+        let hits = run(&[typed_match(SensitiveDataType::Jwt)]);
+        assert!(
+            hits.contains(&220005),
+            "220005 (jwt in body) must fire on 1 jwt match"
+        );
+
+        // Rule 220006: mass SSN (>=3). Exactly 3 SSNs should fire 220006
+        // but NOT 220001 (which needs >=5).
+        let three_ssn = vec![
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+            typed_match(SensitiveDataType::Ssn),
+        ];
+        let hits = run(&three_ssn);
+        assert!(
+            hits.contains(&220006),
+            "220006 (mass SSN >=3) must fire on 3 SSNs"
+        );
+        assert!(
+            !hits.contains(&220001),
+            "220001 must NOT fire on only 3 matches"
+        );
+
+        // Rule 220007: mass credit_card (>=3).
+        let three_cc = vec![
+            typed_match(SensitiveDataType::CreditCard),
+            typed_match(SensitiveDataType::CreditCard),
+            typed_match(SensitiveDataType::CreditCard),
+        ];
+        let hits = run(&three_cc);
+        assert!(
+            hits.contains(&220007),
+            "220007 (mass credit_card >=3) must fire on 3 PANs"
+        );
+
+        // Negative baseline: a single email match (plausibly legitimate)
+        // must not fire any of the DLP credential/PII rules.
+        let benign = vec![typed_match(SensitiveDataType::Email)];
+        let hits = run(&benign);
+        for rule_id in [220001, 220002, 220003, 220004, 220005, 220006, 220007] {
+            assert!(
+                !hits.contains(&rule_id),
+                "{} must NOT fire on a single benign email match; got {:?}",
+                rule_id,
+                hits
+            );
+        }
+    }
+
+    #[test]
+    fn test_signal_correlation_schema_rules_fire_on_intended_triggers() {
+        let engine = load_production_rules_engine();
+        let sample_violation = SchemaViolation::unexpected_field("/tampered_field");
+
+        // Helper: build a ValidationResult with an explicit score and
+        // run it through body-phase analyze. Schema rules are NOT
+        // deferred, so analyze() is correct here.
+        let run = |score: u32| -> (Action, Vec<u32>) {
+            let result = ValidationResult {
+                violations: vec![sample_violation.clone()],
+                total_score: score,
+            };
+            let req = Request {
+                method: "POST",
+                path: "/api/items",
+                client_ip: "1.2.3.4",
+                schema_result: Some(&result),
+                ..Default::default()
+            };
+            let verdict = engine.analyze(&req);
+            (verdict.action, verdict.matched_rules)
+        };
+
+        // Score 30: above both thresholds → both 220010 (>=10) and 220011
+        // (>=25) fire. Verdict must block because 220011 is blocking.
+        let (action, hits) = run(30);
+        assert_eq!(
+            action,
+            Action::Block,
+            "schema score 30 must produce a block via rule 220011"
+        );
+        assert!(hits.contains(&220010), "220010 must fire at score 30");
+        assert!(hits.contains(&220011), "220011 must fire at score 30");
+
+        // Score 15: above 220010 (>=10) but below 220011 (>=25). Only
+        // 220010 fires, and because 220010 is non-blocking the verdict
+        // is Allow. This is the warning-level observability case.
+        let (action, hits) = run(15);
+        assert_eq!(
+            action,
+            Action::Allow,
+            "schema score 15 must not block (220010 is non-blocking)"
+        );
+        assert!(
+            hits.contains(&220010),
+            "220010 must fire at score 15 (warning level)"
+        );
+        assert!(
+            !hits.contains(&220011),
+            "220011 must NOT fire at score 15 (below block threshold)"
+        );
+
+        // Score 5: below both thresholds, neither rule fires.
+        let (action, hits) = run(5);
+        assert_eq!(action, Action::Allow);
+        assert!(!hits.contains(&220010));
+        assert!(!hits.contains(&220011));
+
+        // No schema_result attached at all: neither rule fires regardless
+        // of method/path. This is the negative baseline.
+        let req = Request {
+            method: "POST",
+            path: "/api/items",
+            client_ip: "1.2.3.4",
+            ..Default::default()
+        };
+        let verdict = engine.analyze(&req);
+        assert!(!verdict.matched_rules.contains(&220010));
+        assert!(!verdict.matched_rules.contains(&220011));
+    }
+
+    #[test]
+    fn test_signal_correlation_ja4_rules_fire_on_deprecated_tls() {
+        let engine = load_production_rules_engine();
+
+        // Build a ClientFingerprint with a specific JA4 raw prefix. The
+        // JA4 match kind does a substring check, so only the first few
+        // characters matter — the rest of the raw string just needs to
+        // parse-trip without actually being a real JA4.
+        fn fingerprint_with_ja4_prefix(prefix: &str) -> ClientFingerprint {
+            ClientFingerprint {
+                ja4: Some(Ja4Fingerprint {
+                    raw: format!("{}d1516h2_000000000000_000000000000", prefix),
+                    protocol: Ja4Protocol::TCP,
+                    tls_version: 10,
+                    sni_type: Ja4SniType::Domain,
+                    cipher_count: 15,
+                    ext_count: 16,
+                    alpn: "h2".to_string(),
+                    cipher_hash: "000000000000".to_string(),
+                    ext_hash: "000000000000".to_string(),
+                }),
+                ja4h: Ja4hFingerprint {
+                    raw: "ge11cnrn_000000000000_000000000000".to_string(),
+                    method: "ge".to_string(),
+                    http_version: 11,
+                    has_cookie: true,
+                    has_referer: true,
+                    accept_lang: "en".to_string(),
+                    header_hash: "000000000000".to_string(),
+                    cookie_hash: "000000000000".to_string(),
+                },
+                combined_hash: "0000000000000000".to_string(),
+            }
+        }
+
+        let run = |prefix: &str| -> Vec<u32> {
+            let fp = fingerprint_with_ja4_prefix(prefix);
+            let req = Request {
+                method: "GET",
+                path: "/",
+                client_ip: "1.2.3.4",
+                fingerprint: Some(&fp),
+                ..Default::default()
+            };
+            engine.analyze(&req).matched_rules
+        };
+
+        // Rule 220020: TLS 1.0 (JA4 prefix "t10").
+        let hits = run("t10");
+        assert!(
+            hits.contains(&220020),
+            "220020 (TLS 1.0) must fire on 't10' JA4 prefix, got {:?}",
+            hits
+        );
+        assert!(
+            !hits.contains(&220021),
+            "220021 (TLS 1.1) must NOT fire on t10"
+        );
+
+        // Rule 220021: TLS 1.1 (JA4 prefix "t11").
+        let hits = run("t11");
+        assert!(
+            hits.contains(&220021),
+            "220021 (TLS 1.1) must fire on 't11' JA4 prefix, got {:?}",
+            hits
+        );
+        assert!(
+            !hits.contains(&220020),
+            "220020 (TLS 1.0) must NOT fire on t11"
+        );
+
+        // Negative baseline: modern TLS 1.3 client. Neither deprecated-TLS
+        // rule fires. This is the important false-positive guard: if
+        // 220020/220021 were over-broad, legitimate modern clients would
+        // accumulate risk score for no reason.
+        let hits = run("t13");
+        assert!(
+            !hits.contains(&220020),
+            "220020 must NOT fire on modern TLS 1.3 client"
+        );
+        assert!(
+            !hits.contains(&220021),
+            "220021 must NOT fire on modern TLS 1.3 client"
+        );
+
+        // Negative baseline: no fingerprint attached at all (e.g. plain
+        // HTTP traffic or JA4 disabled). Neither rule can fire because
+        // eval_ja4 returns false on a None fingerprint.
+        let req = Request {
+            method: "GET",
+            path: "/",
+            client_ip: "1.2.3.4",
+            ..Default::default()
+        };
+        let verdict = engine.analyze(&req);
+        assert!(!verdict.matched_rules.contains(&220020));
+        assert!(!verdict.matched_rules.contains(&220021));
     }
 
     #[test]

@@ -2609,7 +2609,7 @@ mod tests {
     use super::*;
     use crate::dlp::{DlpMatch, PatternSeverity, SensitiveDataType};
     use crate::fingerprint::{ClientFingerprint, Ja4Fingerprint, Ja4Protocol, Ja4SniType, Ja4hFingerprint};
-    use crate::profiler::{FieldType, SchemaViolation, ValidationResult};
+    use crate::profiler::{SchemaViolation, ValidationResult};
     use crate::waf::types::Header;
 
     fn sample_fingerprint(ja4_raw: &str, ja4h_raw: &str) -> ClientFingerprint {
@@ -2732,37 +2732,68 @@ mod tests {
 
     #[test]
     fn test_schema_violation_threshold() {
+        // This test pins the `schema_violation` match kind's threshold
+        // comparison semantics: the rule fires when total_score >= threshold
+        // and does NOT fire when total_score < threshold. It intentionally
+        // does NOT rely on ValidationResult::add() accumulating from per-
+        // violation severity defaults in schema_types.rs, because those
+        // defaults are expected to be tuned as the schema learner evolves.
+        // Instead we construct ValidationResult via struct literal with an
+        // explicit total_score, which isolates the test from severity-score
+        // changes and makes it fail for the right reason if the threshold
+        // comparison itself regresses.
+        //
+        // The threshold value (20) is arbitrary — only the above/below
+        // relationship to the two constructed scores (25 and 15) matters.
         let mut engine = Engine::empty();
         let rules = r#"[{
             "id": 9004,
             "description": "Block on severe schema deviation",
             "risk": 40.0,
             "blocking": true,
-            "matches": [{"type": "schema_violation", "op": "gte", "match": 10}]
+            "matches": [{"type": "schema_violation", "op": "gte", "match": 20}]
         }]"#;
         engine.load_rules(rules.as_bytes()).unwrap();
 
-        let mut result = ValidationResult::new();
-        result.add(SchemaViolation::unexpected_field("/foo"));
-        result.add(SchemaViolation::type_mismatch(
-            "/bar",
-            FieldType::String,
-            FieldType::Number,
-        ));
-        // Ensure we're above the 10-score threshold.
-        assert!(result.total_score >= 10);
+        // One sample violation so `is_valid()` returns false. Its own
+        // severity score is irrelevant because we override total_score
+        // directly via the struct literal below.
+        let sample_violation = SchemaViolation::unexpected_field("/foo");
 
-        let verdict = engine.analyze(&Request {
+        // Above the threshold: score 25, rule wants >= 20. Must fire.
+        let above = ValidationResult {
+            violations: vec![sample_violation.clone()],
+            total_score: 25,
+        };
+        let verdict_above = engine.analyze(&Request {
             method: "POST",
             path: "/api/users",
             client_ip: "1.2.3.4",
-            schema_result: Some(&result),
+            schema_result: Some(&above),
             ..Default::default()
         });
-        assert_eq!(verdict.action, Action::Block);
-        assert!(verdict.matched_rules.contains(&9004));
+        assert_eq!(verdict_above.action, Action::Block);
+        assert!(verdict_above.matched_rules.contains(&9004));
 
-        // Same rule without a schema result attached should not fire.
+        // Below the threshold: score 15, rule wants >= 20. Must NOT fire.
+        // This is the negative assertion the original test was missing —
+        // the original only checked "above threshold" and "no schema_result",
+        // neither of which actually exercises the threshold comparison.
+        let below = ValidationResult {
+            violations: vec![sample_violation.clone()],
+            total_score: 15,
+        };
+        let verdict_below = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&below),
+            ..Default::default()
+        });
+        assert_eq!(verdict_below.action, Action::Allow);
+        assert!(!verdict_below.matched_rules.contains(&9004));
+
+        // No schema_result attached: the match kind returns false early.
         let verdict_empty = engine.analyze(&Request {
             method: "POST",
             path: "/api/users",

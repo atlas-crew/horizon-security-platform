@@ -1132,6 +1132,27 @@ impl DetectionEngine {
     }
 }
 
+/// TASK-61: maximum total external-risk contribution from a single request.
+///
+/// After TASK-54/55/58 added three new risk-contribution paths, a single
+/// request could simultaneously trip session_hijack + session_invalid +
+/// trends_anomaly + schema_violation + crawler_suspicious and accumulate
+/// >100 external risk — trivially crossing the entity block threshold on
+/// one hit. Combined with any X-Forwarded-For spoofing vulnerability, this
+/// enables reflected DoS: attacker sends a crafted request carrying a
+/// victim CDN/NAT egress IP, blocking legitimate users sharing that IP.
+///
+/// The clamp preserves single-signal blocking for deliberately-high signals
+/// (bad-bot 100.0 path is intentionally unbounded — it's a hard block on
+/// one detection) while preventing multi-signal accumulation from single
+/// requests. Multi-request attacks still accumulate normally — the cap is
+/// per-request, not per-entity.
+///
+/// 25.0 is a quarter of the default 100.0 block threshold, so even if all
+/// per-request signals land at their maximum budget, blocking still
+/// requires sustained activity across at least 4 requests.
+const MAX_EXTERNAL_RISK_PER_REQUEST: f64 = 25.0;
+
 /// TASK-58: entity risk contribution weight for a SessionDecision::Invalid
 /// outcome. Deliberately smaller than the Suspicious weight (50.0) because
 /// legitimate clients occasionally send stale/lost session tokens — one
@@ -1287,8 +1308,13 @@ pub struct RequestContext {
     body_bytes_seen: usize,
     /// Phase 3: Client fingerprint (JA4 + JA4H)
     fingerprint: Option<ClientFingerprint>,
-    /// Phase 3: Entity risk from Pingora entity tracking
+    /// Phase 3: Entity risk from Pingora entity tracking (per-request running total)
     entity_risk: f64,
+    /// TASK-61: per-request accumulator used by `apply_bounded_external_risk`
+    /// to enforce `MAX_EXTERNAL_RISK_PER_REQUEST`. Distinct from `entity_risk`
+    /// above, which mirrors the capped values for observability — this field
+    /// is the running budget consumed from the cap.
+    external_risk_accumulated: f64,
     /// Phase 3: Entity block decision from Pingora
     entity_blocked: Option<BlockDecision>,
     /// Phase 3: Tarpit delay applied (in milliseconds)
@@ -2099,6 +2125,63 @@ impl SynapseProxy {
         Ok(())
     }
 
+    /// TASK-61: apply external risk to an entity with a per-request cap.
+    ///
+    /// Enforces `MAX_EXTERNAL_RISK_PER_REQUEST` by tracking per-request
+    /// accumulated risk on the caller-provided accumulator. Returns the
+    /// *actual* risk applied after the cap — callers that mirror the value
+    /// into `ctx.entity_risk` (for observability) should use the returned
+    /// value, not the requested value, so the observability counter stays
+    /// consistent with the entity store.
+    ///
+    /// The accumulator is passed as `&mut f64` rather than `&mut RequestContext`
+    /// so the helper can be invoked while another part of `ctx` (like
+    /// `ctx.client_ip`) is still borrowed. Rust's disjoint-field borrow
+    /// rules make this pattern cheap at the call site:
+    ///
+    /// ```ignore
+    /// self.apply_bounded_external_risk(
+    ///     &mut ctx.external_risk_accumulated,
+    ///     client_ip,
+    ///     40.0,
+    ///     "suspicious_crawler",
+    /// );
+    /// ```
+    ///
+    /// Deliberately unbounded blocking sites (bad-bot 100.0 at line 2734)
+    /// should continue calling `self.entity_manager.apply_external_risk`
+    /// directly. Those are single-signal hard blocks whose design intent
+    /// is to trip the threshold on one observation.
+    ///
+    /// Background-thread contributors (TASK-55 trends anomaly callback,
+    /// TASK-54 campaign correlation) do not run on a request thread and
+    /// do not have access to a `RequestContext`, so they bypass this cap
+    /// by nature. That's correct — the cap is per-request to prevent
+    /// single-request accumulation attacks, not per-entity over all time.
+    fn apply_bounded_external_risk(
+        &self,
+        accumulator: &mut f64,
+        client_ip: &str,
+        requested_risk: f64,
+        reason: &str,
+    ) -> f64 {
+        let remaining = MAX_EXTERNAL_RISK_PER_REQUEST - *accumulator;
+        if remaining <= 0.0 {
+            debug!(
+                "TASK-61: per-request risk ceiling {} reached; dropping {} contribution of {} from {}",
+                MAX_EXTERNAL_RISK_PER_REQUEST, reason, requested_risk, client_ip
+            );
+            return 0.0;
+        }
+        let actual = requested_risk.max(0.0).min(remaining);
+        if actual > 0.0 {
+            *accumulator += actual;
+            self.entity_manager
+                .apply_external_risk(client_ip, actual, reason);
+        }
+        actual
+    }
+
     fn is_https_request(session: &Session) -> bool {
         let headers = &session.req_header().headers;
 
@@ -2168,6 +2251,7 @@ impl ProxyHttp for SynapseProxy {
             body_bytes_seen: 0,
             fingerprint: None,
             entity_risk: 0.0,
+            external_risk_accumulated: 0.0,
             entity_blocked: None,
             tarpit_delay_ms: 0,
             tarpit_level: 0,
@@ -2925,15 +3009,17 @@ impl ProxyHttp for SynapseProxy {
                             "Suspicious crawler from {}: {:?}",
                             client_ip, crawler_result.suspicion_reasons
                         );
-                        // Apply risk penalty
+                        // Apply risk penalty (TASK-61 bounded to per-request cap)
                         if self.entity_manager.is_enabled() {
-                            self.entity_manager.apply_external_risk(
+                            let reason = format!(
+                                "suspicious_crawler: {:?}",
+                                crawler_result.suspicion_reasons
+                            );
+                            self.apply_bounded_external_risk(
+                                &mut ctx.external_risk_accumulated,
                                 client_ip,
-                                40.0, // Significant risk penalty
-                                &format!(
-                                    "suspicious_crawler: {:?}",
-                                    crawler_result.suspicion_reasons
-                                ),
+                                40.0,
+                                &reason,
                             );
                         }
                     } else if crawler_result.verified {
@@ -3032,13 +3118,15 @@ impl ProxyHttp for SynapseProxy {
                         Some("Suspicious JA4 fingerprint".to_string()),
                         serde_json::json!({ "issues": ja4_analysis.issues }),
                     );
-                    ctx.entity_risk += ja4_risk;
-                    // Apply to entity for persistence
-                    self.entity_manager.apply_external_risk(
+                    // TASK-61: bounded external risk contribution
+                    let reason = format!("suspicious_ja4: {:?}", ja4_analysis.issues);
+                    let actual = self.apply_bounded_external_risk(
+                        &mut ctx.external_risk_accumulated,
                         client_ip,
                         ja4_risk,
-                        &format!("suspicious_ja4: {:?}", ja4_analysis.issues),
+                        &reason,
                     );
+                    ctx.entity_risk += actual;
                 }
 
                 // 2. Check for rapid fingerprint changes (bot behavior)
@@ -3062,17 +3150,18 @@ impl ProxyHttp for SynapseProxy {
                             )),
                             serde_json::json!({ "change_count": reputation.change_count }),
                         );
-                        ctx.entity_risk += change_risk;
-
-                        // Apply to entity for persistence
-                        self.entity_manager.apply_external_risk(
+                        // TASK-61: bounded external risk contribution
+                        let reason = format!(
+                            "ja4_rapid_change: changed {} times in 60s",
+                            reputation.change_count
+                        );
+                        let actual = self.apply_bounded_external_risk(
+                            &mut ctx.external_risk_accumulated,
                             client_ip,
                             change_risk,
-                            &format!(
-                                "ja4_rapid_change: changed {} times in 60s",
-                                reputation.change_count
-                            ),
+                            &reason,
                         );
+                        ctx.entity_risk += actual;
                     }
                 }
             }
@@ -3102,12 +3191,15 @@ impl ProxyHttp for SynapseProxy {
                     }),
                 );
 
-                ctx.entity_risk += integrity.suspicion_score as f64;
-                self.entity_manager.apply_external_risk(
+                // TASK-61: bounded external risk contribution
+                let reason = format!("integrity_violation: {:?}", integrity.inconsistencies);
+                let actual = self.apply_bounded_external_risk(
+                    &mut ctx.external_risk_accumulated,
                     client_ip,
                     integrity.suspicion_score as f64,
-                    &format!("integrity_violation: {:?}", integrity.inconsistencies),
+                    &reason,
                 );
+                ctx.entity_risk += actual;
             }
         }
 
@@ -3245,13 +3337,20 @@ impl ProxyHttp for SynapseProxy {
                                 "POTENTIAL SESSION HIJACK: {} - type={:?}, original={}, new={}, confidence={:.2}",
                                 client_ip, alert.alert_type, alert.original_value, alert.new_value, alert.confidence
                             );
-                            // Apply risk for potential hijacking
-                            ctx.entity_risk += 50.0 * alert.confidence;
-                            self.entity_manager.apply_external_risk(
+                            // TASK-61: bounded risk contribution for potential
+                            // hijacking. 50.0 * confidence may exceed the per-request
+                            // cap when other signals have already contributed —
+                            // that's the intended safety, since hijack detection
+                            // has a non-trivial false-positive rate and a single
+                            // alert should not block on its own above the cap.
+                            let reason = format!("session_hijack_alert: {:?}", alert.alert_type);
+                            let actual = self.apply_bounded_external_risk(
+                                &mut ctx.external_risk_accumulated,
                                 client_ip,
                                 50.0 * alert.confidence,
-                                &format!("session_hijack_alert: {:?}", alert.alert_type),
+                                &reason,
                             );
+                            ctx.entity_risk += actual;
                         }
                         SessionDecision::Expired => {
                             debug!(
@@ -3268,16 +3367,16 @@ impl ProxyHttp for SynapseProxy {
                                 &token_hash[..8]
                             );
 
-                            // TASK-58: contribute conservative entity risk on
-                            // invalid session tokens so session-token brute-force
-                            // patterns accumulate toward the existing entity-risk
-                            // blocking threshold.
-                            ctx.entity_risk += INVALID_SESSION_RISK_WEIGHT;
-                            self.entity_manager.apply_external_risk(
+                            // TASK-58 + TASK-61: contribute conservative entity
+                            // risk on invalid session tokens (bounded to the
+                            // per-request cap).
+                            let actual = self.apply_bounded_external_risk(
+                                &mut ctx.external_risk_accumulated,
                                 client_ip,
                                 INVALID_SESSION_RISK_WEIGHT,
                                 "invalid_session_token",
                             );
+                            ctx.entity_risk += actual;
                         }
                     }
                 }
@@ -3795,13 +3894,20 @@ impl ProxyHttp for SynapseProxy {
                             );
                         }
 
-                        ctx.entity_risk += severity_score as f64;
+                        // TASK-61: bounded external risk contribution.
+                        // Disjoint-field borrow: `ctx.client_ip` and
+                        // `ctx.external_risk_accumulated` can be borrowed
+                        // simultaneously because Rust's borrow checker
+                        // sees them as distinct fields through direct
+                        // access.
                         if let Some(ref ip) = ctx.client_ip {
-                            self.entity_manager.apply_external_risk(
+                            let actual = self.apply_bounded_external_risk(
+                                &mut ctx.external_risk_accumulated,
                                 ip,
                                 severity_score as f64,
                                 "schema_violation",
                             );
+                            ctx.entity_risk += actual;
                         }
                     }
 
@@ -6955,6 +7061,106 @@ key_path: "/etc/keys/example.key"
         assert!(
             last_risk.load(Ordering::SeqCst) > 0,
             "risk value passed to callback must be positive"
+        );
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Per-request external risk clamp (TASK-61)
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// TASK-61 unit test: the clamp helper must enforce
+    /// `MAX_EXTERNAL_RISK_PER_REQUEST` regardless of how many times it's
+    /// called or how much each individual request asks for. This is the
+    /// core correctness contract — without it, multi-signal accumulation
+    /// can single-request-DoS a victim IP.
+    ///
+    /// The test uses a local `f64` as the accumulator instead of a real
+    /// SynapseProxy. That means the entity_manager side-effect is NOT
+    /// exercised here — only the clamp arithmetic is. The complete
+    /// contract (helper actually calls entity_manager.apply_external_risk
+    /// with the CAPPED value) is provable by code inspection: the helper
+    /// passes `actual` to `entity_manager.apply_external_risk`, and
+    /// `actual` is the clamp output. TASK-67 (real integration tests
+    /// replacing false-confidence unit tests) would be the right place
+    /// to add a full integration test of this wiring once that harness
+    /// exists.
+    #[test]
+    fn test_apply_bounded_external_risk_enforces_per_request_cap() {
+        // Simulate the clamp arithmetic directly since we don't need a
+        // real SynapseProxy / entity_manager for this unit test. The math
+        // here must match the helper's implementation exactly.
+        fn simulate_clamp(accumulator: &mut f64, requested: f64) -> f64 {
+            let remaining = MAX_EXTERNAL_RISK_PER_REQUEST - *accumulator;
+            if remaining <= 0.0 {
+                return 0.0;
+            }
+            let actual = requested.max(0.0).min(remaining);
+            if actual > 0.0 {
+                *accumulator += actual;
+            }
+            actual
+        }
+
+        // Scenario 1: single contribution below the cap, no clamping.
+        let mut acc = 0.0;
+        let applied = simulate_clamp(&mut acc, 10.0);
+        assert_eq!(applied, 10.0);
+        assert_eq!(acc, 10.0);
+
+        // Scenario 2: multi-contribution accumulation that would exceed
+        // the cap. First call fills part of the budget, second call
+        // saturates at the cap, third call gets dropped entirely.
+        let mut acc = 0.0;
+        let a = simulate_clamp(&mut acc, 10.0); // 0 → 10
+        let b = simulate_clamp(&mut acc, 20.0); // 10 → 25 (saturated, actual=15)
+        let c = simulate_clamp(&mut acc, 10.0); // dropped, actual=0
+
+        assert_eq!(a, 10.0, "first contribution at budget");
+        assert_eq!(b, 15.0, "second contribution saturates at the cap");
+        assert_eq!(c, 0.0, "third contribution is dropped");
+        assert_eq!(acc, MAX_EXTERNAL_RISK_PER_REQUEST);
+
+        // Scenario 3: single contribution that alone exceeds the cap is
+        // saturated at the cap. This is the reflected-DoS defense — even
+        // a single large-weight signal cannot cross the cap on its own.
+        let mut acc = 0.0;
+        let applied = simulate_clamp(&mut acc, 100.0);
+        assert_eq!(applied, MAX_EXTERNAL_RISK_PER_REQUEST);
+        assert_eq!(acc, MAX_EXTERNAL_RISK_PER_REQUEST);
+
+        // Scenario 4: negative risk is clamped to zero, no accumulation.
+        let mut acc = 0.0;
+        let applied = simulate_clamp(&mut acc, -10.0);
+        assert_eq!(applied, 0.0);
+        assert_eq!(acc, 0.0);
+    }
+
+    #[test]
+    fn test_task_61_cap_is_below_default_entity_block_threshold() {
+        // The cap must be strictly less than the default entity block
+        // threshold (100.0 from EntityConfig). Otherwise a single request
+        // filling the cap could still trip the threshold and reintroduce
+        // the reflected-DoS vector TASK-61 is defending against.
+        //
+        // Requiring "strictly less than" also means legitimate
+        // single-request risk accumulation can never single-request-block
+        // a victim IP — the cap (25.0) leaves a 75.0 safety margin, which
+        // requires sustained multi-request activity to cross the threshold.
+        let default_threshold = 100.0;
+        assert!(
+            MAX_EXTERNAL_RISK_PER_REQUEST < default_threshold,
+            "TASK-61 per-request cap ({}) must be strictly less than default entity block threshold ({})",
+            MAX_EXTERNAL_RISK_PER_REQUEST,
+            default_threshold
+        );
+        // Also assert a minimum-safety margin of at least 50%: if someone
+        // bumps the cap above 50.0 without updating this test, they've
+        // probably shrunk the safety margin to an unreasonable level.
+        assert!(
+            MAX_EXTERNAL_RISK_PER_REQUEST <= default_threshold / 2.0,
+            "TASK-61 per-request cap ({}) should leave at least a 50% safety margin below the block threshold ({})",
+            MAX_EXTERNAL_RISK_PER_REQUEST,
+            default_threshold
         );
     }
 

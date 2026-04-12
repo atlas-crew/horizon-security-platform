@@ -2969,6 +2969,118 @@ mod tests {
     }
 
     #[test]
+    fn test_condition_is_deferred_walks_nested_boolean_operators() {
+        // TASK-38 coverage: condition_is_deferred recursively inspects
+        // match_value sub-conditions and boolean operand arrays. Before
+        // this test, only a leaf-level dlp_violation was exercised by
+        // test_dlp_violation_is_deferred_not_body_phase — nested patterns
+        // were unverified, so a future refactor of the walker could
+        // silently break rule tagging.
+        //
+        // This test loads four rules in a single batch and inspects
+        // engine.deferred_rule_id_set directly. Three positive cases
+        // wrap dlp_violation in and/or/not; one negative case uses only
+        // non-deferred match kinds inside a boolean wrapper.
+        let mut engine = Engine::empty();
+        let rules = r#"[
+            {
+                "id": 9020,
+                "description": "dlp_violation under and wrapper",
+                "risk": 10.0,
+                "blocking": true,
+                "matches": [
+                    {
+                        "type": "boolean",
+                        "op": "and",
+                        "match": [
+                            {"type": "method", "match": "POST"},
+                            {"type": "dlp_violation", "match": 1}
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": 9021,
+                "description": "dlp_violation under or wrapper",
+                "risk": 10.0,
+                "blocking": true,
+                "matches": [
+                    {
+                        "type": "boolean",
+                        "op": "or",
+                        "match": [
+                            {"type": "dlp_violation", "match": 5},
+                            {"type": "uri", "match": {"type": "contains", "match": "/secret"}}
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": 9022,
+                "description": "dlp_violation under not wrapper",
+                "risk": 10.0,
+                "blocking": true,
+                "matches": [
+                    {
+                        "type": "boolean",
+                        "op": "not",
+                        "match": {"type": "dlp_violation"}
+                    }
+                ]
+            },
+            {
+                "id": 9023,
+                "description": "Non-deferred rule with boolean wrapper — negative case",
+                "risk": 10.0,
+                "blocking": true,
+                "matches": [
+                    {
+                        "type": "boolean",
+                        "op": "and",
+                        "match": [
+                            {"type": "uri", "match": {"type": "contains", "match": "/admin"}},
+                            {"type": "method", "match": "DELETE"}
+                        ]
+                    }
+                ]
+            }
+        ]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // The three dlp_violation-referencing rules must be tagged deferred
+        // regardless of whether the reference is at the leaf, inside an
+        // `and` array, inside an `or` array, or wrapped in a `not`.
+        assert!(
+            engine.deferred_rule_id_set.contains(&9020),
+            "dlp_violation under `and` must be tagged deferred"
+        );
+        assert!(
+            engine.deferred_rule_id_set.contains(&9021),
+            "dlp_violation under `or` must be tagged deferred"
+        );
+        assert!(
+            engine.deferred_rule_id_set.contains(&9022),
+            "dlp_violation under `not` must be tagged deferred"
+        );
+
+        // The pure uri+method rule must NOT be tagged — this is the
+        // negative assertion that guards against over-tagging. If the
+        // walker accidentally flagged rules containing boolean wrappers
+        // as deferred, this assertion catches it.
+        assert!(
+            !engine.deferred_rule_id_set.contains(&9023),
+            "non-deferred boolean-wrapped rule must NOT be tagged deferred"
+        );
+
+        // Exactly three of the four rules should be in the deferred set.
+        assert_eq!(
+            engine.deferred_rule_indices.len(),
+            3,
+            "expected exactly 3 deferred rules (ids 9020, 9021, 9022)"
+        );
+    }
+
+    #[test]
     fn test_load_rules() {
         let mut engine = Engine::empty();
         let rules = r#"[

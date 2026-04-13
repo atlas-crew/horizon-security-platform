@@ -3013,10 +3013,13 @@ mod tests {
             }
         }
 
-        // Rule 220001: mass DLP leak — any 5 matches of any type.
-        // Five SSN matches should trip both 220001 AND 220006 (mass SSN
-        // at >=3), so we check 220001 is among the matched rules but
-        // don't demand exclusivity.
+        // Rule 220001: mass DLP leak — any 5 matches of any type. Non-blocking
+        // since TASK-63 (was blocking=true risk=90, downgraded to
+        // blocking=false risk=40 to avoid false-positiving legitimate
+        // bulk-import endpoints). The rule still fires and appears in
+        // matched_rules, so this assertion is unchanged. The separate
+        // test `test_rule_220001_mass_dlp_is_non_blocking_after_task_63`
+        // pins the non-blocking behavior specifically.
         let mass = vec![
             typed_match(SensitiveDataType::Ssn),
             typed_match(SensitiveDataType::Ssn),
@@ -3105,6 +3108,128 @@ mod tests {
                 hits
             );
         }
+    }
+
+    /// TASK-63: rule 220001 (mass DLP any-type >=5) was originally blocking=true
+    /// with risk=90, which would 403 every legitimate bulk-import endpoint
+    /// — CSV roster upload (HR), SCIM user provisioning, CRM contact import,
+    /// healthcare patient ingest, payroll export. Downgraded to non-blocking
+    /// risk contribution (blocking=false, risk=40) so the detection still
+    /// surfaces in entity risk and observability but does not produce a hard
+    /// 403 on its own.
+    ///
+    /// Like TASK-62's JWT rule, this test pins the non-blocking behavior
+    /// against a fabricated request with exactly 5 DLP matches (the trigger
+    /// threshold). The existing
+    /// `test_signal_correlation_dlp_rules_fire_on_intended_triggers` already
+    /// asserts 220001 appears in `matched_rules` on mass-DLP input, but
+    /// doesn't verify the verdict action — this test closes that gap.
+    ///
+    /// If a future refactor re-enables blocking on 220001 without strengthening
+    /// the calibration (e.g., raising threshold to >=25, adding path
+    /// negation, or requiring unauthenticated context), this test fails with
+    /// a clear pointer to the bulk-import false-positive concern.
+    #[test]
+    fn test_rule_220001_mass_dlp_is_non_blocking_after_task_63() {
+        let engine = load_production_rules_engine();
+
+        // Fabricate 5 SSN DLP matches — exactly at the rule 220001 threshold.
+        // The same input also trips 220006 (mass SSN >=3), so we can't
+        // assert "only 220001 fires" — we assert the overall verdict.
+        let mass_matches: Vec<DlpMatch> = (0..5)
+            .map(|_| DlpMatch {
+                pattern_name: "test",
+                data_type: SensitiveDataType::Ssn,
+                severity: PatternSeverity::High,
+                masked_value: "***".to_string(),
+                start: 0,
+                end: 3,
+                stream_offset: None,
+            })
+            .collect();
+        let req = Request {
+            method: "POST",
+            // Realistic bulk-import endpoint path. Rule 220001 isn't
+            // path-scoped, but using this path documents the FP scenario
+            // the downgrade protects against.
+            path: "/api/users/bulk",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&mass_matches),
+            ..Default::default()
+        };
+
+        let verdict = engine.analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT);
+
+        // The rule must still fire — detection surfaces for observability
+        // and risk accumulation.
+        assert!(
+            verdict.matched_rules.contains(&220001),
+            "TASK-63: rule 220001 must still fire on 5 DLP matches as a non-blocking signal; matched_rules={:?}",
+            verdict.matched_rules
+        );
+
+        // Note: 220006 (mass SSN >=3) is STILL blocking at risk 80. Five
+        // SSNs trip both 220001 and 220006 simultaneously. 220006's block
+        // is the expected behavior for that specific data type threshold.
+        // If we want the 5-SSN case to be Allow, we'd need to downgrade
+        // 220006 too — but SSNs are more unambiguously PII than "any type",
+        // so 220006 staying blocking is defensible.
+        //
+        // For THIS test, we verify 220001's contribution is non-blocking
+        // by constructing a scenario where only 220001 would block (if it
+        // were blocking). Easiest way: use 5 matches of a type that doesn't
+        // trip any other blocking rule. api_key at count 5 trips 220002
+        // (blocking at count 1), so that won't work either. Let me use
+        // Email — 5 email matches trip 220001 (>=5 any type) but Email
+        // isn't called out by any other blocking rule.
+        let email_matches: Vec<DlpMatch> = (0..5)
+            .map(|_| DlpMatch {
+                pattern_name: "test",
+                data_type: SensitiveDataType::Email,
+                severity: PatternSeverity::High,
+                masked_value: "***".to_string(),
+                start: 0,
+                end: 3,
+                stream_offset: None,
+            })
+            .collect();
+        let req_emails = Request {
+            method: "POST",
+            path: "/api/users/bulk",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&email_matches),
+            ..Default::default()
+        };
+
+        let verdict_emails = engine.analyze_deferred_with_timeout(&req_emails, DEFAULT_EVAL_TIMEOUT);
+
+        // 220001 should fire (5 matches >= 5 threshold, any type).
+        assert!(
+            verdict_emails.matched_rules.contains(&220001),
+            "TASK-63: rule 220001 must fire on 5 email matches"
+        );
+
+        // And the verdict must be Allow, not Block. This is the TASK-63
+        // core guarantee: mass-DLP alone (no type-specific rule fires)
+        // does not block. If any future refactor re-enables blocking on
+        // 220001, this assertion fails with a clear pointer to the bulk-
+        // import false-positive concern.
+        assert_eq!(
+            verdict_emails.action,
+            Action::Allow,
+            "TASK-63: rule 220001 (mass DLP any-type >=5) must be non-blocking. \
+             If it blocks, legitimate bulk-import endpoints (CSV, SCIM, CRM, \
+             HRIS, payroll) will 403 on business-as-usual operations. See \
+             TASK-63 for the list of affected flows and mitigation options."
+        );
+
+        // Risk score should be at least 40 (the TASK-63 calibration).
+        assert!(
+            verdict_emails.risk_score >= 40,
+            "TASK-63: rule 220001 risk contribution must be at least 40 \
+             (current value). Got risk_score={}.",
+            verdict_emails.risk_score
+        );
     }
 
     /// TASK-62: rule 220005 (JWT in body) was originally blocking=true with

@@ -16100,9 +16100,9 @@
   },
   {
     "id": 220001,
-    "description": "DLP: mass sensitive data leak in request body (>=5 matches, any type)",
-    "risk": 90.0,
-    "blocking": true,
+    "description": "DLP: mass sensitive data in request body (>=5 matches, any type) — non-blocking signal since TASK-63 (legitimate bulk-import endpoints routinely trip this); contributes to entity risk for correlation, does not block outright",
+    "risk": 40.0,
+    "blocking": false,
     "matches": [
       {
         "type": "dlp_violation",

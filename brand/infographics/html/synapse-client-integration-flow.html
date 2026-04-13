@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synapse Client Integration — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+@page{size:1200px 2050px;margin:0;}
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;flex:1;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* Step columns (numbered) */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;}
+.step{background:var(--card);border:1px solid var(--border);padding:18px;position:relative;}
+.step .num{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:28px;color:var(--blue);}
+.step .nm{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:13px;color:var(--text);margin-top:4px;}
+.step .ds{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;margin-top:8px;}
+.step pre{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--cyan);line-height:1.6;white-space:pre;margin-top:10px;background:var(--subtle);padding:8px 10px;border-left:2px solid var(--cyan);overflow-x:auto;}
+.step.a{border-left:2px solid var(--blue);}
+.step.b{border-left:2px solid var(--violet);} .step.b .num{color:var(--violet);}
+.step.c{border-left:2px solid var(--cyan);} .step.c .num{color:var(--cyan);}
+.step.d{border-left:2px solid var(--green);} .step.d .num{color:var(--green);}
+
+/* Command grid */
+.cmds{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px;}
+.cmd{background:var(--card);border:1px solid var(--border);padding:12px 14px;}
+.cmd .h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:0.5px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;}
+.cmd pre{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text);line-height:1.6;white-space:pre;}
+.cmd .op{color:var(--violet);}
+.cmd .flag{color:var(--amber);}
+.cmd .comment{color:var(--muted);}
+.cmd.g1{border-left:2px solid var(--blue);}
+.cmd.g2{border-left:2px solid var(--violet);}
+.cmd.g3{border-left:2px solid var(--coral);}
+
+/* Programmatic code panel */
+.code-panel{margin-top:20px;background:var(--card);border:1px solid var(--border);border-left:2px solid var(--cyan);padding:20px;}
+.code-panel .h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--cyan);margin-bottom:12px;}
+.code-panel pre{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;line-height:1.65;white-space:pre;color:var(--text);}
+.code-panel .k{color:var(--violet);}
+.code-panel .s{color:var(--green);}
+.code-panel .fn{color:var(--blue);}
+.code-panel .c{color:var(--muted);}
+
+/* Env var table */
+.env{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:20px;}
+.env-row{display:grid;grid-template-columns:180px 160px 1fr;gap:14px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border);}
+.env-row:last-child{border-bottom:none;}
+.env-row .v{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--amber);}
+.env-row .f{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;color:var(--text-sec);}
+.env-row .dsc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;}
+.env-head{display:grid;grid-template-columns:180px 160px 1fr;gap:14px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--border);}
+.env-head span{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div class="page">
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Synapse Client Integration</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:760px;">Install the CLI. Point it at a running Synapse. Inspect rules, evaluate requests, manage blocks — from the terminal or a TypeScript program. Four steps from npm install to first managed block.</p>
+
+<!-- HERO STATS -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">4</div><div class="label t-label">Onboarding Steps</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric">20+</div><div class="label t-label">CLI Commands</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--cyan);"></div><div class="value t-metric">TS</div><div class="label t-label">Typed Client</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">Node 18+</div><div class="label t-label">Runtime</div></div>
+</div>
+
+<!-- ONBOARDING STEPS -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Four-Step Onboarding</span><div class="section-line"></div></div>
+<div class="steps">
+<div class="step a">
+<div class="num">01</div>
+<div class="nm">Install</div>
+<div class="ds">Grab the CLI + typed TypeScript client from npm.</div>
+<pre>$ npm install -g \
+  @atlascrew/synapse-client</pre>
+</div>
+<div class="step b">
+<div class="num">02</div>
+<div class="nm">Point</div>
+<div class="ds">Set the server URL. Optional JSON output, debug, and timeout.</div>
+<pre>$ export SYNAPSE_URL=\
+  https://synapse.example.com</pre>
+</div>
+<div class="step c">
+<div class="num">03</div>
+<div class="nm">Verify</div>
+<div class="ds">First command: health check. Expect 200 &amp; uptime.</div>
+<pre>$ synapse health
+{"ok":true}</pre>
+</div>
+<div class="step d">
+<div class="num">04</div>
+<div class="nm">Operate</div>
+<div class="ds">Manage rules, inspect blocks, evaluate live traffic shapes.</div>
+<pre>$ synapse status --json
+$ synapse evaluate GET /api/</pre>
+</div>
+</div></div>
+
+<!-- COMMAND SURFACE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Command Surface — What You Can Do</span><div class="section-line"></div></div>
+<div class="cmds">
+<div class="cmd g1">
+<div class="h">Health &amp; Status</div>
+<pre><span class="op">synapse</span> health
+<span class="op">synapse</span> status
+<span class="op">synapse</span> metrics <span class="comment"># prom</span></pre>
+</div>
+<div class="cmd g1">
+<div class="h">Entity Management</div>
+<pre><span class="op">synapse</span> entities
+<span class="op">synapse</span> blocks
+<span class="op">synapse</span> release &lt;ip&gt;
+<span class="op">synapse</span> release-all</pre>
+</div>
+<div class="cmd g2">
+<div class="h">Rule Management</div>
+<pre><span class="op">synapse</span> rules
+<span class="op">synapse</span> rule-add &lt;json&gt; &lt;ttl&gt;
+<span class="op">synapse</span> rule-remove &lt;id&gt;
+<span class="op">synapse</span> reload</pre>
+</div>
+<div class="cmd g2">
+<div class="h">Rule Evaluation</div>
+<pre><span class="op">synapse</span> evaluate GET \
+  <span class="flag">"/api/users?id=1"</span>
+<span class="comment"># dry-run against loaded rules</span></pre>
+</div>
+<div class="cmd g3">
+<div class="h">Configuration</div>
+<pre><span class="op">synapse</span> config
+<span class="op">synapse</span> config-set \
+  <span class="flag">risk_decay=15</span></pre>
+</div>
+<div class="cmd g3">
+<div class="h">Global Flags</div>
+<pre><span class="flag">--json</span>    <span class="comment"># JSON output</span>
+<span class="flag">--debug</span>   <span class="comment"># verbose</span>
+<span class="flag">--timeout</span> <span class="comment"># ms</span>
+<span class="flag">--url</span>     <span class="comment"># override</span></pre>
+</div>
+</div></div>
+
+<!-- ENVIRONMENT -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--amber);"></div><span class="t-label" style="color:var(--amber);">Environment Configuration</span><div class="section-line"></div></div>
+<div class="env">
+<div class="env-head"><span>ENV VAR</span><span>FLAG</span><span>DESCRIPTION</span></div>
+<div class="env-row"><div class="v">SYNAPSE_URL</div><div class="f">-u, --url</div><div class="dsc">Synapse server base URL. Required. No default — fails fast if missing.</div></div>
+<div class="env-row"><div class="v">SYNAPSE_JSON</div><div class="f">--json</div><div class="dsc">Emit structured JSON instead of human-readable tables. Ideal for CI &amp; scripts.</div></div>
+<div class="env-row"><div class="v">SYNAPSE_DEBUG</div><div class="f">-d, --debug</div><div class="dsc">Verbose HTTP &amp; request-body logging. Shows every call the client makes.</div></div>
+<div class="env-row"><div class="v">SYNAPSE_TIMEOUT</div><div class="f">-t, --timeout</div><div class="dsc">Per-request timeout in milliseconds. Default 30000. Tune for slow networks.</div></div>
+</div></div>
+
+<!-- PROGRAMMATIC USE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--cyan);"></div><span class="t-label" style="color:var(--cyan);">Programmatic — TypeScript Client</span><div class="section-line"></div></div>
+<div class="code-panel">
+<div class="h">Same capabilities, typed. Import directly from @atlascrew/synapse-api.</div>
+<pre><span class="c">// install:  npm install @atlascrew/synapse-api</span>
+<span class="k">import</span> { <span class="fn">SynapseClient</span> } <span class="k">from</span> <span class="s">'@atlascrew/synapse-api'</span>;
+
+<span class="k">const</span> client = <span class="k">new</span> <span class="fn">SynapseClient</span>({
+  baseUrl: process.env.SYNAPSE_URL!,
+  timeout: <span class="s">30_000</span>,
+});
+
+<span class="c">// health &amp; status</span>
+<span class="k">await</span> client.<span class="fn">health</span>();
+<span class="k">const</span> status = <span class="k">await</span> client.<span class="fn">getStatus</span>();
+console.<span class="fn">log</span>(status.totalRequests, status.blockedRequests);
+
+<span class="c">// manage rules at runtime</span>
+<span class="k">await</span> client.<span class="fn">addRule</span>({ id: <span class="s">9001</span>, matches: [<span class="c">/* ... */</span>] }, { ttlSec: <span class="s">3600</span> });
+
+<span class="c">// dry-run a request against the loaded rule set</span>
+<span class="k">const</span> verdict = <span class="k">await</span> client.<span class="fn">evaluate</span>(<span class="s">'GET'</span>, <span class="s">'/api/users?id=1'</span>);
+<span class="k">if</span> (verdict.blocked) console.<span class="fn">log</span>(<span class="s">'would block:'</span>, verdict.matched_rule);</pre>
+</div></div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">From npm install to first managed block in under 60 seconds.</div><div class="tagline-sub">Single-binary CLI. Typed TypeScript client. JSON output for CI. Every command is scriptable.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

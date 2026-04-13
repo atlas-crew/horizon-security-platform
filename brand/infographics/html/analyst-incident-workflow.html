@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analyst Incident Workflow — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+@page{size:1200px 2100px;margin:0;}
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;flex:1;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* Stage columns with vertical connector */
+.stages{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;position:relative;}
+.stage{background:var(--card);border:1px solid var(--border);padding:18px;position:relative;}
+.stage .idx{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:1.5px;color:var(--muted);}
+.stage .ttl{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text);margin-top:4px;}
+.stage .sub{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:0.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;}
+.stage .q{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;margin-top:10px;font-style:italic;}
+.stage ul{list-style:none;margin-top:10px;padding:0;}
+.stage li{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.6;padding-left:14px;position:relative;}
+.stage li::before{content:'→';position:absolute;left:0;color:var(--muted);}
+.stage .sla{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--muted);margin-top:12px;padding-top:8px;border-top:1px dashed var(--border);}
+.stage.s1{border-left:2px solid var(--red);}
+.stage.s1 .idx{color:var(--red);} .stage.s1 .sub{color:var(--red);}
+.stage.s2{border-left:2px solid var(--amber);}
+.stage.s2 .idx{color:var(--amber);} .stage.s2 .sub{color:var(--amber);}
+.stage.s3{border-left:2px solid var(--blue);}
+.stage.s3 .idx{color:var(--blue);} .stage.s3 .sub{color:var(--blue);}
+.stage.s4{border-left:2px solid var(--green);}
+.stage.s4 .idx{color:var(--green);} .stage.s4 .sub{color:var(--green);}
+
+/* Tools-per-stage grid */
+.tools{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;}
+.tool-col{background:var(--card);border:1px solid var(--border);padding:16px;}
+.tool-col .h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+.tool-col .chip{display:block;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text);padding:5px 8px;background:var(--subtle);border:1px solid var(--border);margin-bottom:4px;}
+.tool-col .chip span{color:var(--muted);font-size:9px;}
+.tool-col.c1 .h{color:var(--red);}
+.tool-col.c2 .h{color:var(--amber);}
+.tool-col.c3 .h{color:var(--blue);}
+.tool-col.c4 .h{color:var(--green);}
+
+/* Actions available per stage */
+.actions{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:20px;}
+.actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.action{display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center;padding:10px 14px;background:var(--subtle);border-left:2px solid var(--violet);}
+.action .v{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;color:var(--violet);letter-spacing:0.5px;text-transform:uppercase;}
+.action .d{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.5;}
+.action .d code{color:var(--cyan);font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;}
+
+/* Loop-back callout */
+.loop-cta{margin-top:20px;background:rgba(6,182,212,0.05);border:1px solid rgba(6,182,212,0.3);border-left:3px solid var(--cyan);padding:18px 20px;display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;}
+.loop-cta svg{width:44px;height:44px;}
+.loop-cta .h{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:13px;color:var(--cyan);}
+.loop-cta .t{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="page">
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Analyst Incident Workflow</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:760px;">The human-in-the-loop view. How a Signal Horizon analyst turns a spiking dashboard into a deployed rule — four stages, each anchored in real UI surfaces and API endpoints. Loops back continuously.</p>
+
+<!-- HERO STATS -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--red);"></div><div class="value t-metric">4</div><div class="label t-label">Workflow Stages</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--amber);"></div><div class="value t-metric">&lt;5m</div><div class="label t-label">Alert → Triage</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">&lt;15m</div><div class="label t-label">Triage → Rule</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">Canary</div><div class="label t-label">Deploy Posture</div></div>
+</div>
+
+<!-- FOUR STAGES -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--red);"></div><span class="t-label" style="color:var(--red);">The Loop — Alert · Triage · Tune · Deploy</span><div class="section-line"></div></div>
+<div class="stages">
+<div class="stage s1">
+<div class="idx">STAGE 01</div>
+<div class="ttl">Alert</div>
+<div class="sub">SIGNAL SURFACED</div>
+<div class="q">"Something just spiked. Is it real?"</div>
+<ul>
+<li>Overview page shows category spike</li>
+<li>Live map flags a new geo cluster</li>
+<li>WarRoom pings oncall</li>
+<li>Campaign detection fires on 3rd IP</li>
+</ul>
+<div class="sla">TARGET · FIRST EYES &lt; 5 MIN</div>
+</div>
+<div class="stage s2">
+<div class="idx">STAGE 02</div>
+<div class="ttl">Triage</div>
+<div class="sub">SCOPE &amp; BLAST RADIUS</div>
+<div class="q">"Who else is hit? What's the pattern?"</div>
+<ul>
+<li>Actor / Session / Campaign drilldown</li>
+<li>Request timeline + JA4 fingerprints</li>
+<li>SocSearch pivots across related IPs</li>
+<li>Sigma hunt confirms similar activity</li>
+</ul>
+<div class="sla">GOAL · UNDERSTAND IMPACT</div>
+</div>
+<div class="stage s3">
+<div class="idx">STAGE 03</div>
+<div class="ttl">Tune</div>
+<div class="sub">RULE AUTHORING</div>
+<div class="q">"What's the minimal rule that catches this?"</div>
+<ul>
+<li>Draft a runtime rule with TTL</li>
+<li>Dry-run via <tt>synapse evaluate</tt></li>
+<li>Check against benign traffic samples</li>
+<li>Add playbook entry for recurrence</li>
+</ul>
+<div class="sla">REVIEW · MINIMIZE FALSE POSITIVES</div>
+</div>
+<div class="stage s4">
+<div class="idx">STAGE 04</div>
+<div class="ttl">Deploy</div>
+<div class="sub">PROGRESSIVE ROLLOUT</div>
+<div class="q">"Ship it — safely."</div>
+<ul>
+<li>Canary via RolloutOrchestrator</li>
+<li>Health-gated batch expansion</li>
+<li>Watch Overview for false-positive rate</li>
+<li>Instant rollback via state store</li>
+</ul>
+<div class="sla">ROLLOUT · 1% → 100% GATED</div>
+</div>
+</div></div>
+
+<!-- TOOLS PER STAGE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Tools Per Stage — Real Horizon Surfaces</span><div class="section-line"></div></div>
+<div class="tools">
+<div class="tool-col c1">
+<div class="h">01 · ALERT</div>
+<div class="chip">OverviewPage <span>/overview</span></div>
+<div class="chip">WarRoomPage <span>/warroom</span></div>
+<div class="chip">LiveMapPage <span>/soc/live-map</span></div>
+<div class="chip">ScenariosPage <span>/scenarios</span></div>
+</div>
+<div class="tool-col c2">
+<div class="h">02 · TRIAGE</div>
+<div class="chip">ActorDetailPage <span>/soc/actors/:id</span></div>
+<div class="chip">SessionDetailPage <span>/soc/sessions/:id</span></div>
+<div class="chip">CampaignDetailPage <span>/soc/campaigns/:id</span></div>
+<div class="chip">RequestTimeline <span>/hunting/request</span></div>
+<div class="chip">SocSearchPage <span>/soc/search</span></div>
+</div>
+<div class="tool-col c3">
+<div class="h">03 · TUNE</div>
+<div class="chip">HuntingPage <span>/hunting</span></div>
+<div class="chip">hunt-sigma API <span>POST /api/hunt/sigma</span></div>
+<div class="chip">synapse rule-add <span>CLI + API</span></div>
+<div class="chip">PlaybooksPage <span>/playbooks</span></div>
+</div>
+<div class="tool-col c4">
+<div class="h">04 · DEPLOY</div>
+<div class="chip">RolloutOrchestrator <span>BullMQ</span></div>
+<div class="chip">FleetCommander <span>reload · drain</span></div>
+<div class="chip">DeploymentStateStore <span>blue/green</span></div>
+<div class="chip">AutopilotPage <span>/autopilot</span></div>
+</div>
+</div></div>
+
+<!-- ACTIONS AVAILABLE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--cyan);"></div><span class="t-label" style="color:var(--cyan);">Response Actions — What an Analyst Can Do</span><div class="section-line"></div></div>
+<div class="actions">
+<div class="actions-grid">
+<div class="action"><div class="v">Block IP</div><div class="d">Add to blocklist via <code>POST /api/blocklist</code> — expires on TTL or manual release.</div></div>
+<div class="action"><div class="v">Release</div><div class="d">Un-block a false positive via <code>synapse release &lt;ip&gt;</code>. Risk score carried over.</div></div>
+<div class="action"><div class="v">Runtime Rule</div><div class="d">Add an in-memory WAF rule with TTL — <code>synapse rule-add &lt;json&gt; 3600</code>. Survives reload if persisted.</div></div>
+<div class="action"><div class="v">Sigma Hunt</div><div class="d">Scope a hypothesis across historical data — <code>POST /api/hunt/sigma</code>. Backed by ClickHouse.</div></div>
+<div class="action"><div class="v">Config Tune</div><div class="d">Adjust thresholds on the fly — <code>synapse config-set challenge_threshold=35</code>.</div></div>
+<div class="action"><div class="v">Playbook</div><div class="d">Attach an automated response to a signal class via <code>POST /api/playbooks</code>.</div></div>
+<div class="action"><div class="v">War Room</div><div class="d">Open a collaborative incident room — timeline, evidence, shared context.</div></div>
+<div class="action"><div class="v">Rollback</div><div class="d">Revert a deploy via <code>DeploymentStateStore</code> blue/green swap. Instant.</div></div>
+</div>
+</div></div>
+
+<!-- LOOP-BACK -->
+<div class="loop-cta">
+<svg viewBox="0 0 44 44" fill="none"><path d="M8 22 A14 14 0 1 1 22 36" stroke="#06B6D4" stroke-width="2" fill="none"/><path d="M18 32 L22 36 L26 32" stroke="#06B6D4" stroke-width="2" stroke-linecap="square"/><circle cx="22" cy="22" r="3" fill="#06B6D4"/></svg>
+<div>
+<div class="h">The loop never closes</div>
+<div class="t">Every deployed rule is also a new source of telemetry. False positives bubble back into Overview, rule hits feed risk scoring, and campaign detections re-arm enforcement in-process. Analysts don't ship rules and walk away — they watch the next alert to confirm the previous one was handled. This infographic is itself a cycle: the "Deploy" step always feeds back into "Alert".</div>
+</div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Four stages. One continuous loop. Humans on the keyboard.</div><div class="tagline-sub">Surface, scope, author, ship — then watch. Every rule deployed is the next rule's telemetry.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

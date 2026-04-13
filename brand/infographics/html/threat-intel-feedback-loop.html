@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Intel Feedback Loop — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+@page{size:1200px 2100px;margin:0;}
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;flex:1;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* Loop SVG panel */
+.loop{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:24px;}
+.loop svg{width:100%;display:block;}
+
+/* Detector grid */
+.detectors{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.det{background:var(--card);border:1px solid var(--border);border-left:2px solid var(--coral);padding:12px 14px;}
+.det .nm{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text);}
+.det .sig{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:8px;letter-spacing:0.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;}
+.det .ds{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.4;margin-top:6px;}
+
+/* Signal category pills */
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.cat{background:var(--card);border:1px solid var(--border);padding:14px 16px;text-align:center;}
+.cat .cn{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;}
+.cat .ci{width:28px;height:28px;margin:0 auto 8px;}
+.cat .cd{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;margin-top:6px;}
+.cat.c1{border-top:2px solid var(--red);} .cat.c1 .cn{color:var(--red);}
+.cat.c2{border-top:2px solid var(--amber);} .cat.c2 .cn{color:var(--amber);}
+.cat.c3{border-top:2px solid var(--violet);} .cat.c3 .cn{color:var(--violet);}
+.cat.c4{border-top:2px solid var(--cyan);} .cat.c4 .cn{color:var(--cyan);}
+
+/* Before/after callout */
+.ba{display:grid;grid-template-columns:1fr 32px 1fr;gap:0;margin-top:20px;align-items:stretch;}
+.ba-card{background:var(--card);border:1px solid var(--border);padding:18px;}
+.ba-card.before{border-left:2px solid var(--amber);}
+.ba-card.after{border-left:2px solid var(--green);}
+.ba-card .h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+.ba-card .big{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:22px;}
+.ba-card.before .big{color:var(--amber);}
+.ba-card.after .big{color:var(--green);}
+.ba-card .t{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;margin-top:8px;}
+.ba-arrow{display:flex;align-items:center;justify-content:center;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="page">
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Threat Intel Feedback Loop</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:760px;">How signals observed at one IP turn into blocks at every related IP. A closed loop from detection to correlation to re-armed enforcement, running in-process at the edge — O(1) fingerprint lookups, no backend round-trip.</p>
+
+<!-- HERO STATS -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--coral);"></div><div class="value t-metric">8</div><div class="label t-label">Correlation Detectors</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric">4</div><div class="label t-label">Signal Categories</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">O(1)</div><div class="label t-label">Fingerprint Lookup</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">+30</div><div class="label t-label">Campaign Risk Add</div></div>
+</div>
+
+<!-- THE LOOP -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">The Closed Loop — Observe · Correlate · Re-Arm · Enforce</span><div class="section-line"></div></div>
+<div class="loop">
+<svg viewBox="0 0 1080 440" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#F97316"/></marker>
+<marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8B5CF6"/></marker>
+</defs>
+
+<!-- Center circle label -->
+<circle cx="540" cy="220" r="62" fill="#0c1220" stroke="#8B5CF6" stroke-width="1.5"/>
+<text x="540" y="212" text-anchor="middle" fill="#C4B5FD" font-family="Recursive" font-size="10" font-weight="700" letter-spacing="1">CAMPAIGN</text>
+<text x="540" y="228" text-anchor="middle" fill="#C4B5FD" font-family="Recursive" font-size="10" font-weight="700" letter-spacing="1">MANAGER</text>
+<text x="540" y="244" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="8">O(1) DASHMAP</text>
+
+<!-- 4 nodes around center -->
+<!-- Top: Observe (signals in) -->
+<rect x="420" y="30" width="240" height="72" fill="#101828" stroke="#1E90FF" stroke-width="1.5"/>
+<text x="540" y="52" text-anchor="middle" fill="#1E90FF" font-family="Recursive" font-size="11" font-weight="700" letter-spacing="1">1 · OBSERVE</text>
+<text x="540" y="70" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">WAF hits · DLP · schema</text>
+<text x="540" y="84" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">JA4/JA4H · IP · ASN</text>
+<text x="540" y="98" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="9">register_ja4(ip, fingerprint)</text>
+
+<!-- Right: Correlate -->
+<rect x="820" y="184" width="240" height="72" fill="#101828" stroke="#F97316" stroke-width="1.5"/>
+<text x="940" y="206" text-anchor="middle" fill="#F97316" font-family="Recursive" font-size="11" font-weight="700" letter-spacing="1">2 · CORRELATE</text>
+<text x="940" y="224" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">FingerprintIndex lookup</text>
+<text x="940" y="238" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">Detectors fire on threshold</text>
+<text x="940" y="252" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="9">shared · rotation · timing · graph</text>
+
+<!-- Bottom: Re-arm -->
+<rect x="420" y="338" width="240" height="72" fill="#101828" stroke="#8B5CF6" stroke-width="1.5"/>
+<text x="540" y="360" text-anchor="middle" fill="#8B5CF6" font-family="Recursive" font-size="11" font-weight="700" letter-spacing="1">3 · RE-ARM</text>
+<text x="540" y="378" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">CampaignStore updated</text>
+<text x="540" y="392" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">All members tagged live</text>
+<text x="540" y="406" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="9">risk +30 applied to each</text>
+
+<!-- Left: Enforce -->
+<rect x="20" y="184" width="240" height="72" fill="#101828" stroke="#EF4444" stroke-width="1.5"/>
+<text x="140" y="206" text-anchor="middle" fill="#EF4444" font-family="Recursive" font-size="11" font-weight="700" letter-spacing="1">4 · ENFORCE</text>
+<text x="140" y="224" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">Risk ≥ 70 · block on sight</text>
+<text x="140" y="238" text-anchor="middle" fill="#e8ecf4" font-family="Recursive" font-size="10">Risk ≥ 40 · interrogate</text>
+<text x="140" y="252" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="9">canonical 403 · tarpit</text>
+
+<!-- Arrows (clockwise) -->
+<!-- observe → manager -->
+<path d="M540,108 L540,154" stroke="#F97316" stroke-width="2" marker-end="url(#ar)"/>
+<!-- manager → correlate -->
+<path d="M600,220 L814,220" stroke="#F97316" stroke-width="2" marker-end="url(#ar)"/>
+<!-- correlate → re-arm -->
+<path d="M940,262 Q940,350 666,374" stroke="#F97316" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<!-- re-arm → enforce -->
+<path d="M420,374 Q140,350 140,262" stroke="#F97316" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<!-- enforce back to observe (closing the loop) -->
+<path d="M140,184 Q140,50 414,60" stroke="#8B5CF6" stroke-width="2" fill="none" marker-end="url(#ar2)" stroke-dasharray="5 5"/>
+<text x="260" y="54" fill="#8B5CF6" font-family="Recursive" font-size="9" font-weight="600" letter-spacing="1">NEW BLOCK EVENTS → NEW SIGNALS</text>
+
+<!-- enforce → manager (direct state read) -->
+<path d="M260,220 L478,220" stroke="#F97316" stroke-width="2" stroke-dasharray="3 4" marker-end="url(#ar)" opacity="0.6"/>
+<text x="370" y="212" text-anchor="middle" fill="#5a6f8a" font-family="Recursive" font-size="8">is_in_campaign?</text>
+</svg>
+</div></div>
+
+<!-- SIGNAL CATEGORIES -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Signal Categories — What Feeds the Loop</span><div class="section-line"></div></div>
+<div class="cats">
+<div class="cat c1">
+<svg class="ci" viewBox="0 0 28 28" fill="none"><path d="M14 4 L24 22 H4 Z" stroke="#EF4444" stroke-width="1.5" fill="none"/><line x1="14" y1="12" x2="14" y2="17" stroke="#EF4444" stroke-width="1.5"/><circle cx="14" cy="19.5" r="0.8" fill="#EF4444"/></svg>
+<div class="cn">Attack</div>
+<div class="cd">WAF blocks, injection attempts, known-exploit matches</div>
+</div>
+<div class="cat c2">
+<svg class="ci" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9" stroke="#F59E0B" stroke-width="1.5"/><line x1="14" y1="10" x2="14" y2="16" stroke="#F59E0B" stroke-width="1.5"/><circle cx="14" cy="19" r="0.8" fill="#F59E0B"/></svg>
+<div class="cn">Anomaly</div>
+<div class="cd">Schema drift, unusual headers, TLS/UA mismatches</div>
+</div>
+<div class="cat c3">
+<svg class="ci" viewBox="0 0 28 28" fill="none"><path d="M5 20 L11 14 L15 17 L23 8" stroke="#8B5CF6" stroke-width="1.5" fill="none"/><circle cx="11" cy="14" r="1.5" fill="#8B5CF6"/><circle cx="15" cy="17" r="1.5" fill="#8B5CF6"/><circle cx="23" cy="8" r="1.5" fill="#8B5CF6"/></svg>
+<div class="cn">Behavior</div>
+<div class="cd">Rate violations, session anomalies, auth patterns</div>
+</div>
+<div class="cat c4">
+<svg class="ci" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9" stroke="#06B6D4" stroke-width="1.5"/><path d="M14 5 Q7 14 14 23 Q21 14 14 5" stroke="#06B6D4" stroke-width="1" fill="none"/><line x1="5" y1="14" x2="23" y2="14" stroke="#06B6D4" stroke-width="1"/></svg>
+<div class="cn">Intelligence</div>
+<div class="cd">Threat feeds, Tor exits, datacenter ranges, bad-IP lists</div>
+</div>
+</div></div>
+
+<!-- DETECTORS -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Correlation Detectors — 8 Running In-Process</span><div class="section-line"></div></div>
+<div class="detectors">
+<div class="det"><div class="nm">shared_fingerprint</div><div class="sig">JA4+JA4H COLLISION</div><div class="ds">3+ IPs sharing the same combined fingerprint → campaign. Default threshold: 3.</div></div>
+<div class="det"><div class="nm">ja4_rotation</div><div class="sig">ACTOR FLIP PATTERN</div><div class="ds">One IP cycling through 3+ JA4s fast → evasion attempt.</div></div>
+<div class="det"><div class="nm">timing_correlation</div><div class="sig">SIMULTANEOUS ACTIONS</div><div class="ds">Requests arriving within tight windows across IPs suggest scripted coordination.</div></div>
+<div class="det"><div class="nm">network_proximity</div><div class="sig">ASN / SUBNET</div><div class="ds">Actors clustered in the same /24 or ASN get linked even without fingerprint overlap.</div></div>
+<div class="det"><div class="nm">behavioral_similarity</div><div class="sig">REQUEST SHAPE</div><div class="ds">Matching path sequences, body shapes, and header orderings across IPs.</div></div>
+<div class="det"><div class="nm">attack_sequence</div><div class="sig">KILL-CHAIN PATTERN</div><div class="ds">Same ordered attack progression seen across multiple actors.</div></div>
+<div class="det"><div class="nm">auth_token</div><div class="sig">SHARED CREDENTIALS</div><div class="ds">Multiple IPs presenting the same session/JWT → stuffing or account takeover.</div></div>
+<div class="det"><div class="nm">graph</div><div class="sig">RELATIONSHIP MESH</div><div class="ds">Transitive links — if A↔B and B↔C, all three enter the same campaign.</div></div>
+</div></div>
+
+<!-- BEFORE / AFTER -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Before the Loop vs After</span><div class="section-line"></div></div>
+<div class="ba">
+<div class="ba-card before">
+<div class="h">WITHOUT FEEDBACK</div>
+<div class="big">198.51.100.12 blocked</div>
+<div class="t">Original attacker IP gets a 403. The other 17 IPs sharing its JA4 + JA4H fingerprint continue unblocked until they individually trip a WAF rule or the per-IP risk score climbs — potentially minutes of exposure per actor.</div>
+</div>
+<div class="ba-arrow">
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2,10 L16,10 M11,5 L16,10 L11,15" stroke="#10B981" stroke-width="1.5" stroke-linecap="square"/></svg>
+</div>
+<div class="ba-card after">
+<div class="h">WITH FEEDBACK</div>
+<div class="big">17 IPs blocked on sight</div>
+<div class="t">Campaign detection fires on the 3rd IP to share the fingerprint. Every member of the set — past, present, and any future IP that joins — gets the campaign membership tag. Their next request sees risk 70+ without any per-IP learning period. The loop closes at edge speed, no backend consultation required.</div>
+</div>
+</div></div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Detect once. Block everywhere. At edge speed.</div><div class="tagline-sub">Eight detectors, four signal categories, one in-process fingerprint index. No round-trip to a backend — the loop closes before the next request arrives.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

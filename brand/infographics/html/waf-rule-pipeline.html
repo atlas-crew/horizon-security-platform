@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAF Rule Pipeline — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+@page{size:1200px 2180px;margin:0;}
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;flex:1;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* Pipeline rail — 5 stages */
+.rail{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:24px;}
+.rail-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0;align-items:stretch;}
+.rail-stage{background:var(--subtle);border:1px solid var(--border);padding:14px 12px;position:relative;min-height:116px;}
+.rail-stage .idx{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+.rail-stage .name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:13px;color:var(--text);margin-top:4px;}
+.rail-stage .desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;margin-top:6px;}
+.rail-stage .tag{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:8px;letter-spacing:1px;padding:2px 6px;display:inline-block;margin-top:8px;}
+.rail-stage.s1{border-left:2px solid var(--blue);}
+.rail-stage.s2{border-left:2px solid var(--violet);}
+.rail-stage.s3{border-left:2px solid var(--coral);}
+.rail-stage.s4{border-left:2px solid var(--amber);}
+.rail-stage.s5{border-left:2px solid var(--red);}
+.rail-stage.s1 .tag{color:var(--blue);background:rgba(30,144,255,0.1);}
+.rail-stage.s2 .tag{color:var(--violet);background:rgba(139,92,246,0.1);}
+.rail-stage.s3 .tag{color:var(--coral);background:rgba(249,115,22,0.1);}
+.rail-stage.s4 .tag{color:var(--amber);background:rgba(245,158,11,0.1);}
+.rail-stage.s5 .tag{color:var(--red);background:rgba(239,68,68,0.1);}
+.rail-note{margin-top:16px;padding:12px 14px;background:rgba(245,158,11,0.04);border-left:3px solid var(--amber);}
+.rail-note .h{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--amber);}
+.rail-note .t{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;line-height:1.5;}
+
+/* Classification grid */
+.classes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.klass{background:var(--card);border:1px solid var(--border);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;}
+.klass .n{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text);}
+.klass .c{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;padding:2px 8px;}
+
+/* Match-kind distribution bars */
+.kinds{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:20px;}
+.kind-row{display:grid;grid-template-columns:140px 1fr 60px;gap:12px;align-items:center;padding:6px 0;}
+.kind-row .k{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);}
+.kind-row .bar-wrap{height:14px;background:rgba(30,45,68,0.35);position:relative;overflow:hidden;}
+.kind-row .bar{height:100%;}
+.kind-row .v{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text);text-align:right;}
+
+/* Blocking split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;}
+.split-card{background:var(--card);border:1px solid var(--border);padding:18px;}
+.split-card .big{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:36px;letter-spacing:-0.5px;}
+.split-card .lab{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:2px;}
+.split-card .desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.5;margin-top:10px;}
+.split-card.block{border-left:2px solid var(--red);}
+.split-card.block .big{color:var(--red);}
+.split-card.observe{border-left:2px solid var(--blue);}
+.split-card.observe .big{color:var(--blue);}
+
+/* 403 contract callout */
+.contract{margin-top:20px;background:var(--card);border:1px solid var(--border);padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.contract .h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+.contract pre{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text);line-height:1.7;white-space:pre;}
+.contract .k{color:var(--blue);}
+.contract .s{color:var(--green);}
+.contract .c{color:var(--muted);}
+.contract .h-line{display:grid;grid-template-columns:140px 1fr;gap:8px;font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;line-height:1.9;}
+.contract .h-line .hk{color:var(--violet);}
+.contract .h-line .hv{color:var(--text-sec);}
+</style>
+</head>
+<body>
+<div class="page">
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">WAF Rule Pipeline</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:760px;">248 production rules across 30 threat classes — evaluated in two phases with a single canonical 403 exit. Deferred rules see what the body-phase pass can't.</p>
+
+<!-- HERO STATS -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">248</div><div class="label t-label">Production Rules</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric">30</div><div class="label t-label">Threat Classes</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--amber);"></div><div class="value t-metric">2</div><div class="label t-label">Eval Phases</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--red);"></div><div class="value t-metric">403</div><div class="label t-label">Canonical Block</div></div>
+</div>
+
+<!-- PIPELINE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Evaluation Pipeline — Body Phase · Deferred Phase · Verdict</span><div class="section-line"></div></div>
+<div class="rail">
+<div class="rail-grid">
+<div class="rail-stage s1">
+<div class="idx">STAGE 01</div>
+<div class="name">Index Candidates</div>
+<div class="desc">RuleIndex narrows 248 rules to the candidate subset for this request via cached keys &amp; regex groups.</div>
+<div class="tag">PREFILTER</div>
+</div>
+<div class="rail-stage s2">
+<div class="idx">STAGE 02</div>
+<div class="name">Body-Phase Pass</div>
+<div class="desc">Evaluates all rules <em>except</em> those whose match kinds need data not yet available (<tt>dlp_violation</tt>).</div>
+<div class="tag">MAIN PASS</div>
+</div>
+<div class="rail-stage s3">
+<div class="idx">STAGE 03</div>
+<div class="name">DLP Scanner</div>
+<div class="desc">Async body scan produces <tt>dlp_violation</tt> findings. Gates the deferred pass.</div>
+<div class="tag">ENRICH</div>
+</div>
+<div class="rail-stage s4">
+<div class="idx">STAGE 04</div>
+<div class="name">Deferred Pass</div>
+<div class="desc">Re-evaluates only <tt>deferred_rule_indices</tt> — the rules skipped in stage 02 — now with DLP data in scope.</div>
+<div class="tag">POST-DLP</div>
+</div>
+<div class="rail-stage s5">
+<div class="idx">STAGE 05</div>
+<div class="name">Verdict → 403</div>
+<div class="desc">Any blocking match exits through the single canonical WAF block response. Non-blocking matches add risk.</div>
+<div class="tag">EMIT</div>
+</div>
+</div>
+<div class="rail-note">
+<div class="h">Why two phases?</div>
+<div class="t">Some rules (<tt>dlp_violation</tt> match kind) need scanner output that isn't available during the synchronous body pass. Rather than blocking the pipeline, those rule indices are tracked in <tt>deferred_rule_indices</tt>, skipped via an <tt>O(1) HashSet</tt> in the body pass, and re-evaluated once DLP completes — so the main pipeline stays fast.</div>
+</div>
+</div>
+</div>
+
+<!-- CLASSIFICATION GRID -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Top Threat Classifications — 248 Rules Across 30 Classes</span><div class="section-line"></div></div>
+<div class="classes">
+<div class="klass"><div class="n">Known Vulnerability</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">37</div></div>
+<div class="klass"><div class="n">Toolkit</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">35</div></div>
+<div class="klass"><div class="n">Command Injection</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">19</div></div>
+<div class="klass"><div class="n">Programmatic Access</div><div class="c" style="color:var(--amber);background:rgba(245,158,11,0.08);">17</div></div>
+<div class="klass"><div class="n">Bad Bot</div><div class="c" style="color:var(--amber);background:rgba(245,158,11,0.08);">14</div></div>
+<div class="klass"><div class="n">Web Attack</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">13</div></div>
+<div class="klass"><div class="n">SQL Injection</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">12</div></div>
+<div class="klass"><div class="n">Directory Traversal</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">11</div></div>
+<div class="klass"><div class="n">Info Disclosure</div><div class="c" style="color:var(--amber);background:rgba(245,158,11,0.08);">11</div></div>
+<div class="klass"><div class="n">Evasion</div><div class="c" style="color:var(--coral);background:rgba(249,115,22,0.08);">9</div></div>
+<div class="klass"><div class="n">Software Detection</div><div class="c" style="color:var(--blue);background:rgba(30,144,255,0.08);">9</div></div>
+<div class="klass"><div class="n">Bad Traffic</div><div class="c" style="color:var(--amber);background:rgba(245,158,11,0.08);">8</div></div>
+<div class="klass"><div class="n">XSS</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">6</div></div>
+<div class="klass"><div class="n">Content Enumeration</div><div class="c" style="color:var(--blue);background:rgba(30,144,255,0.08);">6</div></div>
+<div class="klass"><div class="n">Botnet Activity</div><div class="c" style="color:var(--red);background:rgba(239,68,68,0.08);">5</div></div>
+<div class="klass"><div class="n">+ 15 more classes</div><div class="c" style="color:var(--muted);background:rgba(90,111,138,0.08);">26</div></div>
+</div></div>
+
+<!-- MATCH KIND DISTRIBUTION -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">How Rules Match — Match Kind Distribution</span><div class="section-line"></div></div>
+<div class="kinds">
+<div class="kind-row"><div class="k">boolean</div><div class="bar-wrap"><div class="bar" style="width:100%;background:var(--violet);"></div></div><div class="v">196</div></div>
+<div class="kind-row"><div class="k">header</div><div class="bar-wrap"><div class="bar" style="width:6.1%;background:var(--blue);"></div></div><div class="v">12</div></div>
+<div class="kind-row"><div class="k">count</div><div class="bar-wrap"><div class="bar" style="width:5.6%;background:var(--blue);"></div></div><div class="v">11</div></div>
+<div class="kind-row"><div class="k">args</div><div class="bar-wrap"><div class="bar" style="width:3.6%;background:var(--blue);"></div></div><div class="v">7</div></div>
+<div class="kind-row"><div class="k">dlp_violation <span style="color:var(--amber);">· deferred</span></div><div class="bar-wrap"><div class="bar" style="width:3.6%;background:var(--amber);"></div></div><div class="v">7</div></div>
+<div class="kind-row"><div class="k">uri</div><div class="bar-wrap"><div class="bar" style="width:3.1%;background:var(--blue);"></div></div><div class="v">6</div></div>
+<div class="kind-row"><div class="k">named_argument</div><div class="bar-wrap"><div class="bar" style="width:1.5%;background:var(--blue);"></div></div><div class="v">3</div></div>
+<div class="kind-row"><div class="k">schema_violation</div><div class="bar-wrap"><div class="bar" style="width:1.0%;background:var(--coral);"></div></div><div class="v">2</div></div>
+<div class="kind-row"><div class="k">ja4</div><div class="bar-wrap"><div class="bar" style="width:1.0%;background:var(--cyan);"></div></div><div class="v">2</div></div>
+<div class="kind-row"><div class="k">is_tor_exit</div><div class="bar-wrap"><div class="bar" style="width:0.5%;background:var(--cyan);"></div></div><div class="v">1</div></div>
+<div class="kind-row"><div class="k">track_by_ip</div><div class="bar-wrap"><div class="bar" style="width:0.5%;background:var(--cyan);"></div></div><div class="v">1</div></div>
+</div></div>
+
+<!-- BLOCKING SPLIT -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--amber);"></div><span class="t-label" style="color:var(--amber);">Blocking vs Observational Rules</span><div class="section-line"></div></div>
+<div class="split">
+<div class="split-card block">
+<div class="big">62</div>
+<div class="lab">Blocking Rules · 25%</div>
+<div class="desc">Trigger an immediate canonical 403. Reserved for high-confidence signatures: known exploits, confirmed toolkits, active injection patterns.</div>
+</div>
+<div class="split-card observe">
+<div class="big">186</div>
+<div class="lab">Observational Rules · 75%</div>
+<div class="desc">Contribute to the actor risk score without blocking directly. Feeds the risk lifecycle — repeated low-confidence hits accumulate into challenge or block decisions.</div>
+</div>
+</div></div>
+
+<!-- 403 CONTRACT -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--red);"></div><span class="t-label" style="color:var(--red);">Canonical Block Response — One Exit Point</span><div class="section-line"></div></div>
+<div class="contract">
+<div>
+<div class="h">RESPONSE BODY (STABLE)</div>
+<pre>{<span class="k">"error"</span>: <span class="s">"access_denied"</span>}</pre>
+<div class="h" style="margin-top:14px;">GUARANTEE</div>
+<div style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;">Byte-identical output from every block site — body-phase, deferred, or future additions — via <tt>send_waf_block_response</tt>. Clients that parse the shape depend on it; treated as an API contract.</div>
+</div>
+<div>
+<div class="h">RESPONSE HEADERS</div>
+<div class="h-line">
+<span class="hk">:status</span><span class="hv">403</span>
+<span class="hk">content-type</span><span class="hv">application/json</span>
+<span class="hk">content-length</span><span class="hv">22</span>
+<span class="hk">x-request-id</span><span class="hv">&lt;echoed&gt;</span>
+<span class="hk">strict-transport-security</span><span class="hv">&lt;https only&gt;</span>
+<span class="hk">+ security headers</span><span class="hv">X-Frame, CSP, …</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Two phases. One exit. 248 rules pulling in the same direction.</div><div class="tagline-sub">Fast-path body-phase evaluation with a deferred pass for rules that need DLP output. Every block emits the same canonical 403.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

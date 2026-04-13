@@ -1183,7 +1183,7 @@ impl Engine {
         let Some(ja4) = fp.ja4.as_ref() else {
             return false;
         };
-        let raw = ja4.raw.as_str();
+        let raw: &str = &ja4.raw;
         let Some(match_value) = condition.match_value.as_ref() else {
             return false;
         };
@@ -1210,7 +1210,7 @@ impl Engine {
         let Some(fp) = ctx.fingerprint else {
             return false;
         };
-        let raw = fp.ja4h.raw.as_str();
+        let raw: &str = &fp.ja4h.raw;
         let Some(match_value) = condition.match_value.as_ref() else {
             return false;
         };
@@ -2615,7 +2615,7 @@ mod tests {
     fn sample_fingerprint(ja4_raw: &str, ja4h_raw: &str) -> ClientFingerprint {
         ClientFingerprint {
             ja4: Some(Ja4Fingerprint {
-                raw: ja4_raw.to_string(),
+                raw: std::sync::Arc::from(ja4_raw),
                 protocol: Ja4Protocol::TCP,
                 tls_version: 13,
                 sni_type: Ja4SniType::Domain,
@@ -2626,7 +2626,7 @@ mod tests {
                 ext_hash: "bbbbbbbbbbbb".to_string(),
             }),
             ja4h: Ja4hFingerprint {
-                raw: ja4h_raw.to_string(),
+                raw: std::sync::Arc::from(ja4h_raw),
                 method: "ge".to_string(),
                 http_version: 11,
                 has_cookie: false,
@@ -3394,7 +3394,7 @@ mod tests {
         fn fingerprint_with_ja4_prefix(prefix: &str) -> ClientFingerprint {
             ClientFingerprint {
                 ja4: Some(Ja4Fingerprint {
-                    raw: format!("{}d1516h2_000000000000_000000000000", prefix),
+                    raw: std::sync::Arc::from(format!("{}d1516h2_000000000000_000000000000", prefix)),
                     protocol: Ja4Protocol::TCP,
                     tls_version: 10,
                     sni_type: Ja4SniType::Domain,
@@ -3405,7 +3405,7 @@ mod tests {
                     ext_hash: "000000000000".to_string(),
                 }),
                 ja4h: Ja4hFingerprint {
-                    raw: "ge11cnrn_000000000000_000000000000".to_string(),
+                    raw: std::sync::Arc::from("ge11cnrn_000000000000_000000000000"),
                     method: "ge".to_string(),
                     http_version: 11,
                     has_cookie: true,

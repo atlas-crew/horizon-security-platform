@@ -13,6 +13,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 // ============================================================================
 // Types
@@ -60,7 +61,11 @@ impl std::fmt::Display for Ja4SniType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ja4Fingerprint {
     /// Full fingerprint string (e.g., t13d1516h2_8daaf6152771_e5627efa2ab1)
-    pub raw: String,
+    ///
+    /// TASK-64: Arc<str> rather than String so hot-path clones (filter-chain
+    /// register_fingerprints, header propagation, WAF evaluation) are
+    /// refcount bumps rather than heap allocations.
+    pub raw: Arc<str>,
 
     // Parsed components for filtering
     /// Transport protocol (TCP or QUIC)
@@ -87,7 +92,9 @@ pub struct Ja4Fingerprint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ja4hFingerprint {
     /// Full fingerprint string (e.g., ge11cnrn_a1b2c3d4e5f6_000000000000)
-    pub raw: String,
+    ///
+    /// TASK-64: Arc<str> (see `Ja4Fingerprint::raw`).
+    pub raw: Arc<str>,
 
     // Parsed components
     /// HTTP method code (ge, po, pu, de, he, op, pa, co, tr)
@@ -269,7 +276,7 @@ pub fn parse_ja4_from_header(header: Option<&str>) -> Option<Ja4Fingerprint> {
         .to_string();
 
     Some(Ja4Fingerprint {
-        raw: normalized.to_lowercase(),
+        raw: Arc::from(normalized.to_lowercase()),
         protocol,
         tls_version,
         sni_type,
@@ -361,7 +368,7 @@ pub fn generate_ja4h(request: &HttpHeaders<'_>) -> Ja4hFingerprint {
     );
 
     Ja4hFingerprint {
-        raw,
+        raw: Arc::from(raw),
         method,
         http_version,
         has_cookie,
@@ -958,7 +965,7 @@ mod tests {
     #[test]
     fn test_analyze_ja4_modern_browser() {
         let fp = Ja4Fingerprint {
-            raw: "t13d1516h2_8daaf6152771_e5627efa2ab1".to_string(),
+            raw: Arc::from("t13d1516h2_8daaf6152771_e5627efa2ab1"),
             protocol: Ja4Protocol::TCP,
             tls_version: 13,
             sni_type: Ja4SniType::Domain,
@@ -977,7 +984,7 @@ mod tests {
     #[test]
     fn test_analyze_ja4_suspicious_bot() {
         let fp = Ja4Fingerprint {
-            raw: "t100302h1_8daaf6152771_e5627efa2ab1".to_string(),
+            raw: Arc::from("t100302h1_8daaf6152771_e5627efa2ab1"),
             protocol: Ja4Protocol::TCP,
             tls_version: 10,
             sni_type: Ja4SniType::None,
@@ -997,7 +1004,7 @@ mod tests {
     #[test]
     fn test_analyze_ja4h_normal() {
         let fp = Ja4hFingerprint {
-            raw: "ge11cren_a1b2c3d4e5f6_aabbccddeeff".to_string(),
+            raw: Arc::from("ge11cren_a1b2c3d4e5f6_aabbccddeeff"),
             method: "ge".to_string(),
             http_version: 11,
             has_cookie: true,
@@ -1015,7 +1022,7 @@ mod tests {
     #[test]
     fn test_analyze_ja4h_suspicious() {
         let fp = Ja4hFingerprint {
-            raw: "ge10nn00_a1b2c3d4e5f6_000000000000".to_string(),
+            raw: Arc::from("ge10nn00_a1b2c3d4e5f6_000000000000"),
             method: "ge".to_string(),
             http_version: 10,
             has_cookie: false,

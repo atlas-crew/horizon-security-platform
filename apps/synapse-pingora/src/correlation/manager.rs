@@ -763,9 +763,9 @@ impl CampaignManager {
         // Update fingerprint index
         self.index.update_entity(&ip_str, Some(&fingerprint), None);
 
-        // Record in rotation detector
+        // Record in rotation detector (TASK-64: detector stores Arc<str>)
         self.tls_fingerprint_detector
-            .record_fingerprint(ip, fingerprint);
+            .record_fingerprint(ip, Arc::from(fingerprint));
 
         // Increment stats
         self.stats_fingerprints_registered
@@ -790,9 +790,9 @@ impl CampaignManager {
         // Update fingerprint index (uses &str reference, no allocation needed)
         self.index.update_entity(&ip_str, Some(&fingerprint), None);
 
-        // Record in rotation detector (requires String, but Arc<str> → String is cheap clone)
+        // TASK-64: detector stores Arc<str> directly — no allocation.
         self.tls_fingerprint_detector
-            .record_fingerprint(ip, fingerprint.to_string());
+            .record_fingerprint(ip, fingerprint);
 
         // Increment stats
         self.stats_fingerprints_registered
@@ -820,7 +820,7 @@ impl CampaignManager {
         // Record in rotation detector if tracking combined
         if self.config.track_combined {
             self.tls_fingerprint_detector
-                .record_fingerprint(ip, fingerprint);
+                .record_fingerprint(ip, Arc::from(fingerprint));
         }
 
         // Increment stats
@@ -849,7 +849,7 @@ impl CampaignManager {
         // Record in rotation detector if tracking combined
         if self.config.track_combined {
             self.tls_fingerprint_detector
-                .record_fingerprint(ip, fingerprint.to_string());
+                .record_fingerprint(ip, fingerprint);
         }
 
         // Increment stats
@@ -865,25 +865,36 @@ impl CampaignManager {
     /// * `ip` - The IP address of the client
     /// * `ja4` - Optional JA4 TLS fingerprint
     /// * `ja4h` - Optional JA4H HTTP fingerprint (used in combined hash)
-    pub fn register_fingerprints(&self, ip: IpAddr, ja4: Option<String>, ja4h: Option<String>) {
+    pub fn register_fingerprints(
+        &self,
+        ip: IpAddr,
+        ja4: Option<Arc<str>>,
+        ja4h: Option<Arc<str>>,
+    ) {
+        // TASK-64: ja4 and ja4h arrive as Arc<str> so the filter-chain hot
+        // path never allocates String copies for these fingerprints. The
+        // rotation detector stores Arc<str> directly, so refcount bumps
+        // replace heap allocations all the way down.
         let ip_str = ip.to_string();
         let mut registered = false;
 
-        // Update fingerprint index
+        // Update fingerprint index (needs &str, Arc<str> derefs transparently)
         let ja4_ref = ja4.as_deref();
-        let combined = ja4h.as_ref().map(|h| {
-            // Create combined hash from JA4+JA4H
-            format!("{}_{}", ja4.as_deref().unwrap_or(""), h)
+        let combined: Option<Arc<str>> = ja4h.as_ref().map(|h| {
+            // Combined hash still requires one allocation (the format), but
+            // we materialise it as Arc<str> so downstream storage pays no
+            // additional allocation.
+            Arc::from(format!("{}_{}", ja4.as_deref().unwrap_or(""), h.as_ref()))
         });
         let combined_ref = combined.as_deref();
 
         self.index.update_entity(&ip_str, ja4_ref, combined_ref);
 
-        // Record JA4 in rotation detector
+        // Record JA4 in rotation detector (Arc::clone is a refcount bump)
         if let Some(ref fp) = ja4 {
             if !fp.is_empty() {
                 self.tls_fingerprint_detector
-                    .record_fingerprint(ip, fp.clone());
+                    .record_fingerprint(ip, Arc::clone(fp));
                 registered = true;
             }
         }
@@ -893,7 +904,7 @@ impl CampaignManager {
             if let Some(ref fp) = combined {
                 if !fp.is_empty() {
                     self.tls_fingerprint_detector
-                        .record_fingerprint(ip, fp.clone());
+                        .record_fingerprint(ip, Arc::clone(fp));
                     registered = true;
                 }
             }
@@ -1909,8 +1920,8 @@ mod tests {
 
         manager.register_fingerprints(
             ip,
-            Some("ja4_test".to_string()),
-            Some("ja4h_test".to_string()),
+            Some(Arc::from("ja4_test")),
+            Some(Arc::from("ja4h_test")),
         );
 
         let stats = manager.stats();
@@ -1924,7 +1935,7 @@ mod tests {
         let manager = create_test_manager();
         let ip = create_test_ip(1);
 
-        manager.register_fingerprints(ip, Some("ja4_only".to_string()), None);
+        manager.register_fingerprints(ip, Some(Arc::from("ja4_only")), None);
 
         let stats = manager.stats();
         assert_eq!(stats.fingerprints_registered, 1);

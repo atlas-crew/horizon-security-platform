@@ -40,9 +40,9 @@
 //!
 //! // Record fingerprints as requests come in
 //! let ip = "192.168.1.100".parse().unwrap();
-//! detector.record_fingerprint(ip, "t13d1516h2_abc".to_string());
-//! detector.record_fingerprint(ip, "t13d1516h2_def".to_string());
-//! detector.record_fingerprint(ip, "t13d1516h2_ghi".to_string());
+//! detector.record_fingerprint(ip, Arc::from("t13d1516h2_abc"));
+//! detector.record_fingerprint(ip, Arc::from("t13d1516h2_def"));
+//! detector.record_fingerprint(ip, Arc::from("t13d1516h2_ghi"));
 //!
 //! // Check if rotating
 //! assert!(detector.is_rotating(&ip));
@@ -51,7 +51,26 @@
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// TASK-65: Hard cap on the number of fingerprint observations tracked per
+/// IP address. A legitimate client reuses the same fingerprint for a
+/// session (1 observation per request, but all identical), so this cap is
+/// only touched under pathological input. An attacker that tries to
+/// amplify memory usage by cycling through thousands of distinct
+/// fingerprints will hit this FIFO cap and get silently dropped.
+///
+/// Sized at 1024 to keep worst-case per-IP memory at ~64 KiB (Arc<str>
+/// entries + timestamps) while leaving plenty of headroom above legitimate
+/// fingerprint churn (which should never exceed single digits).
+pub const MAX_OBSERVATIONS_PER_IP: usize = 1024;
+
+/// TASK-65: Hard cap on the number of distinct IPs tracked by the rotation
+/// detector. When exceeded, the detector drops the oldest inserted IP
+/// entry. Prevents a distributed attacker from inflating the detector's
+/// top-level history map beyond a bounded working-set size.
+pub const MAX_TRACKED_IPS: usize = 100_000;
 
 use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
@@ -160,7 +179,11 @@ impl RotationConfig {
 #[derive(Debug)]
 struct FingerprintHistory {
     /// (timestamp, fingerprint) pairs
-    observations: Vec<(Instant, String)>,
+    ///
+    /// TASK-64: stored as Arc<str> so hot-path `record_fingerprint` calls
+    /// never have to copy the fingerprint string. The Arc is cloned once
+    /// from the ClientFingerprint and lives here until cleanup.
+    observations: Vec<(Instant, Arc<str>)>,
     /// When this history was last cleaned
     last_cleanup: Instant,
 }
@@ -174,7 +197,17 @@ impl FingerprintHistory {
     }
 
     /// Add a new observation.
-    fn add(&mut self, fingerprint: String) {
+    ///
+    /// TASK-65: enforces a per-IP observation cap to prevent a single IP
+    /// from amplifying memory usage by cycling through many distinct
+    /// fingerprints. When the cap is exceeded, the oldest observation is
+    /// dropped (FIFO). Legitimate clients reuse the same fingerprint for
+    /// a session so the cap is rarely touched; attackers spraying
+    /// distinct fingerprints get silently capped at MAX_OBSERVATIONS_PER_IP.
+    fn add(&mut self, fingerprint: Arc<str>) {
+        if self.observations.len() >= MAX_OBSERVATIONS_PER_IP {
+            self.observations.remove(0);
+        }
         self.observations.push((Instant::now(), fingerprint));
     }
 
@@ -188,11 +221,11 @@ impl FingerprintHistory {
     /// Get unique fingerprint count within the window.
     fn unique_count_in_window(&self, window: Duration) -> usize {
         let cutoff = Instant::now() - window;
-        let unique: HashSet<_> = self
+        let unique: HashSet<&str> = self
             .observations
             .iter()
             .filter(|(ts, _)| *ts > cutoff)
-            .map(|(_, fp)| fp.as_str())
+            .map(|(_, fp)| fp.as_ref())
             .collect();
         unique.len()
     }
@@ -200,11 +233,11 @@ impl FingerprintHistory {
     /// Get all unique fingerprints within the window.
     fn unique_fingerprints_in_window(&self, window: Duration) -> Vec<String> {
         let cutoff = Instant::now() - window;
-        let unique: HashSet<_> = self
+        let unique: HashSet<String> = self
             .observations
             .iter()
             .filter(|(ts, _)| *ts > cutoff)
-            .map(|(_, fp)| fp.clone())
+            .map(|(_, fp)| fp.to_string())
             .collect();
         unique.into_iter().collect()
     }
@@ -252,13 +285,28 @@ impl Ja4RotationDetector {
     /// # Arguments
     /// * `ip` - The IP address of the client
     /// * `fingerprint` - The JA4 fingerprint observed
-    pub fn record_fingerprint(&self, ip: IpAddr, fingerprint: String) {
+    pub fn record_fingerprint(&self, ip: IpAddr, fingerprint: Arc<str>) {
+        // TASK-64: Arc<str> avoids a String allocation on every request.
         // Skip empty fingerprints
         if fingerprint.is_empty() {
             return;
         }
 
         let mut history = self.history.write();
+
+        // TASK-65: enforce a global cap on the number of IPs tracked. When
+        // the cap is exceeded, drop an arbitrary existing IP entry (HashMap
+        // iteration order) to make room for the new one. This prevents a
+        // distributed attacker from inflating the detector's working set.
+        if !history.contains_key(&ip) && history.len() >= MAX_TRACKED_IPS {
+            if let Some(victim_ip) = history.keys().next().copied() {
+                history.remove(&victim_ip);
+                // Also drop any stale flag for the evicted IP.
+                drop(history);
+                self.flagged.write().remove(&victim_ip);
+                history = self.history.write();
+            }
+        }
 
         let entry = history.entry(ip).or_insert_with(FingerprintHistory::new);
         entry.add(fingerprint);
@@ -606,7 +654,7 @@ mod tests {
         let detector = Ja4RotationDetector::with_defaults();
         let ip: IpAddr = "192.168.1.1".parse().unwrap();
 
-        detector.record_fingerprint(ip, "fp1".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp1"));
 
         assert_eq!(detector.tracked_ip_count(), 1);
         assert_eq!(detector.unique_count_in_window(&ip), 1);
@@ -618,7 +666,7 @@ mod tests {
         let detector = Ja4RotationDetector::with_defaults();
         let ip: IpAddr = "192.168.1.1".parse().unwrap();
 
-        detector.record_fingerprint(ip, "".to_string());
+        detector.record_fingerprint(ip, Arc::from(""));
 
         assert_eq!(detector.tracked_ip_count(), 0);
     }
@@ -634,9 +682,9 @@ mod tests {
         let ip: IpAddr = "10.0.0.1".parse().unwrap();
 
         // Record 3 different fingerprints
-        detector.record_fingerprint(ip, "fp_alpha".to_string());
-        detector.record_fingerprint(ip, "fp_beta".to_string());
-        detector.record_fingerprint(ip, "fp_gamma".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp_alpha"));
+        detector.record_fingerprint(ip, Arc::from("fp_beta"));
+        detector.record_fingerprint(ip, Arc::from("fp_gamma"));
 
         // Should be flagged as rotating
         assert!(detector.is_rotating(&ip));
@@ -662,9 +710,9 @@ mod tests {
         let ip: IpAddr = "10.0.0.1".parse().unwrap();
 
         // Record only 3 different fingerprints (below threshold of 4)
-        detector.record_fingerprint(ip, "fp1".to_string());
-        detector.record_fingerprint(ip, "fp2".to_string());
-        detector.record_fingerprint(ip, "fp3".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp1"));
+        detector.record_fingerprint(ip, Arc::from("fp2"));
+        detector.record_fingerprint(ip, Arc::from("fp3"));
 
         // Should NOT be flagged
         assert!(!detector.is_rotating(&ip));
@@ -679,7 +727,7 @@ mod tests {
 
         // Record the same fingerprint multiple times
         for _ in 0..10 {
-            detector.record_fingerprint(ip, "same_fp".to_string());
+            detector.record_fingerprint(ip, Arc::from("same_fp"));
         }
 
         // Should only count as 1 unique fingerprint
@@ -698,8 +746,8 @@ mod tests {
         let ip: IpAddr = "192.168.1.1".parse().unwrap();
 
         // Record fingerprints
-        detector.record_fingerprint(ip, "fp1".to_string());
-        detector.record_fingerprint(ip, "fp2".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp1"));
+        detector.record_fingerprint(ip, Arc::from("fp2"));
 
         // Should be rotating initially
         assert!(detector.is_rotating(&ip));
@@ -727,7 +775,7 @@ mod tests {
         // Add fingerprints for multiple IPs
         for i in 0..5 {
             let ip: IpAddr = format!("10.0.0.{}", i).parse().unwrap();
-            detector.record_fingerprint(ip, format!("fp{}", i));
+            detector.record_fingerprint(ip, Arc::from(format!("fp{}", i)));
         }
 
         assert_eq!(detector.tracked_ip_count(), 5);
@@ -754,14 +802,14 @@ mod tests {
         let stable_ip: IpAddr = "10.0.0.2".parse().unwrap();
 
         // Rotating IP: many fingerprints
-        detector.record_fingerprint(rotating_ip, "fp1".to_string());
-        detector.record_fingerprint(rotating_ip, "fp2".to_string());
-        detector.record_fingerprint(rotating_ip, "fp3".to_string());
-        detector.record_fingerprint(rotating_ip, "fp4".to_string());
+        detector.record_fingerprint(rotating_ip, Arc::from("fp1"));
+        detector.record_fingerprint(rotating_ip, Arc::from("fp2"));
+        detector.record_fingerprint(rotating_ip, Arc::from("fp3"));
+        detector.record_fingerprint(rotating_ip, Arc::from("fp4"));
 
         // Stable IP: single fingerprint repeated
         for _ in 0..10 {
-            detector.record_fingerprint(stable_ip, "stable_fp".to_string());
+            detector.record_fingerprint(stable_ip, Arc::from("stable_fp"));
         }
 
         assert!(detector.is_rotating(&rotating_ip));
@@ -786,11 +834,11 @@ mod tests {
         assert!(!detector.should_trigger(&ip, &index));
 
         // With 1 fingerprint, should not trigger (need 2 to be "approaching" 3)
-        detector.record_fingerprint(ip, "fp1".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp1"));
         assert!(!detector.should_trigger(&ip, &index));
 
         // With 2 fingerprints, should trigger (approaching threshold)
-        detector.record_fingerprint(ip, "fp2".to_string());
+        detector.record_fingerprint(ip, Arc::from("fp2"));
         assert!(detector.should_trigger(&ip, &index));
     }
 
@@ -807,10 +855,10 @@ mod tests {
         let ip1: IpAddr = "10.0.0.1".parse().unwrap();
         let ip2: IpAddr = "10.0.0.2".parse().unwrap();
 
-        detector.record_fingerprint(ip1, "fp1".to_string());
-        detector.record_fingerprint(ip1, "fp2".to_string());
-        detector.record_fingerprint(ip2, "fp1".to_string());
-        detector.record_fingerprint(ip2, "fp2".to_string());
+        detector.record_fingerprint(ip1, Arc::from("fp1"));
+        detector.record_fingerprint(ip1, Arc::from("fp2"));
+        detector.record_fingerprint(ip2, Arc::from("fp1"));
+        detector.record_fingerprint(ip2, Arc::from("fp2"));
 
         // Both should be flagged
         assert!(detector.is_rotating(&ip1));
@@ -847,11 +895,11 @@ mod tests {
         let ip1: IpAddr = "10.0.0.1".parse().unwrap();
         let ip2: IpAddr = "10.0.0.2".parse().unwrap();
 
-        detector.record_fingerprint(ip1, "fp1".to_string());
-        detector.record_fingerprint(ip1, "fp2".to_string());
-        detector.record_fingerprint(ip1, "fp3".to_string());
+        detector.record_fingerprint(ip1, Arc::from("fp1"));
+        detector.record_fingerprint(ip1, Arc::from("fp2"));
+        detector.record_fingerprint(ip1, Arc::from("fp3"));
 
-        detector.record_fingerprint(ip2, "fp1".to_string());
+        detector.record_fingerprint(ip2, Arc::from("fp1"));
 
         let stats = detector.stats();
 
@@ -875,15 +923,15 @@ mod tests {
         let ip3: IpAddr = "10.0.0.3".parse().unwrap();
 
         // IP1: rotating
-        detector.record_fingerprint(ip1, "fp1".to_string());
-        detector.record_fingerprint(ip1, "fp2".to_string());
+        detector.record_fingerprint(ip1, Arc::from("fp1"));
+        detector.record_fingerprint(ip1, Arc::from("fp2"));
 
         // IP2: rotating
-        detector.record_fingerprint(ip2, "fp3".to_string());
-        detector.record_fingerprint(ip2, "fp4".to_string());
+        detector.record_fingerprint(ip2, Arc::from("fp3"));
+        detector.record_fingerprint(ip2, Arc::from("fp4"));
 
         // IP3: not rotating
-        detector.record_fingerprint(ip3, "fp5".to_string());
+        detector.record_fingerprint(ip3, Arc::from("fp5"));
 
         let rotating = detector.get_rotating_ips();
 
@@ -910,7 +958,7 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for fp_id in 0..100 {
                     let ip: IpAddr = format!("10.{}.0.1", thread_id).parse().unwrap();
-                    detector.record_fingerprint(ip, format!("fp_{}", fp_id % 5));
+                    detector.record_fingerprint(ip, Arc::from(format!("fp_{}", fp_id % 5)));
                 }
             }));
         }
@@ -932,9 +980,9 @@ mod tests {
         // Pre-populate
         for i in 0..10 {
             let ip: IpAddr = format!("10.0.0.{}", i).parse().unwrap();
-            detector.record_fingerprint(ip, "fp1".to_string());
-            detector.record_fingerprint(ip, "fp2".to_string());
-            detector.record_fingerprint(ip, "fp3".to_string());
+            detector.record_fingerprint(ip, Arc::from("fp1"));
+            detector.record_fingerprint(ip, Arc::from("fp2"));
+            detector.record_fingerprint(ip, Arc::from("fp3"));
         }
 
         let mut handles = vec![];
@@ -945,7 +993,7 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for i in 0..50 {
                     let ip: IpAddr = format!("10.{}.0.{}", thread_id, i % 10).parse().unwrap();
-                    detector.record_fingerprint(ip, format!("new_fp_{}", i));
+                    detector.record_fingerprint(ip, Arc::from(format!("new_fp_{}", i)));
                 }
             }));
         }
@@ -981,9 +1029,9 @@ mod tests {
 
         let ipv6: IpAddr = "2001:db8::1".parse().unwrap();
 
-        detector.record_fingerprint(ipv6, "fp1".to_string());
-        detector.record_fingerprint(ipv6, "fp2".to_string());
-        detector.record_fingerprint(ipv6, "fp3".to_string());
+        detector.record_fingerprint(ipv6, Arc::from("fp1"));
+        detector.record_fingerprint(ipv6, Arc::from("fp2"));
+        detector.record_fingerprint(ipv6, Arc::from("fp3"));
 
         assert!(detector.is_rotating(&ipv6));
     }
@@ -999,7 +1047,7 @@ mod tests {
 
         // Record many unique fingerprints
         for i in 0..100 {
-            detector.record_fingerprint(ip, format!("fp_{}", i));
+            detector.record_fingerprint(ip, Arc::from(format!("fp_{}", i)));
         }
 
         assert!(detector.is_rotating(&ip));
@@ -1021,11 +1069,11 @@ mod tests {
         let mut history = FingerprintHistory::new();
         let window = Duration::from_secs(60);
 
-        history.add("fp1".to_string());
-        history.add("fp1".to_string()); // Duplicate
-        history.add("fp2".to_string());
-        history.add("fp3".to_string());
-        history.add("fp2".to_string()); // Duplicate
+        history.add(Arc::from("fp1"));
+        history.add(Arc::from("fp1")); // Duplicate
+        history.add(Arc::from("fp2"));
+        history.add(Arc::from("fp3"));
+        history.add(Arc::from("fp2")); // Duplicate
 
         assert_eq!(history.unique_count_in_window(window), 3);
     }
@@ -1035,8 +1083,8 @@ mod tests {
         let mut history = FingerprintHistory::new();
 
         // Add observations
-        history.add("fp1".to_string());
-        history.add("fp2".to_string());
+        history.add(Arc::from("fp1"));
+        history.add(Arc::from("fp2"));
 
         // Wait briefly
         thread::sleep(Duration::from_millis(10));
@@ -1058,8 +1106,8 @@ mod tests {
         // Add multiple rotating IPs
         for i in 0..5 {
             let ip: IpAddr = format!("10.0.0.{}", i).parse().unwrap();
-            detector.record_fingerprint(ip, "fp1".to_string());
-            detector.record_fingerprint(ip, "fp2".to_string());
+            detector.record_fingerprint(ip, Arc::from("fp1"));
+            detector.record_fingerprint(ip, Arc::from("fp2"));
         }
 
         // All should be grouped together (started within 10s of each other)
@@ -1069,5 +1117,62 @@ mod tests {
         if !groups.is_empty() {
             assert!(groups[0].len() >= 2);
         }
+    }
+
+    // ========================================================================
+    // TASK-65: Memory-exhaustion DoS Bounds
+    // ========================================================================
+
+    /// TASK-65: A single IP spraying many distinct fingerprints must not be
+    /// able to inflate FingerprintHistory unboundedly. The per-IP cap
+    /// silently drops the oldest observations (FIFO) once MAX_OBSERVATIONS_PER_IP
+    /// is reached.
+    #[test]
+    fn test_per_ip_observation_cap_enforced() {
+        let detector = Ja4RotationDetector::with_defaults();
+        let ip: IpAddr = "203.0.113.50".parse().unwrap();
+
+        // Push well past the cap from a single IP.
+        for i in 0..(MAX_OBSERVATIONS_PER_IP + 500) {
+            detector.record_fingerprint(ip, Arc::from(format!("fp_{}", i)));
+        }
+
+        let history = detector.history.read();
+        let entry = history.get(&ip).expect("IP should be tracked");
+        assert_eq!(
+            entry.observations.len(),
+            MAX_OBSERVATIONS_PER_IP,
+            "Per-IP observation count must not exceed MAX_OBSERVATIONS_PER_IP"
+        );
+
+        // Sanity: observations are the MOST RECENT ones (FIFO drop of oldest).
+        // The first surviving observation should be index 500 of the original
+        // sequence (i.e., "fp_500").
+        let (_, first) = &entry.observations[0];
+        assert_eq!(first.as_ref(), "fp_500");
+    }
+
+    /// TASK-65: The global tracked-IP cap prevents a distributed attacker
+    /// from inflating the detector's IP-level history map. When
+    /// MAX_TRACKED_IPS is reached, adding a new IP evicts an existing one.
+    #[test]
+    #[ignore = "slow: allocates MAX_TRACKED_IPS + 1 entries"]
+    fn test_global_ip_cap_enforced() {
+        let detector = Ja4RotationDetector::with_defaults();
+
+        for i in 0..(MAX_TRACKED_IPS + 1) {
+            let octet_a = (i / 65536) as u8;
+            let octet_b = ((i / 256) % 256) as u8;
+            let octet_c = (i % 256) as u8;
+            let ip: IpAddr = format!("10.{}.{}.{}", octet_a, octet_b, octet_c)
+                .parse()
+                .unwrap();
+            detector.record_fingerprint(ip, Arc::from("same_fp"));
+        }
+
+        assert!(
+            detector.tracked_ip_count() <= MAX_TRACKED_IPS,
+            "tracked IP count must stay at or below MAX_TRACKED_IPS"
+        );
     }
 }

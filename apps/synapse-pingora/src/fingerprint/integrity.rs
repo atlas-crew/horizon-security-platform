@@ -619,10 +619,10 @@ mod tests {
         alpn: &str,
     ) -> Ja4Fingerprint {
         Ja4Fingerprint {
-            raw: format!(
+            raw: std::sync::Arc::from(format!(
                 "t{}d{:02x}{:02x}{}_{}_{}",
                 tls_version, cipher_count, ext_count, alpn, "aabbccddeeff", "112233445566"
-            ),
+            )),
             protocol: Ja4Protocol::TCP,
             tls_version,
             sni_type: super::super::ja4::Ja4SniType::Domain,

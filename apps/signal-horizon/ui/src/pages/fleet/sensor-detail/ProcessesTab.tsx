@@ -1,4 +1,5 @@
 import { MetricCard } from '../../../components/fleet';
+import { Panel } from '@/ui';
 import { formatUptime } from './shared';
 
 interface ProcessesTabProps {
@@ -19,7 +20,7 @@ export function ProcessesTab({ data }: ProcessesTabProps) {
       </div>
 
       {/* Services */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
+      <Panel tone="info" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">System Services</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {data.services.map((svc: any) => (
@@ -34,10 +35,10 @@ export function ProcessesTab({ data }: ProcessesTabProps) {
             </div>
           ))}
         </div>
-      </div>
+      </Panel>
 
       {/* Process List */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-sky-light/40">
+      <Panel tone="info" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Running Processes</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -80,7 +81,7 @@ export function ProcessesTab({ data }: ProcessesTabProps) {
             </tbody>
           </table>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

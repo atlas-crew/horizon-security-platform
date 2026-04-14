@@ -12,7 +12,7 @@ import {
 import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { MetricCard } from '../../../components/fleet';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 import { InfoRow, ActionButton, formatUptime } from './shared';
 import { apiFetch } from '../../../lib/api';
 
@@ -144,7 +144,7 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* System Information */}
-        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
+        <Panel tone="info" padding="md">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">System Information</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Hostname" value={systemInfo?.hostname || sensor.name} />
@@ -160,10 +160,10 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
             <InfoRow label="Last Boot" value={systemInfo?.lastBoot ? new Date(systemInfo.lastBoot).toLocaleString() : 'Unknown'} />
             <InfoRow label="Last Check-in" value={sensor.lastHeartbeat ? new Date(sensor.lastHeartbeat).toLocaleString() : 'Never'} />
           </dl>
-        </div>
+        </Panel>
 
         {/* Connection Status */}
-        <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
+        <Panel tone="info" padding="md">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Connection Status</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Cloud Connection" value={sensor.connectionState} />
@@ -184,11 +184,11 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       </div>
 
       {/* Quick Actions */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
+      <Panel tone="advanced" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Quick Actions</h3>
         {isApparatus && (
           <div className="mb-4 border border-border-subtle bg-surface-inset p-4">
@@ -252,10 +252,10 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
           <ActionButton icon={Globe2} label="Test Connectivity" />
           <ActionButton icon={Plug} label="Restart Sensor" onClick={handleRestartSensor} />
         </div>
-      </div>
+      </Panel>
 
       {/* Recent Signals */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
+      <Panel tone="advanced" padding="md">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-ink-primary">Recent Signals</h3>
           <div className="text-xs text-ink-muted font-mono">
@@ -318,11 +318,11 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
             })}
           </div>
         )}
-      </div>
+      </Panel>
 
       {/* Diagnostic Results */}
       {diagnostics && (
-        <div className="card border border-border-subtle border-t-2 border-t-info p-6">
+        <Panel tone="info" padding="md">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">
             Diagnostic Results <span className="text-sm text-ink-secondary font-normal">({new Date(diagnostics.runAt).toLocaleTimeString()})</span>
           </h3>
@@ -345,7 +345,7 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       )}
     </div>
   );

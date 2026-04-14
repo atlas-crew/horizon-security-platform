@@ -1,4 +1,5 @@
 import { MetricCard } from '../../../components/fleet';
+import { Panel } from '@/ui';
 import { InfoRow, formatBytes } from './shared';
 
 interface PerformanceTabProps {
@@ -19,7 +20,7 @@ export function PerformanceTab({ data }: PerformanceTabProps) {
       </div>
 
       {/* CPU Chart */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
+      <Panel tone="info" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">CPU Utilization (Last Hour)</h3>
         <div className="h-48 flex items-end gap-1">
           {data.history.slice(-60).map((point: any, idx: number) => (
@@ -35,23 +36,23 @@ export function PerformanceTab({ data }: PerformanceTabProps) {
           <span>60 min ago</span>
           <span>Now</span>
         </div>
-      </div>
+      </Panel>
 
       {/* Disk I/O */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-sky-light/40">
-        <h3 className="text-lg font-semibold text-ink-primary mb-4">Disk I/O</h3>
+        <Panel tone="info" padding="md">
+          <h3 className="text-lg font-semibold text-ink-primary mb-4">Disk I/O</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Read Throughput" value={formatBytes(data.diskIO.readBytesPerSec) + '/s'} />
             <InfoRow label="Write Throughput" value={formatBytes(data.diskIO.writeBytesPerSec) + '/s'} />
             <InfoRow label="IOPS" value={data.diskIO.iops.toString()} />
             <InfoRow label="I/O Wait" value={`${data.diskIO.ioWait.toFixed(1)}%`} />
           </dl>
-        </div>
+        </Panel>
 
         {/* Benchmarks */}
-      <div className="card border border-border-subtle border-t-2 border-t-info p-6 dark:border-ac-sky-light/40">
-        <h3 className="text-lg font-semibold text-ink-primary mb-4">Performance Benchmarks</h3>
+        <Panel tone="info" padding="md">
+          <h3 className="text-lg font-semibold text-ink-primary mb-4">Performance Benchmarks</h3>
           <div className="space-y-3">
             {data.benchmarks.map((b: any) => (
               <div key={b.name} className="flex items-center justify-between">
@@ -63,7 +64,7 @@ export function PerformanceTab({ data }: PerformanceTabProps) {
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { MetricCard } from '../../../components/fleet';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 import { InfoRow, formatDuration } from './shared';
 
 interface NetworkTabProps {
@@ -20,7 +20,7 @@ export function NetworkTab({ data }: NetworkTabProps) {
       </div>
 
       {/* Traffic Chart */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
+      <Panel tone="info" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Traffic (Last Hour)</h3>
         <div className="h-48 flex items-end gap-1">
           {data.history.slice(-60).map((point: any, idx: number) => (
@@ -46,11 +46,11 @@ export function NetworkTab({ data }: NetworkTabProps) {
           </div>
           <span>Now</span>
         </div>
-      </div>
+      </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Network Interfaces */}
-        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-blue/40">
+        <Panel tone="info" padding="md">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Interfaces</h3>
           <table className="w-full text-sm">
             <caption className="sr-only">Sensor network interfaces with traffic and status</caption>
@@ -79,21 +79,21 @@ export function NetworkTab({ data }: NetworkTabProps) {
               ))}
             </tbody>
           </table>
-        </div>
+        </Panel>
 
         {/* DNS Configuration */}
-        <div className="card border border-border-subtle border-t-2 border-t-info p-6 dark:border-ac-sky-light/40">
+        <Panel tone="info" padding="md">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">DNS Configuration</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Primary DNS" value={data.dns.primary} />
             <InfoRow label="Secondary DNS" value={data.dns.secondary} />
             <InfoRow label="DNS Latency" value={`${data.dns.latencyMs.toFixed(1)}ms`} />
           </dl>
-        </div>
+        </Panel>
       </div>
 
       {/* Active Connections */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
+      <Panel tone="info" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Active Connections</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -126,7 +126,7 @@ export function NetworkTab({ data }: NetworkTabProps) {
             </tbody>
           </table>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

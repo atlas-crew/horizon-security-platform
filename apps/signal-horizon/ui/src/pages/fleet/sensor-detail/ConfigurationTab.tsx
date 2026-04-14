@@ -23,7 +23,7 @@ import {
   updatePingoraConfig,
   runPingoraAction,
 } from './shared';
-import { Spinner, Stack, Tabs, colors } from '@/ui';
+import { Panel, Spinner, Stack, Tabs, colors } from '@/ui';
 
 interface ConfigurationTabProps {
   sensor: any;
@@ -207,7 +207,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
   };
 
   const renderTunnelInactive = (label: string) => (
-    <div className="card border border-border-subtle border-t-2 border-t-info p-6">
+    <Panel tone="warning" padding="md">
       <div className="flex items-start gap-3">
         <WifiOff className="w-5 h-5 text-status-warning" />
         <div className="space-y-2">
@@ -223,12 +223,12 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Panel>
   );
   return (
     <div className="space-y-6">
       {/* Config Tabs — ARIA tab pattern */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
+      <Panel tone="info" padding="none" spacing="none">
         <Stack
           direction="row"
           align="center"
@@ -275,7 +275,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           )}
           </div>
         </Stack>
-      </div>
+      </Panel>
 
       {configTab === 'drift' && (
         <div id="tabpanel-config-drift">
@@ -321,18 +321,18 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                 renderTunnelInactive('Pingora controls')
               )}
 
-              <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
+              <Panel tone="info" padding="md">
                 <WafConfig config={wafConfig} onChange={setWafConfig} />
-              </div>
+              </Panel>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card border border-border-subtle border-t-2 border-t-info p-6">
+                <Panel tone="info" padding="md">
                   <RateLimitConfig config={rateLimitConfig} onChange={setRateLimitConfig} />
-                </div>
+                </Panel>
 
-                <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
+                <Panel tone="info" padding="md">
                   <AccessControlConfig config={aclConfig} onChange={setAccessConfig} />
-                </div>
+                </Panel>
               </div>
             </>
           )}
@@ -368,7 +368,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
             </Stack>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
+              <Panel tone="info" padding="md">
                 <h3 className="text-lg font-semibold text-ink-primary mb-4">General Settings</h3>
                 <div className="space-y-4">
                   {Object.entries(generalSettings).map(([key, value]) => (
@@ -393,9 +393,9 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                     <div className="text-sm text-ink-secondary">No general settings available.</div>
                   )}
                 </div>
-              </div>
+              </Panel>
 
-              <div className="card border border-border-subtle border-t-2 border-t-info p-6">
+              <Panel tone="info" padding="md">
                 <h3 className="text-lg font-semibold text-ink-primary mb-4">Runtime Settings</h3>
                 <div className="space-y-4">
                   {runtimeEntries.map(([key, value]) => (
@@ -420,7 +420,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                     <div className="text-sm text-ink-secondary">No runtime settings available.</div>
                   )}
                 </div>
-              </div>
+              </Panel>
             </div>
           )}
         </div>
@@ -431,7 +431,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
           {!isTunnelActive ? (
             renderTunnelInactive('Kernel parameters')
           ) : (
-            <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 space-y-4">
+            <Panel tone="info" padding="md" className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
                 <Stack direction="row" align="center" gap="smPlus">
@@ -495,13 +495,18 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                   )}
                 </tbody>
               </table>
-            </div>
+            </Panel>
           )}
         </div>
       )}
 
       {configTab === 'history' && (
-        <div id="tabpanel-config-history" className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
+        <Panel
+          tone="info"
+          padding="md"
+          as="div"
+          id="tabpanel-config-history"
+        >
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
           {isHistoryLoading ? (
             <ConfigPanelSkeleton />
@@ -540,7 +545,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
               ))}
             </div>
           )}
-        </div>
+        </Panel>
       )}
     </div>
   );

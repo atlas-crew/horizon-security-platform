@@ -314,6 +314,14 @@ theme work together rather than fighting each other.
   child overlays (e.g. the diagonal-split decoration on the Live
   Attack Map) need a containing block. `overflow-hidden` clips
   the scanlines to the panel's bounds.
+- `hero` — swaps the whole substrate: `bg-ac-navy` with on-dark
+  text, no accent bar, `relative overflow-hidden` for child
+  decorations. Used for marquee featured content like the
+  Strategic Insight card on the Threat Overview page. `tone` is
+  ignored when `variant="hero"` — the dark navy background is
+  the identity, and there is no second axis of semantic color
+  to layer on top. `shadow-card` is preserved so hero panels
+  still sit visually in line with the rest of the page.
 
 ### Child requirements when using tactical variant
 
@@ -350,36 +358,91 @@ prop. If a second tactical panel wants the same overlay, it can
 duplicate the div; if it shows up three times, then it deserves its
 own component.
 
+## Hero variant
+
+**Added in the 8th Panel commit** to finish the OverviewPage migration.
+
+The Strategic Insight card on the Threat Overview page is a marquee
+panel — dark navy background, on-dark typography, diagonal-split
+decoration that scales on hover. It was the last non-Panel wrapper
+on OverviewPage and needed a dedicated variant because it breaks
+from the light-on-light card substrate the rest of the design system
+uses.
+
+```tsx
+<Panel
+  variant="hero"
+  padding="md"
+  spacing="none"
+  className="group flex flex-col justify-center min-h-[450px]"
+>
+  <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
+  <div className="relative z-10">
+    {/* hero content — label, title, description, threat bar, CTA */}
+  </div>
+</Panel>
+```
+
+### What belongs to Panel vs. the caller
+
+**Panel owns:** the dark navy substrate (`bg-ac-navy`), on-dark text
+color (`text-white/90`), the card shadow, and `relative overflow-hidden`
+for absolutely-positioned children. No accent bar, no tone.
+
+**Caller owns:** layout-specific classes like `group`, `flex flex-col
+justify-center`, and `min-h-[450px]`. Also the hover animation target
+(`group-hover:scale-110`) and the diagonal-split decoration itself —
+those are per-page flourishes, not Panel vocabulary. Same reasoning
+as the tactical variant: keep decorations separable so Panel stays
+small.
+
+### Why `tone` is ignored in hero variant
+
+Tone paints an accent bar on top of a light card. A dark navy hero
+has no room for a second semantic color axis — the navy *is* the
+identity. Trying to layer `tone="info"` on top would put a blue bar
+on a nearly-blue surface, and `tone="destructive"` would be visually
+louder than the content it's framing. The API accepts the prop (for
+type uniformity) but the variant branch skips the accent class list
+entirely.
+
+## Migration status
+
+Shipped in order:
+1. Base Panel API (tone / padding / spacing / `as` / `noAccent`)
+2. Compound slot API (`Panel.Header` + `Panel.Body`) with
+   auto-detect and automatic flex-column layout
+3. AdminSettings sweep — 14 sections across `AdminSettingsPage.tsx`,
+   plus 2 loading panels in `AdminSettingsSkeleton.tsx`
+4. Hunting sweep — 10 components in `src/components/hunting/`
+5. Fleet sweep — 6 files, 14 wrappers under `src/pages/fleet/`
+6. OverviewPage compound slots — Active Campaigns, Top Attackers,
+   Top Fingerprints
+7. Tactical variant + Live Attack Map migration
+8. Hero variant + Strategic Insight migration — **OverviewPage is
+   now fully on Panel with zero inline `.card` wrappers remaining**
+
 ## Not yet migrated
-- `OverviewPage.tsx`'s **Strategic Insight hero card** uses navy
-  background with diagonal-split overlays — also a themed exception,
-  not a Panel candidate without a hero variant.
-- `AdminSettingsSkeleton.tsx` duplicates the AdminSettings pattern
-  inline for its loading state. Convert in the same sweep that
-  migrates `AdminSettingsPage.tsx` itself.
-- `AdminSettingsPage.tsx` — the canonical pattern the Panel was
-  modeled on. Migration is mechanical but touches ~8 sections, so
-  it needs its own commit.
-- Most Hunting pages (`HuntResultsTable`, `SavedQueries`,
-  `SigmaLeadsPanel`, `SigmaRulesPanel`, `BehavioralAnomaliesPanel`,
-  `ClickHouseOpsPanel`, `RecentRequestsPanel`) — mostly
-  header-body splits that can now use the compound slot API. Queue
-  up as a focused "Hunting section migration" commit.
+- 8 fleet pages intentionally skipped because they already use
+  `@/ui` widgets (`MetricCard`, `ChartPanel`, `KpiStrip`) directly
+  and don't have a card-shaped wrapper to replace. Those pages are
+  the reference for "how a fleet page should look" — they do not
+  need Panel.
 
 ## Next steps
 
-With compound slots landed, the remaining Panel feature work is:
+With OverviewPage fully migrated, the remaining Panel work is
+janitorial rather than feature work:
 
-1. **Tactical variant**: should Panel gain a `variant="tactical"`
-   prop that layers on `scanlines`/`tactical-bg` effects for themed
-   pages like the attack map? Or should those stay outside Panel's
-   responsibility entirely? Decision needed before the attack map
-   migration.
-2. **Deprecate `.card`**: once enough pages have migrated to Panel,
-   mark `.card` in `src/index.css` as deprecated with a comment and
-   a grep-count target. When usage drops below ~5 files, delete the
-   CSS class.
-3. **Sweep migrations**: run a focused migration commit per page
-   cluster (AdminSettings + skeleton, Hunting section, remaining
-   fleet pages) rather than a single megadiff. Each commit should
-   touch one section of the codebase and be independently reversible.
+1. **Deprecate `.card`**: mark the legacy `.card` class in
+   `src/index.css` as deprecated with a comment. Count remaining
+   grep hits; when usage drops below ~5 files, delete the CSS.
+2. **Deprecate `colors.navy` direct imports** on pages that have
+   migrated to `variant="hero"` — the navy background is now
+   owned by Panel, so pages importing `colors.navy` just to color
+   their own divs are a leak. Sweep as a follow-up.
+3. **Second hero candidate audit**: if a second page wants hero
+   treatment, verify the variant is still the right scope. If a
+   hero starts needing its own tone variants (e.g. a red hero
+   for incident mode), re-evaluate whether hero should split into
+   `tone`-aware sub-variants.

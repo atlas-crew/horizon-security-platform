@@ -94,8 +94,18 @@ export type PanelSpacing = 'none' | 'sm' | 'md' | 'lg';
  * above the grid/scanline backgrounds should apply `relative z-10`
  * themselves (or via `<Panel.Header>` / `<Panel.Body>` which do it
  * automatically when the parent variant is tactical).
+ *
+ * - `hero` — dark-themed featured panel used for marquee content like
+ *   the Strategic Insight card on the Threat Overview page. Swaps the
+ *   standard card substrate for `bg-ac-navy` with on-dark text, drops
+ *   the tone accent bar entirely, and keeps `relative overflow-hidden`
+ *   so caller-supplied decorations (diagonal-split overlays, animated
+ *   accents, etc.) can position absolutely without escaping the panel.
+ *   Tone is ignored in hero variant because the dark navy substrate
+ *   already establishes the identity — there is no second axis of
+ *   semantic color to layer on top.
  */
-export type PanelVariant = 'default' | 'tactical';
+export type PanelVariant = 'default' | 'tactical' | 'hero';
 
 type PanelElement = 'section' | 'div' | 'article' | 'aside';
 
@@ -279,9 +289,18 @@ const PanelImpl: React.FC<PanelProps> = ({
   const effectiveSpacing = hasSlots ? '' : spacingClass[spacing];
 
   const Component = as as keyof React.JSX.IntrinsicElements;
+  const isHero = variant === 'hero';
   const classes = clsx(
-    'bg-surface-card shadow-card',
-    noAccent ? 'border border-border-subtle' : ['border-t-4', toneAccentClass[tone]],
+    // Hero variant swaps the whole substrate: dark navy background,
+    // on-dark text color, no accent bar, no surface-card shadow. The
+    // `relative overflow-hidden` keeps absolutely-positioned child
+    // decorations (diagonal-split overlays, etc.) clipped to the panel.
+    isHero
+      ? 'bg-ac-navy text-white/90 shadow-card relative overflow-hidden'
+      : [
+          'bg-surface-card shadow-card',
+          noAccent ? 'border border-border-subtle' : ['border-t-4', toneAccentClass[tone]],
+        ],
     effectivePadding,
     effectiveSpacing,
     // When slots take over, the parent becomes a flex column so Body can

@@ -431,12 +431,20 @@ export default function OverviewPage() {
         </Panel.Body>
       </Panel>
 
-      {/* ─── Strategic Insights + Top Metrics ────────────────────────── */}
+      {/* ─── Strategic Insights + Top Metrics ──────────────────────────
+           Strategic Insight is a <Panel variant="hero"> — the dark navy
+           substrate + no accent bar is the marquee treatment for featured
+           content. The `group` + `min-h-[450px]` + centered flex layout
+           are page-specific and stay on the caller's className. The
+           diagonal-split decoration is a child because it is a per-page
+           flourish, not Panel vocabulary. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Strategic Insight hero */}
-        <div
-          className="group flex flex-col justify-center min-h-[450px] relative overflow-hidden"
-          style={{ background: colors.navy, padding: '24px' }}
+        <Panel
+          variant="hero"
+          padding="md"
+          spacing="none"
+          className="group flex flex-col justify-center min-h-[450px]"
         >
           <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
           <div className="relative z-10">
@@ -492,7 +500,7 @@ export default function OverviewPage() {
               Review Recommended Policies
             </Button>
           </div>
-        </div>
+        </Panel>
 
         {/* Top Attackers */}
         <Panel

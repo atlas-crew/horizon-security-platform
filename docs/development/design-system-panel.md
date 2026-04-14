@@ -183,6 +183,30 @@ control of layout anyway.
   (default tone, slotted)
 - `fleet/SensorConfigPage.tsx` — Apparatus Echo Target preset row
   (default tone, non-slotted, `as="div"`)
+- `AdminSettingsPage.tsx` — **14 accented sections** across all seven
+  tabs (Tenant / Policies / Automation / Fleet / Synapse / Apparatus
+  / System). Tone mix: 7× `info`, 2× `destructive`, 2× `advanced`,
+  2× `success`, 1× `default`, 1× `system`. **The `success` tone was
+  added to Panel as part of this migration** (two AdminSettings
+  sections used `border-status-success` for active/healthy states
+  that the original vocabulary didn't cover).
+- `components/AdminSettingsSkeleton.tsx` — 2 loading-state panels
+  (`info` + `destructive`) that duplicated the inline pattern.
+
+The AdminSettings migration was the regression test for Panel's
+defaults: since AdminSettings was the canonical source the pattern
+was modeled on, the visual result had to be pixel-identical to the
+hand-rolled version it replaced. Any discrepancy would have been
+a Panel defaults bug. None surfaced — all 14 sections render the
+same accent/padding/shadow/spacing as before.
+
+One section on AdminSettingsPage is deliberately NOT migrated: the
+dark hero card at line 1962 (`<section className="bg-ac-card-dark
+p-8 text-white space-y-6">`), which uses a dark navy background and
+white text instead of the standard `bg-surface-card` accent pattern.
+This is a themed exception parallel to OverviewPage's Strategic
+Insight hero — candidate for a `Panel variant="hero"` if we decide
+heros should live inside Panel's vocabulary.
 
 ## Not yet migrated
 

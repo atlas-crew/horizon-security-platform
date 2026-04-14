@@ -46,7 +46,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader, Spinner, Stack, Tabs, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, Panel, SectionHeader, Spinner, Stack, Tabs, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -537,7 +537,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-tenant"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
+                <Panel tone="info">
                   <div className="flex items-center justify-between">
                     <SectionHeader
                       title="Collective Defense & Privacy"
@@ -615,9 +615,9 @@ const AdminSettingsPage: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                </section>
+                </Panel>
 
-                <section className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
+                <Panel tone="destructive">
                   <div className="flex items-center justify-between">
                     <SectionHeader
                       title="Security Panic Button"
@@ -653,9 +653,9 @@ const AdminSettingsPage: React.FC = () => {
                       {isRevokingAll ? 'Revoking...' : 'Revoke All Tokens'}
                     </button>
                   </div>
-                </section>
+                </Panel>
 
-                <section className="bg-surface-card border-t-4 border-border-subtle p-8 shadow-card space-y-6">
+                <Panel tone="default">
                   <h3 className="text-lg font-light text-ink-primary uppercase tracking-tight">
                     Data Consent Status
                   </h3>
@@ -708,9 +708,9 @@ const AdminSettingsPage: React.FC = () => {
                       </>
                     )}
                   </Stack>
-                </section>
+                </Panel>
 
-                <section className="bg-surface-card border-t-4 border-ink-muted p-8 shadow-card space-y-6">
+                <Panel tone="system">
                   <div className="flex items-center justify-between">
                     <SectionHeader
                       title="Data Sovereignty"
@@ -762,7 +762,7 @@ const AdminSettingsPage: React.FC = () => {
                       Request Full Erasure
                     </Button>
                   </div>
-                </section>
+                </Panel>
               </div>
             </ErrorBoundary>
           )}
@@ -773,7 +773,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-policies"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
+                <Panel tone="info" spacing="none">
                   <div className="flex justify-between items-center mb-8">
                     <SectionHeader
                       title="Security Policy Templates"
@@ -855,10 +855,10 @@ const AdminSettingsPage: React.FC = () => {
                       ))
                     )}
                   </div>
-                </section>
+                </Panel>
 
                 {policyEditorOpen && (
-                  <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
+                  <Panel tone="advanced">
                     <Stack direction="row" align="flex-start" justify="space-between" gap="md">
                       <div>
                         <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest">
@@ -1001,7 +1001,7 @@ const AdminSettingsPage: React.FC = () => {
                               : 'Save'}
                       </button>
                     </div>
-                  </section>
+                  </Panel>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1019,7 +1019,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-automation"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
+                <Panel tone="info" spacing="none">
                   <div className="flex justify-between items-center mb-8">
                     <SectionHeader
                       title="Active Blocklist"
@@ -1170,7 +1170,7 @@ const AdminSettingsPage: React.FC = () => {
                       ))
                     )}
                   </div>
-                </section>
+                </Panel>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <MetricCard label="Manual Blocks" value={blocklistStats.manualCount} />
@@ -1187,7 +1187,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-fleet"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
+                <Panel tone="info" spacing="none">
                   <SectionHeader
                     title="Fleet-Wide Actions"
                     size="h2"
@@ -1236,9 +1236,9 @@ const AdminSettingsPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                </section>
+                </Panel>
 
-                <section className="bg-surface-card border-t-4 border-status-success p-8 shadow-card">
+                <Panel tone="success" spacing="none">
                   <div className="flex justify-between items-center mb-6">
                     <SectionHeader
                       title="Provisioning & Onboarding"
@@ -1359,7 +1359,7 @@ const AdminSettingsPage: React.FC = () => {
                       Open Onboarding -&gt;
                     </a>
                   </div>
-                </section>
+                </Panel>
 
                 {(() => {
                   const totalSensors = sensors.length;
@@ -1426,7 +1426,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-synapse"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
+                <Panel tone="info">
                   <SectionHeader
                     title="Synapse-Pingora Connectivity"
                     size="h2"
@@ -1490,9 +1490,9 @@ const AdminSettingsPage: React.FC = () => {
                       endpoints (Signal Hub / Synapse Direct).
                     </p>
                   </Stack>
-                </section>
+                </Panel>
 
-                <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
+                <Panel tone="advanced">
                   <Stack direction="row" align="center" justify="space-between" gap="md">
                     <SectionHeader
                       title="Connectivity Status"
@@ -1823,7 +1823,7 @@ const AdminSettingsPage: React.FC = () => {
                       Failed to load connectivity status.
                     </div>
                   )}
-                </section>
+                </Panel>
               </div>
             </ErrorBoundary>
           )}
@@ -1836,7 +1836,7 @@ const AdminSettingsPage: React.FC = () => {
               >
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Red Team Panel */}
-                  <section className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
+                  <Panel tone="destructive">
                     <div className="flex items-center justify-between">
                       <SectionHeader
                         title="Red-Team Simulation"
@@ -1883,10 +1883,10 @@ const AdminSettingsPage: React.FC = () => {
                     >
                       Initiate Apparatus Sync
                     </Button>
-                  </section>
+                  </Panel>
 
                   {/* Active Defense Panel */}
-                  <section className="bg-surface-card border-t-4 border-status-success p-8 shadow-card space-y-6">
+                  <Panel tone="success">
                     <div className="flex items-center justify-between">
                       <SectionHeader
                         title="Active Defense (Apparatus)"
@@ -1956,7 +1956,7 @@ const AdminSettingsPage: React.FC = () => {
                         />
                       </div>
                     </div>
-                  </section>
+                  </Panel>
                 </div>
 
                 <section className="bg-ac-card-dark p-8 text-white space-y-6">
@@ -2021,7 +2021,7 @@ const AdminSettingsPage: React.FC = () => {
                 id="panel-system"
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
-                <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
+                <Panel tone="info" spacing="none">
                   <SectionHeader
                     title="Hub Runtime Configuration"
                     size="h2"
@@ -2283,7 +2283,7 @@ const AdminSettingsPage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </section>
+                </Panel>
 
                 <div className="p-6 border-l-4 border-ac-magenta bg-surface-subtle space-y-2">
                   <h4 className="text-xs font-bold text-ink-primary uppercase tracking-widest">

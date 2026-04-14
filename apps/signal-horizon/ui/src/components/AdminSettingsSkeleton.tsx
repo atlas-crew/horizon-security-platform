@@ -1,5 +1,5 @@
 import { Skeleton } from './LoadingStates';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 
 export function AdminSettingsSkeleton() {
   return (
@@ -25,7 +25,7 @@ export function AdminSettingsSkeleton() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0 space-y-8">
-          <div className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
+          <Panel tone="info">
             <Skeleton className="h-6 w-64 mb-4" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4" />
@@ -35,13 +35,13 @@ export function AdminSettingsSkeleton() {
                 <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-surface-card border-t-4 border-status-error p-8 shadow-card space-y-6">
+          <Panel tone="destructive">
             <Skeleton className="h-6 w-48 mb-4" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-12 w-48 mt-4" />
-          </div>
+          </Panel>
         </main>
       </Stack>
     </div>

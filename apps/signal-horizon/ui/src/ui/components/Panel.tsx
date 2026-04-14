@@ -34,6 +34,7 @@ import { clsx } from 'clsx';
  * |---------------|----------------------|------------------------------------------------|
  * | `default`     | neutral border       | informational zones, summaries                 |
  * | `info`        | ac-blue              | primary/core settings, main control zones      |
+ * | `success`     | status-success green | positive/active states, healthy connections    |
  * | `warning`     | ac-orange            | cautionary zones, impactful but recoverable    |
  * | `destructive` | status-error (red)   | danger zones — deletions, revocations, resets  |
  * | `advanced`    | ac-magenta           | advanced/expert-mode controls, experimental    |
@@ -65,6 +66,7 @@ import { clsx } from 'clsx';
 export type PanelTone =
   | 'default'
   | 'info'
+  | 'success'
   | 'warning'
   | 'destructive'
   | 'advanced'
@@ -111,6 +113,7 @@ interface PanelProps extends React.HTMLAttributes<HTMLElement> {
 const toneAccentClass: Record<PanelTone, string> = {
   default: 'border-border-subtle',
   info: 'border-ac-blue',
+  success: 'border-status-success',
   warning: 'border-ac-orange',
   destructive: 'border-status-error',
   advanced: 'border-ac-magenta',

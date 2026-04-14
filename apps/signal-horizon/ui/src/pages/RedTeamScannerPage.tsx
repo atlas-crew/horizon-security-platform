@@ -53,6 +53,7 @@ export default function RedTeamScannerPage() {
   const [selectedTests, setSelectedTests] = useState<Set<string>>(new Set(AVAILABLE_TESTS));
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<RedTeamResponse | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const toggleTest = (test: string) => {
     setSelectedTests((prev) => {
@@ -66,6 +67,7 @@ export default function RedTeamScannerPage() {
     if (!target.trim()) return;
     setIsScanning(true);
     setResult(null);
+    setScanError(null);
     try {
       if (isDemo) {
         // Simulate scan delay
@@ -77,9 +79,29 @@ export default function RedTeamScannerPage() {
         method: 'POST',
         body: JSON.stringify({ target: target.trim(), tests: [...selectedTests] }),
       });
+      // Shape guard: Apparatus's apparatus-lib client currently sends POST
+      // /redteam/validate, but Apparatus only has a GET handler registered
+      // at that path. The POST falls through to Apparatus's default echo
+      // middleware which returns a 200 with {method, originalUrl, path,
+      // headers, ...} — NOT a RedTeamResponse. If we blindly setResult(data)
+      // the render crashes on result.summary.total because summary is
+      // undefined. Validate the shape here and surface a user-friendly
+      // error instead. See docs/development/demo-troubleshooting.md and
+      // follow-up tasks for the apparatus-lib fix.
+      if (!data || typeof data !== 'object' || !('results' in data) || !('summary' in data)) {
+        setScanError(
+          'The Red Team scan endpoint is not yet implemented in Apparatus. The apparatus-lib ' +
+          'client sends POST /redteam/validate but Apparatus only has a GET handler for that ' +
+          'path — the request falls through to the default echo handler. File a follow-up ' +
+          'to either add a POST handler in Apparatus or update apparatus-lib to send GET with ' +
+          'query params.'
+        );
+        return;
+      }
       setResult(data);
-    } catch { /* silent */ }
-    finally { setIsScanning(false); }
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed with an unknown error');
+    } finally { setIsScanning(false); }
   }, [target, selectedTests, isDemo]);
 
   const STATUS_STYLE: Record<string, { icon: typeof CheckCircle; color: string }> = {
@@ -140,6 +162,16 @@ export default function RedTeamScannerPage() {
           </Stack>
         </Button>
       </section>
+
+      {/* Scan error (Apparatus endpoint not implemented, etc.) */}
+      {scanError && (
+        <div className="px-4 py-3 border border-ac-red/30 bg-ac-red/10 text-sm text-ac-red">
+          <Stack direction="row" align="flex-start" gap="sm">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>{scanError}</span>
+          </Stack>
+        </div>
+      )}
 
       {/* Results */}
       {result && (

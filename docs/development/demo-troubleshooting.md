@@ -9,6 +9,49 @@ you're seeing.
 
 ---
 
+## Red Team Scanner page shows "endpoint not yet implemented"
+
+**Symptom.** `RedTeamScannerPage` at `/redteam` accepts a target URL
+and test list, you click "Run Scan", and instead of results you get a
+red error banner saying:
+```
+The Red Team scan endpoint is not yet implemented in Apparatus.
+```
+
+**Root cause.** Schema/method mismatch between `@atlascrew/apparatus-lib`
+and Apparatus itself:
+
+- `apparatus-lib` (in `../Apparatus/libs/client/src/categories/security.ts`)
+  calls `this.http.post<RedTeamResponse>('/redteam/validate', request)`.
+- Apparatus (`../Apparatus/apps/apparatus/src/app.ts:443`) only registers
+  `app.get('/redteam/validate', ...)`. There is **no POST handler**.
+- The POST falls through to Apparatus's default echo middleware which
+  happily returns 200 with `{method, originalUrl, path, headers, ...}` —
+  the UI would previously try to render
+  `data.summary.total` on that echo shape and crash.
+
+The UI now does a shape guard: if the response lacks `results` or
+`summary`, it assumes the endpoint isn't implemented and renders the
+error banner instead of crashing.
+
+**Fix.** Two options, both cross-repo:
+
+1. **Update `apparatus-lib`** to use GET with query params:
+   ```ts
+   return this.http.get<RedTeamResponse>('/redteam/validate', { query: request });
+   ```
+   Smaller change, matches Apparatus's current handler, but means the
+   target URL and test list go over the wire as query parameters.
+2. **Add a POST handler to Apparatus** at `app.ts:443` that reads
+   the body instead of query params. Larger change but cleaner for a
+   scan API that takes structured input.
+
+Until one of these lands, the Red Team Scanner page renders the error
+banner. Demo mode (`isDemo=true` via the dashboard demo toggle) still
+works because it uses DEMO_RESULTS and skips the fetch entirely.
+
+---
+
 ## Apparatus fails to start with `EADDRINUSE` on port 9000 or 6379
 
 **Symptom.** The `apparatus` tmux window shows something like:

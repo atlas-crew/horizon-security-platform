@@ -75,6 +75,7 @@ export default withMermaid(
               { text: 'Installation', link: '/getting-started/installation' },
               { text: 'Requirements', link: '/getting-started/requirements' },
               { text: 'Quick Start', link: '/getting-started/quickstart' },
+              { text: 'Demo Mode', link: '/getting-started/demo-mode' },
             ],
           },
         ],

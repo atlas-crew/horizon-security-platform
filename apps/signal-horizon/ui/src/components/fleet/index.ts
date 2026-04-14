@@ -1,6 +1,7 @@
 export { SensorStatusBadge } from './SensorStatusBadge';
-export { MetricCard } from './MetricCard';
-export type { MetricCardProps, MetricCardVariant, MetricAccent } from './MetricCard';
+// MetricCard is now canonical in @/ui — import it from there directly.
+// The previous fleet-local component has been deleted as part of the
+// MetricCard unification (see docs/development/design-system-panel.md).
 export { SensorTable } from './SensorTable';
 export { FleetErrorBoundary } from './FleetErrorBoundary';
 export { WebTerminal } from './WebTerminal';

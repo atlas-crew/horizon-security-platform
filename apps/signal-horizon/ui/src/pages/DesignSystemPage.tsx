@@ -30,7 +30,6 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { MetricCard as FleetMetricCard } from '../components/fleet';
 import {
   // Layout primitives
   Box,
@@ -447,21 +446,59 @@ export default function DesignSystemPage() {
         </div>
 
         <div>
-          <VariantLabel>MetricCard — @/ui (subtitle + trend)</VariantLabel>
+          <VariantLabel>MetricCard — minimal</VariantLabel>
+          <Grid cols={3} gap="md">
+            <MetricCard label="Active Templates" value={42} />
+            <MetricCard label="Default Templates" value={7} />
+            <MetricCard label="Revision Level" value="v3.2" />
+          </Grid>
+        </div>
+
+        <div>
+          <VariantLabel>MetricCard — with description tooltip + className accent</VariantLabel>
+          <Grid cols={3} gap="md">
+            <MetricCard
+              label="Critical Alerts"
+              value="3"
+              description="Sensors offline or with CPU/memory above 90%"
+              className="border-l-2 border-l-ac-red"
+              labelClassName="text-ac-red"
+              valueClassName="text-ac-red"
+            />
+            <MetricCard
+              label="Warnings"
+              value="7"
+              description="Sensors with degraded status or 75-90% usage"
+              className="border-l-2 border-l-ac-orange"
+              labelClassName="text-ac-orange"
+              valueClassName="text-ac-orange"
+            />
+            <MetricCard
+              label="Healthy"
+              value="48"
+              description="Sensors operating within normal thresholds"
+              className="border-l-2 border-l-ac-green"
+              labelClassName="text-ac-green"
+              valueClassName="text-ac-green"
+            />
+          </Grid>
+        </div>
+
+        <div>
+          <VariantLabel>MetricCard — with subtitle + trend + icon</VariantLabel>
           <Grid cols={3} gap="md">
             <MetricCard
               label="CPU Usage"
               value="32%"
               subtitle="across all cores"
-              trend="-2%"
-              trendDirection="down"
+              trend={{ value: -2, label: 'vs previous' }}
+              borderColor={colors.blue}
             />
             <MetricCard
               label="Memory Usage"
               value="61%"
               subtitle="of total RAM"
-              trend="+5%"
-              trendDirection="up"
+              trend={{ value: 5, label: 'vs previous' }}
               borderColor={colors.orange}
             />
             <MetricCard
@@ -469,30 +506,7 @@ export default function DesignSystemPage() {
               value="48%"
               subtitle="primary partition"
               borderColor={colors.green}
-            />
-          </Grid>
-        </div>
-
-        <div>
-          <VariantLabel>FleetMetricCard — with tooltip description</VariantLabel>
-          <Grid cols={3} gap="md">
-            <FleetMetricCard
-              label="Inbound Traffic"
-              value="42.1 Mbps"
-              description="Data received by this sensor from upstream clients"
-              className="border-l-2 border-l-ac-blue"
-            />
-            <FleetMetricCard
-              label="Active Connections"
-              value="1,284"
-              description="Currently open TCP connections being handled"
-              className="border-l-2 border-l-ac-green"
-            />
-            <FleetMetricCard
-              label="Packets/Sec"
-              value="89,420"
-              description="Network packets processed per second"
-              className="border-l-2 border-l-ac-orange"
+              valueColor={colors.green}
             />
           </Grid>
         </div>
@@ -501,11 +515,11 @@ export default function DesignSystemPage() {
           <VariantLabel>KpiStrip — compact horizontal row</VariantLabel>
           <KpiStrip
             metrics={[
-              { label: 'Requests', value: '12.4k', trend: '+8%', trendDirection: 'up' },
-              { label: 'Blocked', value: '203', trend: '-3%', trendDirection: 'down' },
-              { label: 'Allowed', value: '12.2k', trend: '+9%', trendDirection: 'up' },
-              { label: 'Latency', value: '42ms', trend: '-2ms', trendDirection: 'down' },
-              { label: 'Errors', value: '7', trend: '-50%', trendDirection: 'down' },
+              { label: 'Requests', value: '12.4k', trend: { value: 8, label: 'vs prev' } },
+              { label: 'Blocked', value: '203', trend: { value: -3, label: 'vs prev' } },
+              { label: 'Allowed', value: '12.2k', trend: { value: 9, label: 'vs prev' } },
+              { label: 'Latency', value: '42ms', trend: { value: -2, label: 'vs prev' } },
+              { label: 'Errors', value: '7', trend: { value: -50, label: 'vs prev' } },
             ]}
             cols={5}
             size="default"

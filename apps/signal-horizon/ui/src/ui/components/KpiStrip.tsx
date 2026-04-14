@@ -21,8 +21,12 @@ interface KpiMetric {
   label: string;
   value: string | number;
   subtitle?: string;
-  trend?: string;
-  trendDirection?: 'up' | 'down' | 'neutral';
+  /** Trend indicator. Sign of `value` infers direction unless overridden. */
+  trend?: {
+    value: number;
+    label?: string;
+    direction?: 'up' | 'down' | 'neutral';
+  };
   /** Override auto-cycled border color */
   borderColor?: string;
   /** Override value color */
@@ -65,7 +69,6 @@ export const KpiStrip: React.FC<KpiStripProps> = ({
         value={metric.value}
         subtitle={metric.subtitle}
         trend={metric.trend}
-        trendDirection={metric.trendDirection}
         borderColor={metric.borderColor || kpiBorderColors[i % kpiBorderColors.length]}
         valueColor={metric.valueColor}
         icon={metric.icon}

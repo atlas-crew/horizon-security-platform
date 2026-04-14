@@ -11,8 +11,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
-import { MetricCard } from '../../../components/fleet';
-import { Panel, Stack } from '@/ui';
+import { MetricCard, Panel, Stack } from '@/ui';
 import { InfoRow, ActionButton, formatUptime } from './shared';
 import { apiFetch } from '../../../lib/api';
 

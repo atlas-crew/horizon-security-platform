@@ -41,12 +41,12 @@ import {
   useOnboarding,
   useConnectivity,
 } from '../hooks/fleet';
-import { MetricCard, PolicyConfigEditor } from '../components/fleet';
+import { PolicyConfigEditor } from '../components/fleet';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, Panel, SectionHeader, Spinner, Stack, Tabs, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, MetricCard, Panel, SectionHeader, Spinner, Stack, Tabs, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<

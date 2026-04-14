@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Shield, AlertTriangle, FileSearch, Search, BarChart3 } from 'lucide-react';
-import { MetricCard } from '../../components/fleet';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
-import { Button, Panel, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, MetricCard, Panel, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
 
 interface DlpStats {
   totalScans: number;

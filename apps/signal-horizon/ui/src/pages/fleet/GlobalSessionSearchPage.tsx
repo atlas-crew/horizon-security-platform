@@ -9,8 +9,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
-import { MetricCard } from '../../components/fleet';
-import { Button, Modal, Panel, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, MetricCard, Modal, Panel, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 // =============================================================================
 // Type Definitions

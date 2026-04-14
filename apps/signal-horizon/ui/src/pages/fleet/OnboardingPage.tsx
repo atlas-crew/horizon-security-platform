@@ -21,9 +21,8 @@ import {
   UserPlus,
   Globe,
 } from 'lucide-react';
-import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, Modal, PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, colors } from '@/ui';
+import { Button, MetricCard, Modal, PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, colors } from '@/ui';
 
 interface RegistrationToken {
   id: string;

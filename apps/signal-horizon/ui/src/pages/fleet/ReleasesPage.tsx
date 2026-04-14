@@ -24,8 +24,7 @@ import {
 import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
-import { MetricCard } from '../../components/fleet';
-import { colors, Modal, Panel, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
+import { colors, MetricCard, Modal, Panel, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
 // ============================================================================
 // Types

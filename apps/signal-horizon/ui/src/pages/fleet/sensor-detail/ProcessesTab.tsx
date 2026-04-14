@@ -1,5 +1,4 @@
-import { MetricCard } from '../../../components/fleet';
-import { Panel } from '@/ui';
+import { MetricCard, Panel } from '@/ui';
 import { formatUptime } from './shared';
 
 interface ProcessesTabProps {

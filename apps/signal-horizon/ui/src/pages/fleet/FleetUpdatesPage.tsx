@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MetricCard, SensorStatusBadge } from '../../components/fleet';
+import { SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
-import { 
-  Button, 
-  SectionHeader, 
-  Stack, 
-  alpha, 
+import {
+  Button,
+  MetricCard,
+  SectionHeader,
+  Stack,
+  alpha,
   colors,
   Box,
   Text,

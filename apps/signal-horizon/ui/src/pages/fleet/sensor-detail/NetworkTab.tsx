@@ -1,5 +1,4 @@
-import { MetricCard } from '../../../components/fleet';
-import { Panel, Stack } from '@/ui';
+import { MetricCard, Panel, Stack } from '@/ui';
 import { InfoRow, formatDuration } from './shared';
 
 interface NetworkTabProps {

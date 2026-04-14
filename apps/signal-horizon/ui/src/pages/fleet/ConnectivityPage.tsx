@@ -35,9 +35,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import { MetricCard, PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 const xAxisSmall = { ...xAxisNoLine, tick: { ...xAxisNoLine.tick, fontSize: 11 } } as const;
 const yAxisSmall = { ...axisDefaults.y, tick: { ...axisDefaults.y.tick, fontSize: 11 } } as const;

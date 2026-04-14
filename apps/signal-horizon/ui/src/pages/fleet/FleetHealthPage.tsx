@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, AlertTriangle, XCircle, ArrowRight, Activity } from 'lucide-react';
-import { MetricCard } from '../../components/fleet';
 import { ResourceBar } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
 import { apiFetch } from '../../lib/api';
 import type { SensorSummary } from '../../types/fleet';
 import {
   Box,
+  MetricCard,
   SectionHeader,
   Stack,
   Grid,

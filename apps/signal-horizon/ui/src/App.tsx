@@ -60,6 +60,7 @@ import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import DesignLabPage from './pages/DesignLabPage';
+import DesignSystemPage from './pages/DesignSystemPage';
 const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
 const AutopilotPage = lazy(() => import('./pages/AutopilotPage'));
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage'));
@@ -696,7 +697,8 @@ function App() {
                 <Route path="/redteam" element={<Suspense fallback={<LoadingSpinner message="Loading red team scanner..." size="lg" />}><SignalHorizonPageWrapper><RedTeamScannerPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/dlp-scanner" element={<Suspense fallback={<LoadingSpinner message="Loading DLP scanner..." size="lg" />}><SignalHorizonPageWrapper><DlpScannerPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
-                
+                <Route path="/design-system" element={<SignalHorizonPageWrapper><DesignSystemPage /></SignalHorizonPageWrapper>} />
+
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}

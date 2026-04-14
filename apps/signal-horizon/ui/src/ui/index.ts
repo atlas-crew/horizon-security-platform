@@ -67,7 +67,7 @@ export {
 } from './components/SectionHeader';
 export { StatCard } from './components/StatCard';
 export { Panel } from './components/Panel';
-export type { PanelTone, PanelPadding, PanelSpacing } from './components/Panel';
+export type { PanelTone, PanelPadding, PanelSpacing, PanelVariant } from './components/Panel';
 export { DataTable, ValuePill } from './components/DataTable';
 export { Button } from './components/Button';
 export { Alert } from './components/Alert';

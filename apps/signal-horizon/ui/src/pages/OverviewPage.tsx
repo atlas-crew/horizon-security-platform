@@ -312,14 +312,22 @@ export default function OverviewPage() {
       {/* ─── KPI Strip ───────────────────────────────────────────────── */}
       <KpiStrip metrics={kpiMetrics} cols={5} size="default" />
 
-      {/* ─── Attack Map + Threat Feed ────────────────────────────────── */}
+      {/* ─── Attack Map + Threat Feed ──────────────────────────────────
+           Live Attack Map uses <Panel variant="tactical"> which layers
+           the scanlines + dot-grid CSS effects on top of the standard
+           card chrome. The diagonal-split overlay is a child element
+           because it's a page-specific decoration, not part of the
+           Panel vocabulary. Header and Body use `relative z-10` so
+           they sit above the tactical background. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ height: '420px' }}>
-        <section
-          className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden"
+        <Panel
+          tone="info"
+          variant="tactical"
+          className="md:col-span-2"
           aria-labelledby="attack-map-heading"
         >
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
-          <div className="card-header flex items-center justify-between relative z-10">
+          <Panel.Header className="relative z-10">
             <Stack direction="row" align="center" gap="smPlus">
               <SectionHeader
                 titleId="attack-map-heading"
@@ -363,11 +371,11 @@ export default function OverviewPage() {
                 </Button>
               ))}
             </Stack>
-          </div>
-          <div className="card-body relative z-10">
+          </Panel.Header>
+          <Panel.Body padding="md" className="relative z-10 flex-1">
             <AttackMap points={filteredMapPoints} routes={filteredMapRoutes} />
-          </div>
-        </section>
+          </Panel.Body>
+        </Panel>
         <div className="relative">
           <ErrorBoundary fallback={<AlertFeedSkeleton />}>
             <Suspense fallback={<AlertFeedSkeleton />}>

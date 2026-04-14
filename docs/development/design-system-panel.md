@@ -277,13 +277,80 @@ This is a themed exception parallel to OverviewPage's Strategic
 Insight hero — candidate for a `Panel variant="hero"` if we decide
 heros should live inside Panel's vocabulary.
 
-## Not yet migrated
+## Tactical variant
 
-- `OverviewPage.tsx`'s **Live Attack Map** section uses `.card scanlines
-  tactical-bg` — a themed "tactical HUD" aesthetic with custom visual
-  effects (grid overlay, scanlines) that aren't part of Panel's
-  vocabulary. Leave as-is until we decide whether to add a
-  `variant="tactical"` prop to Panel or keep it as a themed exception.
+**Added in the 7th Panel commit** (after AdminSettings, Hunting, and
+Fleet sweeps proved the base Panel API works at scale).
+
+The Live Attack Map on the Threat Overview page used a hand-rolled
+`<section className="card scanlines tactical-bg ...">` to layer the
+"tactical HUD" aesthetic (subtle dot-grid background + CRT scanline
+overlay) on top of standard card chrome. Migrating it required
+extending Panel with a new orthogonal axis: **variant**.
+
+```tsx
+<Panel tone="info" variant="tactical">
+  <Panel.Header className="relative z-10">...</Panel.Header>
+  <Panel.Body className="relative z-10">
+    <AttackMap />
+  </Panel.Body>
+</Panel>
+```
+
+`variant` is independent of `tone`/`padding`/`spacing` — they all
+compose. `tone="info"` still produces the blue accent bar at the top
+of the panel, but the bar now sits above a navy gradient + dot grid
++ scanlines layered by the tactical CSS classes. The chrome and the
+theme work together rather than fighting each other.
+
+### Variant vocabulary
+
+- `default` — plain card background, no overlays. The shape every
+  AdminSettings / Fleet / Hunting Panel uses today.
+- `tactical` — adds `scanlines tactical-bg relative overflow-hidden`
+  classes on top of the base card. The `relative` is load-bearing
+  because the `.scanlines` class places its overlay via a
+  `::before` pseudo-element with `position: absolute`, and any
+  child overlays (e.g. the diagonal-split decoration on the Live
+  Attack Map) need a containing block. `overflow-hidden` clips
+  the scanlines to the panel's bounds.
+
+### Child requirements when using tactical variant
+
+When `variant="tactical"`, child elements that should sit above the
+grid/scanline backgrounds need `relative z-10` themselves. The
+`Panel.Header` and `Panel.Body` slots accept a `className` override
+for this. The Live Attack Map migration applies it explicitly:
+
+```tsx
+<Panel.Header className="relative z-10">
+<Panel.Body className="relative z-10">
+```
+
+A future enhancement could auto-inject `relative z-10` on slots
+when the parent variant is `tactical`, but that needs context
+plumbing. For now the explicit className is the contract.
+
+### Page-specific decorations
+
+The diagonal-split overlay on the Live Attack Map is NOT part of
+the tactical variant — it's a page-specific decoration that lives
+as a child element inside the Panel:
+
+```tsx
+<Panel variant="tactical">
+  <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
+  <Panel.Header>...
+```
+
+The reasoning: not every tactical panel will want a diagonal split,
+and not every diagonal split lives on a tactical panel. Keeping the
+two concepts separable is the right scope decision for the variant
+prop. If a second tactical panel wants the same overlay, it can
+duplicate the div; if it shows up three times, then it deserves its
+own component.
+
+## Not yet migrated
 - `OverviewPage.tsx`'s **Strategic Insight hero card** uses navy
   background with diagonal-split overlays — also a themed exception,
   not a Panel candidate without a hero variant.

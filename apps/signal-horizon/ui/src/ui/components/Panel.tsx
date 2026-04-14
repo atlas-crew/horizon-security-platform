@@ -76,6 +76,27 @@ export type PanelPadding = 'none' | 'sm' | 'md' | 'lg';
 
 export type PanelSpacing = 'none' | 'sm' | 'md' | 'lg';
 
+/**
+ * Panel visual variant.
+ *
+ * - `default` — plain card background with the standard tone accent bar
+ *   and shadow. This is the AdminSettings / Fleet / Hunting look.
+ * - `tactical` — layers the `scanlines` + `tactical-bg` CSS effects on
+ *   top of the card chrome to produce the "tactical HUD" aesthetic used
+ *   by the Live Attack Map on the Threat Overview page. Keeps the tone
+ *   accent bar and shadow on top, so `<Panel variant="tactical"
+ *   tone="info">` gets the blue accent bar + tactical grid + scanlines
+ *   all at once. Panel still has `position: relative` implicitly via
+ *   the scanlines class, so child overlays with `absolute` positioning
+ *   continue to work.
+ *
+ * When using `variant="tactical"`, child elements that need to sit
+ * above the grid/scanline backgrounds should apply `relative z-10`
+ * themselves (or via `<Panel.Header>` / `<Panel.Body>` which do it
+ * automatically when the parent variant is tactical).
+ */
+export type PanelVariant = 'default' | 'tactical';
+
 type PanelElement = 'section' | 'div' | 'article' | 'aside';
 
 interface PanelProps extends React.HTMLAttributes<HTMLElement> {
@@ -108,6 +129,12 @@ interface PanelProps extends React.HTMLAttributes<HTMLElement> {
    * panels where an outer panel already provides the accent.
    */
   noAccent?: boolean;
+  /**
+   * Visual variant layered on top of the tone/padding/spacing base.
+   * Use `tactical` to enable the scanline + grid overlay effects for
+   * themed panels like the Live Attack Map. Default is plain card.
+   */
+  variant?: PanelVariant;
 }
 
 const toneAccentClass: Record<PanelTone, string> = {
@@ -233,6 +260,7 @@ const PanelImpl: React.FC<PanelProps> = ({
   spacing = 'md',
   as = 'section',
   noAccent = false,
+  variant = 'default',
   className,
   children,
   ...rest
@@ -260,6 +288,12 @@ const PanelImpl: React.FC<PanelProps> = ({
     // flex-grow and Header can stay pinned at the top. Without this, a
     // Panel.Body with flex-grow inside a non-flex Panel does nothing.
     hasSlots && 'flex flex-col',
+    // Tactical variant layers scanlines + dot-grid overlay on top of the
+    // base card chrome. `relative overflow-hidden` is needed because the
+    // `.scanlines` class uses a `::before` pseudo-element positioned
+    // absolutely, and any themed children (diagonal-split overlays, etc.)
+    // that use `absolute` positioning need a containing block.
+    variant === 'tactical' && 'scanlines tactical-bg relative overflow-hidden',
     className,
   );
   return React.createElement(Component, { className: classes, ...rest }, children);

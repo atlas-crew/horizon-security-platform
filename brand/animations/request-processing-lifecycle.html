@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Request Processing Lifecycle — Synapse Edge Defense</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--card:#101828;--subtle:#131c2e;--border:#1e2d44;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;height:500px;margin:0 auto;overflow:hidden;}
+
+.frame{width:1200px;height:500px;padding:32px 40px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+
+/* --- Brand band --- */
+.band{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.band-left{display:flex;align-items:center;gap:10px;}
+.band-left .t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;}
+.band-left svg{width:26px;height:26px;}
+.band-title{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:20px;color:var(--text);}
+
+/* --- Pipeline row --- */
+.pipeline{display:flex;gap:0;position:relative;margin-top:8px;}
+.stage{flex:1;background:var(--subtle);border:1px solid var(--border);border-right:none;padding:14px 12px;min-height:96px;position:relative;transition:none;}
+.stage:last-child{border-right:1px solid var(--border);}
+.stage .idx{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:1px;color:var(--muted);}
+.stage .nm{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--text);margin-top:2px;}
+.stage .sub{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--muted);margin-top:4px;line-height:1.5;}
+.stage .delta{position:absolute;bottom:10px;left:12px;right:12px;font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;opacity:0;}
+
+/* --- Request envelope traveling dot --- */
+.envelope{position:absolute;top:62px;left:calc((100% / 6) * 0.5 - 14px);width:28px;height:20px;border:1.5px solid var(--blue);background:var(--card);display:flex;align-items:center;justify-content:center;z-index:10;opacity:0;}
+.envelope::before{content:'';position:absolute;width:22px;height:1px;background:var(--blue);top:9px;}
+.envelope::after{content:'';position:absolute;width:10px;height:1px;background:var(--blue);top:5px;}
+
+/* --- Sidebar: risk score + verdict --- */
+.dash{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px;}
+.panel{background:var(--card);border:1px solid var(--border);padding:16px 20px;position:relative;min-height:156px;}
+.panel-h{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+
+/* Risk score meter */
+.risk-panel{border-left:2px solid var(--blue);}
+.risk-row{display:flex;align-items:baseline;gap:12px;margin-top:10px;position:relative;height:48px;}
+.risk-val{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:46px;line-height:1;position:relative;width:140px;height:46px;}
+.risk-val .n{position:absolute;left:0;top:0;visibility:hidden;line-height:1;}
+.risk-val .n.n0{color:var(--green);}
+.risk-val .n.n25{color:var(--green);}
+.risk-val .n.n45{color:var(--amber);}
+.risk-val .n.n75{color:var(--red);}
+.risk-slash{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--muted);position:absolute;left:150px;top:30px;}
+.risk-bar{margin-top:14px;height:10px;background:rgba(30,45,68,0.4);position:relative;overflow:hidden;}
+.risk-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--green),var(--amber) 50%,var(--red));}
+.risk-marker{position:absolute;left:70%;top:-2px;bottom:-2px;width:1px;background:var(--red);opacity:0.6;}
+.risk-marker::after{content:'BLOCK @ 70';position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:7px;letter-spacing:0.5px;color:var(--red);white-space:nowrap;}
+
+/* Verdict panel */
+.verdict-panel{border-left:2px solid var(--muted);display:flex;flex-direction:column;}
+.verdict-row{flex:1;position:relative;margin-top:4px;min-height:100px;}
+.verdict{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' 0;font-size:42px;letter-spacing:-0.5px;visibility:hidden;display:flex;align-items:center;gap:14px;white-space:nowrap;}
+.verdict.eval{color:var(--muted);font-size:18px;letter-spacing:1px;}
+.verdict.block{color:var(--red);}
+.verdict .dot{width:14px;height:14px;background:var(--red);border-radius:0;}
+
+/* ============ ANIMATIONS ============
+   Master loop: 10 seconds
+   t=0.0s: idle start
+   t=0.5s: request enters (stage IN)
+   t=1.5s: stage 01 (TLS) activates
+   t=3.0s: stage 02 (WAF) — SQLi detected, risk jumps
+   t=4.5s: stage 03 (API profile) — schema violation
+   t=6.0s: stage 04 (Actor scoring) — campaign member
+   t=7.0s: stage 05 (Decision) — BLOCK
+   t=7.5s-9.5s: verdict holds on BLOCK
+   t=9.5s-10s: fade + reset
+*/
+
+/* Stage highlights — each stage has an active window */
+@keyframes stage0{
+  0%,3%{background:var(--subtle);border-color:var(--border);}
+  5%,14%{background:rgba(30,144,255,0.08);border-color:var(--blue);box-shadow:inset 0 -2px 0 var(--blue);}
+  16%,100%{background:var(--subtle);border-color:var(--border);box-shadow:none;}
+}
+@keyframes stage1{
+  0%,13%{background:var(--subtle);border-color:var(--border);}
+  15%,28%{background:rgba(30,144,255,0.1);border-color:var(--blue);box-shadow:inset 0 -2px 0 var(--blue);}
+  30%,100%{background:var(--subtle);border-color:rgba(30,144,255,0.3);box-shadow:none;}
+}
+@keyframes stage2{
+  0%,28%{background:var(--subtle);border-color:var(--border);}
+  30%,43%{background:rgba(239,68,68,0.1);border-color:var(--red);box-shadow:inset 0 -2px 0 var(--red);}
+  45%,100%{background:var(--subtle);border-color:rgba(239,68,68,0.4);box-shadow:none;}
+}
+@keyframes stage3{
+  0%,43%{background:var(--subtle);border-color:var(--border);}
+  45%,58%{background:rgba(245,158,11,0.1);border-color:var(--amber);box-shadow:inset 0 -2px 0 var(--amber);}
+  60%,100%{background:var(--subtle);border-color:rgba(245,158,11,0.3);box-shadow:none;}
+}
+@keyframes stage4{
+  0%,58%{background:var(--subtle);border-color:var(--border);}
+  60%,68%{background:rgba(249,115,22,0.1);border-color:var(--coral);box-shadow:inset 0 -2px 0 var(--coral);}
+  70%,100%{background:var(--subtle);border-color:rgba(249,115,22,0.3);box-shadow:none;}
+}
+@keyframes stage5{
+  0%,68%{background:var(--subtle);border-color:var(--border);}
+  70%,95%{background:rgba(239,68,68,0.12);border-color:var(--red);box-shadow:inset 0 -2px 0 var(--red);}
+  97%,100%{background:var(--subtle);border-color:var(--border);box-shadow:none;}
+}
+
+/* Stage deltas — fade in labels as each stage resolves */
+@keyframes delta2{0%,28%{opacity:0}30%,95%{opacity:1}97%,100%{opacity:0}}
+@keyframes delta3{0%,43%{opacity:0}45%,95%{opacity:1}97%,100%{opacity:0}}
+@keyframes delta4{0%,58%{opacity:0}60%,95%{opacity:1}97%,100%{opacity:0}}
+
+/* Envelope travel along pipeline */
+@keyframes travel{
+  0%,3%{opacity:0;transform:translateX(0);}
+  5%{opacity:1;transform:translateX(0);}
+  15%{transform:translateX(184px);}
+  30%{transform:translateX(368px);}
+  45%{transform:translateX(552px);}
+  60%{transform:translateX(736px);}
+  70%{opacity:1;transform:translateX(920px);}
+  72%,95%{opacity:0;transform:translateX(920px);}
+  100%{opacity:0;transform:translateX(0);}
+}
+
+/* Risk score counter (discrete step-through via visibility) */
+@keyframes risk0 {0%  {visibility:visible} 30%,100%{visibility:hidden}}
+@keyframes risk25{0%,29%{visibility:hidden} 30%{visibility:visible} 45%,100%{visibility:hidden}}
+@keyframes risk45{0%,44%{visibility:hidden} 45%{visibility:visible} 60%,100%{visibility:hidden}}
+@keyframes risk75{0%,59%{visibility:hidden} 60%{visibility:visible} 97%,100%{visibility:hidden}}
+
+/* Risk bar fill — smooth interpolation */
+@keyframes bar{
+  0%,5%{width:0;}
+  30%{width:25%;}
+  45%{width:45%;}
+  60%{width:75%;}
+  95%{width:75%;}
+  97%,100%{width:0;}
+}
+
+/* Verdict text: EVALUATING during stages 1-4, BLOCK at stage 5 */
+@keyframes verdictEval {0%,4%{visibility:hidden} 5%{visibility:visible} 70%,100%{visibility:hidden}}
+@keyframes verdictBlock{0%,69%{visibility:hidden} 70%{visibility:visible} 97%,100%{visibility:hidden}}
+@keyframes blockPulse{0%,68%{box-shadow:none;}72%{box-shadow:inset 0 0 0 2px var(--red);}80%{box-shadow:inset 0 0 40px rgba(239,68,68,0.2);}88%{box-shadow:inset 0 0 0 2px var(--red);}95%{box-shadow:inset 0 0 40px rgba(239,68,68,0.2);}97%,100%{box-shadow:none;}}
+
+/* Apply animations */
+.pipeline .stage:nth-child(1){animation:stage0 10s infinite linear;}
+.pipeline .stage:nth-child(2){animation:stage1 10s infinite linear;}
+.pipeline .stage:nth-child(3){animation:stage2 10s infinite linear;}
+.pipeline .stage:nth-child(4){animation:stage3 10s infinite linear;}
+.pipeline .stage:nth-child(5){animation:stage4 10s infinite linear;}
+.pipeline .stage:nth-child(6){animation:stage5 10s infinite linear;}
+
+.pipeline .stage:nth-child(3) .delta{animation:delta2 10s infinite linear;color:var(--red);}
+.pipeline .stage:nth-child(4) .delta{animation:delta3 10s infinite linear;color:var(--amber);}
+.pipeline .stage:nth-child(5) .delta{animation:delta4 10s infinite linear;color:var(--coral);}
+
+.envelope{animation:travel 10s infinite linear;}
+.risk-val .n0{animation:risk0 10s infinite linear;}
+.risk-val .n25{animation:risk25 10s infinite linear;}
+.risk-val .n45{animation:risk45 10s infinite linear;}
+.risk-val .n75{animation:risk75 10s infinite linear;}
+.risk-bar-fill{animation:bar 10s infinite linear;}
+.verdict.eval{animation:verdictEval 10s infinite linear;}
+.verdict.block{animation:verdictBlock 10s infinite linear;}
+.verdict-panel{animation:blockPulse 10s infinite linear;}
+</style>
+<script>
+// URL-param seek: ?t=NNN freezes all animations at NNNms into the loop.
+// Used by the frame-capture pipeline; no effect on normal playback.
+(function(){
+  var m = location.search.match(/[?&]t=(-?\d+)/);
+  if (!m) return;
+  var t = parseInt(m[1], 10);
+  var s = document.createElement('style');
+  s.textContent = '*, *::before, *::after { animation-delay: -' + t + 'ms !important; animation-play-state: paused !important; }';
+  document.head.appendChild(s);
+})();
+</script>
+</head>
+<body>
+<div class="frame">
+<!-- Brand band -->
+<div class="band">
+<div class="band-left">
+<svg viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="3" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="3" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="3" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="3" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="4" stroke-linecap="square"/><circle cx="28" cy="24" r="5" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="82" cy="24" r="4" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="90" cy="50" r="4" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="26" cy="76" r="4" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="78" cy="86" r="6" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span>
+<span class="t-label" style="color:var(--muted);">Edge Defense</span>
+</div>
+<div class="band-title">Request Processing Lifecycle</div>
+</div>
+
+<!-- Pipeline -->
+<div class="pipeline">
+<div class="stage"><div class="idx">IN</div><div class="nm">Request</div><div class="sub">HTTP/HTTPS<br>Headers + Body</div></div>
+<div class="stage"><div class="idx">STAGE 01</div><div class="nm">TLS Fingerprint</div><div class="sub">JA4 / JA4H<br>~1μs</div></div>
+<div class="stage"><div class="idx">STAGE 02</div><div class="nm">WAF Detection</div><div class="sub">248 rules<br>15–25μs</div><div class="delta">SQLi match · +25</div></div>
+<div class="stage"><div class="idx">STAGE 03</div><div class="nm">API Profile</div><div class="sub">Schema check<br>~5μs</div><div class="delta">Schema violation · +20</div></div>
+<div class="stage"><div class="idx">STAGE 04</div><div class="nm">Actor Score</div><div class="sub">Risk + campaign<br>~1μs</div><div class="delta">Campaign member · +30</div></div>
+<div class="stage"><div class="idx">STAGE 05</div><div class="nm">Decision</div><div class="sub">Allow / Block<br>&lt;1μs</div></div>
+<div class="envelope"></div>
+</div>
+
+<!-- Sidebar dashboard -->
+<div class="dash">
+<div class="panel risk-panel">
+<div class="panel-h">Risk Score · 0–100</div>
+<div class="risk-row">
+<div class="risk-val">
+<span class="n n0">0</span>
+<span class="n n25">25</span>
+<span class="n n45">45</span>
+<span class="n n75">75</span>
+</div>
+<span class="risk-slash">/ 100</span>
+</div>
+<div class="risk-bar">
+<div class="risk-bar-fill"></div>
+<div class="risk-marker"></div>
+</div>
+</div>
+
+<div class="panel verdict-panel">
+<div class="panel-h">Verdict</div>
+<div class="verdict-row">
+<div class="verdict eval">evaluating…</div>
+<div class="verdict block"><span class="dot"></span>BLOCK</div>
+</div>
+</div>
+</div>
+
+</div>
+</body>
+</html>

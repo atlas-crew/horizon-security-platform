@@ -295,6 +295,7 @@ infographic-new name title:
         -e "s|__TAGLINE__|Tagline — replace me.|g" \
         -e "s|__TAGLINE_SUB__|Supporting line — replace me.|g" \
         -e "s|__PAGE_HEIGHT__|1900|g" \
+        -e "s|__SLUG__|{{name}}|g" \
         "$src" > "$dst"
     echo "Created: brand/infographics/html/{{name}}.html"
     echo "Next: fill sections, then 'just infographic-render {{name}}'"
@@ -367,3 +368,21 @@ infographic-render-all:
         exit 1
     fi
     echo "all infographics rendered"
+
+# Sync infographic HTML source files to atlascrew.dev/infographics/
+infographic-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="{{root}}/brand/infographics/html"
+    dst="/Users/nick/Developer/Sites/atlascrew.dev/infographics"
+    if [[ ! -d "$dst" ]]; then
+        echo "error: atlascrew.dev infographics directory not found at $dst" >&2
+        exit 1
+    fi
+    count=0
+    for f in "$src"/*.html; do
+        [[ "$(basename "$f")" == _* ]] && continue
+        cp "$f" "$dst/"
+        count=$((count + 1))
+    done
+    echo "synced $count infographic(s) to $dst"

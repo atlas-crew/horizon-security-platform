@@ -280,8 +280,7 @@
   input,
   select,
   textarea,
-  .btn,
-  .card {
+  .btn {
     border-radius: 0;
   }
 
@@ -317,110 +316,10 @@
     @apply bg-surface-base text-ink-primary;
   }
 
-  /* Card styles with gradient depth - Light mode
-     Enhanced with layered shadows and subtle highlights */
-  .card {
-    background: var(--gradient-card);
-    border: 1px solid var(--border-subtle);
-    box-shadow: var(--shadow-card);
-    position: relative;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-  }
-
-  .card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--inner-highlight);
-    pointer-events: none;
-    opacity: 0.5;
-  }
-
-  .card::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    box-shadow: var(--inner-shadow-top);
-    pointer-events: none;
-  }
-
-  .card:hover {
-    border-color: var(--border-medium);
-    box-shadow: var(--shadow-card-hover);
-    transform: translateY(-1px);
-  }
-
-  /* Raised card variant for more emphasis */
-  .card-raised {
-    box-shadow: var(--shadow-card-raised);
-  }
-
-  /* Dark mode cards get navy gradient treatment */
-  .dark .card {
-    background: var(--gradient-card);
-    border: 1px solid rgba(30, 144, 255, 0.25);
-    box-shadow:
-      0 4px 16px rgba(0, 0, 0, 0.4),
-      0 1px 3px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  }
-
-  .dark .card::before {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 40%);
-    opacity: 1;
-  }
-
-  .dark .card::after {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  }
-
-  /* Glass panel - Light mode with enhanced depth */
-  .card-glass {
-    @apply backdrop-blur-md;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
-    border: 1px solid rgba(26, 43, 66, 0.08);
-    border-top-color: rgba(255, 255, 255, 0.95);
-    border-left-color: rgba(255, 255, 255, 0.6);
-    box-shadow:
-      0 4px 16px rgba(26, 43, 66, 0.08),
-      0 1px 3px rgba(26, 43, 66, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 0 rgba(26, 43, 66, 0.03);
-  }
-
-  .card-glass:hover {
-    box-shadow:
-      0 8px 24px rgba(26, 43, 66, 0.10),
-      0 2px 4px rgba(26, 43, 66, 0.05),
-      inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  }
-
-  /* Glass panel - Dark mode */
-  .dark .card-glass {
-    background: linear-gradient(165deg, rgba(26, 43, 66, 0.85) 0%, rgba(8, 14, 26, 0.9) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-top-color: rgba(255, 255, 255, 0.12);
-    border-left-color: rgba(255, 255, 255, 0.1);
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-
-  .card-header {
-    @apply px-4 py-3 border-b text-ink-primary;
-    border-color: var(--border-subtle);
-    background: linear-gradient(180deg, rgba(30, 144, 255, 0.03) 0%, transparent 100%);
-  }
-
-  .dark .card-header {
-    border-color: rgba(30, 144, 255, 0.2);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
-  }
-
-  .card-body {
-    @apply p-4;
-    position: relative;
-  }
+  /* .card / .card-header / .card-body / .card-raised / .card-glass /
+     .card-elevated have all been removed — replaced by the <Panel>
+     component exported from @/ui. See docs/development/design-system-panel.md
+     for the migration history and tone/variant vocabulary. */
 
   /* Button styles (Signal Horizon Design System)
      Primary: Magenta, Secondary: Atlas Crew Blue outline, Height: 40px */
@@ -969,28 +868,6 @@
       0 1px 2px rgba(26, 43, 66, 0.04);
   }
 
-  /* Elevated card with full depth treatment */
-  .card-elevated {
-    background: var(--gradient-card);
-    border: 1px solid var(--border-subtle);
-    box-shadow: var(--shadow-card);
-    position: relative;
-  }
-
-  .card-elevated::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--inner-highlight);
-    pointer-events: none;
-    opacity: 0.6;
-  }
-
-  .card-elevated:hover {
-    box-shadow: var(--shadow-card-hover);
-    border-color: var(--border-medium);
-  }
-
   /* Dark mode overrides for elevation */
   .dark .surface-level-1,
   .dark .surface-level-2,
@@ -1008,16 +885,6 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       0 2px 4px rgba(0, 0, 0, 0.3);
-  }
-
-  .dark .card-elevated {
-    background: var(--gradient-card);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  }
-
-  .dark .card-elevated::before {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 30%);
-    opacity: 1;
   }
 
   /* =========================================

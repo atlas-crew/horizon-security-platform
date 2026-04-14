@@ -42,6 +42,10 @@ notes that are not part of the product documentation.
   Known issues and recovery recipes for the demo pipeline (Prisma
   client regeneration, luma.gl dedup, sensor auth flows, RPS saturation,
   the ID-namespace schism between seed and live data).
+- [docs/development/design-system-panel.md](./development/design-system-panel.md) —
+  `<Panel>` component reference: semantic tones, padding/spacing tokens,
+  migration guide, and the deferred work needed for full card-convention
+  cleanup (slotted headers, tactical variant, `.card` CSS deprecation).
 - `docs/dockerhub-horizon.md`, `docs/dockerhub-synapse-waf.md` — Docker
   Hub registry publishing notes.
 

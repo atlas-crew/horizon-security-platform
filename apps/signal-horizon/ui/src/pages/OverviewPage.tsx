@@ -40,7 +40,7 @@ import {
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
 // ─── @/ui library imports ────────────────────────────────────────────────────
-import { SectionHeader, KpiStrip, Button, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { SectionHeader, KpiStrip, Button, Stack, Panel, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
@@ -377,12 +377,22 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* ─── Active Campaigns ────────────────────────────────────────── */}
-      <section
-        className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]"
+      {/* ─── Active Campaigns ─────────────────────────────────────────
+           POC: converted from ad-hoc `<section className="card border-t-4
+           border-ac-blue">` to the new @/ui <Panel> component. The
+           `tone="info"` prop produces the same 4px blue top accent that
+           was previously hand-rolled. padding="md" matches the old p-6-ish
+           feel; spacing="none" because the ActiveCampaignList child manages
+           its own layout. See docs/development/design-system.md (TBD)
+           for the Panel migration guide. */}
+      <Panel
+        tone="info"
+        padding="md"
+        spacing="none"
+        className="flex flex-col min-h-[300px]"
         aria-labelledby="campaigns-heading"
       >
-        <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
+        <div className="flex items-center justify-between shrink-0 pb-3 border-b border-border-subtle">
           <SectionHeader
             titleId="campaigns-heading"
             title="Active Campaigns"
@@ -409,14 +419,12 @@ export default function OverviewPage() {
             </Button>
           </Stack>
         </div>
-        <div className="card-body p-0">
-          <ErrorBoundary fallback={<CampaignListSkeleton />}>
-            <Suspense fallback={<CampaignListSkeleton />}>
-              <ActiveCampaignList campaigns={campaigns} />
-            </Suspense>
-          </ErrorBoundary>
-        </div>
-      </section>
+        <ErrorBoundary fallback={<CampaignListSkeleton />}>
+          <Suspense fallback={<CampaignListSkeleton />}>
+            <ActiveCampaignList campaigns={campaigns} />
+          </Suspense>
+        </ErrorBoundary>
+      </Panel>
 
       {/* ─── Strategic Insights + Top Metrics ────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

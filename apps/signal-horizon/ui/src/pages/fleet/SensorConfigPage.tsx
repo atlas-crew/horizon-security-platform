@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, SectionHeader, Spinner, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Breadcrumb, SectionHeader, Spinner, Stack, Panel, colors, PAGE_TITLE_STYLE } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -285,12 +285,17 @@ export function SensorConfigPage() {
 	              </div>
 	            </div>
 
-              <Stack
-                direction="row"
-                align="flex-start"
-                justify="space-between"
-                gap="md"
-                className="border border-border-subtle bg-surface-card p-4 flex-shrink-0"
+              {/* POC: converted ad-hoc 'border border-border-subtle bg-surface-card p-4'
+                  wrapper to the new @/ui <Panel> component. tone="default" keeps the
+                  neutral accent; padding="sm" matches the existing p-4 feel; as="div"
+                  because this sits inside a larger form, not as a top-level page zone;
+                  spacing="none" because the internal layout uses flex not vertical rhythm. */}
+              <Panel
+                tone="default"
+                padding="sm"
+                spacing="none"
+                as="div"
+                className="flex items-start justify-between gap-4 flex-shrink-0"
               >
                 <div className="space-y-1">
                   <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
@@ -354,7 +359,7 @@ export function SensorConfigPage() {
                     Apply Upstream
                   </button>
                 </div>
-              </Stack>
+              </Panel>
 	
 	            <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
 	              <CodeEditor

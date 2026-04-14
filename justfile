@@ -113,6 +113,72 @@ dev: dev-horizon-api dev-horizon-ui dev-synapse
     @echo "  Synapse Pingora    → :6190 (proxy) / :6191 (admin)"
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# DEMO MODE
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# `just demo` starts Horizon API + UI + a RELEASE-build Synapse WAF with
+# --demo, which spins up the procedural traffic simulator documented in
+# docs/development/demo-simulator.md. Release build matters: the debug
+# binary is a memory hog and gets OOM-killed on laptops after ~30-60
+# minutes of continuous simulation, whereas the release build runs
+# indefinitely.
+#
+# First run compiles the release binary (a few minutes). Subsequent runs
+# are no-ops since cargo is incremental.
+#
+# Teardown: `just dev-stop` (same as dev; the demo-synapse recipe reuses
+# the `synapse-pingora` tmux window name).
+
+# Build the release synapse-waf binary if it's missing or stale
+_demo-build-waf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{root}}/apps/synapse-pingora"
+    if [ ! -x "target/release/synapse-waf" ]; then
+        echo "Building release synapse-waf binary (first run only)..."
+        cargo build --release --bin synapse-waf
+    else
+        # Rebuild incrementally; cargo is smart enough to no-op if nothing changed
+        cargo build --release --bin synapse-waf
+    fi
+
+# Start Synapse WAF release binary in --demo mode (procedural traffic + horizon push)
+demo-synapse: _dev-init _demo-build-waf
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="synapse-pingora"
+    # Release binary with demo flags and horizon config pointed at localhost
+    cmd="cd '{{root}}/apps/synapse-pingora' && SYNAPSE_PRODUCTION=0 SYNAPSE_DEMO=1 SYNAPSE_ADMIN_AUTH_DISABLED=1 RUST_LOG=warn,synapse_waf=info,synapse_waf::simulator=info,synapse_pingora::horizon=info ./target/release/synapse-waf --config config.horizon.yaml --demo"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in --demo mode (release build)" ;;
+            *)
+                echo "$name: already running ($current) — stop it first with \`just dev-stop-one synapse-pingora\`" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started in --demo mode (release build)"
+    fi
+
+# Start the full demo stack: Horizon API + UI + Synapse WAF in --demo mode
+demo: dev-horizon-api dev-horizon-ui demo-synapse
+    @echo ""
+    @echo "Demo stack running in tmux session '{{_dev_session}}':"
+    @echo "  Signal Horizon API → http://localhost:3100"
+    @echo "  Signal Horizon UI  → http://localhost:5180  ← open this in your browser"
+    @echo "  Synapse WAF (demo) → :6190 proxy / :6191 admin"
+    @echo ""
+    @echo "The Synapse WAF is generating synthetic attacker traffic from"
+    @echo "RFC 5737 reserved ranges (198.51.100.x and 203.0.113.99). See"
+    @echo "docs/development/demo-simulator.md for the full architecture."
+    @echo ""
+    @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
+
 # Show status of all dev windows (running vs idle vs not running)
 dev-status:
     #!/usr/bin/env bash

@@ -272,3 +272,40 @@ User-facing quickstart lives at
 [site/getting-started/demo-mode.md](../../site/getting-started/demo-mode.md)
 and on the GitHub Pages site. For recovery when things go wrong, see
 [demo-troubleshooting.md](./demo-troubleshooting.md).
+
+### Release build vs. debug build
+
+`just demo` uses the **release** binary
+(`target/release/synapse-waf`), not the debug binary. This is
+deliberate and load-bearing for any demo session longer than about
+half an hour.
+
+- **Debug build**: Rust's `Drop` paths are not optimized away in debug
+  mode, and the simulator's long-running state (EntityManager history,
+  FingerprintIndex, BlockLog, Ja4RotationDetector observations,
+  SCHEMA_LEARNER templates) accumulates toward its bounded caps.
+  Resident memory climbs over 30-60 minutes until macOS's OOM killer
+  picks the process and SIGKILLs it. Symptom in the tmux window:
+  `zsh: killed ... ✘ KILL took 37m 26s` followed by return to a shell
+  prompt. No panic, no stack trace — the process simply disappears.
+- **Release build**: `Drop` is fully elided, inlining shrinks the
+  per-entry overhead on the bounded caches, and the process steady-
+  states well below the OOM threshold. A release binary has been
+  observed running indefinitely under sustained simulator load.
+
+If you're iterating on the `simulator.rs` code itself, use
+`just dev-synapse` which compiles and runs the debug binary (faster
+edit-compile-run loop). Switch back to `just demo` when you're done
+and want to leave the demo running.
+
+### Teardown
+
+All three services run as tmux windows inside the `edge-protection`
+session by default (`TMUX_SESSION` env var overrides the session
+name). The standard dev-session controls apply:
+
+- `just dev-stop` — stop all three windows
+- `just dev-stop-one synapse-pingora` — stop only the WAF
+- `just dev-restart` — full restart
+- `just dev-reset` — kill and recreate the tmux session itself
+  (useful if a window gets wedged)

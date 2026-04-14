@@ -70,23 +70,25 @@ pnpm --filter @atlascrew/signal-horizon-api db:migrate
 #    connects as, plus demo campaigns, threats, and actors.
 pnpm --filter @atlascrew/signal-horizon-api db:seed
 
-# 4. Build the Synapse WAF binary
-cd apps/synapse-pingora
-cargo build --bin synapse-waf
-cd ../..
-
-# 5. Start Horizon API + UI in tmux
-just dev-horizon
-
-# 6. In another shell, start Synapse in demo mode pointing at Horizon
-cd apps/synapse-pingora
-SYNAPSE_PRODUCTION=0 \
-SYNAPSE_DEMO=1 \
-SYNAPSE_ADMIN_AUTH_DISABLED=1 \
-./target/debug/synapse-waf \
-  --config config.horizon.yaml \
-  --demo
+# 4. Start the full demo stack (builds a release Synapse binary on
+#    first run, then launches Horizon API + UI + Synapse WAF in demo
+#    mode across three tmux windows)
+just demo
 ```
+
+The first run compiles the release Synapse binary, which takes a few
+minutes. Subsequent runs are near-instant because cargo is incremental
+and the Horizon tsx watcher is already warm.
+
+::: tip Why release and not debug?
+The debug build is a memory hog (Rust's `Drop` code isn't optimized
+away, and bounded caches still accumulate up to their caps) and
+macOS's OOM killer picks it off after ~30-60 minutes of continuous
+simulation on a laptop. The release build runs indefinitely. If you
+want to hack on the Synapse code and iterate quickly, use
+`just dev-synapse` instead — it uses the debug binary which compiles
+faster but won't stay alive as long.
+:::
 
 Then open **`http://localhost:5180`** in your browser. Within a few
 seconds the aggregate panels start moving and
@@ -107,11 +109,21 @@ Password: dev-acme-corporation-admin
 
 Demo mode ties three processes together:
 
-| Service | Port | Role |
-|---|---|---|
-| `synapse-waf --demo` | 6190 (proxy), 6191 (admin API) | Real detection engine + procedural traffic generator |
-| Horizon API | 3100 | REST + WebSocket gateways, Postgres ingestion |
-| Horizon UI | 5180 | VitePress-free dashboard (Vite dev server) |
+| Service | tmux window | Port | Role |
+|---|---|---|---|
+| Horizon API | `signal-horizon-api` | 3100 | REST + WebSocket gateways, Postgres ingestion |
+| Horizon UI | `signal-horizon-ui` | 5180 | Dashboard (Vite dev server) |
+| Synapse WAF | `synapse-pingora` | 6190 / 6191 | Real detection engine + `--demo` traffic generator |
+
+All three live inside a shared tmux session (default name
+`edge-protection`). Attach with `just dev-shell` to see all three
+log streams side by side, or use:
+
+- `just dev-status` — quick status check of all three windows
+- `just dev-tail synapse-pingora 100` — tail the last 100 lines from
+  the Synapse window
+- `just dev-stop` — stop everything (kills all three windows)
+- `just dev-restart` — stop + start — useful after you rebuild
 
 The traffic generator calls the real `DetectionEngine` and updates
 real state managers for entities, campaigns, block logs, and WAF

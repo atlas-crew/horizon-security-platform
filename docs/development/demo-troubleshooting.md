@@ -9,6 +9,53 @@ you're seeing.
 
 ---
 
+## Synapse WAF disappears after ~30-60 minutes with no crash log
+
+**Symptom.** The WAF was running happily, the dashboard was populated,
+and then everything stops. Nothing on ports 6190 or 6191. The
+`synapse-pingora` tmux window shows something like:
+```
+zsh: killed     SYNAPSE_PRODUCTION=0 SYNAPSE_DEMO=1 ...
+✘ KILL took 37m 26s  1
+```
+No panic message, no stack trace — the process was wiped by an
+external SIGKILL.
+
+**Root cause.** macOS's OOM killer. Debug-build synapse-waf is a
+memory hog because Rust's `Drop` paths are not optimized away, and
+the simulator's bounded-cache state (EntityManager, FingerprintIndex,
+rotation detector history, schema learner templates) climbs toward
+the configured caps. On a laptop with other apps running, the kernel
+picks our process as the victim when memory pressure hits.
+
+**Fix.** Use the **release** binary, not the debug binary. The
+simplest way is:
+```bash
+just demo
+```
+which compiles `target/release/synapse-waf` on first run (a few
+minutes) and runs that binary instead of the debug one. Release-built
+synapse-waf has been observed running indefinitely under sustained
+simulator load.
+
+If you've been using `cargo run` or `./target/debug/synapse-waf`
+manually, switch to:
+```bash
+cd apps/synapse-pingora
+cargo build --release --bin synapse-waf
+SYNAPSE_PRODUCTION=0 SYNAPSE_DEMO=1 SYNAPSE_ADMIN_AUTH_DISABLED=1 \
+  RUST_LOG=warn,synapse_waf=info,synapse_waf::simulator=info \
+  ./target/release/synapse-waf --config config.horizon.yaml --demo
+```
+
+**When to keep using debug.** If you're actively editing
+`simulator.rs` or other Rust code, `just dev-synapse` uses the debug
+binary so edit-compile-run is fast. Just don't leave the debug binary
+running overnight expecting a populated demo in the morning — plan
+to stop it after an hour of work.
+
+---
+
 ## `/ws/dashboard` hangs on "Connecting…" in the browser
 
 **Symptom.** Horizon dashboard loads, but every panel spins and the

@@ -121,6 +121,7 @@ Demo mode ties three processes together:
 | Horizon UI | `signal-horizon-ui` | 5180 | Dashboard (Vite dev server) |
 | Synapse WAF | `synapse-pingora` | 6190 / 6191 | Real detection engine + `--demo` traffic generator |
 | Apparatus | `apparatus` | 8090 / 8443 | Active Defense backend (drills, red team, supply chain) |
+| Chimera | `chimera` | 8880 | Vulnerable target — 456+ real OWASP endpoints across 25+ industry verticals, `/swagger` UI, responds to real attack payloads |
 
 All three live inside a shared tmux session (default name
 `edge-protection`). Attach with `just dev-shell` to see all three

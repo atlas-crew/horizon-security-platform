@@ -165,14 +165,15 @@ demo-synapse: _dev-init _demo-build-waf
         echo "$name: started in --demo mode (release build)"
     fi
 
-# Start the full demo stack: Horizon API + UI + Synapse WAF + Apparatus
-demo: dev-horizon-api dev-horizon-ui demo-synapse demo-apparatus
+# Start the full demo stack: Horizon API + UI + Synapse WAF + Apparatus + Chimera
+demo: dev-horizon-api dev-horizon-ui demo-synapse demo-apparatus demo-chimera
     @echo ""
     @echo "Demo stack running in tmux session '{{_dev_session}}':"
     @echo "  Signal Horizon API → http://localhost:3100"
     @echo "  Signal Horizon UI  → http://localhost:5180  ← open this in your browser"
     @echo "  Synapse WAF (demo) → :6190 proxy / :6191 admin"
     @echo "  Apparatus          → :8090 HTTP1 / :8443 HTTP2  (Active Defense backend)"
+    @echo "  Chimera            → http://localhost:8880  (vulnerable target + Swagger)"
     @echo ""
     @echo "Two traffic sources are active:"
     @echo "  - synapse-waf --demo: in-process procedural simulator driving the WAF engine"
@@ -256,6 +257,46 @@ demo-synapse-3: _dev-init _demo-build-waf
 #   APPARATUS_PATH=/path/to/Apparatus just demo-apparatus
 _apparatus_path := env_var_or_default("APPARATUS_PATH", justfile_directory() + "/../Apparatus")
 
+# Chimera lives as a sibling repo — see README at ../Chimera. It's a
+# purpose-built vulnerable target (456+ endpoints across 25+ industry
+# verticals, full OWASP Top 10 coverage) and defaults to port 8880.
+# Runs via 'uv run python -m gunicorn' through the apps/vuln-api Makefile,
+# so uv must be installed (pipx install uv or brew install uv).
+_chimera_path := env_var_or_default("CHIMERA_PATH", justfile_directory() + "/../Chimera")
+
+# Start Chimera vulnerable target (sibling repo) in its own tmux window
+demo-chimera: _dev-init
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="chimera"
+    chimera_path="{{_chimera_path}}"
+    if [ ! -d "$chimera_path/apps/vuln-api" ]; then
+        echo "demo-chimera: Chimera repo not found at $chimera_path" >&2
+        echo "Set CHIMERA_PATH env var or clone Chimera as a sibling of this repo." >&2
+        exit 1
+    fi
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "demo-chimera: 'uv' not found in PATH. Install with 'brew install uv' or 'pipx install uv'." >&2
+        exit 1
+    fi
+    # Chimera's Makefile wants cwd = apps/vuln-api and runs in vulnerable
+    # demo mode by default (DEMO_MODE=full). Port is overridden via env.
+    cmd="cd '$chimera_path/apps/vuln-api' && PORT=8880 make run"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in existing window" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started (port 8880, DEMO_MODE=full)"
+    fi
+
 # Start Apparatus (sibling repo) in its own tmux window — lights up Active Defense pages
 demo-apparatus: _dev-init
     #!/usr/bin/env bash
@@ -288,8 +329,8 @@ demo-apparatus: _dev-init
         echo "$name: started (ports 8090 HTTP1 / 8443 HTTP2)"
     fi
 
-# Start the fleet demo: Horizon + three Synapse WAF instances + Apparatus
-demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-synapse-3 demo-apparatus
+# Start the fleet demo: Horizon + three Synapse WAF instances + Apparatus + Chimera
+demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-synapse-3 demo-apparatus demo-chimera
     @echo ""
     @echo "Fleet demo running in tmux session '{{_dev_session}}':"
     @echo "  Signal Horizon API → http://localhost:3100"
@@ -298,6 +339,7 @@ demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-syna
     @echo "  Synapse WAF #2     → :6290 / :6291  (sensor_id synapse-waf-2)"
     @echo "  Synapse WAF #3     → :6390 / :6391  (sensor_id synapse-waf-3)"
     @echo "  Apparatus          → :8090 HTTP1 / :8443 HTTP2  (Active Defense backend)"
+    @echo "  Chimera            → http://localhost:8880  (vulnerable target + Swagger)"
     @echo ""
     @echo "Navigate to Fleet Overview in the dashboard to see all three sensors."
     @echo "Each sensor runs its own procedural simulator against the same engine"

@@ -15,6 +15,8 @@ import { TrendingUp, TrendingDown, AlertTriangle, Calendar, Server } from 'lucid
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
 import {
+  CARD_HEADER_TITLE_STYLE,
+  Panel,
   SectionHeader,
   axisDefaults,
   colors,
@@ -33,12 +35,6 @@ const REGIONS = ['US-East', 'EU-West', 'AP-South'];
 const HISTORY_DAYS = 30;
 const FORECAST_DAYS = 14;
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const CARD_HEADER_TITLE_STYLE = {
-  fontSize: '16px',
-  lineHeight: '22px',
-  fontWeight: 500,
-  color: 'var(--text-primary)',
-};
 
 interface DailyMetric {
   day: number;
@@ -203,7 +199,7 @@ export default function CapacityForecastPage() {
       </div>
 
       {/* Main Chart */}
-      <div className="card p-6">
+      <Panel tone="default" padding="md">
         <SectionHeader
           title="Load Projection (30 Days History + 14 Day Forecast)"
           icon={<TrendingUp className="w-5 h-5 text-ac-blue" />}
@@ -306,7 +302,7 @@ export default function CapacityForecastPage() {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

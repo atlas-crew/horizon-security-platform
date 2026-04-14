@@ -116,8 +116,8 @@ export function DlpDashboardPage() {
         />
       </div>
 
-      <div className="card shadow-lg">
-        <div className="px-6 py-4 border-b border-border-subtle bg-surface-card">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Recent Violations"
             icon={<AlertTriangle className="w-5 h-5 text-ac-red" />}
@@ -137,9 +137,9 @@ export function DlpDashboardPage() {
               </div>
             }
           />
-        </div>
+        </Panel.Header>
 
-        <div className="overflow-x-auto">
+        <Panel.Body padding="none" className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <caption className="sr-only">
               Data loss prevention violations with severity and source details
@@ -216,8 +216,8 @@ export function DlpDashboardPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
         <Panel tone="info" padding="md" spacing="none" as="div">

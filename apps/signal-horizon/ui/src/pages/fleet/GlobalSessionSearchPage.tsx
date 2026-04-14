@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button, Modal, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, Modal, Panel, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -346,7 +346,7 @@ export function GlobalSessionSearchPage() {
 
       {/* Risk Distribution */}
       {riskTierData.length > 0 && (
-        <div className="card p-4">
+        <Panel tone="default" padding="sm" spacing="none">
           <h3 className="text-sm font-medium text-ink-secondary mb-3">Sessions by Risk Tier</h3>
           <Stack direction="row" align="center" gap="xs" className="h-4">
             {riskTierData.map((tier) => (
@@ -365,17 +365,20 @@ export function GlobalSessionSearchPage() {
               </span>
             ))}
           </div>
-        </div>
+        </Panel>
       )}
 
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="card p-6">
-        <SectionHeader
-          title="Search Sessions"
-          size="h4"
-          style={{ marginBottom: '16px' }}
-          titleStyle={FORM_HEADER_TITLE_STYLE}
-        />
+      {/* Search Form. Panel doesn't support `as="form"` (the polymorphic
+          element prop is limited to section/div/article/aside), so the
+          form element wraps the Panel and onSubmit lives on the form. */}
+      <form onSubmit={handleSearch}>
+        <Panel tone="default" padding="md">
+          <SectionHeader
+            title="Search Sessions"
+            size="h4"
+            style={{ marginBottom: '16px' }}
+            titleStyle={FORM_HEADER_TITLE_STYLE}
+          />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Session ID */}
@@ -547,9 +550,10 @@ export function GlobalSessionSearchPage() {
           >
             Clear
           </button>
-        </Stack>
+          </Stack>
 
-        {searchError && <p className="mt-4 text-sm text-ac-red">{searchError.message}</p>}
+          {searchError && <p className="mt-4 text-sm text-ac-red">{searchError.message}</p>}
+        </Panel>
       </form>
 
       {/* Search Results */}

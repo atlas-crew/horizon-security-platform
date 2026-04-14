@@ -15,6 +15,7 @@ import {
   CARD_HEADER_TITLE_STYLE,
   colors,
   Input,
+  Panel,
   SectionHeader,
   Spinner,
   Stack,
@@ -213,14 +214,8 @@ export default function RequestTimelinePage() {
         </Alert>
       )}
 
-      <div className="card">
-        <Stack
-          direction="row"
-          align="center"
-          justify="space-between"
-          style={{ gap: '16px' }}
-          className="card-header"
-        >
+      <Panel tone="default">
+        <Panel.Header>
           <div className="min-w-0">
             <SectionHeader
               title="Recent"
@@ -243,8 +238,8 @@ export default function RequestTimelinePage() {
           >
             Refresh
           </Button>
-        </Stack>
-        <div className="card-body">
+        </Panel.Header>
+        <Panel.Body>
           {recentError && <Alert status="error">{recentError}</Alert>}
 
           {!recent && <div className="text-sm text-ink-secondary">Loading…</div>}
@@ -297,19 +292,19 @@ export default function RequestTimelinePage() {
               </table>
             </div>
           )}
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
 
-      <div className="card">
-        <div className="card-header">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Lookup"
             size="h4"
             style={{ marginBottom: 0 }}
             titleStyle={CARD_HEADER_TITLE_STYLE}
           />
-        </div>
-        <div className="card-body">
+        </Panel.Header>
+        <Panel.Body>
           <form
             onSubmit={handleSubmit}
             className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end"
@@ -370,17 +365,11 @@ export default function RequestTimelinePage() {
               </Button>
             </div>
           </form>
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
 
-      <div className="card">
-        <Stack
-          direction="row"
-          align="center"
-          justify="space-between"
-          style={{ gap: '16px' }}
-          className="card-header"
-        >
+      <Panel tone="default">
+        <Panel.Header>
           <div className="min-w-0">
             <SectionHeader
               title="Timeline"
@@ -405,8 +394,8 @@ export default function RequestTimelinePage() {
               {events ? `${events.length} events` : 'no data'}
             </div>
           </div>
-        </Stack>
-        <div className="card-body">
+        </Panel.Header>
+        <Panel.Body>
           {timelineNote && <Alert status="warning">{timelineNote}</Alert>}
 
           {!events && (
@@ -476,8 +465,8 @@ export default function RequestTimelinePage() {
               )}
             </>
           )}
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
     </div>
   );
 }

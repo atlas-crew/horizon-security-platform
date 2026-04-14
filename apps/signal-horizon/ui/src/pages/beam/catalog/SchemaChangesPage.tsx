@@ -31,6 +31,7 @@ import { useApiIntelligence } from '../../../hooks/useApiIntelligence';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import {
   CARD_HEADER_TITLE_STYLE,
+  Panel,
   SectionHeader,
   Stack,
   axisDefaults,
@@ -395,16 +396,16 @@ export default function SchemaChangesPage() {
       </div>
 
       {/* Endpoint Drift Trends */}
-      <div className="card h-[320px]">
-        <div className="card-header">
+      <Panel tone="default" className="h-[320px]">
+        <Panel.Header>
           <SectionHeader
             title="Schema Drift Trends (Top Endpoints)"
             size="h4"
             style={{ marginBottom: 0 }}
             titleStyle={CARD_HEADER_TITLE_STYLE}
           />
-        </div>
-        <div className="card-body h-full">
+        </Panel.Header>
+        <Panel.Body className="h-full">
           {trendChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendChartData}>
@@ -429,8 +430,8 @@ export default function SchemaChangesPage() {
               No drift trend data available.
             </div>
           )}
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
 
       {/* Filters */}
       <Stack direction="row" align="center" gap="md">

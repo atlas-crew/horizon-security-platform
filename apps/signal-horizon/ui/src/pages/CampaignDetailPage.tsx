@@ -11,6 +11,7 @@ import {
   Button,
   CARD_HEADER_TITLE_STYLE,
   EmptyState,
+  Panel,
   SectionHeader,
   PAGE_TITLE_STYLE,
   Stack,
@@ -176,7 +177,7 @@ export default function CampaignDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <div className="card p-6">
+          <Panel tone="default" padding="md">
             <h3 className="text-sm font-medium text-ink-secondary mb-4">Campaign Intelligence</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
@@ -198,21 +199,21 @@ export default function CampaignDetailPage() {
                 campaign.
               </div>
             </div>
-          </div>
+          </Panel>
         </div>
       </div>
 
       {/* Attack Timeline */}
-      <section className="card">
-        <div className="card-header">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Attack Timeline"
             size="h4"
             style={{ marginBottom: 0 }}
             titleStyle={CARD_HEADER_TITLE_STYLE}
           />
-        </div>
-        <div className="card-body h-64">
+        </Panel.Header>
+        <Panel.Body className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={attackTimeline}>
               <CartesianGrid {...gridDefaultsSoft} />
@@ -228,13 +229,13 @@ export default function CampaignDetailPage() {
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-      </section>
+        </Panel.Body>
+      </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Participating IPs */}
-        <section className="card">
-          <div className="card-header flex items-center justify-between">
+        <Panel tone="default">
+          <Panel.Header>
             <SectionHeader
               title="Participating IPs"
               size="h4"
@@ -246,8 +247,8 @@ export default function CampaignDetailPage() {
                 </Button>
               }
             />
-          </div>
-          <div className="overflow-x-auto">
+          </Panel.Header>
+          <Panel.Body padding="none" className="overflow-x-auto">
             <table className="data-table">
               <caption className="sr-only">IP addresses participating in this campaign</caption>
               <thead>
@@ -275,12 +276,12 @@ export default function CampaignDetailPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </section>
+          </Panel.Body>
+        </Panel>
 
         {/* Affected Customers */}
-        <section className="card">
-          <div className="card-header flex items-center justify-between">
+        <Panel tone="default">
+          <Panel.Header>
             <SectionHeader
               title="Affected Customers"
               size="h4"
@@ -292,8 +293,8 @@ export default function CampaignDetailPage() {
                 </Button>
               }
             />
-          </div>
-          <div className="overflow-x-auto">
+          </Panel.Header>
+          <Panel.Body padding="none" className="overflow-x-auto">
             <table className="data-table">
               <caption className="sr-only">Customers affected by this campaign</caption>
               <thead>
@@ -321,21 +322,21 @@ export default function CampaignDetailPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </section>
+          </Panel.Body>
+        </Panel>
       </div>
 
       {/* Correlation Signals */}
-      <section className="card">
-        <div className="card-header">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Correlation Signals"
             size="h4"
             style={{ marginBottom: 0 }}
             titleStyle={CARD_HEADER_TITLE_STYLE}
           />
-        </div>
-        <div className="card-body space-y-4">
+        </Panel.Header>
+        <Panel.Body className="space-y-4">
           {mockCorrelationSignals.map((signal) => (
             <div key={signal.name} className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -352,8 +353,8 @@ export default function CampaignDetailPage() {
               </div>
             </div>
           ))}
-        </div>
-      </section>
+        </Panel.Body>
+      </Panel>
 
       {/* Response Actions */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -378,15 +379,17 @@ function StatMini({
   value: string;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className="w-10 h-10 border border-border-subtle flex items-center justify-center">
-        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: colors.blue }} />
+    <Panel tone="default" padding="sm" spacing="none">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 border border-border-subtle flex items-center justify-center">
+          <Icon aria-hidden="true" className="w-5 h-5" style={{ color: colors.blue }} />
+        </div>
+        <div>
+          <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
+          <div className="text-xl font-light text-ink-primary">{value}</div>
+        </div>
       </div>
-      <div>
-        <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
-        <div className="text-xl font-light text-ink-primary">{value}</div>
-      </div>
-    </div>
+    </Panel>
   );
 }
 

@@ -221,11 +221,19 @@ export interface ApiSignal {
 }
 
 /**
- * Generate relative dates for demo discovery trend data
+ * Generate relative dates for demo discovery trend data.
+ *
+ * The counts are chosen to produce a chart with visible shape — a clear
+ * peak mid-week, a weekend dip, and a rebound. Previous values (3–12
+ * range) auto-scaled to a nearly-flat line that looked static. These
+ * values (18–71 range, ~4x spread) give the area chart real contour.
+ * Total across 7 days (~285) is consistent with `stats.totalEndpoints:
+ * 487` — roughly 60% of the fleet was discovered in the last week,
+ * which matches a "recently deployed" demo narrative.
  */
 function generateDemoDiscoveryTrend(): Array<{ date: string; count: number }> {
   const today = new Date();
-  const counts = [5, 8, 3, 12, 7, 4, 3];
+  const counts = [38, 52, 28, 71, 45, 33, 18];
   return Array.from({ length: 7 }, (_, i) => ({
     date: new Date(today.getTime() - (6 - i) * 86400000).toISOString().split('T')[0],
     count: counts[i],
@@ -249,17 +257,79 @@ function riskScoreFromLevel(level: string): number {
 }
 
 /**
- * Generate relative dates for demo endpoint data
+ * Generate relative dates for demo endpoint data.
+ *
+ * Produces a representative sample of ~28 endpoints across 8 services
+ * with a realistic mix of HTTP methods, risk levels, and schema coverage.
+ * The `stats.totalEndpoints: 487` claim represents the full fleet
+ * across all pages; this function returns what would be "page 1" in a
+ * real paginated response.
+ *
+ * Services are ordered by request volume in the inventory builder, so
+ * the services listed first here tend to dominate the treemap.
  */
 function generateDemoEndpoints(): ApiEndpoint[] {
   const today = new Date();
-  const baseDate = new Date(today.getTime() - 15 * 86400000); // 15 days ago
+  const daysAgo = (n: number) => new Date(today.getTime() - n * 86400000).toISOString();
 
-  return [
-    { id: '1', method: 'POST', path: '/api/v1/users', service: 'user-service', firstSeenAt: baseDate.toISOString(), lastSeenAt: today.toISOString(), riskLevel: 'high', hasSchema: true },
-    { id: '2', method: 'GET', path: '/api/v1/products', service: 'catalog-service', firstSeenAt: new Date(baseDate.getTime() + 86400000).toISOString(), lastSeenAt: today.toISOString(), riskLevel: 'low', hasSchema: true },
-    { id: '3', method: 'POST', path: '/api/v1/auth/login', service: 'auth-service', firstSeenAt: baseDate.toISOString(), lastSeenAt: today.toISOString(), riskLevel: 'critical', hasSchema: false },
+  // [method, path, service, firstSeenDaysAgo, lastSeenDaysAgo, risk, hasSchema]
+  type Row = [string, string, string, number, number, ApiEndpoint['riskLevel'], boolean];
+  const rows: Row[] = [
+    // auth-service — security-critical, high blast radius
+    ['POST', '/api/v1/auth/login',           'auth-service',    30, 0, 'critical', false],
+    ['POST', '/api/v1/auth/logout',          'auth-service',    30, 0, 'low',      true],
+    ['POST', '/api/v1/auth/refresh',         'auth-service',    28, 0, 'high',     true],
+    ['POST', '/api/v1/auth/reset-password',  'auth-service',    22, 1, 'high',     true],
+    ['GET',  '/api/v1/auth/session',         'auth-service',    30, 0, 'medium',   true],
+
+    // user-service — PII-heavy, high volume
+    ['GET',  '/api/v1/users',                'user-service',    30, 0, 'medium',   true],
+    ['POST', '/api/v1/users',                'user-service',    30, 0, 'high',     true],
+    ['GET',  '/api/v1/users/:id',            'user-service',    30, 0, 'medium',   true],
+    ['PUT',  '/api/v1/users/:id',            'user-service',    28, 0, 'medium',   true],
+    ['DELETE','/api/v1/users/:id',           'user-service',    25, 1, 'critical', true],
+    ['GET',  '/api/v1/users/:id/profile',    'user-service',    28, 0, 'low',      true],
+
+    // catalog-service — public read-heavy, lower risk
+    ['GET',  '/api/v1/products',             'catalog-service', 30, 0, 'low',      true],
+    ['GET',  '/api/v1/products/:id',         'catalog-service', 30, 0, 'low',      true],
+    ['GET',  '/api/v1/categories',           'catalog-service', 30, 0, 'low',      true],
+    ['GET',  '/api/v1/search',               'catalog-service', 14, 0, 'medium',   true],
+
+    // order-service
+    ['POST', '/api/v1/orders',               'order-service',   30, 0, 'high',     true],
+    ['GET',  '/api/v1/orders/:id',           'order-service',   30, 0, 'medium',   true],
+    ['PATCH','/api/v1/orders/:id/status',    'order-service',   12, 0, 'high',     true],
+
+    // payment-service — most sensitive, strictest schema enforcement
+    ['POST', '/api/v1/checkout',             'payment-service', 30, 0, 'critical', true],
+    ['POST', '/api/v1/payments/charge',      'payment-service', 30, 0, 'critical', true],
+    ['POST', '/api/v1/payments/refund',      'payment-service', 20, 2, 'critical', true],
+
+    // notification-service
+    ['POST', '/api/v1/notifications',        'notification-service', 18, 0, 'low',      true],
+    ['GET',  '/api/v1/notifications',        'notification-service', 18, 0, 'low',      true],
+
+    // analytics-service — often missing schemas (auto-discovered)
+    ['POST', '/api/v1/analytics/events',     'analytics-service',     9, 0, 'low',      false],
+    ['GET',  '/api/v1/analytics/dashboard',  'analytics-service',     7, 0, 'medium',   false],
+
+    // admin-service — least-discovered, higher risk per endpoint
+    ['GET',  '/api/v1/admin/audit-log',      'admin-service',         5, 0, 'high',     true],
+    ['POST', '/api/v1/admin/impersonate',    'admin-service',         3, 0, 'critical', false],
+    ['GET',  '/api/v1/admin/debug',          'admin-service',         2, 1, 'high',     false],
   ];
+
+  return rows.map((row, i) => ({
+    id: String(i + 1),
+    method: row[0],
+    path: row[1],
+    service: row[2],
+    firstSeenAt: daysAgo(row[3]),
+    lastSeenAt: daysAgo(row[4]),
+    riskLevel: row[5],
+    hasSchema: row[6],
+  }));
 }
 
 function buildInventory(endpoints: InventoryEndpoint[]): FleetInventory {
@@ -353,10 +423,20 @@ function generateDemoEndpointDriftTrends(): EndpointDriftTrend[] {
     return date.toISOString().split('T')[0];
   });
 
+  // Deterministic per-endpoint series. Previously used Math.random()
+  // which re-rolled every render, making the chart visibly flicker in
+  // StrictMode. Using a fixed pseudo-noise curve keeps each reload
+  // stable while still looking like real drift activity.
+  const seeds = [
+    [3, 5, 4, 8, 6, 4, 2],
+    [6, 4, 7, 5, 9, 6, 5],
+    [2, 6, 5, 11, 7, 4, 3],
+  ];
+
   return endpoints.map((entry, index) => {
     const series = dateKeys.map((date, offset) => ({
       date,
-      count: Math.max(0, Math.round(4 + index * 2 + Math.sin(offset) * 3 + Math.random() * 4)),
+      count: seeds[index]?.[offset] ?? 0,
     }));
     const total = series.reduce((sum, item) => sum + item.count, 0);
     return { ...entry, total, series };

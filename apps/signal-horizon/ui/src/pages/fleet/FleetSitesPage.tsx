@@ -17,7 +17,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Globe, Shield, ShieldOff, RefreshCw, Search } from 'lucide-react';
+import { Globe, Shield, ShieldOff, RefreshCw, Search, Plus } from 'lucide-react';
 import {
   Button,
   CARD_HEADER_TITLE_STYLE,
@@ -38,6 +38,7 @@ import {
 import { useSensors, useFleetSites, type FleetSite } from '../../hooks/fleet';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { FleetSiteDrawer } from '../../components/fleet/FleetSiteDrawer';
+import { FleetSiteCreateDrawer } from '../../components/fleet/FleetSiteCreateDrawer';
 
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
 
@@ -58,6 +59,12 @@ export default function FleetSitesPage() {
   // The drawer handles its own invalidation on save/delete, so this
   // page doesn't need to explicitly refetch.
   const [selectedSite, setSelectedSite] = useState<FleetSite | null>(null);
+
+  // Create drawer visibility. On successful creation the created-site
+  // shape is forwarded to setSelectedSite so the edit drawer opens
+  // immediately — bridges "create with defaults" → "tune the knobs"
+  // without a detour through the table.
+  const [createOpen, setCreateOpen] = useState(false);
 
   const filteredSites = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -105,15 +112,26 @@ export default function FleetSitesPage() {
           style={PAGE_HEADER_STYLE}
           titleStyle={PAGE_TITLE_STYLE}
         />
-        <Button
-          variant="outlined"
-          size="sm"
-          icon={<RefreshCw className="w-3.5 h-3.5" />}
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          {isFetching ? 'Refreshing' : 'Refresh'}
-        </Button>
+        <Stack direction="row" gap="sm">
+          <Button
+            variant="outlined"
+            size="sm"
+            icon={<RefreshCw className="w-3.5 h-3.5" />}
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? 'Refreshing' : 'Refresh'}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus className="w-3.5 h-3.5" />}
+            onClick={() => setCreateOpen(true)}
+            disabled={sensors.length === 0}
+          >
+            Create site
+          </Button>
+        </Stack>
       </Stack>
 
       {/* KPI strip. Uses MetricCard rather than KpiStrip because we want
@@ -305,6 +323,20 @@ export default function FleetSitesPage() {
       <FleetSiteDrawer
         site={selectedSite}
         onClose={() => setSelectedSite(null)}
+      />
+
+      {/* Create drawer. On success, the newly-created site is piped
+          straight into the edit drawer via setSelectedSite so the
+          operator can tune WAF/rate-limit/access-control knobs
+          immediately without re-finding the row in the table. */}
+      <FleetSiteCreateDrawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        sensors={sensors}
+        defaultSensorId={sensorFilter || undefined}
+        onCreated={(newSite) => {
+          setSelectedSite(newSite);
+        }}
       />
     </div>
   );

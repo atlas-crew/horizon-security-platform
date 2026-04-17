@@ -555,25 +555,58 @@ ch-init:
 db-generate:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:generate
 
-# Run database migrations (dev)
+# Run database migrations (dev — creates + applies)
 db-migrate:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:migrate
 
-# Deploy database migrations (production)
+# Deploy database migrations (production — applies only, no schema drift)
 db-migrate-prod:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:migrate:prod
+
+# Show pending migrations + schema drift (read-only, safe)
+db-migrate-status:
+    cd "{{root}}/apps/signal-horizon/api" && pnpm exec prisma migrate status
 
 # Open Prisma Studio
 db-studio:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:studio
 
-# Seed the database
+# Seed the database (default profile)
 db-seed:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:seed
 
 # Reset and reseed the database (default profile)
 db-reseed:
     cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:reseed
+
+# Reset and reseed with a medium-volume profile
+db-reseed-medium:
+    cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:reseed:medium
+
+# Reset and reseed with a large-volume profile
+db-reseed-large:
+    cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:reseed:large
+
+# DESTRUCTIVE: drops all data, re-runs migrations, does NOT seed. Use
+# `just db-seed` afterwards for a fresh-data workflow, or `just db-reseed`
+# for reset+seed in one shot.
+# Clear the database (DESTRUCTIVE — wipes all data)
+db-reset:
+    cd "{{root}}" && pnpm exec nx run signal-horizon-api:db:reset
+
+# Useful for rapid prototyping on a branch; DO NOT use on main —
+# production needs the migration history intact.
+# Push schema to DB without a migration file (dev prototyping only)
+db-push:
+    cd "{{root}}/apps/signal-horizon/api" && pnpm exec prisma db push
+
+# Format prisma/schema.prisma in place
+db-format:
+    cd "{{root}}/apps/signal-horizon/api" && pnpm exec prisma format
+
+# Validate prisma/schema.prisma without connecting to the database
+db-validate:
+    cd "{{root}}/apps/signal-horizon/api" && pnpm exec prisma validate
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BENCHMARKS (Synapse Pingora)

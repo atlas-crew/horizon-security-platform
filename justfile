@@ -387,8 +387,19 @@ dev-stop:
 dev-stop-one name:
     tmux kill-window -t "{{_dev_session}}:{{name}}"
 
+# Private variant that silently tolerates a missing window — used by the
+# per-service restart recipes below so `dev-restart-*` acts as "start or
+# restart" even if the window was never created.
+_dev-stop-quiet name:
+    -tmux kill-window -t "{{_dev_session}}:{{name}}" 2>/dev/null
+
 # Restart everything (stop + start)
 dev-restart: dev-stop dev
+
+# Restart a single service (stop its window, then start fresh)
+dev-restart-horizon-api: (_dev-stop-quiet "signal-horizon-api") dev-horizon-api
+dev-restart-horizon-ui: (_dev-stop-quiet "signal-horizon-ui") dev-horizon-ui
+dev-restart-synapse: (_dev-stop-quiet "synapse-pingora") dev-synapse
 
 # Attach to the dev tmux session
 dev-shell:

@@ -226,7 +226,7 @@ export default function FleetSitesPage() {
             titleStyle={CARD_HEADER_TITLE_STYLE}
           />
         </Panel.Header>
-        <Panel.Body padding="none">
+        <Panel.Body padding="none" className="overflow-x-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Spinner size={32} color={colors.blue} />
@@ -265,25 +265,35 @@ export default function FleetSitesPage() {
                 {
                   key: 'hostname',
                   label: 'Hostname',
+                  // Widest column — gets a soft minimum so short
+                  // hostnames still leave room for the icon.
+                  width: 'auto',
                   render: (_v, row: FleetSite) => (
                     <Stack direction="row" align="center" gap="sm">
                       <Globe className="w-3.5 h-3.5 text-ac-blue flex-shrink-0" />
-                      <span className="font-mono text-sm">{row.hostname}</span>
+                      <span className="font-mono text-sm truncate">{row.hostname}</span>
                     </Stack>
                   ),
                 },
                 {
                   key: 'sensorName',
                   label: 'Sensor',
+                  width: '180px',
                   render: (_v, row: FleetSite) => (
-                    <span className="text-ink-secondary text-sm">{row.sensorName}</span>
+                    <span className="text-ink-secondary text-sm truncate block" title={row.sensorName}>
+                      {row.sensorName}
+                    </span>
                   ),
                 },
                 {
                   key: 'upstreams',
                   label: 'Upstreams',
+                  width: '180px',
                   render: (_v, row: FleetSite) => (
-                    <span className="font-mono text-[11px] text-ink-secondary">
+                    <span
+                      className="font-mono text-[11px] text-ink-secondary truncate block"
+                      title={row.upstreams.join(', ')}
+                    >
                       {row.upstreams.length === 0
                         ? '—'
                         : row.upstreams.length === 1
@@ -296,6 +306,7 @@ export default function FleetSitesPage() {
                   key: 'wafEnabled',
                   label: 'WAF',
                   align: 'center',
+                  width: '80px',
                   render: (_v, row: FleetSite) =>
                     row.wafEnabled ? (
                       <StatusBadge status="success" variant="subtle" size="sm">
@@ -313,6 +324,7 @@ export default function FleetSitesPage() {
                   key: 'tlsEnabled',
                   label: 'TLS',
                   align: 'center',
+                  width: '70px',
                   render: (_v, row: FleetSite) =>
                     row.tlsEnabled ? (
                       <StatusBadge status="success" variant="subtle" size="sm">On</StatusBadge>
@@ -324,6 +336,7 @@ export default function FleetSitesPage() {
                   key: 'rateLimitRps',
                   label: 'Rate Limit',
                   align: 'right',
+                  width: '110px',
                   render: (_v, row: FleetSite) =>
                     row.rateLimitRps != null ? (
                       <ValuePill value={`${row.rateLimitRps} rps`} color="blue" />

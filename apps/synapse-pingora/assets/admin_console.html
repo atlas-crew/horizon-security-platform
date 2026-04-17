@@ -190,6 +190,7 @@
             <button class="nav-item" data-panel="sites">Sites</button>
             <button class="nav-item" data-panel="tls">TLS</button>
             <button class="nav-item" data-panel="modules">Modules</button>
+            <button class="nav-item" data-panel="profiler">Profiler</button>
           </div>
           <div class="nav-section">
             <div class="nav-section-label">Admin</div>
@@ -294,6 +295,29 @@
             <p>DLP, Tarpit, Crawler detection, and other subsystem config</p>
           </div>
           <div class="card-grid" id="modules-grid"></div>
+        </div>
+
+        <!-- Profiler Panel -->
+        <div class="panel" id="panel-profiler">
+          <div class="panel-header">
+            <h2>Profiler</h2>
+            <p>Endpoint behaviour profiling and anomaly detection thresholds</p>
+          </div>
+          <div class="card tone-info" id="profiler-card">
+            <div style="font-size:12px;color:var(--ink-secondary);margin-bottom:12px;line-height:1.5">
+              Z-score thresholds control how many standard deviations a request must
+              deviate from the learned baseline before firing an anomaly. Lower values =
+              more alerts (more false positives); higher values = fewer alerts (more
+              false negatives). The sensor must accumulate <code>min_samples_for_validation</code>
+              samples before any threshold is applied. Tune with care — these values
+              affect every site on this sensor.
+            </div>
+            <div id="profiler-form"></div>
+            <div class="btn-row" style="margin-top:16px">
+              <button class="btn primary" id="profiler-save">Save &amp; Reload</button>
+            </div>
+            <pre class="output" id="profiler-out" style="margin-top:12px;display:none"></pre>
+          </div>
         </div>
 
         <!-- Actions Panel -->
@@ -692,6 +716,66 @@
       });
     }
 
+    /* ── Profiler ─────────────────────────────────────────── */
+    // POST /config replaces the full ConfigFile (no dedicated
+    // /_sensor/config/profiler endpoint exists). So we fetch the
+    // current full config, stash it on the card, and on save merge the
+    // edited profiler block back into the stash before POSTing the
+    // whole thing. Same pattern as the Modules panel's nested-field
+    // preservation fix, scaled up one level.
+    async function loadProfiler() {
+      const card = $('#profiler-card');
+      try {
+        const res = await api('/config');
+        const fullConfig = res.data || res;
+        const profiler = fullConfig.profiler || {};
+        card.dataset.fullConfig = JSON.stringify(fullConfig);
+        const form = $('#profiler-form');
+        // Render every profiler field in source order — keeps
+        // capacity limits grouped at top, thresholds in the middle,
+        // privacy + stability flags at the bottom.
+        const order = [
+          'enabled', 'max_profiles', 'max_schemas',
+          'min_samples_for_validation',
+          'payload_z_threshold', 'param_z_threshold', 'response_z_threshold',
+          'min_stddev', 'type_ratio_threshold', 'max_type_counts',
+          'redact_pii', 'freeze_after_samples',
+        ];
+        form.innerHTML = order
+          .filter(k => k in profiler)
+          .map(k => buildField(k, profiler[k], 'profiler'))
+          .join('');
+      } catch (e) {
+        $('#profiler-out').style.display = 'block';
+        setOutput('#profiler-out', e.data || e.message || e, false);
+      }
+    }
+    $('#profiler-save').addEventListener('click', async () => {
+      const btn = $('#profiler-save');
+      const card = $('#profiler-card');
+      btn.disabled = true;
+      try {
+        const edited = collectFields(card);
+        const profilerEdits = edited.profiler || {};
+        const fullConfig = JSON.parse(card.dataset.fullConfig || '{}');
+        // Merge edits over the profiler block; leave sites/server/
+        // rate_limit/etc. untouched so we don't clobber unrelated
+        // config. POST /config requires the entire ConfigFile shape.
+        const payload = {
+          ...fullConfig,
+          profiler: { ...(fullConfig.profiler || {}), ...profilerEdits },
+        };
+        await api('/config', 'POST', payload);
+        await api('/reload', 'POST');
+        $('#profiler-out').style.display = 'none';
+        toast('Profiler config saved and reloaded');
+      } catch (e) {
+        $('#profiler-out').style.display = 'block';
+        setOutput('#profiler-out', e.data || e.message || e, false);
+        toast('Save failed: ' + pretty(e.data || e), 'err');
+      } finally { btn.disabled = false; }
+    });
+
     /* ── Admin Actions ───────────────────────────────────── */
     $$('[data-action]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -820,6 +904,7 @@
     loadSites();
     loadTls();
     loadModules();
+    loadProfiler();
     loadLogs();
     // Auto-refresh overview every 30s
     setInterval(loadOverview, 30000);

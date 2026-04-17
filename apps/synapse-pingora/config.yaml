@@ -13,6 +13,19 @@ upstreams:
   - host: "127.0.0.1"
     port: 5555  # CHIMERA_API_PORT - Flask API from demo-targets
 
+# Multi-site configuration. Without a non-empty `sites:` section the
+# ConfigManager is never initialised and every admin-console endpoint
+# that reads `/config` (TLS panel, Detection panel, Rate Limit panel,
+# Sites panel) returns 500 "Configuration manager not available".
+# The single site below mirrors the top-level upstream so runtime
+# proxy behaviour is unchanged — this entry exists purely to activate
+# the admin config APIs in dev mode.
+sites:
+  - hostname: "localhost"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 5555
+
 rate_limit:
   rps: 10000
   enabled: true

@@ -51,6 +51,12 @@ notes that are not part of the product documentation.
   Horizon typography harmonisation, form control audit, visual regression
   tests, bundle splitting, and other open threads from the design system
   overhaul.
+- [docs/development/plans/synapse-admin-console-audit.md](./development/plans/synapse-admin-console-audit.md) —
+  Gap analysis of the Synapse sensor admin console vs. its admin API.
+  Inventories observability endpoints, per-site CRUD, global server
+  settings, module configs, and runtime ops. Proposes a reorganised
+  IA and prioritised implementation order. Read this before expanding
+  the admin console.
 - `docs/dockerhub-horizon.md`, `docs/dockerhub-synapse-waf.md` — Docker
   Hub registry publishing notes.
 

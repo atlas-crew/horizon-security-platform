@@ -163,6 +163,7 @@ static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(60)));
 
 static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
+static SIDEBAR_LOCKUP_SVG: &str = include_str!("../assets/sidebar-lockup.svg");
 const ADMIN_CONSOLE_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'";
 
 /// Dev mode flag - when true, serves admin console from disk instead of embedded
@@ -1436,6 +1437,7 @@ pub async fn start_admin_server(
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
+        .route("/console/assets/sidebar-lockup.svg", get(sidebar_lockup_handler))
         .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         .route("/_sensor/logs", get(logs_handler))
         .route("/_sensor/logs/:source", get(logs_by_source_handler))
@@ -1676,6 +1678,38 @@ async fn admin_console_handler() -> impl IntoResponse {
             (header::CONTENT_SECURITY_POLICY, ADMIN_CONSOLE_CSP),
         ],
         Html(content),
+    )
+}
+
+/// GET /console/assets/sidebar-lockup.svg - Synapse brand mark for the
+/// admin console sidebar. Dev-mode reads from disk for live-reload
+/// parity with the admin console HTML; production serves the embedded
+/// copy baked into the binary via include_str!.
+async fn sidebar_lockup_handler() -> impl IntoResponse {
+    let content = if is_dev_mode() {
+        match std::fs::read_to_string("assets/sidebar-lockup.svg") {
+            Ok(content) => content,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read sidebar lockup from disk: {}, falling back to embedded",
+                    e
+                );
+                SIDEBAR_LOCKUP_SVG.to_string()
+            }
+        }
+    } else {
+        SIDEBAR_LOCKUP_SVG.to_string()
+    };
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "image/svg+xml; charset=utf-8"),
+            // Cache the mark aggressively — it rarely changes and a full
+            // day of cache saves ~110KB per page load after the first.
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        content,
     )
 }
 
@@ -7877,6 +7911,7 @@ mod tests {
         // Console route with require_admin_read middleware
         let admin_read_routes = Router::new()
             .route("/console", get(admin_console_handler))
+            .route("/console/assets/sidebar-lockup.svg", get(sidebar_lockup_handler))
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 require_admin_read,
